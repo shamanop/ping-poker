@@ -530,7 +530,7 @@ body::after {
   display: flex; align-items: center; gap: var(--s3);
   background: var(--ink-up); border: 1px solid rgba(245,185,66,0.1);
   border-radius: var(--radius-sm); padding: var(--s3) var(--s4);
-  animation: slideIn 0.2s ease;
+  animation: slideIn 0.2s ease-out;
 }
 .player-lobby-item .p-avatar { font-size: 20px; }
 .player-lobby-item .p-name { font-weight: 600; font-size: 14px; }
@@ -673,7 +673,6 @@ body::after {
 
 .player-seat.is-active .seat-box {
   border-color: var(--gold);
-  box-shadow: 0 0 0 1px var(--gold-ring), 0 0 20px var(--gold-glow);
 }
 .player-seat.is-active .seat-box::before { opacity: 1; }
 .player-seat.is-folded .seat-box { opacity: 0.3; border-color: transparent; }
@@ -715,7 +714,7 @@ body::after {
   animation: allinSlam 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 @keyframes allinSlam {
-  0%   { transform: scale(2.5) rotate(-8deg); opacity: 0; }
+  0%   { transform: scale(1.8) rotate(-8deg); opacity: 0; }
   60%  { transform: scale(0.92) rotate(2deg); opacity: 1; }
   100% { transform: scale(1) rotate(0); opacity: 1; }
 }
@@ -921,7 +920,7 @@ body::after {
   font-family: 'Space Grotesk', sans-serif;
   font-size: 13px; font-weight: 700; letter-spacing: 1px;
   text-transform: uppercase;
-  cursor: pointer; transition: all 0.12s;
+  cursor: pointer; transition: background 0.12s, border-color 0.12s, color 0.12s, box-shadow 0.12s;
   border: 1px solid transparent;
 }
 
@@ -977,7 +976,7 @@ body::after {
   font-size: 11px; color: var(--ivory-dim);
   padding: 3px 0;
   border-bottom: 1px solid rgba(255,255,255,0.025);
-  animation: fadeIn 0.2s ease;
+  animation: fadeIn 0.2s ease both;
   line-height: 1.4;
 }
 
@@ -996,7 +995,7 @@ body::after {
   background: rgba(5,11,20,0.92);
   backdrop-filter: blur(8px);
   display: flex; align-items: center; justify-content: center;
-  animation: fadeIn 0.25s ease;
+  animation: fadeIn 0.25s ease both;
 }
 
 .showdown-card {
@@ -1015,7 +1014,7 @@ body::after {
   font-family: 'Bebas Neue', sans-serif;
   font-size: 11px; letter-spacing: 6px;
   color: var(--gold); margin-bottom: var(--s3); opacity: 0.8;
-  animation: fadeIn 0.3s 0.1s both;
+  animation: fadeIn 0.3s 0.05s both;
 }
 
 .showdown-winner { display: flex; flex-direction: column; align-items: center; gap: var(--s2); }
@@ -1025,13 +1024,13 @@ body::after {
   font-size: 52px; letter-spacing: 4px;
   color: var(--ivory);
   line-height: 1;
-  animation: popIn 0.45s 0.05s cubic-bezier(0.34, 1.4, 0.64, 1) both;
+  animation: popIn 0.45s 0.15s cubic-bezier(0.34, 1.4, 0.64, 1) both;
 }
 
 .showdown-hand-name {
   font-size: 16px; font-weight: 700;
   color: var(--gold); letter-spacing: 3px; text-transform: uppercase;
-  animation: fadeIn 0.3s 0.15s both;
+  animation: popIn 0.3s 0.28s cubic-bezier(0.34, 1.3, 0.64, 1) both;
 }
 
 .showdown-all-cards {
@@ -1264,7 +1263,7 @@ body::after {
   padding: var(--s3) var(--s3);
   box-shadow: 0 10px 28px rgba(0,0,0,0.65);
   min-width: 168px;
-  animation: popIn 0.12s ease-out;
+  animation: popIn 0.18s cubic-bezier(0.34, 1.3, 0.64, 1);
 }
 
 .throw-tray-label {
@@ -1338,7 +1337,7 @@ body::after {
   padding: var(--s3);
   box-shadow: 0 10px 36px rgba(0,0,0,0.65);
   width: 226px;
-  animation: popIn 0.15s ease-out;
+  animation: popIn 0.2s cubic-bezier(0.34, 1.3, 0.64, 1);
 }
 
 .sticker-tray.hidden { display: none; }
@@ -1646,7 +1645,7 @@ body::after {
   z-index: 10;
 }
 .seat-timer.timer-warn {
-  animation: timerFlash 0.4s ease infinite alternate;
+  animation: timerFlash 1s ease-in-out infinite alternate;
 }
 @keyframes timerFlash {
   from { opacity: 1; }

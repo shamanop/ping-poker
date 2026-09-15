@@ -15,6 +15,7 @@ const state = {
 };
 
 let activeTray      = null;
+const prevChipsMap  = {};
 let turnTimerIval   = null;
 let chatCollapsed   = window.innerWidth <= 768;
 let balanceTimeout  = null;
@@ -574,7 +575,7 @@ function animateProjectile(item, fromPos, toPos) {
     { transform: 'translate(-50%,-50%) scale(1) rotate(0deg)', offset: 0 },
     { transform: `translate(calc(-50% + ${dx * 0.45}px),calc(-50% + ${dy * 0.45 - arc}px)) scale(1.4) rotate(185deg)`, offset: 0.45 },
     { transform: `translate(calc(-50% + ${dx}px),calc(-50% + ${dy}px)) scale(0.35) rotate(380deg)`, offset: 1 },
-  ], { duration: 680, easing: 'ease-in', fill: 'forwards' }).onfinish = () => {
+  ], { duration: 680, easing: 'ease-out', fill: 'forwards' }).onfinish = () => {
     proj.remove(); showSplat(item, ex, ey);
   };
 }
@@ -625,10 +626,8 @@ function renderGame() {
   const potTxt = gs.pot > 0 ? `POT  ${gs.pot.toLocaleString()}` : '';
   if (gs.pot > state.prevPot && gs.pot > 0) {
     potEl.classList.remove('pot-pulse');
-    potEl.classList.remove('pot-tick');
     void potEl.offsetWidth; // reflow
     potEl.classList.add('pot-pulse');
-    potEl.classList.add('pot-tick');
     playSound('chip');
   }
   potEl.textContent = potTxt;
@@ -693,9 +692,12 @@ function renderSeats(gs) {
       </div>`;
     el.appendChild(seat);
     seat.querySelectorAll('.seat-chips').forEach(chipEl => {
-      chipEl.classList.add('ticking');
-      setTimeout(() => chipEl.classList.remove('ticking'), 300);
+      if (prevChipsMap[i] !== p.chips) {
+        chipEl.classList.add('ticking');
+        setTimeout(() => chipEl.classList.remove('ticking'), 300);
+      }
     });
+    prevChipsMap[i] = p.chips;
   });
 
   // My seat
@@ -720,9 +722,12 @@ function renderSeats(gs) {
     <div class="my-hand-label seat-hand-label" id="my-hand-label"></div>`;
     el.appendChild(mSeat);
     mSeat.querySelectorAll('.seat-chips').forEach(chipEl => {
-      chipEl.classList.add('ticking');
-      setTimeout(() => chipEl.classList.remove('ticking'), 300);
+      if (prevChipsMap[myIdx] !== myPlayer.chips) {
+        chipEl.classList.add('ticking');
+        setTimeout(() => chipEl.classList.remove('ticking'), 300);
+      }
     });
+    prevChipsMap[myIdx] = myPlayer.chips;
   }
 }
 
@@ -749,7 +754,7 @@ function renderCommunity(gs) {
       const card = buildFaceCard(gs.community[i], 'md', i);
       if (i >= prevCount) {
         card.classList.add('reveal-flash');
-        card.style.animationDelay = `${(i - prevCount) * 0.18}s`;
+        card.style.animationDelay = `${(i - prevCount) * 0.12}s`;
       }
       el.appendChild(card);
     } else {
@@ -778,7 +783,7 @@ function renderMyCards() {
   state.myCards.forEach((card, i) => {
     const cardEl = buildFaceCard(card, 'md', 0);
     cardEl.classList.add('flip-in');
-    cardEl.style.animationDelay = `${i * 0.14}s`;
+    cardEl.style.animationDelay = `${i * 0.08}s`;
     el.appendChild(cardEl);
   });
   const gs = state.gameState;
@@ -952,7 +957,7 @@ function spawnConfetti(container) {
     const angle = (Math.PI * 2 * i) / 28 + (Math.random() - 0.5) * 0.4;
     const dist  = 80 + Math.random() * 120;
     const tx    = Math.cos(angle) * dist;
-    const ty    = Math.sin(angle) * dist - 40;
+    const ty    = Math.sin(angle) * dist;
     p.style.cssText = `
       background: ${colors[i % colors.length]};
       left: 50%; top: 50%;
@@ -1049,7 +1054,7 @@ function showWinFloat(amount) {
     { opacity: 1, transform: 'translate(-50%,-50%) scale(1.35)', offset: 0.1 },
     { opacity: 1, transform: `translate(calc(-50% + ${dx * 0.75}px),calc(-50% + ${dy * 0.75}px)) scale(1)`, offset: 0.78 },
     { opacity: 0, transform: `translate(calc(-50% + ${dx}px),calc(-50% + ${dy}px)) scale(0.7)`, offset: 1 },
-  ], { duration: 1300, easing: 'ease-in-out' }).onfinish = () => el.remove();
+  ], { duration: 950, easing: 'cubic-bezier(0.25, 0.46, 0.45, 0.94)' }).onfinish = () => el.remove();
 }
 
 // ─── Utils ────────────────────────────────────────────────────────
