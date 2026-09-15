@@ -441,8 +441,8 @@ body::after {
 /* ─── Poker Table ─────────────────────────────────────────────────── */
 .table-wrap {
   grid-area: table;
-  display: flex; align-items: center; justify-content: center;
-  padding: var(--s5) var(--s5) 0;
+  display: flex; align-items: flex-end; justify-content: center;
+  padding: var(--s5) var(--s5) var(--s4);
 }
 
 #poker-table {
@@ -1237,25 +1237,34 @@ body::after {
   /* ── Game Layout ─────────────────────────────────────────── */
   .game-layout {
     grid-template-columns: 1fr;
-    grid-template-rows: 1fr auto;
+    grid-template-rows: 1fr auto auto;
     grid-template-areas:
       "table"
+      "log"
       "bottom";
   }
 
-  /* Hide the game log on mobile — too narrow */
-  #game-log { display: none; }
+  /* Compact log strip on mobile */
+  #game-log {
+    display: flex;
+    grid-area: log;
+    height: 72px;
+    border-left: none;
+    border-top: 1px solid rgba(245,185,66,0.06);
+  }
+  #game-log .log-header { padding: var(--s1) var(--s3); }
+  #log-entries { flex-direction: row; flex-wrap: nowrap; gap: var(--s3); overflow-x: auto; overflow-y: hidden; align-items: center; }
+  .log-entry { border-bottom: none; white-space: nowrap; flex-shrink: 0; }
 
   .table-wrap {
-    padding: var(--s2) var(--s2) 0;
-    align-items: flex-start;
-    padding-top: var(--s4);
+    padding: var(--s2);
+    align-items: flex-end;
   }
 
-  /* Table fills the viewport width */
+  /* Slightly narrower so seats at 97% don't clip at screen edge */
   #poker-table {
-    width: min(98vw, 560px);
-    height: min(58vw, 330px);
+    width: min(86vw, 500px);
+    height: min(72vw, calc(100svh - 320px));
   }
 
   /* ── Bottom Panel ────────────────────────────────────────── */
@@ -1334,8 +1343,8 @@ body::after {
 /* ─── Responsive — Small Phones (≤ 480px) ───────────────────────── */
 @media (max-width: 480px) {
   #poker-table {
-    width: 99vw;
-    height: 58vw;
+    width: 86vw;
+    height: 70vw;
   }
 
   .seat-box { min-width: 58px; padding: 3px var(--s1); }
@@ -1536,7 +1545,17 @@ body::after {
 .chat-send-btn:hover { background: var(--gold); color: var(--ink); }
 
 @media (max-width: 768px) {
-  .chat-panel { width: 180px; height: 180px; }
+  /* On mobile: anchor chat to top-right (below sound/lb buttons), starts collapsed */
+  .chat-panel {
+    bottom: auto;
+    top: calc(var(--s3) + 34px + var(--s1) + 34px + var(--s1) + 4px);
+    right: 0;
+    width: 190px;
+    height: 36px;
+    border-radius: var(--radius-md) 0 0 var(--radius-md);
+    border-right: none;
+  }
+  .chat-panel:not(.collapsed) { height: 220px; }
   .chat-panel.collapsed { height: 36px; }
 }
 

@@ -16,7 +16,7 @@ const state = {
 
 let activeTray      = null;
 let turnTimerIval   = null;
-let chatCollapsed   = false;
+let chatCollapsed   = window.innerWidth <= 768;
 let balanceTimeout  = null;
 
 // ─── Init ─────────────────────────────────────────────────────────
@@ -316,6 +316,12 @@ function initChat() {
   const input   = document.getElementById('chat-input');
   const sendBtn = document.getElementById('chat-send');
   const colBtn  = document.getElementById('chat-collapse');
+
+  // Apply initial collapsed state (mobile starts collapsed)
+  if (chatCollapsed) {
+    document.getElementById('chat-panel').classList.add('collapsed');
+    colBtn.textContent = '▲';
+  }
 
   const sendChat = () => {
     const text = input.value.trim();
