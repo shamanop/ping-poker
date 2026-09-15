@@ -442,7 +442,7 @@ body::after {
 .table-wrap {
   grid-area: table;
   display: flex; align-items: flex-end; justify-content: center;
-  padding: var(--s5) var(--s5) var(--s4);
+  padding: var(--s5) var(--s5) 88px;
 }
 
 #poker-table {
