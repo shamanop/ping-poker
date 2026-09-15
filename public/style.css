@@ -1,28 +1,28 @@
 /* ─────────────────────────────────────────────────────────────────────────
    PokerPing — Midnight Casino, Editorial Noir
    Direction: intimate high-stakes darkness; VP gold as the only warmth
-   Palette: near-black / deep-rail-brown / felt-green / VP-gold / ivory
+   Palette: VP navy / felt-green / VP-gold / white — fully on-brand
    Type: Space Grotesk (body+numbers) · Bebas Neue (brand only)
    ───────────────────────────────────────────────────────────────────────── */
 
 :root {
-  /* Surface hierarchy — warm dark, not navy */
-  --ink:        #0A0A0B;
-  --ink-up:     #111115;
-  --ink-card:   #17171C;
-  --ink-panel:  #1C1C22;
+  /* Surface hierarchy — VP navy family (dark→light) */
+  --ink:        #050B14;
+  --ink-up:     #0A1628;
+  --ink-card:   #0F1F3A;
+  --ink-panel:  #162848;
 
-  /* VP Gold */
-  --gold:       #F0B429;
-  --gold-dim:   #9a7218;
-  --gold-faint: rgba(240, 180, 41, 0.12);
-  --gold-glow:  rgba(240, 180, 41, 0.35);
-  --gold-ring:  rgba(240, 180, 41, 0.6);
+  /* VP Gold — canonical #F5B942 */
+  --gold:       #F5B942;
+  --gold-dim:   #B47C0C;
+  --gold-faint: rgba(245, 185, 66, 0.12);
+  --gold-glow:  rgba(245, 185, 66, 0.35);
+  --gold-ring:  rgba(245, 185, 66, 0.6);
 
-  /* Text */
-  --ivory:      #E8DFC8;
-  --ivory-mid:  #A09880;
-  --ivory-dim:  #5A5248;
+  /* Text — VP white */
+  --ivory:      #ECF0F1;
+  --ivory-mid:  #8A9DB8;
+  --ivory-dim:  #525561;
 
   /* Table */
   --felt:       #1B5C30;
@@ -79,7 +79,7 @@ body {
   justify-content: center;
   padding: var(--s7) var(--s6) var(--s7) var(--s7);
   position: relative;
-  border-right: 1px solid rgba(240,180,41,0.08);
+  border-right: 1px solid rgba(245,185,66,0.08);
 }
 
 .landing-brand {
@@ -195,7 +195,7 @@ body {
 
 .text-input {
   background: var(--ink);
-  border: 1px solid rgba(240,180,41,0.2);
+  border: 1px solid rgba(245,185,66,0.2);
   border-radius: var(--radius-sm);
   padding: 11px var(--s4);
   color: var(--ivory);
@@ -235,7 +235,7 @@ body {
   transition: border-color 0.12s, background 0.12s;
   line-height: 1;
 }
-.avatar-option:hover { border-color: rgba(240,180,41,0.4); background: var(--ink-card); }
+.avatar-option:hover { border-color: rgba(245,185,66,0.4); background: var(--ink-card); }
 .avatar-option.selected {
   border-color: var(--gold);
   background: var(--ink-card);
@@ -257,7 +257,7 @@ body {
 /* ─── Buttons ──────────────────────────────────────────────────────── */
 .btn-primary {
   background: var(--gold);
-  color: #0A0A0B;
+  color: #0A1628;
   border: none;
   border-radius: var(--radius-sm);
   padding: 13px var(--s6);
@@ -333,7 +333,7 @@ body {
 .lobby-header {
   display: flex; justify-content: space-between; align-items: flex-end;
   padding-bottom: var(--s4);
-  border-bottom: 1px solid rgba(240,180,41,0.1);
+  border-bottom: 1px solid rgba(245,185,66,0.1);
 }
 
 .lobby-brand {
@@ -370,7 +370,7 @@ body {
 
 .player-lobby-item {
   display: flex; align-items: center; gap: var(--s3);
-  background: var(--ink-up); border: 1px solid rgba(240,180,41,0.1);
+  background: var(--ink-up); border: 1px solid rgba(245,185,66,0.1);
   border-radius: var(--radius-sm); padding: var(--s3) var(--s4);
   animation: slideIn 0.2s ease;
 }
@@ -379,12 +379,12 @@ body {
 .host-badge {
   margin-left: auto; font-size: 10px; font-weight: 700; letter-spacing: 1.5px;
   color: var(--gold); background: var(--gold-faint);
-  border: 1px solid rgba(240,180,41,0.3);
+  border: 1px solid rgba(245,185,66,0.3);
   padding: 2px 8px; border-radius: 2px;
 }
 
 .game-rules-block {
-  background: var(--ink-up); border: 1px solid rgba(240,180,41,0.1);
+  background: var(--ink-up); border: 1px solid rgba(245,185,66,0.1);
   border-radius: var(--radius-sm); padding: var(--s4);
 }
 .rules-head {
@@ -490,7 +490,7 @@ body {
 
 .seat-box {
   background: var(--ink-card);
-  border: 1px solid rgba(240,180,41,0.15);
+  border: 1px solid rgba(245,185,66,0.15);
   border-radius: var(--radius-md);
   padding: var(--s2) var(--s3);
   min-width: 96px;
@@ -559,7 +559,7 @@ body {
 /* Active player pulse */
 @keyframes seatPulse {
   0%, 100% { box-shadow: 0 0 0 1px var(--gold-ring), 0 0 16px var(--gold-glow); }
-  50%       { box-shadow: 0 0 0 1px rgba(240,180,41,0.9), 0 0 32px rgba(240,180,41,0.5); }
+  50%       { box-shadow: 0 0 0 1px rgba(245,185,66,0.9), 0 0 32px rgba(245,185,66,0.5); }
 }
 .player-seat.is-active .seat-box { animation: seatPulse 2s ease-in-out infinite; }
 
@@ -586,7 +586,7 @@ body {
 /* Card back — VP branded */
 .card.back {
   background: var(--ink-card);
-  border: 1px solid rgba(240,180,41,0.3);
+  border: 1px solid rgba(245,185,66,0.3);
   box-shadow: 0 2px 8px rgba(0,0,0,0.5);
 }
 
@@ -594,7 +594,7 @@ body {
   position: absolute; inset: 0;
   display: flex; align-items: center; justify-content: center;
   background:
-    linear-gradient(135deg, rgba(240,180,41,0.06) 0%, transparent 50%, rgba(240,180,41,0.06) 100%);
+    linear-gradient(135deg, rgba(245,185,66,0.06) 0%, transparent 50%, rgba(245,185,66,0.06) 100%);
 }
 
 .card.back img.back-logo {
@@ -676,7 +676,7 @@ body {
 .raise-row {
   display: flex; align-items: center; gap: var(--s3);
   background: var(--ink-up);
-  border: 1px solid rgba(240,180,41,0.15);
+  border: 1px solid rgba(245,185,66,0.15);
   border-radius: var(--radius-sm); padding: var(--s3) var(--s4);
 }
 
@@ -726,9 +726,9 @@ body {
 
 .btn-raise {
   background: var(--gold-faint); color: var(--gold);
-  border-color: rgba(240,180,41,0.4);
+  border-color: rgba(245,185,66,0.4);
 }
-.btn-raise:hover { background: rgba(240,180,41,0.25); border-color: var(--gold); box-shadow: 0 0 16px var(--gold-glow); }
+.btn-raise:hover { background: rgba(245,185,66,0.25); border-color: var(--gold); box-shadow: 0 0 16px var(--gold-glow); }
 
 .waiting-action {
   flex: 1; text-align: center; font-size: 13px; color: var(--ivory-dim);
@@ -741,7 +741,7 @@ body {
 .game-log {
   grid-area: log;
   background: var(--ink-up);
-  border-left: 1px solid rgba(240,180,41,0.06);
+  border-left: 1px solid rgba(245,185,66,0.06);
   overflow: hidden;
   display: flex; flex-direction: column;
 }
@@ -771,7 +771,7 @@ body {
 .log-sep {
   color: var(--gold-dim); font-weight: 700; font-size: 10px;
   letter-spacing: 1.5px; padding-top: var(--s3); margin-top: var(--s2);
-  border-top: 1px solid rgba(240,180,41,0.15); border-bottom: none;
+  border-top: 1px solid rgba(245,185,66,0.15); border-bottom: none;
 }
 
 #log-entries::-webkit-scrollbar { width: 2px; }
@@ -788,7 +788,7 @@ body {
 
 .showdown-card {
   background: var(--ink-card);
-  border: 1px solid rgba(240,180,41,0.4);
+  border: 1px solid rgba(245,185,66,0.4);
   border-radius: var(--radius-lg);
   padding: var(--s7) var(--s8);
   text-align: center; max-width: 480px; width: 90%;
