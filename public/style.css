@@ -1213,9 +1213,10 @@ body::after {
   .landing-right {
     width: 100%;
     min-height: 100svh;
-    padding: var(--s6) var(--s5) var(--s7);
-    justify-content: flex-start;
-    padding-top: var(--s7);
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: center;
+    padding: var(--s7) var(--s5) var(--s7);
   }
 
   .mobile-brand { display: block; }
