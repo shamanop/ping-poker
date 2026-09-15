@@ -442,13 +442,14 @@ body::after {
 .table-wrap {
   grid-area: table;
   display: flex; align-items: flex-end; justify-content: center;
-  padding: var(--s5) var(--s5) 88px;
+  padding: var(--s3) var(--s4) 72px;
 }
 
 #poker-table {
   position: relative;
-  width: min(1100px, calc(100vw - 260px));
-  height: min(613px, calc((100vw - 260px) * 0.557));
+  /* Fill available space in both dimensions — constrained by whichever is tighter */
+  width: min(1400px, calc(100vw - 240px), calc((100vh - 210px) * 1.795));
+  aspect-ratio: 1.795 / 1;
 
   /* Felt surface — spotlight from above, dark edges */
   background:
