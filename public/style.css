@@ -938,3 +938,255 @@ body::after {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+/* ─── Profile Photo Upload ──────────────────────────────────────── */
+.avatar-section {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s3);
+}
+
+.photo-upload-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--s1);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.photo-preview-circle {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 2px dashed rgba(245,185,66,0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--ink-card);
+  transition: border-color 0.18s, background 0.18s, box-shadow 0.18s;
+  overflow: hidden;
+}
+
+.photo-upload-area:hover .photo-preview-circle,
+.photo-upload-area.drag-over .photo-preview-circle {
+  border-color: var(--gold);
+  background: var(--gold-faint);
+  box-shadow: 0 0 0 3px var(--gold-faint);
+}
+
+.photo-preview-circle.has-photo {
+  border: 2px solid var(--gold);
+  box-shadow: 0 0 0 2px var(--gold-faint);
+}
+
+.photo-upload-icon { font-size: 18px; opacity: 0.55; }
+
+.photo-preview-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.photo-upload-hint {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ivory-dim);
+}
+
+/* ─── Seat Profile Pic ───────────────────────────────────────────── */
+.seat-profile-pic {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--gold-ring);
+  display: block;
+  margin: 0 auto 2px;
+}
+
+.p-profile-pic {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1.5px solid var(--gold-ring);
+  flex-shrink: 0;
+}
+
+/* ─── Throw Target (opponent seat hover) ────────────────────────── */
+.seat-box.throw-target {
+  cursor: pointer;
+  transition: box-shadow 0.14s;
+}
+
+.seat-box.throw-target:hover {
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.06),
+    0 0 0 1px rgba(245,185,66,0.4),
+    0 0 14px rgba(245,185,66,0.12);
+}
+
+/* ─── Throw Tray (popup near seat) ─────────────────────────────── */
+.throw-tray {
+  background: var(--ink-panel);
+  border: 1px solid rgba(245,185,66,0.32);
+  border-radius: var(--radius-lg);
+  padding: var(--s3) var(--s3);
+  box-shadow: 0 10px 28px rgba(0,0,0,0.65);
+  min-width: 168px;
+  animation: popIn 0.12s ease-out;
+}
+
+.throw-tray-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ivory-mid);
+  margin-bottom: var(--s2);
+  text-align: center;
+}
+
+.throw-tray-label strong { color: var(--gold); }
+
+.throw-options {
+  display: flex;
+  gap: var(--s2);
+  justify-content: center;
+}
+
+.throw-option {
+  font-size: 26px;
+  cursor: pointer;
+  padding: var(--s1) var(--s2);
+  border-radius: var(--radius-md);
+  transition: background 0.1s, transform 0.1s;
+  line-height: 1;
+  user-select: none;
+}
+
+.throw-option:hover {
+  background: var(--gold-faint);
+  transform: scale(1.22) rotate(-4deg);
+}
+
+/* ─── Social Panel (sticker button + tray) ───────────────────────── */
+.social-panel {
+  position: fixed;
+  bottom: 28px;
+  left: 28px;
+  z-index: 100;
+}
+
+.social-btn {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: 1px solid rgba(245,185,66,0.3);
+  background: var(--ink-panel);
+  font-size: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.12s;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.45);
+}
+
+.social-btn:hover {
+  border-color: var(--gold);
+  box-shadow: 0 4px 18px rgba(245,185,66,0.25);
+  transform: scale(1.06);
+}
+
+.sticker-tray {
+  position: absolute;
+  bottom: 56px;
+  left: 0;
+  background: var(--ink-panel);
+  border: 1px solid rgba(245,185,66,0.28);
+  border-radius: var(--radius-lg);
+  padding: var(--s3);
+  box-shadow: 0 10px 36px rgba(0,0,0,0.65);
+  width: 226px;
+  animation: popIn 0.15s ease-out;
+}
+
+.sticker-tray.hidden { display: none; }
+
+.sticker-tray-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ivory-mid);
+  margin-bottom: var(--s2);
+  text-align: center;
+}
+
+.sticker-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: var(--s1);
+  margin-bottom: var(--s2);
+}
+
+.sticker-item {
+  font-size: 22px;
+  cursor: pointer;
+  text-align: center;
+  padding: 3px 2px;
+  border-radius: var(--radius-sm);
+  transition: background 0.1s, transform 0.1s;
+  line-height: 1.25;
+  user-select: none;
+}
+
+.sticker-item:hover {
+  background: var(--gold-faint);
+  transform: scale(1.25);
+}
+
+.sticker-tray-tip {
+  font-size: 9px;
+  color: var(--ivory-dim);
+  text-align: center;
+  border-top: 1px solid rgba(255,255,255,0.05);
+  padding-top: var(--s2);
+  line-height: 1.4;
+}
+
+/* ─── Projectile & Splat FX ─────────────────────────────────────── */
+.throw-projectile {
+  user-select: none;
+  text-shadow: 0 3px 10px rgba(0,0,0,0.7);
+  will-change: transform;
+}
+
+.throw-splat {
+  user-select: none;
+  line-height: 1;
+  text-shadow: 0 0 20px rgba(255,80,0,0.7);
+  will-change: transform, opacity;
+}
+
+/* ─── Floating Sticker ──────────────────────────────────────────── */
+.floating-sticker {
+  text-align: center;
+  user-select: none;
+  will-change: transform, opacity;
+}
+
+.float-emoji {
+  font-size: 52px;
+  line-height: 1;
+  filter: drop-shadow(0 0 14px rgba(245,185,66,0.55));
+}
+
+.float-from {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--gold);
+  margin-top: var(--s1);
+}

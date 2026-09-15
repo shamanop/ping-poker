@@ -48,6 +48,7 @@ function makePlayer(socketId, name, avatar) {
     socketId,
     name,
     avatar: avatar || '🃏',
+    profilePic: null,
     chips: STARTING_CHIPS,
     cards: [],
     roundBet: 0,
@@ -589,9 +590,10 @@ function publicGameState(room) {
     handNum:          room.handNum,
     status:           room.status,
     players: room.players.map((p, i) => ({
-      name:      p.name,
-      avatar:    p.avatar,
-      chips:     p.chips,
+      name:       p.name,
+      avatar:     p.avatar,
+      profilePic: p.profilePic || null,
+      chips:      p.chips,
       roundBet:  p.roundBet,
       folded:    p.folded,
       allIn:     p.allIn,
@@ -621,9 +623,18 @@ function emitPrivateCards(room) {
 
 function broadcastRoomUpdate(room) {
   io.to(room.id).emit('room_update', {
-    players:  room.players.map(p => ({ name: p.name, avatar: p.avatar })),
+    players:  room.players.map(p => ({ name: p.name, avatar: p.avatar, profilePic: p.profilePic || null })),
     hostName: room.players.find(p => p.socketId === room.hostSocketId)?.name || '',
   });
+}
+
+// ─── Validation helpers ───────────────────────────────────────────────────────
+
+function validatePic(pic) {
+  if (typeof pic !== 'string') return null;
+  if (!pic.startsWith('data:image/')) return null;
+  if (pic.length > 150000) return null; // ~100KB base64 cap
+  return pic;
 }
 
 // ─── Room ID Generator ────────────────────────────────────────────────────────
@@ -643,12 +654,13 @@ io.on('connection', socket => {
   console.log(`Socket connected: ${socket.id}`);
 
   // ── create_room ──────────────────────────────────────────────────────────
-  socket.on('create_room', ({ name, avatar } = {}) => {
+  socket.on('create_room', ({ name, avatar, profilePic } = {}) => {
     let roomId;
     do { roomId = generateRoomId(); } while (rooms.has(roomId));
 
     const room   = makeRoom(roomId, socket.id);
     const player = makePlayer(socket.id, name || 'Player 1', avatar);
+    player.profilePic = validatePic(profilePic);
     room.players.push(player);
     rooms.set(roomId, room);
 
@@ -659,7 +671,7 @@ io.on('connection', socket => {
   });
 
   // ── join_room ─────────────────────────────────────────────────────────────
-  socket.on('join_room', ({ roomId, name, avatar } = {}) => {
+  socket.on('join_room', ({ roomId, name, avatar, profilePic } = {}) => {
     const room = rooms.get(roomId);
     if (!room) {
       socket.emit('error', { message: 'Room not found' });
@@ -672,6 +684,7 @@ io.on('connection', socket => {
 
     const playerIdx = room.players.length;
     const player    = makePlayer(socket.id, name || `Player ${playerIdx + 1}`, avatar);
+    player.profilePic = validatePic(profilePic);
     room.players.push(player);
 
     socket.join(roomId);
@@ -697,12 +710,13 @@ io.on('connection', socket => {
   });
 
   // ── create_demo ───────────────────────────────────────────────────────────
-  socket.on('create_demo', ({ name, avatar } = {}) => {
+  socket.on('create_demo', ({ name, avatar, profilePic } = {}) => {
     let roomId;
     do { roomId = generateRoomId(); } while (rooms.has(roomId));
 
     const room  = makeRoom(roomId, socket.id);
     const human = makePlayer(socket.id, name || 'You', avatar);
+    human.profilePic = validatePic(profilePic);
     room.players.push(human);
 
     for (let i = 0; i < 3; i++) {
@@ -744,6 +758,29 @@ io.on('connection', socket => {
       emitPrivateCards(room);
       scheduleBotActionsIfNeeded(room);
     }
+  });
+
+  // ── drop_sticker ──────────────────────────────────────────────────────────
+  socket.on('drop_sticker', ({ roomId, emoji } = {}) => {
+    const room = rooms.get(roomId);
+    if (!room) return;
+    const sender = room.players.find(p => p.socketId === socket.id);
+    if (!sender) return;
+    // Whitelist emoji to prevent injection
+    const safe = String(emoji || '').slice(0, 8);
+    io.to(roomId).emit('sticker_dropped', { emoji: safe, fromName: sender.name });
+  });
+
+  // ── throw_item ────────────────────────────────────────────────────────────
+  socket.on('throw_item', ({ roomId, targetIdx, item } = {}) => {
+    const room = rooms.get(roomId);
+    if (!room) return;
+    const fromIdx = room.players.findIndex(p => p.socketId === socket.id);
+    if (fromIdx === -1) return;
+    if (typeof targetIdx !== 'number' || targetIdx < 0 || targetIdx >= room.players.length) return;
+    if (targetIdx === fromIdx) return;
+    const safe = String(item || '').slice(0, 8);
+    io.to(roomId).emit('item_thrown', { fromIdx, targetIdx, item: safe, fromName: room.players[fromIdx].name });
   });
 
   // ── disconnect ────────────────────────────────────────────────────────────

@@ -47,19 +47,28 @@
 
         <div class="setup-field">
           <label class="field-label">AVATAR</label>
-          <div class="avatar-grid">
-            <div class="avatar-option selected" data-avatar="🤠">🤠</div>
-            <div class="avatar-option" data-avatar="🦊">🦊</div>
-            <div class="avatar-option" data-avatar="🐉">🐉</div>
-            <div class="avatar-option" data-avatar="🎩">🎩</div>
-            <div class="avatar-option" data-avatar="🦁">🦁</div>
-            <div class="avatar-option" data-avatar="🐺">🐺</div>
-            <div class="avatar-option" data-avatar="🦅">🦅</div>
-            <div class="avatar-option" data-avatar="🎲">🎲</div>
-            <div class="avatar-option" data-avatar="👑">👑</div>
-            <div class="avatar-option" data-avatar="💀">💀</div>
-            <div class="avatar-option" data-avatar="🎯">🎯</div>
-            <div class="avatar-option" data-avatar="⚡">⚡</div>
+          <div class="avatar-section">
+            <div class="photo-upload-area" id="photo-upload-area" title="Upload a profile photo">
+              <input type="file" id="photo-input" accept="image/*" style="display:none">
+              <div class="photo-preview-circle" id="photo-preview-circle">
+                <div class="photo-upload-icon">📷</div>
+              </div>
+              <div class="photo-upload-hint">photo</div>
+            </div>
+            <div class="avatar-grid">
+              <div class="avatar-option selected" data-avatar="🤠">🤠</div>
+              <div class="avatar-option" data-avatar="🦊">🦊</div>
+              <div class="avatar-option" data-avatar="🐉">🐉</div>
+              <div class="avatar-option" data-avatar="🎩">🎩</div>
+              <div class="avatar-option" data-avatar="🦁">🦁</div>
+              <div class="avatar-option" data-avatar="🐺">🐺</div>
+              <div class="avatar-option" data-avatar="🦅">🦅</div>
+              <div class="avatar-option" data-avatar="🎲">🎲</div>
+              <div class="avatar-option" data-avatar="👑">👑</div>
+              <div class="avatar-option" data-avatar="💀">💀</div>
+              <div class="avatar-option" data-avatar="🎯">🎯</div>
+              <div class="avatar-option" data-avatar="⚡">⚡</div>
+            </div>
           </div>
         </div>
 
@@ -155,6 +164,29 @@
         <div id="log-entries"></div>
       </div>
 
+    </div>
+
+    <!-- ── SOCIAL PANEL ─────────────────────────────────────── -->
+    <div class="social-panel" id="social-panel">
+      <button class="social-btn" id="sticker-toggle" title="Stickers & Reactions">🎭</button>
+      <div class="sticker-tray hidden" id="sticker-tray">
+        <div class="sticker-tray-label">DROP A STICKER</div>
+        <div class="sticker-grid">
+          <div class="sticker-item" data-emoji="🔥">🔥</div>
+          <div class="sticker-item" data-emoji="💎">💎</div>
+          <div class="sticker-item" data-emoji="🤑">🤑</div>
+          <div class="sticker-item" data-emoji="💀">💀</div>
+          <div class="sticker-item" data-emoji="🍀">🍀</div>
+          <div class="sticker-item" data-emoji="👑">👑</div>
+          <div class="sticker-item" data-emoji="🎰">🎰</div>
+          <div class="sticker-item" data-emoji="🎯">🎯</div>
+          <div class="sticker-item" data-emoji="🃏">🃏</div>
+          <div class="sticker-item" data-emoji="🎲">🎲</div>
+          <div class="sticker-item" data-emoji="🏆">🏆</div>
+          <div class="sticker-item" data-emoji="😤">😤</div>
+        </div>
+        <div class="sticker-tray-tip">Click any opponent seat to throw 💣🍅</div>
+      </div>
     </div>
 
     <div id="showdown-overlay" class="showdown-overlay hidden">
