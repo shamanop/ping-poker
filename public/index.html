@@ -44,6 +44,7 @@
         <div class="setup-field">
           <label class="field-label">YOUR NAME</label>
           <input id="player-name" type="text" class="text-input" placeholder="How you want to be known" maxlength="16" autocomplete="off">
+          <div id="bank-display" class="bank-display hidden">BANK &nbsp;◈ <span id="bank-amount">—</span></div>
         </div>
 
         <div class="setup-field">
@@ -143,6 +144,11 @@
         <div id="action-controls" class="action-controls hidden">
           <div id="raise-row" class="raise-row hidden">
             <div class="raise-label">RAISE TO</div>
+            <div class="raise-presets" id="raise-presets">
+              <button class="preset-btn" data-preset="2x">2× BB</button>
+              <button class="preset-btn" data-preset="3x">3× BB</button>
+              <button class="preset-btn" data-preset="pot">Pot</button>
+            </div>
             <div class="raise-amount-wrap">
               <input id="raise-slider" type="range" class="raise-slider">
               <span id="raise-display" class="raise-display">0</span>
@@ -166,6 +172,43 @@
       </div>
 
     </div>
+
+    <!-- ── SOUND TOGGLE ──────────────────────────────────────── -->
+    <button class="sound-toggle" id="sound-toggle" title="Toggle sound">🔊</button>
+
+    <!-- ── CHAT PANEL ────────────────────────────────────────── -->
+    <div class="chat-panel" id="chat-panel">
+      <div class="chat-header" id="chat-header">
+        <span class="chat-title">CHAT</span>
+        <button class="chat-collapse-btn" id="chat-collapse">▼</button>
+      </div>
+      <div class="chat-messages" id="chat-messages"></div>
+      <div class="chat-input-row">
+        <input type="text" class="chat-input" id="chat-input" placeholder="Say something…" maxlength="120" autocomplete="off">
+        <button class="chat-send-btn" id="chat-send">↵</button>
+      </div>
+    </div>
+
+    <!-- ── BUST OVERLAY ───────────────────────────────────────── -->
+    <div id="bust-overlay" class="bust-overlay hidden">
+      <div class="bust-card">
+        <div class="bust-icon">💸</div>
+        <div class="bust-title">YOU'RE OUT OF CHIPS</div>
+        <div id="bust-balance" class="bust-balance">Bank: ◈ —</div>
+        <button id="btn-rebuy" class="btn-primary bust-rebuy-btn">Rebuy ◈ 1,500</button>
+        <div id="bust-broke-msg" class="bust-broke hidden">Your bank is empty. GG.</div>
+      </div>
+    </div>
+
+    <!-- ── LEADERBOARD ────────────────────────────────────────── -->
+    <div id="leaderboard-panel" class="leaderboard-panel hidden">
+      <div class="leaderboard-header">
+        <span>LEADERBOARD</span>
+        <button id="lb-close" class="lb-close-btn">✕</button>
+      </div>
+      <div id="leaderboard-entries" class="leaderboard-entries"></div>
+    </div>
+    <button id="lb-toggle" class="lb-toggle-btn" title="Leaderboard">🏆</button>
 
     <!-- ── SOCIAL PANEL ─────────────────────────────────────── -->
     <div class="social-panel" id="social-panel">

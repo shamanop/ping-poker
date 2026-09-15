@@ -9,9 +9,15 @@ const state = {
   gameState:      null,
   selectedAvatar: '🤠',
   profilePic:     null,
+  myBalance:      null,
+  soundOn:        true,
+  prevPot:        0,
 };
 
-let activeTray = null; // currently open throw tray
+let activeTray      = null;
+let turnTimerIval   = null;
+let chatCollapsed   = false;
+let balanceTimeout  = null;
 
 // ─── Init ─────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -21,8 +27,11 @@ document.addEventListener('DOMContentLoaded', () => {
   bindActions();
   bindSocket();
   initSocialPanel();
+  initSoundToggle();
+  initChat();
+  initLeaderboard();
+  initBustOverlay();
 
-  // Seat click delegation for throw feature
   document.getElementById('player-seats').addEventListener('click', (e) => {
     const seatBox = e.target.closest('.seat-box[data-player-idx]');
     if (!seatBox) return;
@@ -31,7 +40,6 @@ document.addEventListener('DOMContentLoaded', () => {
     showThrowTray(playerIdx, seatBox);
   });
 
-  // Auto-fill room code from URL
   const urlJoin = new URL(window.location.href).searchParams.get('join');
   if (urlJoin) document.getElementById('room-code-input').value = urlJoin;
 });
@@ -42,9 +50,60 @@ function showScreen(id) {
   document.getElementById(id).classList.add('active');
 }
 
+// ─── Sound FX (Web Audio API) ──────────────────────────────────────
+let _audioCtx = null;
+function audioCtx() {
+  if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return _audioCtx;
+}
+
+function playSound(type) {
+  if (!state.soundOn) return;
+  try {
+    const ctx  = audioCtx();
+    const gain = ctx.createGain();
+    gain.connect(ctx.destination);
+
+    const play = (freq, vol, dur, type = 'sine', freqEnd) => {
+      const osc = ctx.createOscillator();
+      osc.type = type;
+      osc.frequency.value = freq;
+      if (freqEnd) osc.frequency.exponentialRampToValueAtTime(freqEnd, ctx.currentTime + dur);
+      gain.gain.setValueAtTime(vol, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
+      osc.connect(gain);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + dur);
+    };
+
+    switch (type) {
+      case 'deal':  play(900, 0.06, 0.055); break;
+      case 'chip':  play(1400, 0.10, 0.07, 'sine', 700); break;
+      case 'fold':  play(280,  0.06, 0.12, 'sine', 190); break;
+      case 'check': play(600,  0.05, 0.06); break;
+      case 'raise': play(520, 0.08, 0.06); setTimeout(() => play(700, 0.08, 0.06), 70); break;
+      case 'win': {
+        [523, 659, 784, 1047].forEach((f, i) => {
+          const g2 = ctx.createGain();
+          const o2 = ctx.createOscillator();
+          g2.connect(ctx.destination);
+          o2.connect(g2);
+          o2.frequency.value = f;
+          const t = ctx.currentTime + i * 0.1;
+          g2.gain.setValueAtTime(0.10, t);
+          g2.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+          o2.start(t); o2.stop(t + 0.22);
+        });
+        break;
+      }
+      case 'splat': play(140, 0.14, 0.18, 'sawtooth', 50); break;
+      case 'timer_warn': play(880, 0.05, 0.08); break;
+    }
+  } catch {}
+}
+
 // ─── Landing ──────────────────────────────────────────────────────
 function bindLanding() {
-  // Avatar emoji selection
   document.querySelectorAll('.avatar-option').forEach(el => {
     el.addEventListener('click', () => {
       document.querySelectorAll('.avatar-option').forEach(a => a.classList.remove('selected'));
@@ -53,45 +112,38 @@ function bindLanding() {
     });
   });
 
-  // Profile photo upload
   const photoInput = document.getElementById('photo-input');
   const photoArea  = document.getElementById('photo-upload-area');
-
   photoArea.addEventListener('click', () => photoInput.click());
-
-  photoArea.addEventListener('dragover', e => {
-    e.preventDefault();
-    photoArea.classList.add('drag-over');
-  });
+  photoArea.addEventListener('dragover', e => { e.preventDefault(); photoArea.classList.add('drag-over'); });
   photoArea.addEventListener('dragleave', () => photoArea.classList.remove('drag-over'));
   photoArea.addEventListener('drop', e => {
-    e.preventDefault();
-    photoArea.classList.remove('drag-over');
+    e.preventDefault(); photoArea.classList.remove('drag-over');
     const file = e.dataTransfer?.files[0];
     if (file && file.type.startsWith('image/')) processPhotoUpload(file);
   });
+  photoInput.addEventListener('change', () => { if (photoInput.files[0]) processPhotoUpload(photoInput.files[0]); });
 
-  photoInput.addEventListener('change', () => {
-    const file = photoInput.files[0];
-    if (file) processPhotoUpload(file);
+  // Debounced balance lookup on name change
+  document.getElementById('player-name').addEventListener('input', () => {
+    clearTimeout(balanceTimeout);
+    const name = document.getElementById('player-name').value.trim();
+    if (!name) { document.getElementById('bank-display').classList.add('hidden'); return; }
+    balanceTimeout = setTimeout(() => {
+      state.socket.emit('check_balance', { name });
+    }, 500);
   });
 
-  // Room actions — include profilePic in all join events
   document.getElementById('btn-create').addEventListener('click', () => {
-    const name = getPlayerName();
-    if (!name) return;
+    const name = getPlayerName(); if (!name) return;
     state.socket.emit('create_room', { name, avatar: state.selectedAvatar, profilePic: state.profilePic });
   });
-
   document.getElementById('btn-demo').addEventListener('click', () => {
-    const name = getPlayerName();
-    if (!name) return;
+    const name = getPlayerName(); if (!name) return;
     state.socket.emit('create_demo', { name, avatar: state.selectedAvatar, profilePic: state.profilePic });
   });
-
   document.getElementById('btn-join').addEventListener('click', () => {
-    const name = getPlayerName();
-    if (!name) return;
+    const name = getPlayerName(); if (!name) return;
     const code = document.getElementById('room-code-input').value.trim().toUpperCase();
     if (!code) { showError('Enter a room code'); return; }
     state.socket.emit('join_room', { roomId: code, name, avatar: state.selectedAvatar, profilePic: state.profilePic });
@@ -113,15 +165,11 @@ function processPhotoUpload(file) {
   const url = URL.createObjectURL(file);
   img.onload = () => {
     const size = Math.min(img.width, img.height);
-    const sx = (img.width  - size) / 2;
-    const sy = (img.height - size) / 2;
-    ctx.drawImage(img, sx, sy, size, size, 0, 0, 80, 80);
+    ctx.drawImage(img, (img.width - size) / 2, (img.height - size) / 2, size, size, 0, 0, 80, 80);
     URL.revokeObjectURL(url);
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.65);
-    state.profilePic = dataUrl;
-
+    state.profilePic = canvas.toDataURL('image/jpeg', 0.65);
     const preview = document.getElementById('photo-preview-circle');
-    preview.innerHTML = `<img src="${dataUrl}" class="photo-preview-img" alt="Profile">`;
+    preview.innerHTML = `<img src="${state.profilePic}" class="photo-preview-img" alt="Profile">`;
     preview.classList.add('has-photo');
   };
   img.onerror = () => URL.revokeObjectURL(url);
@@ -136,8 +184,7 @@ function getPlayerName() {
 
 function showError(msg) {
   const el = document.getElementById('landing-error');
-  el.textContent = msg;
-  el.classList.remove('hidden');
+  el.textContent = msg; el.classList.remove('hidden');
   setTimeout(() => el.classList.add('hidden'), 3000);
 }
 
@@ -146,7 +193,6 @@ function bindLobby() {
   document.getElementById('btn-start').addEventListener('click', () => {
     state.socket.emit('start_game', { roomId: state.roomId });
   });
-
   document.getElementById('btn-copy-code').addEventListener('click', () => {
     const url = `${window.location.origin}?join=${state.roomId}`;
     navigator.clipboard.writeText(url).catch(() => {});
@@ -160,31 +206,23 @@ function renderLobbyPlayers(players, hostName) {
   const list = document.getElementById('lobby-players-list');
   list.innerHTML = players.map(p => {
     const pic = safePic(p.profilePic);
-    return `
-      <div class="player-lobby-item">
-        ${pic
-          ? `<img class="p-profile-pic" src="${pic}" alt="">`
-          : `<span class="p-avatar">${esc(p.avatar)}</span>`
-        }
-        <span class="p-name">${esc(p.name)}</span>
-        ${p.name === hostName ? '<span class="host-badge">HOST</span>' : ''}
-      </div>
-    `;
+    return `<div class="player-lobby-item">
+      ${pic ? `<img class="p-profile-pic" src="${pic}" alt="">` : `<span class="p-avatar">${esc(p.avatar)}</span>`}
+      <span class="p-name">${esc(p.name)}</span>
+      ${p.name === hostName ? '<span class="host-badge">HOST</span>' : ''}
+    </div>`;
   }).join('');
 
   const isHost = state.myIdx === 0;
   const btnStart = document.getElementById('btn-start');
   const waitMsg  = document.getElementById('waiting-msg');
-
   if (isHost) {
-    btnStart.classList.remove('hidden');
-    waitMsg.classList.add('hidden');
+    btnStart.classList.remove('hidden'); waitMsg.classList.add('hidden');
     const canStart = players.length >= 2;
     btnStart.disabled    = !canStart;
     btnStart.textContent = canStart ? 'Start Game' : 'Waiting for players…';
   } else {
-    btnStart.classList.add('hidden');
-    waitMsg.classList.remove('hidden');
+    btnStart.classList.add('hidden'); waitMsg.classList.remove('hidden');
   }
 }
 
@@ -192,9 +230,22 @@ function renderLobbyPlayers(players, hostName) {
 function bindSocket() {
   const s = state.socket;
 
-  s.on('room_joined', ({ roomId, playerIdx }) => {
-    state.roomId = roomId;
-    state.myIdx  = playerIdx;
+  s.on('balance_data', ({ balance }) => {
+    state.myBalance = balance;
+    const el = document.getElementById('bank-display');
+    const amt = document.getElementById('bank-amount');
+    amt.textContent = balance.toLocaleString();
+    el.classList.remove('hidden');
+  });
+
+  s.on('balance_update', ({ balance }) => {
+    state.myBalance = balance;
+  });
+
+  s.on('room_joined', ({ roomId, playerIdx, balance }) => {
+    state.roomId   = roomId;
+    state.myIdx    = playerIdx;
+    if (balance !== undefined) state.myBalance = balance;
     document.getElementById('lobby-room-code').textContent = roomId;
     window.history.replaceState({}, '', `?join=${roomId}`);
     showScreen('lobby-screen');
@@ -205,48 +256,197 @@ function bindSocket() {
   });
 
   s.on('game_state', gs => {
+    const prevActiveIdx = state.gameState?.currentPlayerIdx;
     state.gameState = gs;
+
     if (gs.status === 'playing' || gs.status === 'waiting_next') {
       showScreen('game-screen');
       renderGame();
+    }
+
+    // Turn timer — only reset when active player changes
+    if (gs.currentPlayerIdx !== prevActiveIdx) {
+      if (gs.turnRemainingMs != null && gs.currentPlayerIdx !== null) {
+        startTurnTimer(gs.turnRemainingMs);
+      } else {
+        clearTurnTimer();
+      }
     }
   });
 
   s.on('your_cards', ({ cards, myIdx }) => {
     state.myIdx   = myIdx;
     state.myCards = cards;
-    if (state.gameState) renderMyCards();
+    if (state.gameState) { renderMyCards(); playSound('deal'); }
   });
 
   s.on('showdown_result', ({ winners, pot }) => {
     renderShowdown(winners, pot);
+    playSound('win');
   });
 
-  s.on('sticker_dropped', ({ emoji, fromName }) => {
-    showFloatingSticker(emoji, fromName);
-  });
-
-  s.on('item_thrown', ({ fromIdx, targetIdx, item }) => {
+  s.on('sticker_dropped', ({ emoji, fromName }) => { showFloatingSticker(emoji, fromName); });
+  s.on('item_thrown',     ({ fromIdx, targetIdx, item }) => {
     const fromPos = getSeatTablePos(fromIdx);
     const toPos   = getSeatTablePos(targetIdx);
     animateProjectile(item, fromPos, toPos);
   });
 
-  s.on('error', ({ message }) => {
-    showError(message);
+  s.on('chat_message', ({ name, text }) => { appendChatMsg(name, text); });
+
+  s.on('bust_out', ({ balance }) => { showBustOverlay(balance); });
+
+  s.on('leaderboard_data', ({ entries }) => { renderLeaderboard(entries); });
+
+  s.on('error', ({ message }) => { showError(message); });
+}
+
+// ─── Sound Toggle ──────────────────────────────────────────────────
+function initSoundToggle() {
+  const btn = document.getElementById('sound-toggle');
+  btn.addEventListener('click', () => {
+    state.soundOn = !state.soundOn;
+    btn.textContent = state.soundOn ? '🔊' : '🔇';
+    btn.classList.toggle('muted', !state.soundOn);
   });
 }
 
-// ─── Social Panel — stickers ──────────────────────────────────────
+// ─── Chat ─────────────────────────────────────────────────────────
+function initChat() {
+  const input   = document.getElementById('chat-input');
+  const sendBtn = document.getElementById('chat-send');
+  const colBtn  = document.getElementById('chat-collapse');
+
+  const sendChat = () => {
+    const text = input.value.trim();
+    if (!text || !state.roomId) return;
+    state.socket.emit('chat_message', { roomId: state.roomId, text });
+    input.value = '';
+  };
+
+  sendBtn.addEventListener('click', sendChat);
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') sendChat(); });
+
+  colBtn.addEventListener('click', () => {
+    chatCollapsed = !chatCollapsed;
+    const panel = document.getElementById('chat-panel');
+    panel.classList.toggle('collapsed', chatCollapsed);
+    colBtn.textContent = chatCollapsed ? '▲' : '▼';
+  });
+}
+
+function appendChatMsg(name, text) {
+  const el  = document.getElementById('chat-messages');
+  const msg = document.createElement('div');
+  msg.className = 'chat-msg';
+  msg.innerHTML = `<span class="chat-name">${esc(name)}</span> <span class="chat-text">${esc(text)}</span>`;
+  el.appendChild(msg);
+  el.scrollTop = el.scrollHeight;
+  // Auto-expand if collapsed
+  if (chatCollapsed) {
+    chatCollapsed = false;
+    document.getElementById('chat-panel').classList.remove('collapsed');
+    document.getElementById('chat-collapse').textContent = '▼';
+  }
+}
+
+// ─── Bust Overlay ──────────────────────────────────────────────────
+function initBustOverlay() {
+  document.getElementById('btn-rebuy').addEventListener('click', () => {
+    if (!state.roomId) return;
+    state.socket.emit('rebuy', { roomId: state.roomId });
+    document.getElementById('bust-overlay').classList.add('hidden');
+  });
+}
+
+function showBustOverlay(balance) {
+  document.getElementById('bust-overlay').classList.remove('hidden');
+  document.getElementById('bust-balance').textContent = `Bank: ◈ ${balance.toLocaleString()}`;
+  const rebuyBtn = document.getElementById('btn-rebuy');
+  const brokeMsg = document.getElementById('bust-broke-msg');
+  if (balance >= 20) {
+    rebuyBtn.classList.remove('hidden');
+    brokeMsg.classList.add('hidden');
+    rebuyBtn.textContent = `Rebuy ◈ ${Math.min(1500, balance).toLocaleString()}`;
+  } else {
+    rebuyBtn.classList.add('hidden');
+    brokeMsg.classList.remove('hidden');
+  }
+}
+
+// ─── Leaderboard ───────────────────────────────────────────────────
+function initLeaderboard() {
+  document.getElementById('lb-toggle').addEventListener('click', () => {
+    const panel = document.getElementById('leaderboard-panel');
+    if (panel.classList.contains('hidden')) {
+      state.socket.emit('get_leaderboard');
+      panel.classList.remove('hidden');
+    } else {
+      panel.classList.add('hidden');
+    }
+  });
+  document.getElementById('lb-close').addEventListener('click', () => {
+    document.getElementById('leaderboard-panel').classList.add('hidden');
+  });
+}
+
+function renderLeaderboard(entries) {
+  const el = document.getElementById('leaderboard-entries');
+  el.innerHTML = entries.map((e, i) => `
+    <div class="lb-row ${e.name.toLowerCase() === (state.gameState?.players[state.myIdx]?.name || '').toLowerCase() ? 'lb-me' : ''}">
+      <span class="lb-rank">#${i + 1}</span>
+      <span class="lb-name">${esc(e.name)}</span>
+      <span class="lb-balance">◈ ${e.balance.toLocaleString()}</span>
+    </div>
+  `).join('');
+}
+
+// ─── Turn Timer ────────────────────────────────────────────────────
+function startTurnTimer(remainingMs) {
+  clearTurnTimer();
+  const endAt = Date.now() + remainingMs;
+
+  turnTimerIval = setInterval(() => {
+    const rem  = Math.max(0, endAt - Date.now());
+    const secs = Math.ceil(rem / 1000);
+    const pct  = rem / 30000;
+
+    // Color interpolation gold → red
+    const r = Math.round(245 - (1 - pct) * 53)  | 0;
+    const g = Math.round(185 * pct)              | 0;
+    const b = Math.round(66  * pct + 48 * (1 - pct)) | 0;
+    const col = `rgb(${r},${g},${b})`;
+
+    document.querySelectorAll('.seat-timer').forEach(el => {
+      el.textContent = secs;
+      el.style.color = col;
+      // Warning flash below 6s
+      el.classList.toggle('timer-warn', secs <= 6);
+    });
+
+    // My-turn countdown strip
+    const myTimer = document.getElementById('my-turn-timer');
+    if (myTimer) {
+      myTimer.textContent = secs;
+      myTimer.style.color = col;
+    }
+
+    if (secs <= 6 && secs % 2 === 0) playSound('timer_warn');
+    if (rem <= 0) clearTurnTimer();
+  }, 200);
+}
+
+function clearTurnTimer() {
+  if (turnTimerIval) { clearInterval(turnTimerIval); turnTimerIval = null; }
+}
+
+// ─── Social Panel ─────────────────────────────────────────────────
 function initSocialPanel() {
   const toggle = document.getElementById('sticker-toggle');
   const tray   = document.getElementById('sticker-tray');
   if (!toggle || !tray) return;
 
-  toggle.addEventListener('click', (e) => {
-    e.stopPropagation();
-    tray.classList.toggle('hidden');
-  });
+  toggle.addEventListener('click', e => { e.stopPropagation(); tray.classList.toggle('hidden'); });
 
   tray.querySelectorAll('.sticker-item').forEach(item => {
     item.addEventListener('click', () => {
@@ -256,20 +456,16 @@ function initSocialPanel() {
     });
   });
 
-  document.addEventListener('click', (e) => {
-    if (!e.target.closest('#social-panel')) {
-      tray.classList.add('hidden');
-    }
+  document.addEventListener('click', e => {
+    if (!e.target.closest('#social-panel')) tray.classList.add('hidden');
   });
 }
 
 // ─── Throw Tray ───────────────────────────────────────────────────
 function showThrowTray(playerIdx, nearEl) {
   if (activeTray) { activeTray.remove(); activeTray = null; }
-
   const gs = state.gameState;
-  if (!gs || !gs.players[playerIdx]) return;
-  if (!state.roomId) return;
+  if (!gs?.players[playerIdx] || !state.roomId) return;
 
   const rect = nearEl.getBoundingClientRect();
   const tray = document.createElement('div');
@@ -281,13 +477,12 @@ function showThrowTray(playerIdx, nearEl) {
       <div class="throw-option" data-item="🍅" title="Tomato">🍅</div>
       <div class="throw-option" data-item="💦" title="Splash">💦</div>
       <div class="throw-option" data-item="🎉" title="Celebrate">🎉</div>
-    </div>
-  `;
+    </div>`;
 
   const trayW = 168;
   const rawCx = rect.left + rect.width / 2;
-  const cx = Math.min(Math.max(rawCx, trayW / 2 + 8), window.innerWidth - trayW / 2 - 8);
-  let   cy = rect.bottom + 6;
+  const cx    = Math.min(Math.max(rawCx, trayW / 2 + 8), window.innerWidth - trayW / 2 - 8);
+  let   cy    = rect.bottom + 6;
   if (cy + 90 > window.innerHeight) cy = rect.top - 90;
 
   tray.style.cssText = `position:fixed;left:${cx}px;top:${cy}px;transform:translateX(-50%);z-index:300;`;
@@ -295,21 +490,17 @@ function showThrowTray(playerIdx, nearEl) {
   activeTray = tray;
 
   tray.querySelectorAll('.throw-option').forEach(opt => {
-    opt.addEventListener('click', (e) => {
+    opt.addEventListener('click', e => {
       e.stopPropagation();
       state.socket.emit('throw_item', { roomId: state.roomId, targetIdx: playerIdx, item: opt.dataset.item });
       tray.remove(); activeTray = null;
     });
   });
 
-  const autoClose = setTimeout(() => {
-    if (activeTray === tray) { tray.remove(); activeTray = null; }
-  }, 4000);
-
-  const outside = (e) => {
+  const autoClose = setTimeout(() => { if (activeTray === tray) { tray.remove(); activeTray = null; } }, 4000);
+  const outside = e => {
     if (!tray.contains(e.target)) {
-      clearTimeout(autoClose);
-      tray.remove(); activeTray = null;
+      clearTimeout(autoClose); tray.remove(); activeTray = null;
       document.removeEventListener('click', outside);
     }
   };
@@ -320,8 +511,8 @@ function showThrowTray(playerIdx, nearEl) {
 function getSeatTablePos(playerIdx) {
   const gs = state.gameState;
   if (!gs) return [50, 50];
-  const n    = gs.players.length;
-  const pos  = SEATS[Math.min(n, 8)] || SEATS[8];
+  const n      = gs.players.length;
+  const pos    = SEATS[Math.min(n, 8)] || SEATS[8];
   const myIdx  = state.myIdx ?? 0;
   const offset = (playerIdx - myIdx + n) % n;
   return pos[offset] || [50, 50];
@@ -332,13 +523,11 @@ function animateProjectile(item, fromPos, toPos) {
   const table = document.getElementById('poker-table');
   if (!table) return;
   const r = table.getBoundingClientRect();
-
   const sx = r.left + r.width  * fromPos[0] / 100;
   const sy = r.top  + r.height * fromPos[1] / 100;
   const ex = r.left + r.width  * toPos[0]   / 100;
   const ey = r.top  + r.height * toPos[1]   / 100;
-  const dx = ex - sx;
-  const dy = ey - sy;
+  const dx = ex - sx, dy = ey - sy;
   const arc = Math.min(110, Math.hypot(dx, dy) * 0.36 + 28);
 
   const proj = document.createElement('div');
@@ -352,24 +541,23 @@ function animateProjectile(item, fromPos, toPos) {
     { transform: `translate(calc(-50% + ${dx * 0.45}px),calc(-50% + ${dy * 0.45 - arc}px)) scale(1.4) rotate(185deg)`, offset: 0.45 },
     { transform: `translate(calc(-50% + ${dx}px),calc(-50% + ${dy}px)) scale(0.35) rotate(380deg)`, offset: 1 },
   ], { duration: 680, easing: 'ease-in', fill: 'forwards' }).onfinish = () => {
-    proj.remove();
-    showSplat(item, ex, ey);
+    proj.remove(); showSplat(item, ex, ey);
   };
 }
 
 function showSplat(item, x, y) {
+  playSound('splat');
   const map = { '💣': '💥', '🍅': '💢', '💦': '🌊', '🎉': '✨' };
   const el  = document.createElement('div');
   el.className  = 'throw-splat';
   el.textContent = map[item] || item;
   el.style.cssText = `position:fixed;left:${x}px;top:${y}px;z-index:1000;font-size:54px;pointer-events:none;transform:translate(-50%,-50%);`;
   document.body.appendChild(el);
-
   el.animate([
     { opacity: 1, transform: 'translate(-50%,-50%) scale(0.08)' },
     { opacity: 1, transform: 'translate(-50%,-50%) scale(2.5)', offset: 0.28 },
     { opacity: 0.8, transform: 'translate(-50%,-50%) scale(1.9)', offset: 0.62 },
-    { opacity: 0,   transform: 'translate(-50%,-50%) scale(1.5)', offset: 1 },
+    { opacity: 0, transform: 'translate(-50%,-50%) scale(1.5)', offset: 1 },
   ], { duration: 950 }).onfinish = () => el.remove();
 }
 
@@ -377,18 +565,16 @@ function showFloatingSticker(emoji, fromName) {
   const table = document.getElementById('poker-table');
   if (!table) return;
   const r = table.getBoundingClientRect();
-
   const el = document.createElement('div');
   el.className = 'floating-sticker';
   el.innerHTML = `<div class="float-emoji">${emoji}</div><div class="float-from">${esc(fromName)}</div>`;
   el.style.cssText = `position:fixed;left:${r.left + r.width * 0.5}px;top:${r.top + r.height * 0.42}px;z-index:998;pointer-events:none;transform:translate(-50%,-50%);`;
   document.body.appendChild(el);
-
   el.animate([
-    { opacity: 0,   transform: 'translate(-50%,-50%) scale(0.2)' },
-    { opacity: 1,   transform: 'translate(-50%,-50%) scale(1.25)', offset: 0.18 },
-    { opacity: 1,   transform: 'translate(-50%,-68%) scale(1)',    offset: 0.65 },
-    { opacity: 0,   transform: 'translate(-50%,-98%) scale(0.8)',  offset: 1 },
+    { opacity: 0, transform: 'translate(-50%,-50%) scale(0.2)' },
+    { opacity: 1, transform: 'translate(-50%,-50%) scale(1.25)', offset: 0.18 },
+    { opacity: 1, transform: 'translate(-50%,-68%) scale(1)',    offset: 0.65 },
+    { opacity: 0, transform: 'translate(-50%,-98%) scale(0.8)',  offset: 1 },
   ], { duration: 2600 }).onfinish = () => el.remove();
 }
 
@@ -399,14 +585,25 @@ function renderGame() {
   renderSeats(gs);
   renderCommunity(gs);
   document.getElementById('street-label').textContent = gs.street?.toUpperCase() || '';
-  document.getElementById('pot-display').textContent = gs.pot > 0 ? `POT  ${gs.pot.toLocaleString()}` : '';
+
+  // Pot display + pulse on increase
+  const potEl  = document.getElementById('pot-display');
+  const potTxt = gs.pot > 0 ? `POT  ${gs.pot.toLocaleString()}` : '';
+  if (gs.pot > state.prevPot && gs.pot > 0) {
+    potEl.classList.remove('pot-pulse');
+    void potEl.offsetWidth; // reflow
+    potEl.classList.add('pot-pulse');
+    playSound('chip');
+  }
+  potEl.textContent = potTxt;
+  state.prevPot = gs.pot;
+
   renderMyCards();
   renderControls(gs);
   renderLog(gs.log);
 }
 
 // ─── Seat Positions ────────────────────────────────────────────────
-// [x%, y%] — my seat is always index 0 (bottom center)
 const SEATS = {
   2: [[50,94],[50,4]],
   3: [[50,94],[14,20],[86,20]],
@@ -426,8 +623,8 @@ function avatarHtml(p) {
 function renderSeats(gs) {
   const el = document.getElementById('player-seats');
   el.innerHTML = '';
-  const n    = gs.players.length;
-  const pos  = SEATS[Math.min(n, 8)] || SEATS[8];
+  const n     = gs.players.length;
+  const pos   = SEATS[Math.min(n, 8)] || SEATS[8];
   const myIdx = state.myIdx ?? 0;
 
   gs.players.forEach((p, i) => {
@@ -436,16 +633,11 @@ function renderSeats(gs) {
     if (i === myIdx) return;
 
     const seat = document.createElement('div');
-    seat.className = [
-      'player-seat',
-      p.isActive ? 'is-active' : '',
-      p.folded   ? 'is-folded' : '',
-    ].join(' ').trim();
+    seat.className = ['player-seat', p.isActive ? 'is-active' : '', p.folded ? 'is-folded' : ''].join(' ').trim();
     seat.style.left = `${px}%`;
     seat.style.top  = `${py}%`;
 
-    const betHtml = p.roundBet > 0
-      ? `<span class="seat-bet">${p.roundBet.toLocaleString()}</span>` : '';
+    const betHtml = p.roundBet > 0 ? `<span class="seat-bet">${p.roundBet.toLocaleString()}</span>` : '';
 
     seat.innerHTML = `
       <div class="seat-box throw-target" data-player-idx="${i}">
@@ -458,15 +650,15 @@ function renderSeats(gs) {
           ${p.allIn    ? '<div class="allin-tag">ALL IN</div>' : ''}
           ${p.isBot    ? '<div class="bot-badge">CPU</div>' : ''}
         </div>
+        ${p.isActive ? '<div class="seat-timer">30</div>' : ''}
       </div>
       <div class="seat-hole-cards">
         ${p.cardCount > 0 && !p.folded ? cardBacksHtml(p.cardCount, 'sm') : ''}
-      </div>
-    `;
+      </div>`;
     el.appendChild(seat);
   });
 
-  // My own seat
+  // My seat
   const myPlayer = gs.players[myIdx];
   if (myPlayer) {
     const [mpx, mpy] = pos[0];
@@ -505,9 +697,8 @@ const GHOST_SUITS = ['♠', '♥', '♣', '♦', '♥'];
 function renderCommunity(gs) {
   const el = document.getElementById('community-cards');
   el.innerHTML = '';
-
   for (let i = 0; i < 5; i++) {
-    if (gs.community && gs.community[i]) {
+    if (gs.community?.[i]) {
       el.appendChild(buildFaceCard(gs.community[i], 'md', i));
     } else {
       const ph = document.createElement('div');
@@ -522,25 +713,17 @@ function renderCommunity(gs) {
 function renderMyCards() {
   const el = document.getElementById('hole-cards');
   el.innerHTML = '';
-
   if (state.myCards.length === 0) {
     for (let i = 0; i < 2; i++) {
-      const ph = document.createElement('div');
-      ph.className = 'card card-lg placeholder';
-      el.appendChild(ph);
+      const ph = document.createElement('div'); ph.className = 'card card-lg placeholder'; el.appendChild(ph);
     }
     document.getElementById('my-hand-label').textContent = '';
     return;
   }
-
-  state.myCards.forEach((card, i) => {
-    el.appendChild(buildFaceCard(card, 'lg', i));
-  });
-
+  state.myCards.forEach((card, i) => el.appendChild(buildFaceCard(card, 'lg', i)));
   const gs = state.gameState;
   if (gs?.community?.length >= 3) {
-    const label = evalHandLabel(state.myCards, gs.community);
-    document.getElementById('my-hand-label').textContent = label;
+    document.getElementById('my-hand-label').textContent = evalHandLabel(state.myCards, gs.community);
   } else {
     document.getElementById('my-hand-label').textContent = '';
   }
@@ -572,6 +755,7 @@ function renderControls(gs) {
   const slider   = document.getElementById('raise-slider');
   const display  = document.getElementById('raise-display');
   const raiseBtn = document.getElementById('btn-raise');
+  const presets  = document.getElementById('raise-presets');
 
   const minRaise = gs.currentBet + 20;
   const maxRaise = myPlayer.chips + (myPlayer.roundBet || 0);
@@ -588,26 +772,46 @@ function renderControls(gs) {
     slider.max   = maxRaise;
     slider.value = minRaise;
     display.textContent = Number(minRaise).toLocaleString();
-    slider.oninput = () => {
-      display.textContent = Number(slider.value).toLocaleString();
-    };
+
+    slider.oninput = () => { display.textContent = Number(slider.value).toLocaleString(); };
+
+    // Raise presets
+    if (presets) {
+      presets.querySelectorAll('.preset-btn').forEach(btn => {
+        btn.onclick = () => {
+          let val;
+          if (btn.dataset.preset === '2x')  val = Math.min(BIG_BLIND * 2, maxRaise);
+          if (btn.dataset.preset === '3x')  val = Math.min(BIG_BLIND * 3, maxRaise);
+          if (btn.dataset.preset === 'pot') val = Math.min(gs.pot + gs.currentBet, maxRaise);
+          val = Math.max(val || minRaise, minRaise);
+          slider.value = val;
+          display.textContent = Number(val).toLocaleString();
+          presets.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+        };
+      });
+    }
   }
 }
+
+const BIG_BLIND = 20;
 
 // ─── Action Sends ──────────────────────────────────────────────────
 function bindActions() {
   document.getElementById('btn-fold').addEventListener('click', () => {
-    sendAction('fold');
+    playSound('fold'); sendAction('fold');
   });
   document.getElementById('btn-check-call').addEventListener('click', () => {
-    const gs = state.gameState;
-    if (!gs) return;
+    const gs = state.gameState; if (!gs) return;
     const me     = gs.players[state.myIdx];
     const toCall = gs.currentBet - (me?.roundBet || 0);
-    sendAction(toCall === 0 ? 'check' : 'call');
+    const action = toCall === 0 ? 'check' : 'call';
+    playSound(action === 'check' ? 'check' : 'chip');
+    sendAction(action);
   });
   document.getElementById('btn-raise').addEventListener('click', () => {
     const amount = parseInt(document.getElementById('raise-slider').value);
+    playSound('raise');
     sendAction('raise', amount);
   });
 }
@@ -643,7 +847,6 @@ function renderShowdown(winners, pot) {
   `).join('');
 
   overlay.classList.remove('hidden');
-
   let secs = 5;
   countdown.textContent = secs;
   const timer = setInterval(() => {
@@ -659,59 +862,45 @@ function buildFaceCard(card, size = 'md', delay = 0) {
   const el    = document.createElement('div');
   el.className = `card face card-${size} ${isRed ? 'red' : 'black'}`;
   el.style.animationDelay = `${delay * 0.07}s`;
-
   el.innerHTML = `
-    <div class="rank-tl">
-      <div>${esc(card.rank)}</div>
-      <div class="card-suit">${esc(card.suit)}</div>
-    </div>
+    <div class="rank-tl"><div>${esc(card.rank)}</div><div class="card-suit">${esc(card.suit)}</div></div>
     <div class="suit-ctr">${esc(card.suit)}</div>
-    <div class="rank-br">
-      <div>${esc(card.rank)}</div>
-      <div class="card-suit">${esc(card.suit)}</div>
-    </div>
-  `;
+    <div class="rank-br"><div>${esc(card.rank)}</div><div class="card-suit">${esc(card.suit)}</div></div>`;
   return el;
 }
 
-// ─── Hand Label (client-side display only) ────────────────────────
+// ─── Hand Label ───────────────────────────────────────────────────
 function evalHandLabel(hole, community) {
   const all   = [...hole, ...community];
-  const RANKS = ['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
-  const vals  = all.map(c => RANKS.indexOf(c.rank) + 2).sort((a,b) => b-a);
+  const RNKS  = ['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
+  const vals  = all.map(c => RNKS.indexOf(c.rank) + 2).sort((a, b) => b - a);
   const suits = all.map(c => c.suit);
-
-  const freq = {};
-  for (const v of vals) freq[v] = (freq[v]||0)+1;
-  const counts = Object.values(freq).sort((a,b) => b-a);
-
-  const flushSuit = ['♠','♥','♦','♣'].find(s => suits.filter(x=>x===s).length >= 5);
+  const freq  = {};
+  for (const v of vals) freq[v] = (freq[v] || 0) + 1;
+  const counts = Object.values(freq).sort((a, b) => b - a);
+  const flush  = ['♠','♥','♦','♣'].find(s => suits.filter(x => x === s).length >= 5);
   const uv = [...new Set(vals)];
-  let straight = false;
-  for (let i = 0; i <= uv.length - 5; i++) if (uv[i]-uv[i+4]===4) { straight=true; break; }
-  if (!straight && vals.includes(14)) {
-    const low = [...new Set(vals.map(v => v===14?1:v))].sort((a,b)=>b-a);
-    for (let i = 0; i <= low.length-5; i++) if (low[i]-low[i+4]===4) { straight=true; break; }
+  let str = false;
+  for (let i = 0; i <= uv.length - 5; i++) if (uv[i] - uv[i+4] === 4) { str = true; break; }
+  if (!str && vals.includes(14)) {
+    const low = [...new Set(vals.map(v => v === 14 ? 1 : v))].sort((a, b) => b - a);
+    for (let i = 0; i <= low.length - 5; i++) if (low[i] - low[i+4] === 4) { str = true; break; }
   }
-
-  if (flushSuit && straight)                     return 'Straight Flush';
-  if (counts[0] === 4)                           return 'Four of a Kind';
-  if (counts[0] === 3 && (counts[1]||0) >= 2)   return 'Full House';
-  if (flushSuit)                                 return 'Flush';
-  if (straight)                                  return 'Straight';
-  if (counts[0] === 3)                           return 'Three of a Kind';
-  if (counts[0] === 2 && (counts[1]||0) === 2)  return 'Two Pair';
-  if (counts[0] === 2)                           return 'Pair';
+  if (flush && str)                             return 'Straight Flush';
+  if (counts[0] === 4)                          return 'Four of a Kind';
+  if (counts[0] === 3 && (counts[1]||0) >= 2)  return 'Full House';
+  if (flush)                                    return 'Flush';
+  if (str)                                      return 'Straight';
+  if (counts[0] === 3)                          return 'Three of a Kind';
+  if (counts[0] === 2 && (counts[1]||0) === 2) return 'Two Pair';
+  if (counts[0] === 2)                          return 'Pair';
   return 'High Card';
 }
 
 // ─── Utils ────────────────────────────────────────────────────────
 function esc(s) {
-  return String(s)
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
-
 function safePic(pic) {
   if (typeof pic !== 'string') return null;
   if (!pic.startsWith('data:image/')) return null;

@@ -1350,3 +1350,313 @@ body::after {
   .action-btns { gap: var(--s1); }
   .btn-action { font-size: 12px; }
 }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   BANK DISPLAY — landing page balance chip
+   ───────────────────────────────────────────────────────────────────────── */
+.bank-display {
+  margin-top: var(--s2);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  color: var(--gold);
+  opacity: 0.85;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   RAISE PRESETS
+   ───────────────────────────────────────────────────────────────────────── */
+.raise-presets {
+  display: flex;
+  gap: var(--s1);
+  margin-bottom: var(--s2);
+}
+
+.preset-btn {
+  background: var(--ink-card);
+  border: 1px solid rgba(245,185,66,0.25);
+  border-radius: var(--radius-sm);
+  color: var(--ivory-mid);
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  padding: 5px 10px;
+  cursor: pointer;
+  transition: border-color 0.12s, color 0.12s, background 0.12s;
+}
+.preset-btn:hover { border-color: var(--gold); color: var(--gold); background: var(--gold-faint); }
+.preset-btn.active { border-color: var(--gold); color: var(--ink); background: var(--gold); }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   TURN TIMER
+   ───────────────────────────────────────────────────────────────────────── */
+.seat-timer {
+  position: absolute;
+  top: -18px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--gold);
+  background: var(--ink);
+  border: 1px solid var(--gold-ring);
+  border-radius: 10px;
+  padding: 1px 6px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 10;
+}
+.seat-timer.timer-warn {
+  animation: timerFlash 0.4s ease infinite alternate;
+}
+@keyframes timerFlash {
+  from { opacity: 1; }
+  to   { opacity: 0.4; }
+}
+
+.my-turn-timer {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ivory-mid);
+  letter-spacing: 1px;
+  margin-bottom: var(--s1);
+  text-align: right;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   SOUND TOGGLE
+   ───────────────────────────────────────────────────────────────────────── */
+.sound-toggle {
+  position: fixed;
+  top: var(--s3);
+  right: var(--s3);
+  z-index: 210;
+  background: var(--ink-card);
+  border: 1px solid rgba(245,185,66,0.18);
+  border-radius: 50%;
+  width: 34px; height: 34px;
+  font-size: 15px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.sound-toggle:hover  { border-color: var(--gold); }
+.sound-toggle.muted  { opacity: 0.45; }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   CHAT PANEL
+   ───────────────────────────────────────────────────────────────────────── */
+.chat-panel {
+  position: fixed;
+  bottom: 0; right: 0;
+  width: 240px;
+  background: var(--ink-card);
+  border: 1px solid rgba(245,185,66,0.12);
+  border-bottom: none;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: height 0.2s ease;
+  height: 220px;
+}
+.chat-panel.collapsed { height: 36px; }
+
+.chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px var(--s3);
+  background: var(--ink-panel);
+  border-bottom: 1px solid rgba(245,185,66,0.1);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.chat-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: var(--ivory-mid);
+}
+.chat-collapse-btn {
+  background: none;
+  border: none;
+  color: var(--ivory-dim);
+  font-size: 10px;
+  cursor: pointer;
+  padding: 0 2px;
+}
+
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--s2) var(--s3);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--ink-panel) transparent;
+}
+.chat-msg { font-size: 12px; line-height: 1.4; word-break: break-word; }
+.chat-name { color: var(--gold); font-weight: 600; }
+.chat-text { color: var(--ivory); }
+
+.chat-input-row {
+  display: flex;
+  gap: var(--s1);
+  padding: var(--s1) var(--s2);
+  border-top: 1px solid rgba(245,185,66,0.08);
+  flex-shrink: 0;
+}
+.chat-input {
+  flex: 1;
+  background: var(--ink);
+  border: 1px solid rgba(245,185,66,0.15);
+  border-radius: var(--radius-sm);
+  padding: 5px var(--s2);
+  color: var(--ivory);
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 12px;
+  outline: none;
+}
+.chat-input:focus { border-color: var(--gold); }
+.chat-send-btn {
+  background: var(--gold-faint);
+  border: 1px solid var(--gold-ring);
+  border-radius: var(--radius-sm);
+  color: var(--gold);
+  font-size: 13px;
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.chat-send-btn:hover { background: var(--gold); color: var(--ink); }
+
+@media (max-width: 768px) {
+  .chat-panel { width: 180px; height: 180px; }
+  .chat-panel.collapsed { height: 36px; }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   BUST OVERLAY
+   ───────────────────────────────────────────────────────────────────────── */
+.bust-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  background: rgba(5, 11, 20, 0.88);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.bust-overlay.hidden { display: none; }
+
+.bust-card {
+  background: var(--ink-card);
+  border: 1px solid rgba(245,185,66,0.25);
+  border-radius: var(--radius-lg);
+  padding: var(--s7) var(--s6);
+  text-align: center;
+  max-width: 340px;
+  width: 90%;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.7);
+}
+.bust-icon  { font-size: 52px; margin-bottom: var(--s3); }
+.bust-title {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 28px;
+  letter-spacing: 3px;
+  color: var(--ivory);
+  margin-bottom: var(--s3);
+}
+.bust-balance {
+  font-size: 14px;
+  color: var(--gold);
+  font-weight: 600;
+  margin-bottom: var(--s5);
+}
+.bust-rebuy-btn { width: 100%; font-size: 16px; }
+.bust-broke {
+  font-size: 13px;
+  color: var(--ivory-dim);
+  margin-top: var(--s3);
+}
+.bust-broke.hidden { display: none; }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   LEADERBOARD PANEL
+   ───────────────────────────────────────────────────────────────────────── */
+.leaderboard-panel {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 400;
+  width: 320px;
+  background: var(--ink-card);
+  border: 1px solid rgba(245,185,66,0.2);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.7);
+}
+.leaderboard-panel.hidden { display: none; }
+
+.leaderboard-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--s3) var(--s4);
+  background: var(--ink-panel);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 2.5px;
+  color: var(--gold);
+  border-bottom: 1px solid rgba(245,185,66,0.1);
+}
+.lb-close-btn {
+  background: none; border: none;
+  color: var(--ivory-dim); font-size: 13px; cursor: pointer;
+}
+.leaderboard-entries { padding: var(--s3) 0; }
+.lb-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding: var(--s2) var(--s4);
+  font-size: 13px;
+  transition: background 0.1s;
+}
+.lb-row:hover { background: var(--ink-panel); }
+.lb-row.lb-me  { color: var(--gold); background: var(--gold-faint); }
+.lb-rank  { width: 24px; color: var(--ivory-dim); font-weight: 700; font-size: 11px; }
+.lb-name  { flex: 1; font-weight: 500; }
+.lb-balance { color: var(--gold); font-weight: 600; font-size: 12px; }
+
+.lb-toggle-btn {
+  position: fixed;
+  top: calc(var(--s3) + 42px);
+  right: var(--s3);
+  z-index: 210;
+  background: var(--ink-card);
+  border: 1px solid rgba(245,185,66,0.18);
+  border-radius: 50%;
+  width: 34px; height: 34px;
+  font-size: 15px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.lb-toggle-btn:hover { border-color: var(--gold); }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   POT PULSE ANIMATION
+   ───────────────────────────────────────────────────────────────────────── */
+@keyframes potPulse {
+  0%   { transform: scale(1);    }
+  35%  { transform: scale(1.22); color: var(--gold); filter: drop-shadow(0 0 8px var(--gold-glow)); }
+  100% { transform: scale(1);    }
+}
+.pot-pulse { animation: potPulse 0.55s ease-out; }
