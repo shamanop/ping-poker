@@ -19,6 +19,7 @@ const prevChipsMap  = {};
 let turnTimerIval   = null;
 let chatCollapsed   = window.innerWidth <= 768;
 let balanceTimeout  = null;
+let blindCountdownIval = null;
 
 // ─── Init ─────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
@@ -108,6 +109,21 @@ function playSound(type) {
       }
       case 'splat': play(140, 0.14, 0.18, 'sawtooth', 50); break;
       case 'timer_warn': play(880, 0.05, 0.08); break;
+      case 'blinds_up': {
+        [330, 415, 523, 622, 784].forEach((f, i) => {
+          const g2 = ctx.createGain();
+          const o2 = ctx.createOscillator();
+          g2.connect(ctx.destination);
+          o2.connect(g2);
+          o2.type = 'sine';
+          o2.frequency.value = f;
+          const t = ctx.currentTime + i * 0.09;
+          g2.gain.setValueAtTime(0.11, t);
+          g2.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+          o2.start(t); o2.stop(t + 0.35);
+        });
+        break;
+      }
     }
   } catch {}
 }
@@ -204,7 +220,8 @@ function showError(msg) {
 // ─── Lobby ────────────────────────────────────────────────────────
 function bindLobby() {
   document.getElementById('btn-start').addEventListener('click', () => {
-    state.socket.emit('start_game', { roomId: state.roomId });
+    const blindInterval = parseInt(document.getElementById('blind-interval-select')?.value || '0');
+    state.socket.emit('start_game', { roomId: state.roomId, blindInterval });
   });
   document.getElementById('btn-copy-code').addEventListener('click', () => {
     const url = `${window.location.origin}?join=${state.roomId}`;
@@ -239,6 +256,8 @@ function renderLobbyPlayers(players, hostName) {
   } else {
     btnStart.classList.add('hidden'); waitMsg.classList.remove('hidden');
   }
+  const blindSettings = document.getElementById('blind-settings');
+  if (blindSettings) blindSettings.classList.toggle('hidden', !isHost);
 }
 
 // ─── Socket ────────────────────────────────────────────────────────
@@ -322,6 +341,10 @@ function bindSocket() {
   });
 
   s.on('chat_message', ({ name, text }) => { appendChatMsg(name, text); });
+
+  s.on('blinds_up', ({ level, sb, bb }) => {
+    showBlindsUpBanner(level, sb, bb);
+  });
 
   s.on('bust_out', ({ balance }) => { showBustOverlay(balance); });
 
@@ -473,6 +496,44 @@ function startTurnTimer(remainingMs) {
 
 function clearTurnTimer() {
   if (turnTimerIval) { clearInterval(turnTimerIval); turnTimerIval = null; }
+}
+
+// ─── Blind Countdown ──────────────────────────────────────────────────────
+function startBlindCountdown(remainingMs) {
+  if (blindCountdownIval) { clearInterval(blindCountdownIval); blindCountdownIval = null; }
+  const el = document.getElementById('blind-display');
+  if (!el || remainingMs === null || remainingMs === undefined) return;
+
+  const endAt = Date.now() + remainingMs;
+  const update = () => {
+    const rem  = Math.max(0, endAt - Date.now());
+    const mins = Math.floor(rem / 60000);
+    const secs = Math.floor((rem % 60000) / 1000);
+    const gs   = state.gameState;
+    if (!gs?.blindsEnabled) { el.textContent = `BLINDS  ${gs?.sb || 10} / ${gs?.bb || 20}`; return; }
+    const sb = gs.sb || 10, bb = gs.bb || 20;
+    el.textContent = `LEVEL ${gs.blindLevel + 1}  ·  ${sb} / ${bb}  ·  ↑ ${mins}:${secs.toString().padStart(2, '0')}`;
+    el.classList.toggle('blind-display-warn', rem <= 30000);
+    if (rem <= 0) { clearInterval(blindCountdownIval); blindCountdownIval = null; }
+  };
+  update();
+  blindCountdownIval = setInterval(update, 1000);
+}
+
+// ─── Blinds Up Banner ─────────────────────────────────────────────────────
+function showBlindsUpBanner(level, sb, bb) {
+  const banner = document.getElementById('blinds-up-banner');
+  if (!banner) return;
+  banner.querySelector('.bub-level').textContent  = `LEVEL ${level + 1}`;
+  banner.querySelector('.bub-value').textContent  = `${sb} / ${bb}`;
+  banner.classList.remove('hidden', 'bub-out');
+  banner.classList.add('bub-in');
+  playSound('blinds_up');
+  setTimeout(() => {
+    banner.classList.remove('bub-in');
+    banner.classList.add('bub-out');
+    setTimeout(() => { banner.classList.add('hidden'); banner.classList.remove('bub-out'); }, 500);
+  }, 3500);
 }
 
 // ─── Social Panel ─────────────────────────────────────────────────
@@ -633,6 +694,29 @@ function renderGame() {
   potEl.textContent = potTxt;
   state.prevPot = gs.pot;
 
+  // Blind display
+  const blindEl = document.getElementById('blind-display');
+  if (blindEl) {
+    const sb = gs.sb || 10, bb = gs.bb || 20;
+    blindEl.textContent = gs.blindsEnabled
+      ? `LEVEL ${gs.blindLevel + 1}  ·  ${sb} / ${bb}`
+      : `BLINDS  ${sb} / ${bb}`;
+  }
+  if (gs.blindNextMs !== undefined) startBlindCountdown(gs.blindNextMs);
+
+  // Sit out button
+  const sitOutWrap = document.getElementById('sit-out-wrap');
+  const sitOutBtn  = document.getElementById('btn-sit-out');
+  const myPlayer   = gs.players[state.myIdx];
+  if (sitOutWrap && sitOutBtn && myPlayer && gs.status === 'playing') {
+    sitOutWrap.classList.remove('hidden');
+    const will = myPlayer.sitOutRequest;
+    sitOutBtn.textContent = will ? "I'm Back" : 'Sit Out Next Hand';
+    sitOutBtn.classList.toggle('sit-out-active', will);
+  } else if (sitOutWrap) {
+    sitOutWrap.classList.add('hidden');
+  }
+
   renderMyCards();
   renderControls(gs);
   renderLog(gs.log);
@@ -668,7 +752,7 @@ function renderSeats(gs) {
     if (i === myIdx) return;
 
     const seat = document.createElement('div');
-    seat.className = ['player-seat', p.isActive ? 'is-active' : '', p.folded ? 'is-folded' : ''].join(' ').trim();
+    seat.className = ['player-seat', p.isActive ? 'is-active' : '', p.folded ? 'is-folded' : '', p.sittingOut ? 'is-sitting-out' : ''].join(' ').trim();
     seat.style.left = `${px}%`;
     seat.style.top  = `${py}%`;
 
@@ -684,6 +768,7 @@ function renderSeats(gs) {
           ${p.isDealer ? '<div class="dealer-btn">D</div>' : ''}
           ${p.allIn    ? '<div class="allin-tag">ALL IN</div>' : ''}
           ${p.isBot    ? '<div class="bot-badge">CPU</div>' : ''}
+          ${p.sittingOut  ? '<div class="away-badge">AWAY</div>' : ''}
         </div>
         ${p.isActive ? '<div class="seat-timer">30</div>' : ''}
       </div>
@@ -814,6 +899,20 @@ function renderControls(gs) {
   waiting.classList.add('hidden');
 
   const toCall   = gs.currentBet - (myPlayer.roundBet || 0);
+
+  // Pot odds display
+  const oddsEl = document.getElementById('pot-odds-display');
+  if (oddsEl) {
+    if (toCall > 0 && gs.pot > 0) {
+      const pct = Math.round(toCall / (gs.pot + toCall) * 100);
+      const cls = pct < 20 ? 'odds-good' : pct < 35 ? 'odds-ok' : 'odds-bad';
+      oddsEl.className = `pot-odds-display ${cls}`;
+      oddsEl.textContent = `POT ODDS  ·  ${pct}%  equity needed`;
+      oddsEl.classList.remove('hidden');
+    } else {
+      oddsEl.classList.add('hidden');
+    }
+  }
   const canCheck = toCall === 0;
   const callBtn  = document.getElementById('btn-check-call');
   callBtn.textContent = canCheck ? 'Check' : `Call  ${toCall.toLocaleString()}`;
@@ -847,8 +946,9 @@ function renderControls(gs) {
       presets.querySelectorAll('.preset-btn').forEach(btn => {
         btn.onclick = () => {
           let val;
-          if (btn.dataset.preset === '2x')  val = Math.min(BIG_BLIND * 2, maxRaise);
-          if (btn.dataset.preset === '3x')  val = Math.min(BIG_BLIND * 3, maxRaise);
+          const bb = gs.bb || BIG_BLIND;
+          if (btn.dataset.preset === '2x')  val = Math.min(bb * 2, maxRaise);
+          if (btn.dataset.preset === '3x')  val = Math.min(bb * 3, maxRaise);
           if (btn.dataset.preset === 'pot') val = Math.min(gs.pot + gs.currentBet, maxRaise);
           val = Math.max(val || minRaise, minRaise);
           slider.value = val;
@@ -880,6 +980,10 @@ function bindActions() {
     const amount = parseInt(document.getElementById('raise-slider').value);
     playSound('raise');
     sendAction('raise', amount);
+  });
+  document.getElementById('btn-sit-out')?.addEventListener('click', () => {
+    if (!state.roomId) return;
+    state.socket.emit('sit_out', { roomId: state.roomId });
   });
 }
 

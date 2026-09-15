@@ -17,6 +17,17 @@ const BIG_BLIND       = 20;
 const SUITS           = ['♠', '♥', '♦', '♣'];
 const RANKS           = ['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
 
+const BLIND_SCHEDULE = [
+  { sb: 10,  bb: 20  },
+  { sb: 15,  bb: 30  },
+  { sb: 25,  bb: 50  },
+  { sb: 50,  bb: 100 },
+  { sb: 75,  bb: 150 },
+  { sb: 100, bb: 200 },
+  { sb: 150, bb: 300 },
+  { sb: 200, bb: 400 },
+];
+
 // ─── Bank System ─────────────────────────────────────────────────────────────
 
 let bank = {};
@@ -78,6 +89,14 @@ function makeRoom(id, hostSocketId) {
     log:          [],
     turnTimeout:  null,
     turnStartedAt: null,
+    sb:               SMALL_BLIND,
+    bb:               BIG_BLIND,
+    blindLevel:       0,
+    blindsEnabled:    false,
+    blindIntervalMs:  0,
+    blindLevelStartAt: null,
+    blindTimer:       null,
+    handHistory:      [],
   };
 }
 
@@ -93,6 +112,7 @@ function makePlayer(socketId, name, avatar, chips) {
     folded:     false,
     allIn:      false,
     sittingOut: false,
+    sitOutRequest: false,
     connected:  true,
   };
 }
@@ -194,17 +214,17 @@ function decideBotAction(player, toCall, room) {
   const rand = Math.random();
   if (toCall <= 0) {
     if (rand < 0.65) return { action: 'check' };
-    return { action: 'raise', amount: room.currentBet + BIG_BLIND * (1 + Math.floor(Math.random() * 2)) };
+    return { action: 'raise', amount: room.currentBet + room.bb * (1 + Math.floor(Math.random() * 2)) };
   }
   const pressure = toCall / Math.max(player.chips, 1);
   if (pressure > 0.4) {
     if (rand < 0.42) return { action: 'fold' };
     if (rand < 0.82) return { action: 'call' };
-    return { action: 'raise', amount: room.currentBet + BIG_BLIND * 2 };
+    return { action: 'raise', amount: room.currentBet + room.bb * 2 };
   }
   if (rand < 0.15) return { action: 'fold' };
   if (rand < 0.74) return { action: 'call' };
-  return { action: 'raise', amount: room.currentBet + BIG_BLIND * 2 };
+  return { action: 'raise', amount: room.currentBet + room.bb * 2 };
 }
 
 function scheduleBotActionsIfNeeded(room) {
@@ -255,6 +275,28 @@ function scheduleTurnTimeout(room) {
   }, TURN_MS);
 }
 
+// ─── Blind Escalation ─────────────────────────────────────────────────────────
+
+function scheduleBlindIncrease(room) {
+  if (room.blindTimer) { clearTimeout(room.blindTimer); room.blindTimer = null; }
+  if (!room.blindsEnabled || room.blindIntervalMs <= 0) return;
+  const nextLevel = room.blindLevel + 1;
+  if (nextLevel >= BLIND_SCHEDULE.length) return;
+
+  room.blindTimer = setTimeout(() => {
+    if (!rooms.has(room.id)) return;
+    room.blindLevel = nextLevel;
+    const lvl = BLIND_SCHEDULE[nextLevel];
+    room.sb = lvl.sb;
+    room.bb = lvl.bb;
+    room.blindLevelStartAt = Date.now();
+    roomLog(room, `★ BLINDS UP · Level ${nextLevel + 1}: ${room.sb}/${room.bb}`);
+    io.to(room.id).emit('blinds_up', { level: nextLevel, sb: room.sb, bb: room.bb });
+    broadcastGameState(room);
+    scheduleBlindIncrease(room);
+  }, room.blindIntervalMs);
+}
+
 // ─── Room Helpers ─────────────────────────────────────────────────────────────
 
 function roomLog(room, msg) {
@@ -279,7 +321,7 @@ function startHand(room) {
   room.deck      = makeDeck();
   room.community = [];
   room.pot       = 0;
-  room.currentBet = BIG_BLIND;
+  room.currentBet = room.bb;
   room.street    = 'preflop';
   room.handNum  += 1;
 
@@ -288,7 +330,8 @@ function startHand(room) {
     p.roundBet = 0;
     p.folded   = false;
     p.allIn    = false;
-    if (p.chips === 0) p.sittingOut = true;
+    if (p.chips === 0)  p.sittingOut = true;
+    else                p.sittingOut = p.sitOutRequest;
   }
 
   for (let i = 0; i < 2; i++) for (const p of players) {
@@ -297,15 +340,15 @@ function startHand(room) {
 
   const sbIdx = nextActiveIdx(room, room.dealerIdx, 1);
   const bbIdx = nextActiveIdx(room, sbIdx, 1);
-  postBlind(room, sbIdx, SMALL_BLIND, 'small blind');
-  postBlind(room, bbIdx, BIG_BLIND, 'big blind');
+  postBlind(room, sbIdx, room.sb, 'small blind');
+  postBlind(room, bbIdx, room.bb, 'big blind');
   const utgIdx = nextActiveIdx(room, bbIdx, 1);
   room.actionQueue = buildActionQueue(room, utgIdx);
 
-  roomLog(room, `--- Hand #${room.handNum} ---`);
+  roomLog(room, `--- Hand #${room.handNum} · ${room.sb}/${room.bb} ---`);
   roomLog(room, `Dealer: ${players[room.dealerIdx].name}`);
-  roomLog(room, `${players[sbIdx].name} posts SB ${SMALL_BLIND}`);
-  roomLog(room, `${players[bbIdx].name} posts BB ${BIG_BLIND}`);
+  roomLog(room, `${players[sbIdx].name} posts SB ${room.sb}`);
+  roomLog(room, `${players[bbIdx].name} posts BB ${room.bb}`);
 }
 
 function nextActiveIdx(room, fromIdx, steps) {
@@ -357,7 +400,7 @@ function processAction(room, playerIdx, action, amount) {
       break;
     }
     case 'raise': {
-      const minRaise = room.currentBet + BIG_BLIND;
+      const minRaise = room.currentBet + room.bb;
       const raiseTo  = Math.max(amount || 0, minRaise);
       const addAmt   = Math.min(raiseTo - p.roundBet, p.chips);
       p.chips -= addAmt; p.roundBet += addAmt; room.pot += addAmt;
@@ -383,6 +426,13 @@ function instantWin(room, winner) {
   winner.chips += room.pot;
   roomLog(room, `${winner.name} wins ${room.pot} (all others folded)`);
   const winnerIdx = room.players.indexOf(winner);
+  room.handHistory.unshift({
+    handNum:  room.handNum,
+    winners:  [winner.name],
+    handName: 'All others folded',
+    pot:      room.pot,
+  });
+  if (room.handHistory.length > 10) room.handHistory.pop();
   io.to(room.id).emit('showdown_result', {
     winners: [{ name: winner.name, handName: 'Everyone folded', cards: winner.cards }],
     pot: room.pot,
@@ -446,6 +496,13 @@ function showdown(room) {
   const winnerList = winners.map(w => ({ name: w.player.name, handName: w.hand.name, cards: w.player.cards }));
   for (const w of winners) roomLog(room, `${w.player.name} wins ${share + (w.idx === winners[0].idx ? rem : 0)} with ${w.hand.name}`);
 
+  room.handHistory.unshift({
+    handNum:  room.handNum,
+    winners:  winners.map(w => w.player.name),
+    handName: results[0].hand.name,
+    pot:      room.pot,
+  });
+  if (room.handHistory.length > 10) room.handHistory.pop();
   io.to(room.id).emit('showdown_result', { winners: winnerList, pot: room.pot });
   room.pot = 0;
   scheduleNextHand(room, nextActiveIdx(room, room.dealerIdx, 1));
@@ -474,6 +531,7 @@ function scheduleNextHand(room, nextDealerIdx) {
       for (const p of room.players) {
         if (!p.isBot && p.chips > 0) { adjustBank(p.name, p.chips); p.chips = 0; }
       }
+      if (room.blindTimer) { clearTimeout(room.blindTimer); room.blindTimer = null; }
       room.status = 'waiting';
       roomLog(room, 'Not enough players. Waiting...');
       broadcastGameState(room);
@@ -510,25 +568,35 @@ function publicGameState(room) {
     currentPlayerIdx,
     handNum:         room.handNum,
     status:          room.status,
+    sb:              room.sb,
+    bb:              room.bb,
+    blindLevel:      room.blindLevel,
+    blindsEnabled:   room.blindsEnabled,
+    blindNextMs:     (room.blindsEnabled && room.blindLevelStartAt)
+      ? Math.max(0, room.blindLevelStartAt + room.blindIntervalMs - Date.now())
+      : null,
+    blindMaxLevel:   BLIND_SCHEDULE.length - 1,
     turnRemainingMs: room.turnStartedAt
       ? Math.max(0, room.turnStartedAt + TURN_MS - Date.now())
       : null,
     players: room.players.map((p, i) => ({
-      name:       p.name,
-      avatar:     p.avatar,
-      profilePic: p.profilePic || null,
-      chips:      p.chips,
-      roundBet:   p.roundBet,
-      folded:     p.folded,
-      allIn:      p.allIn,
-      sittingOut: p.sittingOut,
-      connected:  p.connected,
-      isBot:      p.isBot || false,
-      isDealer:   i === room.dealerIdx,
-      isActive:   currentPlayerIdx === i,
-      cardCount:  p.cards.length,
+      name:          p.name,
+      avatar:        p.avatar,
+      profilePic:    p.profilePic || null,
+      chips:         p.chips,
+      roundBet:      p.roundBet,
+      folded:        p.folded,
+      allIn:         p.allIn,
+      sittingOut:    p.sittingOut,
+      sitOutRequest: p.sitOutRequest,
+      connected:     p.connected,
+      isBot:         p.isBot || false,
+      isDealer:      i === room.dealerIdx,
+      isActive:      currentPlayerIdx === i,
+      cardCount:     p.cards.length,
     })),
-    log: room.log.slice(-8),
+    log:         room.log.slice(-8),
+    handHistory: room.handHistory,
   };
 }
 
@@ -620,7 +688,7 @@ io.on('connection', socket => {
   });
 
   // ── start_game ────────────────────────────────────────────────────────────
-  socket.on('start_game', ({ roomId } = {}) => {
+  socket.on('start_game', ({ roomId, blindInterval } = {}) => {
     const room = rooms.get(roomId);
     if (!room)                               { socket.emit('error', { message: 'Room not found' }); return; }
     if (room.hostSocketId !== socket.id)     { socket.emit('error', { message: 'Only host can start' }); return; }
@@ -628,6 +696,14 @@ io.on('connection', socket => {
     if (room.status === 'playing')           { socket.emit('error', { message: 'Game already started' }); return; }
 
     room.status = 'playing';
+
+    if (blindInterval && blindInterval > 0) {
+      room.blindsEnabled    = true;
+      room.blindIntervalMs  = Math.max(60000, Number(blindInterval)); // min 1 minute
+      room.blindLevelStartAt = Date.now();
+      scheduleBlindIncrease(room);
+    }
+
     startHand(room);
     broadcastGameState(room);
     emitPrivateCards(room);
@@ -734,6 +810,19 @@ io.on('connection', socket => {
     const safe = String(text || '').slice(0, 120).trim();
     if (!safe) return;
     io.to(roomId).emit('chat_message', { name: sender.name, text: safe });
+  });
+
+  // ── sit_out ────────────────────────────────────────────────────────────────
+  socket.on('sit_out', ({ roomId } = {}) => {
+    const room = rooms.get(roomId);
+    if (!room) return;
+    const player = room.players.find(p => p.socketId === socket.id);
+    if (!player || player.chips === 0) return;
+    player.sitOutRequest = !player.sitOutRequest;
+    roomLog(room, player.sitOutRequest
+      ? `${player.name} sitting out next hand`
+      : `${player.name} is back in`);
+    broadcastGameState(room);
   });
 
   // ── disconnect ────────────────────────────────────────────────────────────

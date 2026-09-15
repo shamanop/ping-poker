@@ -6,7 +6,7 @@
   <title>PokerPing</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=9">
+  <link rel="stylesheet" href="style.css?v=10">
 </head>
 <body>
 
@@ -126,6 +126,15 @@
             <div class="rules-row"><span>Blinds</span><span class="rules-val">10 / 20</span></div>
             <div class="rules-row"><span>Players</span><span class="rules-val">2 – 8</span></div>
           </div>
+          <div id="blind-settings" class="blind-settings hidden">
+            <label class="field-label">BLIND ESCALATION</label>
+            <select id="blind-interval-select" class="text-input blind-select">
+              <option value="0">Off — fixed blinds</option>
+              <option value="300000">Every 5 min</option>
+              <option value="600000" selected>Every 10 min</option>
+              <option value="900000">Every 15 min</option>
+            </select>
+          </div>
           <button id="btn-start" class="btn-primary btn-large hidden">Start Game</button>
           <div id="waiting-msg" class="waiting-text">Waiting for the host to start…</div>
         </div>
@@ -144,6 +153,7 @@
             <div id="community-cards" class="community-cards"></div>
             <div id="street-label" class="street-label"></div>
             <div id="pot-display" class="pot-display"></div>
+            <div id="blind-display" class="blind-display"></div>
           </div>
         </div>
       </div>
@@ -167,6 +177,7 @@
               <span id="raise-display" class="raise-display">0</span>
             </div>
           </div>
+          <div id="pot-odds-display" class="pot-odds-display hidden"></div>
           <div class="action-btns">
             <button id="btn-fold" class="btn-action btn-fold">Fold</button>
             <button id="btn-check-call" class="btn-action btn-call">Check</button>
@@ -246,6 +257,20 @@
       </div>
     </div>
 
+    <!-- ── BLINDS UP BANNER ────────────────────────────────────────── -->
+    <div id="blinds-up-banner" class="blinds-up-banner hidden">
+      <div class="bub-level"></div>
+      <div class="bub-sep">·</div>
+      <div class="bub-label">BLINDS UP</div>
+      <div class="bub-sep">·</div>
+      <div class="bub-value"></div>
+    </div>
+
+    <!-- ── SIT OUT BUTTON ─────────────────────────────────────────── -->
+    <div id="sit-out-wrap" class="sit-out-wrap hidden">
+      <button id="btn-sit-out" class="btn-sit-out">Sit Out Next Hand</button>
+    </div>
+
     <div id="showdown-overlay" class="showdown-overlay hidden">
       <div class="showdown-card">
         <div class="showdown-eyebrow">SHOWDOWN</div>
@@ -256,6 +281,6 @@
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="game.js?v=5"></script>
+  <script src="game.js?v=6"></script>
 </body>
 </html>

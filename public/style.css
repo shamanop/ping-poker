@@ -1951,3 +1951,144 @@ body::after {
   vertical-align: middle;
 }
 .ingame-room-code:hover { color: var(--gold); }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   BLIND DISPLAY — table center indicator
+   ───────────────────────────────────────────────────────────────────────── */
+.blind-display {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: rgba(245,185,66,0.45);
+  min-height: 14px;
+  text-align: center;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   BLINDS UP BANNER
+   ───────────────────────────────────────────────────────────────────────── */
+@keyframes bannerSlideIn {
+  from { transform: translateY(-100%); opacity: 0; }
+  60%  { transform: translateY(4px);  opacity: 1; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+@keyframes bannerSlideOut {
+  from { transform: translateY(0);    opacity: 1; }
+  to   { transform: translateY(-100%); opacity: 0; }
+}
+
+.blinds-up-banner {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 400;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 12px 24px;
+  background: linear-gradient(
+    to right,
+    transparent 0%,
+    rgba(245,185,66,0.06) 20%,
+    rgba(245,185,66,0.13) 50%,
+    rgba(245,185,66,0.06) 80%,
+    transparent 100%
+  );
+  border-bottom: 1px solid rgba(245,185,66,0.5);
+  backdrop-filter: blur(4px);
+}
+.blinds-up-banner.bub-in  { animation: bannerSlideIn  0.45s cubic-bezier(0.34, 1.2, 0.64, 1) both; }
+.blinds-up-banner.bub-out { animation: bannerSlideOut 0.45s ease-in both; }
+
+.bub-level {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 13px; letter-spacing: 4px;
+  color: rgba(245,185,66,0.7);
+}
+.bub-sep { color: rgba(245,185,66,0.35); font-size: 11px; }
+.bub-label {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 22px; letter-spacing: 5px;
+  color: var(--gold);
+  text-shadow: 0 0 30px rgba(245,185,66,0.6);
+}
+.bub-value {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 18px; font-weight: 700; letter-spacing: 3px;
+  color: var(--ivory);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   SIT OUT BUTTON
+   ───────────────────────────────────────────────────────────────────────── */
+.sit-out-wrap {
+  position: fixed;
+  bottom: 28px;
+  right: 76px;
+  z-index: 100;
+}
+.btn-sit-out {
+  background: transparent;
+  border: 1px solid rgba(138,157,184,0.25);
+  border-radius: var(--radius-sm);
+  color: var(--ivory-mid);
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  cursor: pointer;
+  padding: 7px 14px;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.btn-sit-out:hover { border-color: rgba(245,185,66,0.4); color: var(--gold); }
+.btn-sit-out.sit-out-active {
+  border-color: var(--gold);
+  color: var(--gold);
+  background: rgba(245,185,66,0.06);
+}
+
+/* AWAY badge on sitting-out seats */
+.away-badge {
+  background: rgba(82,85,97,0.35);
+  color: var(--ivory-mid);
+  border: 1px solid rgba(138,157,184,0.3);
+  border-radius: 2px; font-size: 8px; font-weight: 700;
+  padding: 1px 4px; letter-spacing: 1px;
+}
+.player-seat.is-sitting-out .seat-box { opacity: 0.45; }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   POT ODDS DISPLAY
+   ───────────────────────────────────────────────────────────────────────── */
+.pot-odds-display {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  text-align: center;
+  padding: 4px 0 2px;
+  transition: color 0.2s;
+}
+.pot-odds-display.odds-good { color: #6be08a; }
+.pot-odds-display.odds-ok   { color: var(--gold); }
+.pot-odds-display.odds-bad  { color: #e07070; }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   BLIND SETTINGS (lobby)
+   ───────────────────────────────────────────────────────────────────────── */
+.blind-settings {
+  background: var(--ink-up);
+  border: 1px solid rgba(245,185,66,0.1);
+  border-radius: var(--radius-sm);
+  padding: var(--s4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+}
+.blind-select {
+  font-size: 13px;
+  padding: 8px var(--s3);
+  cursor: pointer;
+}
