@@ -1784,3 +1784,31 @@ body::after {
   100% { transform: scale(1);    }
 }
 .pot-pulse { animation: potPulse 0.55s ease-out; }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   WIN FLOAT — pot amount flies from center to winner's seat
+   ───────────────────────────────────────────────────────────────────────── */
+.win-float {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 34px;
+  letter-spacing: 1px;
+  color: var(--gold);
+  text-shadow: 0 0 24px rgba(245,185,66,0.9), 0 2px 8px rgba(0,0,0,0.9);
+  white-space: nowrap;
+  user-select: none;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   IN-GAME ROOM CODE (log header)
+   ───────────────────────────────────────────────────────────────────────── */
+.ingame-room-code {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: rgba(245,185,66,0.38);
+  margin-left: 8px;
+  cursor: pointer;
+  transition: color 0.2s;
+  vertical-align: middle;
+}
+.ingame-room-code:hover { color: var(--gold); }

@@ -6,7 +6,7 @@
   <title>PokerPing</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=5">
+  <link rel="stylesheet" href="style.css?v=6">
 </head>
 <body>
 
@@ -167,7 +167,7 @@
       </div>
 
       <div id="game-log" class="game-log">
-        <div class="log-header">HAND LOG</div>
+        <div class="log-header">HAND LOG <span id="ingame-room-code" class="ingame-room-code" title="Click to copy invite link"></span></div>
         <div id="log-entries"></div>
       </div>
 
@@ -243,6 +243,6 @@
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="game.js?v=3"></script>
+  <script src="game.js?v=4"></script>
 </body>
 </html>

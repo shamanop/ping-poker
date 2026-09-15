@@ -42,6 +42,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const urlJoin = new URL(window.location.href).searchParams.get('join');
   if (urlJoin) document.getElementById('room-code-input').value = urlJoin;
+
+  // Pre-fill saved name
+  const savedName = localStorage.getItem('ppName');
+  if (savedName) {
+    const nameInput = document.getElementById('player-name');
+    nameInput.value = savedName;
+    // Trigger balance lookup
+    nameInput.dispatchEvent(new Event('input'));
+  }
 });
 
 // ─── Screen ────────────────────────────────────────────────────────
@@ -136,16 +145,19 @@ function bindLanding() {
 
   document.getElementById('btn-create').addEventListener('click', () => {
     const name = getPlayerName(); if (!name) return;
+    localStorage.setItem('ppName', name);
     state.socket.emit('create_room', { name, avatar: state.selectedAvatar, profilePic: state.profilePic });
   });
   document.getElementById('btn-demo').addEventListener('click', () => {
     const name = getPlayerName(); if (!name) return;
+    localStorage.setItem('ppName', name);
     state.socket.emit('create_demo', { name, avatar: state.selectedAvatar, profilePic: state.profilePic });
   });
   document.getElementById('btn-join').addEventListener('click', () => {
     const name = getPlayerName(); if (!name) return;
     const code = document.getElementById('room-code-input').value.trim().toUpperCase();
     if (!code) { showError('Enter a room code'); return; }
+    localStorage.setItem('ppName', name);
     state.socket.emit('join_room', { roomId: code, name, avatar: state.selectedAvatar, profilePic: state.profilePic });
   });
 
@@ -204,6 +216,8 @@ function bindLobby() {
 
 function renderLobbyPlayers(players, hostName) {
   const list = document.getElementById('lobby-players-list');
+  const secLabel = list.closest('.lobby-players-section')?.querySelector('.section-label');
+  if (secLabel) secLabel.textContent = `AT THE TABLE — ${players.length} / 8`;
   list.innerHTML = players.map(p => {
     const pic = safePic(p.profilePic);
     return `<div class="player-lobby-item">
@@ -248,6 +262,16 @@ function bindSocket() {
     if (balance !== undefined) state.myBalance = balance;
     document.getElementById('lobby-room-code').textContent = roomId;
     window.history.replaceState({}, '', `?join=${roomId}`);
+    const codeEl = document.getElementById('ingame-room-code');
+    if (codeEl) {
+      codeEl.textContent = roomId;
+      codeEl.onclick = () => {
+        navigator.clipboard.writeText(`${window.location.origin}?join=${roomId}`).catch(() => {});
+        const prev = codeEl.textContent;
+        codeEl.textContent = 'COPIED!';
+        setTimeout(() => { codeEl.textContent = prev; }, 1500);
+      };
+    }
     showScreen('lobby-screen');
   });
 
@@ -283,6 +307,10 @@ function bindSocket() {
   s.on('showdown_result', ({ winners, pot }) => {
     renderShowdown(winners, pot);
     playSound('win');
+    const myName = state.gameState?.players[state.myIdx]?.name;
+    if (myName && winners.some(w => w.name === myName)) {
+      setTimeout(() => showWinFloat(pot), 250);
+    }
   });
 
   s.on('sticker_dropped', ({ emoji, fromName }) => { showFloatingSticker(emoji, fromName); });
@@ -755,7 +783,11 @@ function renderMyCards() {
   });
   const gs = state.gameState;
   if (labelEl) {
-    labelEl.textContent = gs?.community?.length >= 3 ? evalHandLabel(state.myCards, gs.community) : '';
+    if (gs?.community?.length >= 3) {
+      labelEl.textContent = evalHandLabel(state.myCards, gs.community);
+    } else {
+      labelEl.textContent = evalPreflopLabel(state.myCards);
+    }
   }
 }
 
@@ -973,6 +1005,51 @@ function evalHandLabel(hole, community) {
   if (counts[0] === 2 && (counts[1]||0) === 2) return 'Two Pair';
   if (counts[0] === 2)                          return 'Pair';
   return 'High Card';
+}
+
+// ─── Pre-flop Label ───────────────────────────────────────────────
+function evalPreflopLabel(hole) {
+  if (!hole || hole.length < 2) return '';
+  const [a, b] = hole;
+  const RNKS  = ['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
+  const NAMES = { '2':'Twos','3':'Threes','4':'Fours','5':'Fives','6':'Sixes','7':'Sevens',
+                  '8':'Eights','9':'Nines','10':'Tens','J':'Jacks','Q':'Queens','K':'Kings','A':'Aces' };
+  const va = RNKS.indexOf(a.rank), vb = RNKS.indexOf(b.rank);
+  const suited = a.suit === b.suit;
+  const gap    = Math.abs(va - vb);
+  if (gap === 0) return `Pocket ${NAMES[a.rank] || a.rank}`;
+  const hi = RNKS[Math.max(va, vb)], lo = RNKS[Math.min(va, vb)];
+  if (hi === 'A' && lo === 'K') return suited ? 'Ace-King Suited' : 'Big Slick';
+  if (hi === 'A' && lo === 'Q') return suited ? 'Ace-Queen Suited' : 'Ace-Queen';
+  if (hi === 'K' && lo === 'Q') return suited ? 'King-Queen Suited' : 'King-Queen';
+  if (hi === 'A' && lo === 'J') return suited ? 'Ace-Jack Suited' : 'Ace-Jack';
+  if (suited && gap === 1)      return 'Suited Connectors';
+  if (suited)                   return 'Suited';
+  if (gap === 1)                return 'Connectors';
+  if (hi === 'A')               return 'Ace-High';
+  return '';
+}
+
+// ─── Win Float ────────────────────────────────────────────────────
+function showWinFloat(amount) {
+  const potEl  = document.getElementById('pot-display');
+  const mySeat = document.querySelector(`#player-seats .player-seat .seat-box[data-player-idx="${state.myIdx}"]`);
+  if (!potEl || !mySeat) return;
+  const potR  = potEl.getBoundingClientRect();
+  const seatR = mySeat.getBoundingClientRect();
+  const el    = document.createElement('div');
+  el.className = 'win-float';
+  el.textContent = `+${amount.toLocaleString()}`;
+  el.style.cssText = `position:fixed;left:${potR.left + potR.width / 2}px;top:${potR.top + potR.height / 2}px;z-index:999;pointer-events:none;transform:translate(-50%,-50%);`;
+  document.body.appendChild(el);
+  const dx = (seatR.left + seatR.width / 2) - (potR.left + potR.width / 2);
+  const dy = (seatR.top  + seatR.height / 2) - (potR.top + potR.height / 2);
+  el.animate([
+    { opacity: 0, transform: 'translate(-50%,-50%) scale(0.4)' },
+    { opacity: 1, transform: 'translate(-50%,-50%) scale(1.35)', offset: 0.1 },
+    { opacity: 1, transform: `translate(calc(-50% + ${dx * 0.75}px),calc(-50% + ${dy * 0.75}px)) scale(1)`, offset: 0.78 },
+    { opacity: 0, transform: `translate(calc(-50% + ${dx}px),calc(-50% + ${dy}px)) scale(0.7)`, offset: 1 },
+  ], { duration: 1300, easing: 'ease-in-out' }).onfinish = () => el.remove();
 }
 
 // ─── Utils ────────────────────────────────────────────────────────
