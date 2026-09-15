@@ -3,35 +3,50 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Ping Poker</title>
+  <title>PokerPing</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&family=Bebas+Neue&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
   <!-- ── LANDING ────────────────────────────────────────────────── -->
   <div id="landing-screen" class="screen active">
-    <div class="landing-bg-pattern"></div>
-    <div class="landing-content">
-      <div class="brand-lockup">
-        <div class="brand-logo">
-          <span class="logo-vp">VP</span>
-        </div>
-        <div class="brand-text">
-          <div class="brand-name">PING POKER</div>
-          <div class="brand-tagline">VoterPing Game Night</div>
+    <div class="landing-left">
+      <div class="landing-brand">
+        <img src="/images/vp-logo.png" alt="VoterPing" class="brand-vp-logo">
+        <div class="brand-wordmark">
+          <div class="brand-title">POKER<span class="brand-ping">PING</span></div>
+          <div class="brand-sub">VoterPing Game Night</div>
         </div>
       </div>
+      <div class="landing-table-preview">
+        <div class="preview-table">
+          <div class="preview-chips">
+            <span class="preview-chip c1"></span>
+            <span class="preview-chip c2"></span>
+            <span class="preview-chip c3"></span>
+            <span class="preview-chip c4"></span>
+            <span class="preview-chip c5"></span>
+          </div>
+          <div class="preview-cards">
+            <div class="preview-card"></div>
+            <div class="preview-card"></div>
+            <div class="preview-card"></div>
+          </div>
+        </div>
+      </div>
+    </div>
 
-      <div class="setup-card">
-        <div class="setup-section">
+    <div class="landing-right">
+      <div class="setup-form">
+        <div class="setup-field">
           <label class="field-label">YOUR NAME</label>
-          <input id="player-name" type="text" class="text-input" placeholder="Enter your name" maxlength="16">
+          <input id="player-name" type="text" class="text-input" placeholder="How you want to be known" maxlength="16" autocomplete="off">
         </div>
 
-        <div class="setup-section">
-          <label class="field-label">PICK YOUR AVATAR</label>
+        <div class="setup-field">
+          <label class="field-label">AVATAR</label>
           <div class="avatar-grid">
             <div class="avatar-option selected" data-avatar="🤠">🤠</div>
             <div class="avatar-option" data-avatar="🦊">🦊</div>
@@ -48,13 +63,13 @@
           </div>
         </div>
 
-        <div class="setup-divider">
-          <button id="btn-create" class="btn-primary">Create Table</button>
-        </div>
-
-        <div class="setup-divider join-row">
-          <input id="room-code-input" type="text" class="text-input code-input" placeholder="Room code" maxlength="6">
-          <button id="btn-join" class="btn-secondary">Join</button>
+        <div class="setup-actions">
+          <button id="btn-create" class="btn-primary">Deal Me In</button>
+          <div class="setup-divider-text">— or join a table —</div>
+          <div class="join-row">
+            <input id="room-code-input" type="text" class="text-input code-input" placeholder="ROOM CODE" maxlength="6" autocomplete="off">
+            <button id="btn-join" class="btn-secondary">Join</button>
+          </div>
         </div>
 
         <div id="landing-error" class="error-msg hidden"></div>
@@ -66,27 +81,28 @@
   <div id="lobby-screen" class="screen">
     <div class="lobby-wrap">
       <div class="lobby-header">
-        <div class="brand-name-sm">PING POKER</div>
-        <div class="lobby-room-info">
-          Room Code: <span id="lobby-room-code" class="room-code-display">——</span>
-          <button id="btn-copy-code" class="btn-ghost" title="Copy link">⎘ Copy Link</button>
+        <div class="lobby-brand">POKERPING</div>
+        <div class="lobby-room-block">
+          <div class="room-code-label">TABLE CODE</div>
+          <div class="room-code-value" id="lobby-room-code">——</div>
+          <button id="btn-copy-code" class="btn-ghost-sm">Copy invite link</button>
         </div>
       </div>
 
       <div class="lobby-body">
         <div class="lobby-players-section">
-          <div class="section-title">PLAYERS</div>
+          <div class="section-label">AT THE TABLE</div>
           <div id="lobby-players-list" class="players-list"></div>
         </div>
         <div class="lobby-side">
-          <div class="lobby-rules">
-            <div class="rules-title">TEXAS HOLD'EM</div>
-            <div class="rules-item">Starting chips: 1,500</div>
-            <div class="rules-item">Blinds: 10 / 20</div>
-            <div class="rules-item">2–8 players</div>
+          <div class="game-rules-block">
+            <div class="rules-head">Texas Hold'em</div>
+            <div class="rules-row"><span>Starting chips</span><span class="rules-val">1,500</span></div>
+            <div class="rules-row"><span>Blinds</span><span class="rules-val">10 / 20</span></div>
+            <div class="rules-row"><span>Players</span><span class="rules-val">2 – 8</span></div>
           </div>
           <button id="btn-start" class="btn-primary btn-large hidden">Start Game</button>
-          <div id="waiting-msg" class="waiting-text">Waiting for host to start…</div>
+          <div id="waiting-msg" class="waiting-text">Waiting for the host to start…</div>
         </div>
       </div>
     </div>
@@ -96,51 +112,55 @@
   <div id="game-screen" class="screen">
     <div class="game-layout">
 
-      <!-- Table area -->
       <div class="table-wrap">
         <div id="poker-table">
           <div id="player-seats"></div>
           <div class="table-center">
             <div id="community-cards" class="community-cards"></div>
-            <div class="table-center-info">
-              <div id="street-label" class="street-label"></div>
-              <div id="pot-display" class="pot-display"></div>
-            </div>
+            <div id="street-label" class="street-label"></div>
+            <div id="pot-display" class="pot-display"></div>
           </div>
         </div>
       </div>
 
-      <!-- Bottom: my hand + controls -->
       <div class="bottom-panel">
         <div id="hole-cards-area" class="hole-cards-area">
           <div id="hole-cards" class="hole-cards"></div>
           <div id="my-hand-label" class="my-hand-label"></div>
         </div>
+
         <div id="action-controls" class="action-controls hidden">
-          <div class="raise-row hidden" id="raise-row">
-            <input id="raise-slider" type="range" class="raise-slider">
-            <span id="raise-display" class="raise-display">0</span>
+          <div id="raise-row" class="raise-row hidden">
+            <div class="raise-label">RAISE TO</div>
+            <div class="raise-amount-wrap">
+              <input id="raise-slider" type="range" class="raise-slider">
+              <span id="raise-display" class="raise-display">0</span>
+            </div>
           </div>
-          <div class="btn-row">
+          <div class="action-btns">
             <button id="btn-fold" class="btn-action btn-fold">Fold</button>
             <button id="btn-check-call" class="btn-action btn-call">Check</button>
             <button id="btn-raise" class="btn-action btn-raise">Raise</button>
           </div>
         </div>
-        <div id="waiting-action" class="waiting-action hidden">Waiting for other players…</div>
+
+        <div id="waiting-action" class="waiting-action hidden">
+          Watching the hand…
+        </div>
       </div>
 
-      <!-- Log panel -->
-      <div id="game-log" class="game-log"></div>
+      <div id="game-log" class="game-log">
+        <div class="log-header">HAND LOG</div>
+        <div id="log-entries"></div>
+      </div>
 
     </div>
 
-    <!-- Showdown overlay -->
     <div id="showdown-overlay" class="showdown-overlay hidden">
       <div class="showdown-card">
-        <div class="showdown-title">SHOWDOWN</div>
+        <div class="showdown-eyebrow">SHOWDOWN</div>
         <div id="showdown-content"></div>
-        <div class="showdown-countdown">Next hand in <span id="countdown">5</span>s</div>
+        <div class="showdown-timer">Next hand in <span id="countdown">5</span>s</div>
       </div>
     </div>
   </div>
