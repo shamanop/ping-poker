@@ -284,7 +284,9 @@ function showThrowTray(playerIdx, nearEl) {
     </div>
   `;
 
-  const cx = Math.min(Math.max(rect.left + rect.width / 2, 90), window.innerWidth - 90);
+  const trayW = 168;
+  const rawCx = rect.left + rect.width / 2;
+  const cx = Math.min(Math.max(rawCx, trayW / 2 + 8), window.innerWidth - trayW / 2 - 8);
   let   cy = rect.bottom + 6;
   if (cy + 90 > window.innerHeight) cy = rect.top - 90;
 
@@ -356,7 +358,7 @@ function animateProjectile(item, fromPos, toPos) {
 }
 
 function showSplat(item, x, y) {
-  const map = { '💣': '💥', '🍅': '🔴', '💦': '💧', '🎉': '✨' };
+  const map = { '💣': '💥', '🍅': '💢', '💦': '🌊', '🎉': '✨' };
   const el  = document.createElement('div');
   el.className  = 'throw-splat';
   el.textContent = map[item] || item;

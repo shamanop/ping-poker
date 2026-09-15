@@ -1190,3 +1190,162 @@ body::after {
   color: var(--gold);
   margin-top: var(--s1);
 }
+
+/* ─── Mobile brand header (hidden on desktop) ───────────────────── */
+.mobile-brand {
+  display: none;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 44px;
+  color: var(--ivory);
+  letter-spacing: 3px;
+  text-align: center;
+  margin-bottom: var(--s4);
+}
+
+/* ─── Responsive — Tablet & Mobile (≤ 768px) ────────────────────── */
+@media (max-width: 768px) {
+
+  /* ── Landing ─────────────────────────────────────────────── */
+  #landing-screen { flex-direction: column; }
+
+  .landing-left { display: none; }
+
+  .landing-right {
+    width: 100%;
+    min-height: 100svh;
+    padding: var(--s6) var(--s5) var(--s7);
+    justify-content: flex-start;
+    padding-top: var(--s7);
+  }
+
+  .mobile-brand { display: block; }
+
+  /* Photo upload + emoji grid side by side on mobile */
+  .avatar-section {
+    flex-direction: row;
+    align-items: center;
+    gap: var(--s3);
+  }
+
+  /* 6-col emoji grid stays compact */
+  .avatar-grid {
+    flex: 1;
+    grid-template-columns: repeat(6, 1fr);
+  }
+
+  /* ── Game Layout ─────────────────────────────────────────── */
+  .game-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr auto;
+    grid-template-areas:
+      "table"
+      "bottom";
+  }
+
+  /* Hide the game log on mobile — too narrow */
+  #game-log { display: none; }
+
+  .table-wrap {
+    padding: var(--s2) var(--s2) 0;
+    align-items: flex-start;
+    padding-top: var(--s4);
+  }
+
+  /* Table fills the viewport width */
+  #poker-table {
+    width: min(98vw, 560px);
+    height: min(58vw, 330px);
+  }
+
+  /* ── Bottom Panel ────────────────────────────────────────── */
+  .bottom-panel {
+    flex-wrap: wrap;
+    padding: var(--s2) var(--s3) env(safe-area-inset-bottom, var(--s5));
+    gap: var(--s2);
+    min-height: unset;
+    align-items: center;
+  }
+
+  .hole-cards-area {
+    flex-direction: row;
+    min-width: unset;
+    align-items: center;
+    gap: var(--s3);
+  }
+
+  /* Smaller player cards on mobile */
+  .card-lg { width: 58px; height: 84px; }
+  .card-lg.face { font-size: 14px; }
+  .card-lg.face .suit-ctr { font-size: 26px; }
+  .card-lg.face .rank-tl, .card-lg.face .rank-br { font-size: 11px; }
+
+  .card-md { width: 42px; height: 60px; }
+  .card-md.face { font-size: 12px; }
+  .card-md.face .suit-ctr { font-size: 20px; }
+
+  /* Action controls full width */
+  .action-controls {
+    flex: unset;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .btn-action {
+    padding: 13px var(--s2);
+    font-size: 13px;
+    min-height: 46px;
+  }
+
+  .waiting-action { width: 100%; }
+
+  /* ── Seat boxes — compact on mobile ─────────────────────── */
+  .seat-box {
+    min-width: 68px;
+    padding: 4px var(--s2);
+  }
+
+  .seat-name  { font-size: 10px; }
+  .seat-chips { font-size: 10px; }
+  .seat-avatar { font-size: 16px; }
+  .seat-profile-pic { width: 28px; height: 28px; }
+
+  .dealer-btn { font-size: 8px; width: 14px; height: 14px; line-height: 14px; }
+  .bot-badge  { font-size: 7px; }
+
+  /* ── Social Panel ────────────────────────────────────────── */
+  /* Lift above the bottom panel so it doesn't overlap hole cards */
+  .social-panel {
+    bottom: auto;
+    top: var(--s3);
+    left: var(--s3);
+    right: unset;
+  }
+
+  /* Sticker tray opens downward on mobile (button is top-left) */
+  .sticker-tray {
+    bottom: auto;
+    top: 56px;
+    left: 0;
+    width: 210px;
+  }
+}
+
+/* ─── Responsive — Small Phones (≤ 480px) ───────────────────────── */
+@media (max-width: 480px) {
+  #poker-table {
+    width: 99vw;
+    height: 58vw;
+  }
+
+  .seat-box { min-width: 58px; padding: 3px var(--s1); }
+
+  .card-lg { width: 50px; height: 72px; }
+  .card-lg.face { font-size: 12px; }
+  .card-lg.face .suit-ctr { font-size: 22px; }
+
+  .card-md { width: 36px; height: 52px; }
+  .card-md.face .suit-ctr { font-size: 16px; }
+
+  .action-btns { gap: var(--s1); }
+  .btn-action { font-size: 12px; }
+}
