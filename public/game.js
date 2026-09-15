@@ -597,8 +597,10 @@ function renderGame() {
   const potTxt = gs.pot > 0 ? `POT  ${gs.pot.toLocaleString()}` : '';
   if (gs.pot > state.prevPot && gs.pot > 0) {
     potEl.classList.remove('pot-pulse');
+    potEl.classList.remove('pot-tick');
     void potEl.offsetWidth; // reflow
     potEl.classList.add('pot-pulse');
+    potEl.classList.add('pot-tick');
     playSound('chip');
   }
   potEl.textContent = potTxt;
@@ -662,6 +664,10 @@ function renderSeats(gs) {
         ${p.cardCount > 0 && !p.folded ? cardBacksHtml(p.cardCount, 'sm') : ''}
       </div>`;
     el.appendChild(seat);
+    seat.querySelectorAll('.seat-chips').forEach(chipEl => {
+      chipEl.classList.add('ticking');
+      setTimeout(() => chipEl.classList.remove('ticking'), 300);
+    });
   });
 
   // My seat
@@ -681,8 +687,14 @@ function renderSeats(gs) {
         ${myPlayer.isDealer ? '<div class="dealer-btn">D</div>' : ''}
         ${myPlayer.allIn    ? '<div class="allin-tag">ALL IN</div>' : ''}
       </div>
-    </div>`;
+    </div>
+    <div class="seat-my-cards" id="seat-my-cards"></div>
+    <div class="my-hand-label seat-hand-label" id="my-hand-label"></div>`;
     el.appendChild(mSeat);
+    mSeat.querySelectorAll('.seat-chips').forEach(chipEl => {
+      chipEl.classList.add('ticking');
+      setTimeout(() => chipEl.classList.remove('ticking'), 300);
+    });
   }
 }
 
@@ -702,10 +714,16 @@ const GHOST_SUITS = ['♠', '♥', '♣', '♦', '♥'];
 
 function renderCommunity(gs) {
   const el = document.getElementById('community-cards');
+  const prevCount = el.querySelectorAll('.card.face').length;
   el.innerHTML = '';
   for (let i = 0; i < 5; i++) {
     if (gs.community?.[i]) {
-      el.appendChild(buildFaceCard(gs.community[i], 'md', i));
+      const card = buildFaceCard(gs.community[i], 'md', i);
+      if (i >= prevCount) {
+        card.classList.add('reveal-flash');
+        card.style.animationDelay = `${(i - prevCount) * 0.18}s`;
+      }
+      el.appendChild(card);
     } else {
       const ph = document.createElement('div');
       ph.className = 'card card-md placeholder';
@@ -717,21 +735,27 @@ function renderCommunity(gs) {
 
 // ─── My Cards ─────────────────────────────────────────────────────
 function renderMyCards() {
-  const el = document.getElementById('hole-cards');
+  // Cards now live under the player's seat on the table
+  const el = document.getElementById('seat-my-cards');
+  if (!el) return;
   el.innerHTML = '';
+  const labelEl = document.getElementById('my-hand-label');
   if (state.myCards.length === 0) {
     for (let i = 0; i < 2; i++) {
-      const ph = document.createElement('div'); ph.className = 'card card-lg placeholder'; el.appendChild(ph);
+      const ph = document.createElement('div'); ph.className = 'card card-md placeholder'; el.appendChild(ph);
     }
-    document.getElementById('my-hand-label').textContent = '';
+    if (labelEl) labelEl.textContent = '';
     return;
   }
-  state.myCards.forEach((card, i) => el.appendChild(buildFaceCard(card, 'lg', i)));
+  state.myCards.forEach((card, i) => {
+    const cardEl = buildFaceCard(card, 'md', 0);
+    cardEl.classList.add('flip-in');
+    cardEl.style.animationDelay = `${i * 0.14}s`;
+    el.appendChild(cardEl);
+  });
   const gs = state.gameState;
-  if (gs?.community?.length >= 3) {
-    document.getElementById('my-hand-label').textContent = evalHandLabel(state.myCards, gs.community);
-  } else {
-    document.getElementById('my-hand-label').textContent = '';
+  if (labelEl) {
+    labelEl.textContent = gs?.community?.length >= 3 ? evalHandLabel(state.myCards, gs.community) : '';
   }
 }
 
@@ -842,17 +866,43 @@ function renderShowdown(winners, pot) {
   const overlay   = document.getElementById('showdown-overlay');
   const content   = document.getElementById('showdown-content');
   const countdown = document.getElementById('countdown');
+  const community = state.gameState?.community || [];
 
-  content.innerHTML = winners.map(w => `
-    <div class="showdown-winner">
-      <div class="showdown-winner-name">${esc(w.name)}</div>
-      <div class="showdown-hand-name">${esc(w.handName)}</div>
-      ${w.cards ? `<div class="showdown-winner-cards">${w.cards.map(c => buildFaceCard(c, 'md').outerHTML).join('')}</div>` : ''}
-    </div>
-    <div class="showdown-pot">Pot: ${pot.toLocaleString()} chips</div>
-  `).join('');
+  content.innerHTML = winners.map(w => {
+    // Build all 7 card elements: 5 community + 2 hole
+    const commHtml = community.map((c, i) => {
+      return `<div class="showdown-card-wrap"><div class="card face card-md ${c.suit === '♥' || c.suit === '♦' ? 'red' : 'black'}" style="animation-delay:${i*0.07}s">
+        <div class="rank-tl"><div>${esc(c.rank)}</div><div class="card-suit">${esc(c.suit)}</div></div>
+        <div class="suit-ctr">${esc(c.suit)}</div>
+        <div class="rank-br"><div>${esc(c.rank)}</div><div class="card-suit">${esc(c.suit)}</div></div>
+      </div></div>`;
+    }).join('');
+
+    const holeHtml = w.cards ? w.cards.map((c, i) => {
+      return `<div class="showdown-card-wrap best"><div class="card face card-md ${c.suit === '♥' || c.suit === '♦' ? 'red' : 'black'}" style="animation-delay:${(community.length + i)*0.07}s">
+        <div class="rank-tl"><div>${esc(c.rank)}</div><div class="card-suit">${esc(c.suit)}</div></div>
+        <div class="suit-ctr">${esc(c.suit)}</div>
+        <div class="rank-br"><div>${esc(c.rank)}</div><div class="card-suit">${esc(c.suit)}</div></div>
+      </div></div>`;
+    }).join('') : '';
+
+    const divider = community.length > 0 && holeHtml ? '<div class="showdown-divider"></div>' : '';
+
+    return `
+      <div class="showdown-winner">
+        <div class="showdown-winner-name">${esc(w.name)}</div>
+        <div class="showdown-hand-name">${esc(w.handName)}</div>
+        <div class="showdown-all-cards">${commHtml}${divider}${holeHtml}</div>
+      </div>
+      <div class="showdown-pot">Pot: <strong>◈ ${pot.toLocaleString()}</strong></div>
+    `;
+  }).join('');
 
   overlay.classList.remove('hidden');
+
+  // Confetti burst
+  spawnConfetti(overlay);
+
   let secs = 5;
   countdown.textContent = secs;
   const timer = setInterval(() => {
@@ -860,6 +910,28 @@ function renderShowdown(winners, pot) {
     countdown.textContent = secs;
     if (secs <= 0) { clearInterval(timer); overlay.classList.add('hidden'); }
   }, 1000);
+}
+
+function spawnConfetti(container) {
+  const colors = ['#F5B942', '#ffe066', '#fff', '#b8860b', '#ffd700'];
+  for (let i = 0; i < 28; i++) {
+    const p = document.createElement('div');
+    p.className = 'confetti-particle';
+    const angle = (Math.PI * 2 * i) / 28 + (Math.random() - 0.5) * 0.4;
+    const dist  = 80 + Math.random() * 120;
+    const tx    = Math.cos(angle) * dist;
+    const ty    = Math.sin(angle) * dist - 40;
+    p.style.cssText = `
+      background: ${colors[i % colors.length]};
+      left: 50%; top: 50%;
+      --tx: ${tx}px; --ty: ${ty}px;
+      --rot: ${Math.floor(Math.random() * 720 - 360)}deg;
+      --dur: ${0.6 + Math.random() * 0.5}s;
+      --delay: ${Math.random() * 0.15}s;
+    `;
+    container.appendChild(p);
+    setTimeout(() => p.remove(), 1500);
+  }
 }
 
 // ─── Card Builder ─────────────────────────────────────────────────

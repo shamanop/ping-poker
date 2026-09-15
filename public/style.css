@@ -426,7 +426,7 @@ body::after {
 /* ─────────────────────────────────────────────────────────────────────────
    GAME SCREEN
    ───────────────────────────────────────────────────────────────────────── */
-#game-screen { flex-direction: column; overflow: hidden; background: var(--ink); }
+#game-screen { flex-direction: column; overflow: hidden; background: radial-gradient(ellipse 120% 100% at 50% 35%, #0d1f3c 0%, #050b14 55%, #020408 100%); }
 
 .game-layout {
   display: grid;
@@ -447,8 +447,8 @@ body::after {
 
 #poker-table {
   position: relative;
-  width: min(700px, 88vw);
-  height: min(390px, 52vw);
+  width: min(1100px, calc(100vw - 260px));
+  height: min(613px, calc((100vw - 260px) * 0.557));
 
   /* Felt surface — spotlight from above, dark edges */
   background:
@@ -574,16 +574,36 @@ body::after {
   border: 1px solid rgba(192,48,48,0.4);
   border-radius: 2px; font-size: 9px; font-weight: 700;
   padding: 1px 4px; letter-spacing: 0.5px;
+  animation: allinSlam 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+@keyframes allinSlam {
+  0%   { transform: scale(2.5) rotate(-8deg); opacity: 0; }
+  60%  { transform: scale(0.92) rotate(2deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0); opacity: 1; }
 }
 
 .seat-hole-cards { display: flex; gap: 4px; margin-top: 3px; }
 
 /* Active player pulse */
 @keyframes seatPulse {
-  0%, 100% { box-shadow: 0 0 0 1px var(--gold-ring), 0 0 16px var(--gold-glow); }
-  50%       { box-shadow: 0 0 0 1px rgba(245,185,66,0.9), 0 0 32px rgba(245,185,66,0.5); }
+  0%, 100% { box-shadow: 0 0 0 2px var(--gold), 0 0 24px rgba(245,185,66,0.6), 0 0 60px rgba(245,185,66,0.25); }
+  50%       { box-shadow: 0 0 0 2px var(--gold), 0 0 40px rgba(245,185,66,0.9), 0 0 90px rgba(245,185,66,0.45); }
 }
-.player-seat.is-active .seat-box { animation: seatPulse 2s ease-in-out infinite; }
+.player-seat.is-active .seat-box {
+  animation: seatPulse 1.6s ease-in-out infinite;
+  border-color: var(--gold);
+}
+/* Floor spotlight glow beneath active seat */
+.player-seat.is-active::after {
+  content: '';
+  position: absolute;
+  bottom: -20px; left: 50%;
+  transform: translateX(-50%);
+  width: 120px; height: 40px;
+  background: radial-gradient(ellipse, rgba(245,185,66,0.35) 0%, transparent 70%);
+  pointer-events: none;
+  animation: seatPulse 1.6s ease-in-out infinite;
+}
 
 /* ─── Cards ────────────────────────────────────────────────────── */
 .card {
@@ -691,16 +711,14 @@ body::after {
   grid-area: bottom;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: var(--s5);
   padding: var(--s3) var(--s5) var(--s4);
   background: linear-gradient(0deg, rgba(10,10,11,1) 60%, rgba(10,10,11,0) 100%);
-  min-height: 148px;
+  min-height: 110px;
 }
 
-.hole-cards-area {
-  display: flex; flex-direction: column; align-items: center; gap: var(--s2);
-  min-width: 170px;
-}
+.hole-cards-area { display: none; }
 
 .hole-cards { display: flex; gap: var(--s3); }
 
@@ -708,6 +726,20 @@ body::after {
   font-size: 11px; font-weight: 700; letter-spacing: 1.5px;
   text-transform: uppercase; color: var(--gold);
   min-height: 16px; text-align: center;
+}
+
+/* Cards displayed under the player's own seat on the table */
+.seat-my-cards {
+  display: flex; gap: var(--s2); justify-content: center;
+  margin-top: var(--s2);
+}
+
+.seat-hand-label {
+  font-size: 10px; font-weight: 700; letter-spacing: 1.5px;
+  text-transform: uppercase; color: var(--gold);
+  text-align: center; min-height: 14px;
+  margin-top: 3px;
+  text-shadow: 0 0 12px rgba(245,185,66,0.6);
 }
 
 /* ─── Action Controls ─────────────────────────────────────────── */
@@ -823,55 +855,97 @@ body::after {
 /* ─── Showdown ──────────────────────────────────────────────────── */
 .showdown-overlay {
   position: absolute; inset: 0; z-index: 100;
-  background: rgba(10,10,11,0.88);
-  backdrop-filter: blur(6px);
+  background: rgba(5,11,20,0.92);
+  backdrop-filter: blur(8px);
   display: flex; align-items: center; justify-content: center;
-  animation: fadeIn 0.3s ease;
+  animation: fadeIn 0.25s ease;
 }
 
 .showdown-card {
-  background: var(--ink-card);
-  border: 1px solid rgba(245,185,66,0.4);
+  background: linear-gradient(160deg, #0f1f3a 0%, #0a1628 60%, #050b14 100%);
+  border: 1px solid rgba(245,185,66,0.5);
+  border-top: 3px solid var(--gold);
   border-radius: var(--radius-lg);
-  padding: var(--s7) var(--s8);
-  text-align: center; max-width: 480px; width: 90%;
-  box-shadow: 0 0 80px var(--gold-glow), 0 40px 80px rgba(0,0,0,0.8);
-  animation: popIn 0.35s cubic-bezier(0.34, 1.4, 0.64, 1) both;
-
-  /* Left edge accent — asymmetry */
-  border-left: 3px solid var(--gold);
+  padding: var(--s6) var(--s7);
+  text-align: center;
+  max-width: 680px; width: 95%;
+  box-shadow: 0 0 120px rgba(245,185,66,0.25), 0 40px 100px rgba(0,0,0,0.9), inset 0 1px 0 rgba(245,185,66,0.1);
+  animation: popIn 0.4s cubic-bezier(0.34, 1.4, 0.64, 1) both;
 }
 
 .showdown-eyebrow {
   font-family: 'Bebas Neue', sans-serif;
-  font-size: 11px; letter-spacing: 5px;
-  color: var(--gold); margin-bottom: var(--s4); opacity: 0.7;
+  font-size: 11px; letter-spacing: 6px;
+  color: var(--gold); margin-bottom: var(--s3); opacity: 0.8;
+  animation: fadeIn 0.3s 0.1s both;
 }
 
 .showdown-winner { display: flex; flex-direction: column; align-items: center; gap: var(--s2); }
 
 .showdown-winner-name {
-  font-family: 'Space Grotesk', sans-serif;
-  font-size: 28px; font-weight: 700; color: var(--ivory);
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 52px; letter-spacing: 4px;
+  color: var(--ivory);
+  line-height: 1;
+  animation: popIn 0.45s 0.05s cubic-bezier(0.34, 1.4, 0.64, 1) both;
 }
 
 .showdown-hand-name {
-  font-size: 15px; font-weight: 600;
-  color: var(--gold); letter-spacing: 1px;
+  font-size: 16px; font-weight: 700;
+  color: var(--gold); letter-spacing: 3px; text-transform: uppercase;
+  animation: fadeIn 0.3s 0.15s both;
+}
+
+.showdown-all-cards {
+  display: flex;
+  gap: var(--s2);
+  justify-content: center;
+  align-items: center;
+  margin: var(--s4) 0 var(--s3);
+  flex-wrap: wrap;
+}
+
+.showdown-divider {
+  width: 1px; height: 52px;
+  background: linear-gradient(to bottom, transparent, rgba(245,185,66,0.3), transparent);
+  margin: 0 var(--s2);
+  flex-shrink: 0;
+}
+
+.showdown-card-wrap {
+  position: relative;
+}
+
+/* Best-hand highlight: gold ring + lifted effect */
+.showdown-card-wrap.best .card.face {
+  box-shadow: 0 0 0 2px var(--gold), 0 0 18px rgba(245,185,66,0.6), 0 4px 12px rgba(0,0,0,0.6);
+  transform: translateY(-4px);
 }
 
 .showdown-pot {
-  font-size: 13px; color: var(--ivory-dim); margin: var(--s3) 0;
+  font-size: 13px; color: var(--ivory-mid); margin: var(--s2) 0;
+  letter-spacing: 1px;
 }
 
-.showdown-winner-cards {
-  display: flex; gap: var(--s2); justify-content: center;
-  margin: var(--s3) 0;
-}
+.showdown-pot strong { color: var(--gold); font-size: 16px; }
 
 .showdown-timer {
-  font-size: 12px; color: var(--ivory-dim); margin-top: var(--s5);
+  font-size: 11px; color: var(--ivory-dim); margin-top: var(--s4);
   letter-spacing: 0.5px;
+}
+
+/* Gold confetti burst on win */
+.confetti-particle {
+  position: absolute;
+  width: 6px; height: 6px;
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 200;
+  animation: confettiFly var(--dur, 0.8s) var(--delay, 0s) ease-out both;
+}
+@keyframes confettiFly {
+  0%   { transform: translate(0, 0) rotate(0deg) scale(1); opacity: 1; }
+  100% { transform: translate(var(--tx, 60px), var(--ty, -80px)) rotate(var(--rot, 360deg)) scale(0.3); opacity: 0; }
 }
 
 /* ─── Bot Badge ────────────────────────────────────────────────── */
@@ -916,6 +990,20 @@ body::after {
   from { opacity: 0; transform: translateY(-16px) rotate(-3deg) scale(0.88); }
   to   { opacity: 1; transform: translateY(0) rotate(0) scale(1); }
 }
+
+@keyframes cardFlip {
+  0%   { transform: rotateY(90deg) scale(0.92); opacity: 0; }
+  60%  { transform: rotateY(-8deg) scale(1.04); opacity: 1; }
+  100% { transform: rotateY(0deg) scale(1); opacity: 1; }
+}
+.card.flip-in { animation: cardFlip 0.38s cubic-bezier(0.34, 1.2, 0.64, 1) both; }
+
+@keyframes cardRevealFlash {
+  0%   { box-shadow: 0 0 0 rgba(245,185,66,0); }
+  40%  { box-shadow: 0 0 24px rgba(245,185,66,0.8), 0 0 4px rgba(245,185,66,0.6); }
+  100% { box-shadow: 0 2px 8px rgba(0,0,0,0.4); }
+}
+.card.reveal-flash { animation: cardRevealFlash 0.6s ease-out both; }
 
 @keyframes fadeIn {
   from { opacity: 0; }
@@ -1669,6 +1757,23 @@ body::after {
   transition: border-color 0.15s;
 }
 .lb-toggle-btn:hover { border-color: var(--gold); }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   POT TICK / CHIP TICK ANIMATIONS
+   ───────────────────────────────────────────────────────────────────────── */
+@keyframes potTick {
+  0%   { transform: scale(1); }
+  30%  { transform: scale(1.18); color: #ffe066; }
+  100% { transform: scale(1); }
+}
+.pot-display.pot-tick { animation: potTick 0.35s ease-out; }
+
+@keyframes chipTick {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.25); }
+  100% { transform: scale(1); }
+}
+.seat-chips.ticking { animation: chipTick 0.3s ease-out; }
 
 /* ─────────────────────────────────────────────────────────────────────────
    POT PULSE ANIMATION
