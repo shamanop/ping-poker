@@ -197,6 +197,59 @@ function bestHand(hole, community) {
   return { ...best, cards: bestCards };
 }
 
+// ─── Bot AI ──────────────────────────────────────────────────────────────────
+
+const BOT_ROSTER = [
+  { name: 'Apollo',  avatar: '🦅' },
+  { name: 'Blaze',   avatar: '🐉' },
+  { name: 'Nova',    avatar: '⚡' },
+  { name: 'Storm',   avatar: '🐺' },
+  { name: 'Raven',   avatar: '🎯' },
+];
+
+function decideBotAction(player, toCall, room) {
+  const rand = Math.random();
+
+  if (toCall <= 0) {
+    if (rand < 0.65) return { action: 'check' };
+    const betAmt = room.currentBet + BIG_BLIND * (1 + Math.floor(Math.random() * 2));
+    return { action: 'raise', amount: betAmt };
+  }
+
+  const pressureRatio = toCall / Math.max(player.chips, 1);
+
+  if (pressureRatio > 0.4) {
+    if (rand < 0.42) return { action: 'fold' };
+    if (rand < 0.82) return { action: 'call' };
+    return { action: 'raise', amount: room.currentBet + BIG_BLIND * 2 };
+  }
+
+  if (rand < 0.15) return { action: 'fold' };
+  if (rand < 0.74) return { action: 'call' };
+  return { action: 'raise', amount: room.currentBet + BIG_BLIND * 2 };
+}
+
+function scheduleBotActionsIfNeeded(room) {
+  if (!room || room.status !== 'playing') return;
+  const idx = room.actionQueue[0];
+  if (idx === undefined) return;
+  const player = room.players[idx];
+  if (!player || !player.isBot) return;
+
+  setTimeout(() => {
+    if (!rooms.has(room.id)) return;
+    if (room.actionQueue[0] !== idx) return;
+    if (room.status !== 'playing') return;
+
+    const toCall = room.currentBet - player.roundBet;
+    const { action, amount } = decideBotAction(player, toCall, room);
+    processAction(room, idx, action, amount || 0);
+    broadcastGameState(room);
+    emitPrivateCards(room);
+    scheduleBotActionsIfNeeded(room);
+  }, 900 + Math.random() * 600);
+}
+
 // ─── Room Helpers ─────────────────────────────────────────────────────────────
 
 function roomLog(room, msg) {
@@ -517,6 +570,7 @@ function scheduleNextHand(room, nextDealerIdx) {
     startHand(room);
     broadcastGameState(room);
     emitPrivateCards(room);
+    scheduleBotActionsIfNeeded(room);
   }, 5000);
 }
 
@@ -543,6 +597,7 @@ function publicGameState(room) {
       allIn:     p.allIn,
       sittingOut: p.sittingOut,
       connected: p.connected,
+      isBot:     p.isBot || false,
       isDealer:  i === room.dealerIdx,
       isActive:  currentPlayerIdx === i,
       cardCount: p.cards.length,
@@ -558,7 +613,7 @@ function broadcastGameState(room) {
 function emitPrivateCards(room) {
   for (let i = 0; i < room.players.length; i++) {
     const p = room.players[i];
-    if (p.connected && p.socketId) {
+    if (!p.isBot && p.connected && p.socketId) {
       io.to(p.socketId).emit('your_cards', { cards: p.cards, myIdx: i });
     }
   }
@@ -637,7 +692,35 @@ io.on('connection', socket => {
     startHand(room);
     broadcastGameState(room);
     emitPrivateCards(room);
+    scheduleBotActionsIfNeeded(room);
     console.log(`Game started in room ${roomId}`);
+  });
+
+  // ── create_demo ───────────────────────────────────────────────────────────
+  socket.on('create_demo', ({ name, avatar } = {}) => {
+    let roomId;
+    do { roomId = generateRoomId(); } while (rooms.has(roomId));
+
+    const room  = makeRoom(roomId, socket.id);
+    const human = makePlayer(socket.id, name || 'You', avatar);
+    room.players.push(human);
+
+    for (let i = 0; i < 3; i++) {
+      const b = makePlayer(`bot_${i}_${roomId}`, BOT_ROSTER[i].name, BOT_ROSTER[i].avatar);
+      b.isBot = true;
+      room.players.push(b);
+    }
+
+    rooms.set(roomId, room);
+    socket.join(roomId);
+    socket.emit('room_joined', { roomId, playerIdx: 0 });
+
+    room.status = 'playing';
+    startHand(room);
+    broadcastGameState(room);
+    emitPrivateCards(room);
+    scheduleBotActionsIfNeeded(room);
+    console.log(`Demo room created: ${roomId}`);
   });
 
   // ── player_action ─────────────────────────────────────────────────────────
@@ -659,6 +742,7 @@ io.on('connection', socket => {
     if (ok) {
       broadcastGameState(room);
       emitPrivateCards(room);
+      scheduleBotActionsIfNeeded(room);
     }
   });
 

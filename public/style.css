@@ -59,6 +59,15 @@ body {
   line-height: 1.5;
 }
 
+/* Subtle noise grain overlay — kills the flat-digital look */
+body::after {
+  content: '';
+  position: fixed; inset: 0; z-index: 9999; pointer-events: none;
+  opacity: 0.022;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 256px 256px;
+}
+
 /* ─── Screen container ────────────────────────────────────────────── */
 .screen { display: none; width: 100%; height: 100vh; }
 .screen.active { display: flex; }
@@ -80,6 +89,18 @@ body {
   padding: var(--s7) var(--s6) var(--s7) var(--s7);
   position: relative;
   border-right: 1px solid rgba(245,185,66,0.08);
+  overflow: hidden;
+}
+
+/* Ambient glow behind the brand */
+.landing-left::before {
+  content: '';
+  position: absolute;
+  width: 500px; height: 500px;
+  background: radial-gradient(circle, rgba(245,185,66,0.07) 0%, transparent 65%);
+  top: 30%; left: 20%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
 }
 
 .landing-brand {
@@ -429,14 +450,14 @@ body {
   width: min(700px, 88vw);
   height: min(390px, 52vw);
 
-  /* Felt surface — rich casino green */
+  /* Felt surface — spotlight from above, dark edges */
   background:
     repeating-linear-gradient(
       45deg,
-      rgba(255,255,255,0.012) 0px, rgba(255,255,255,0.012) 1px,
-      transparent 1px, transparent 12px
+      rgba(255,255,255,0.014) 0px, rgba(255,255,255,0.014) 1px,
+      transparent 1px, transparent 10px
     ),
-    radial-gradient(ellipse at 50% 40%, var(--felt-hi) 0%, var(--felt) 40%, var(--felt-ctr) 100%);
+    radial-gradient(ellipse 60% 50% at 50% 44%, #33924f 0%, var(--felt-hi) 25%, var(--felt) 55%, var(--felt-ctr) 100%);
 
   border-radius: 50%;
 
@@ -489,7 +510,7 @@ body {
 }
 
 .seat-box {
-  background: var(--ink-card);
+  background: linear-gradient(160deg, var(--ink-panel) 0%, var(--ink-card) 100%);
   border: 1px solid rgba(245,185,66,0.15);
   border-radius: var(--radius-md);
   padding: var(--s2) var(--s3);
@@ -497,6 +518,7 @@ body {
   text-align: center;
   position: relative;
   transition: border-color 0.2s, box-shadow 0.2s;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 4px 12px rgba(0,0,0,0.4);
 }
 
 /* Left accent bar — the anti-symmetric tell */
@@ -583,18 +605,39 @@ body {
 .card.red { color: #CC1111; }
 .card.black { color: #111111; }
 
-/* Card back — VP branded */
+/* Card back — VP branded with geometric casino pattern */
 .card.back {
   background: var(--ink-card);
-  border: 1px solid rgba(245,185,66,0.3);
+  border: 1px solid rgba(245,185,66,0.35);
   box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+}
+
+/* Inner border frame — real casino card telltale */
+.card.back::after {
+  content: '';
+  position: absolute; inset: 3px;
+  border: 1px solid rgba(245,185,66,0.22);
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 1;
 }
 
 .card.back .card-back-inner {
   position: absolute; inset: 0;
   display: flex; align-items: center; justify-content: center;
+  /* Crosshatch pattern: two diagonal repeating gradients */
   background:
-    linear-gradient(135deg, rgba(245,185,66,0.06) 0%, transparent 50%, rgba(245,185,66,0.06) 100%);
+    radial-gradient(ellipse 60% 55% at 50% 50%, rgba(245,185,66,0.05) 0%, transparent 100%),
+    repeating-linear-gradient(
+      45deg,
+      transparent, transparent 3px,
+      rgba(245,185,66,0.055) 3px, rgba(245,185,66,0.055) 4px
+    ),
+    repeating-linear-gradient(
+      -45deg,
+      transparent, transparent 3px,
+      rgba(245,185,66,0.055) 3px, rgba(245,185,66,0.055) 4px
+    );
 }
 
 .card.back img.back-logo {
@@ -830,6 +873,43 @@ body {
   font-size: 12px; color: var(--ivory-dim); margin-top: var(--s5);
   letter-spacing: 0.5px;
 }
+
+/* ─── Bot Badge ────────────────────────────────────────────────── */
+.bot-badge {
+  background: rgba(82,85,97,0.3); color: var(--ivory-mid);
+  border: 1px solid rgba(138,157,184,0.25);
+  border-radius: 2px; font-size: 8px; font-weight: 700;
+  padding: 1px 4px; letter-spacing: 1px;
+}
+
+/* ─── Demo Button ──────────────────────────────────────────────── */
+.btn-demo {
+  background: transparent;
+  border: none;
+  color: var(--ivory-dim);
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  padding: var(--s2) 0;
+  text-align: center;
+  width: 100%;
+  transition: color 0.12s;
+}
+.btn-demo:hover { color: var(--gold); }
+
+/* ─── Community Placeholder Suit ──────────────────────────────── */
+.placeholder-suit {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 20px;
+  opacity: 0.08;
+  color: var(--ivory);
+  pointer-events: none;
+}
+.card-md .placeholder-suit { font-size: 22px; }
 
 /* ─── Keyframes ────────────────────────────────────────────────── */
 @keyframes cardDeal {

@@ -45,6 +45,12 @@ function bindLanding() {
     state.socket.emit('create_room', { name, avatar: state.selectedAvatar });
   });
 
+  document.getElementById('btn-demo').addEventListener('click', () => {
+    const name = getPlayerName();
+    if (!name) return;
+    state.socket.emit('create_demo', { name, avatar: state.selectedAvatar });
+  });
+
   document.getElementById('btn-join').addEventListener('click', () => {
     const name = getPlayerName();
     if (!name) return;
@@ -207,11 +213,12 @@ function renderSeats(gs) {
       <div class="seat-box">
         <div class="seat-avatar">${esc(p.avatar)}</div>
         <div class="seat-name">${esc(p.name)}</div>
-        <div class="seat-chips">${p.chips.toLocaleString()}</div>
+        <div class="seat-chips">◈ ${p.chips.toLocaleString()}</div>
         <div class="seat-bet-row">${betHtml}</div>
         <div class="seat-tags">
           ${p.isDealer ? '<div class="dealer-btn">D</div>' : ''}
           ${p.allIn    ? '<div class="allin-tag">ALL IN</div>' : ''}
+          ${p.isBot    ? '<div class="bot-badge">CPU</div>' : ''}
         </div>
       </div>
       <div class="seat-hole-cards">
@@ -232,7 +239,7 @@ function renderSeats(gs) {
     dSeat.innerHTML = `<div class="seat-box">
       <div class="seat-avatar">${esc(myPlayer.avatar)}</div>
       <div class="seat-name">${esc(myPlayer.name)}</div>
-      <div class="seat-chips">${myPlayer.chips.toLocaleString()}</div>
+      <div class="seat-chips">◈ ${myPlayer.chips.toLocaleString()}</div>
       <div class="seat-bet-row">${myPlayer.roundBet > 0 ? `<span class="seat-bet">${myPlayer.roundBet.toLocaleString()}</span>` : ''}</div>
       <div class="seat-tags"><div class="dealer-btn">D</div></div>
     </div>`;
@@ -246,7 +253,7 @@ function renderSeats(gs) {
     mSeat.innerHTML = `<div class="seat-box">
       <div class="seat-avatar">${esc(myPlayer.avatar)}</div>
       <div class="seat-name">${esc(myPlayer.name)}</div>
-      <div class="seat-chips">${myPlayer.chips.toLocaleString()}</div>
+      <div class="seat-chips">◈ ${myPlayer.chips.toLocaleString()}</div>
       <div class="seat-bet-row">${myPlayer.roundBet > 0 ? `<span class="seat-bet">${myPlayer.roundBet.toLocaleString()}</span>` : ''}</div>
       <div class="seat-tags">
         ${myPlayer.isDealer ? '<div class="dealer-btn">D</div>' : ''}
@@ -269,6 +276,8 @@ function cardBacksHtml(count, size) {
 }
 
 // ─── Community Cards ───────────────────────────────────────────────
+const GHOST_SUITS = ['♠', '♥', '♣', '♦', '♥'];
+
 function renderCommunity(gs) {
   const el = document.getElementById('community-cards');
   el.innerHTML = '';
@@ -279,6 +288,7 @@ function renderCommunity(gs) {
     } else {
       const ph = document.createElement('div');
       ph.className = 'card card-md placeholder';
+      ph.innerHTML = `<span class="placeholder-suit">${GHOST_SUITS[i]}</span>`;
       el.appendChild(ph);
     }
   }
