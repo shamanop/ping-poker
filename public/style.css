@@ -737,7 +737,7 @@ body::after {
 .seat-hand-label {
   font-size: 10px; font-weight: 700; letter-spacing: 1.5px;
   text-transform: uppercase; color: var(--gold);
-  text-align: center; min-height: 14px;
+  text-align: center;
   margin-top: 3px;
   text-shadow: 0 0 12px rgba(245,185,66,0.6);
 }
