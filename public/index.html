@@ -6,44 +6,57 @@
   <title>PokerPing</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=7">
+  <link rel="stylesheet" href="style.css?v=8">
 </head>
 <body>
 
   <!-- ── LANDING ────────────────────────────────────────────────── -->
   <div id="landing-screen" class="screen active">
     <div class="landing-left">
+      <div class="bg-card bg-card-1"></div>
+      <div class="bg-card bg-card-2"></div>
+      <div class="bg-card bg-card-3"></div>
       <div class="landing-brand">
         <img src="/images/vp-logo.png" alt="VoterPing" class="brand-vp-logo">
         <div class="brand-wordmark">
+          <div class="brand-eyebrow">Texas Hold'em · Game Night</div>
           <div class="brand-title">POKER<span class="brand-ping">PING</span></div>
-          <div class="brand-sub">VoterPing Game Night</div>
+          <div class="brand-sub">VoterPing · Private Tables</div>
         </div>
       </div>
       <div class="landing-table-preview">
         <div class="preview-table">
-          <div class="preview-chips">
-            <span class="preview-chip c1"></span>
-            <span class="preview-chip c2"></span>
-            <span class="preview-chip c3"></span>
-            <span class="preview-chip c4"></span>
-            <span class="preview-chip c5"></span>
+          <div class="preview-community">
+            <div class="preview-comm-card"></div>
+            <div class="preview-comm-card"></div>
+            <div class="preview-comm-card"></div>
+            <div class="preview-comm-card pf-gold"><span class="pf-rank">A</span><span class="pf-suit pf-red">♥</span></div>
+            <div class="preview-comm-card pf-gold"><span class="pf-rank">K</span><span class="pf-suit">♠</span></div>
           </div>
-          <div class="preview-cards">
-            <div class="preview-card"></div>
-            <div class="preview-card"></div>
-            <div class="preview-card"></div>
+          <div class="preview-pot">
+            <div class="preview-chips">
+              <span class="preview-chip c1"></span>
+              <span class="preview-chip c2"></span>
+              <span class="preview-chip c1"></span>
+              <span class="preview-chip c3"></span>
+              <span class="preview-chip c4"></span>
+            </div>
+            <div class="preview-pot-label">POT  ◈ 640</div>
           </div>
+        </div>
+        <div class="preview-stats">
+          <span>2–8 PLAYERS</span><span class="preview-stat-sep">·</span><span>BLINDS 10 / 20</span><span class="preview-stat-sep">·</span><span>◈ 1,500 BUY-IN</span>
         </div>
       </div>
     </div>
 
     <div class="landing-right">
       <div class="mobile-brand">POKER<span class="brand-ping">PING</span></div>
+      <div class="setup-eyebrow">Take a Seat</div>
       <div class="setup-form">
         <div class="setup-field">
           <label class="field-label">YOUR NAME</label>
-          <input id="player-name" type="text" class="text-input" placeholder="How you want to be known" maxlength="16" autocomplete="off">
+          <input id="player-name" type="text" class="text-input" placeholder="Your name at the table" maxlength="16" autocomplete="off">
           <div id="bank-display" class="bank-display hidden">BANK &nbsp;◈ <span id="bank-amount">—</span></div>
         </div>
 
@@ -76,7 +89,7 @@
 
         <div class="setup-actions">
           <button id="btn-create" class="btn-primary">Deal Me In</button>
-          <div class="setup-divider-text">— or join a table —</div>
+          <div class="setup-divider-text">join existing</div>
           <div class="join-row">
             <input id="room-code-input" type="text" class="text-input code-input" placeholder="ROOM CODE" maxlength="6" autocomplete="off">
             <button id="btn-join" class="btn-secondary">Join</button>
