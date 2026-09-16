@@ -42,9 +42,6 @@ document.addEventListener('DOMContentLoaded', () => {
     showThrowTray(playerIdx, seatBox);
   });
 
-  const urlJoin = new URL(window.location.href).searchParams.get('join');
-  if (urlJoin) document.getElementById('room-code-input').value = urlJoin;
-
   // Pre-fill saved name
   const savedName = localStorage.getItem('ppName');
   if (savedName) {
@@ -160,28 +157,24 @@ function bindLanding() {
     }, 500);
   });
 
-  document.getElementById('btn-create').addEventListener('click', () => {
-    const name = getPlayerName(); if (!name) return;
-    localStorage.setItem('ppName', name);
-    state.socket.emit('create_room', { name, avatar: state.selectedAvatar, profilePic: state.profilePic });
-  });
   document.getElementById('btn-demo').addEventListener('click', () => {
     const name = getPlayerName(); if (!name) return;
     localStorage.setItem('ppName', name);
     state.socket.emit('create_demo', { name, avatar: state.selectedAvatar, profilePic: state.profilePic });
   });
+
   document.getElementById('btn-join').addEventListener('click', () => {
     const name = getPlayerName(); if (!name) return;
-    const code = document.getElementById('room-code-input').value.trim().toUpperCase();
-    if (!code) { showError('Enter a room code'); return; }
+    const password = document.getElementById('password-input')?.value.trim() || '';
+    if (!password) { showError('Enter the table password'); return; }
     localStorage.setItem('ppName', name);
-    state.socket.emit('join_room', { roomId: code, name, avatar: state.selectedAvatar, profilePic: state.profilePic });
+    state.socket.emit('join_game', { name, avatar: state.selectedAvatar, profilePic: state.profilePic, password });
   });
 
   document.getElementById('player-name').addEventListener('keydown', e => {
-    if (e.key === 'Enter') document.getElementById('btn-create').click();
+    if (e.key === 'Enter') document.getElementById('btn-join').click();
   });
-  document.getElementById('room-code-input').addEventListener('keydown', e => {
+  document.getElementById('password-input')?.addEventListener('keydown', e => {
     if (e.key === 'Enter') document.getElementById('btn-join').click();
   });
 }
@@ -222,13 +215,6 @@ function bindLobby() {
   document.getElementById('btn-start').addEventListener('click', () => {
     const blindInterval = parseInt(document.getElementById('blind-interval-select')?.value || '0');
     state.socket.emit('start_game', { roomId: state.roomId, blindInterval });
-  });
-  document.getElementById('btn-copy-code').addEventListener('click', () => {
-    const url = `${window.location.origin}?join=${state.roomId}`;
-    navigator.clipboard.writeText(url).catch(() => {});
-    const btn = document.getElementById('btn-copy-code');
-    btn.textContent = 'Copied!';
-    setTimeout(() => { btn.textContent = 'Copy invite link'; }, 2000);
   });
 }
 
@@ -280,18 +266,6 @@ function bindSocket() {
     state.roomId   = roomId;
     state.myIdx    = playerIdx;
     if (balance !== undefined) state.myBalance = balance;
-    document.getElementById('lobby-room-code').textContent = roomId;
-    window.history.replaceState({}, '', `?join=${roomId}`);
-    const codeEl = document.getElementById('ingame-room-code');
-    if (codeEl) {
-      codeEl.textContent = roomId;
-      codeEl.onclick = () => {
-        navigator.clipboard.writeText(`${window.location.origin}?join=${roomId}`).catch(() => {});
-        const prev = codeEl.textContent;
-        codeEl.textContent = 'COPIED!';
-        setTimeout(() => { codeEl.textContent = prev; }, 1500);
-      };
-    }
     showScreen('lobby-screen');
   });
 

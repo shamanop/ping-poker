@@ -87,13 +87,13 @@
           </div>
         </div>
 
+        <div class="setup-field">
+          <label class="field-label">TABLE PASSWORD</label>
+          <input id="password-input" type="password" class="text-input" placeholder="Password" autocomplete="off">
+        </div>
+
         <div class="setup-actions">
-          <button id="btn-create" class="btn-primary">Deal Me In</button>
-          <div class="setup-divider-text">join existing</div>
-          <div class="join-row">
-            <input id="room-code-input" type="text" class="text-input code-input" placeholder="ROOM CODE" maxlength="6" autocomplete="off">
-            <button id="btn-join" class="btn-secondary">Join</button>
-          </div>
+          <button id="btn-join" class="btn-primary">Join Table</button>
           <button id="btn-demo" class="btn-demo">Play vs CPU  →</button>
         </div>
 
@@ -107,11 +107,6 @@
     <div class="lobby-wrap">
       <div class="lobby-header">
         <div class="lobby-brand">POKERPING</div>
-        <div class="lobby-room-block">
-          <div class="room-code-label">TABLE CODE</div>
-          <div class="room-code-value" id="lobby-room-code">——</div>
-          <button id="btn-copy-code" class="btn-ghost-sm">Copy invite link</button>
-        </div>
       </div>
 
       <div class="lobby-body">
@@ -281,6 +276,6 @@
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="game.js?v=7"></script>
+  <script src="game.js?v=8"></script>
 </body>
 </html>

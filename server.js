@@ -28,6 +28,9 @@ const BLIND_SCHEDULE = [
   { sb: 200, bb: 400 },
 ];
 
+const ROOM_ID = 'POKERPING';
+const ROOM_PASSWORD = 'ping';
+
 // ─── Bank System ─────────────────────────────────────────────────────────────
 
 let bank = {};
@@ -80,6 +83,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 // ─── Room State ──────────────────────────────────────────────────────────────
 
 const rooms = new Map();
+rooms.set(ROOM_ID, makeRoom(ROOM_ID, null));
 
 function makeRoom(id, hostSocketId) {
   return {
@@ -674,42 +678,33 @@ io.on('connection', socket => {
     socket.emit('leaderboard_data', { entries: getLeaderboard() });
   });
 
-  // ── create_room ──────────────────────────────────────────────────────────
-  socket.on('create_room', ({ name, avatar, profilePic } = {}) => {
-    let roomId;
-    do { roomId = generateRoomId(); } while (rooms.has(roomId));
+  // ── join_game ─────────────────────────────────────────────────────────────
+  socket.on('join_game', ({ name, avatar, profilePic, password } = {}) => {
+    if (password !== ROOM_PASSWORD) {
+      socket.emit('error', { message: 'Incorrect password' }); return;
+    }
+    const room = rooms.get(ROOM_ID);
+    if (!room) { socket.emit('error', { message: 'Server error' }); return; }
+    if (room.status === 'playing' || room.status === 'waiting_next') {
+      socket.emit('error', { message: 'Game in progress — wait for next round' }); return;
+    }
+    if (room.players.length >= 8) {
+      socket.emit('error', { message: 'Table is full (max 8 players)' }); return;
+    }
 
-    const cleanName = (name || 'Player 1').trim();
-    const buyIn  = Math.min(STARTING_CHIPS, getBalance(cleanName));
+    const cleanName = (name || `Player ${room.players.length + 1}`).trim();
+    const buyIn = Math.min(STARTING_CHIPS, getBalance(cleanName));
     if (buyIn < BIG_BLIND) { socket.emit('error', { message: 'Insufficient bank balance.' }); return; }
-    const room   = makeRoom(roomId, socket.id);
+
+    const playerIdx = room.players.length;
     const player = makePlayer(socket.id, cleanName, avatar, buyIn);
     player.profilePic = validatePic(profilePic);
     adjustBank(cleanName, -buyIn);
     room.players.push(player);
-    rooms.set(roomId, room);
-    socket.join(roomId);
-    socket.emit('room_joined', { roomId, playerIdx: 0, balance: getBalance(cleanName) });
-    broadcastRoomUpdate(room);
-  });
+    if (!room.hostSocketId) room.hostSocketId = socket.id;
 
-  // ── join_room ─────────────────────────────────────────────────────────────
-  socket.on('join_room', ({ roomId, name, avatar, profilePic } = {}) => {
-    const room = rooms.get(roomId);
-    if (!room)                       { socket.emit('error', { message: 'Room not found' }); return; }
-    if (room.status === 'playing')   { socket.emit('error', { message: 'Game already in progress' }); return; }
-    if (room.players.length >= 8)    { socket.emit('error', { message: 'Table is full (max 8 players)' }); return; }
-
-    const cleanName  = (name || `Player ${room.players.length + 1}`).trim();
-    const buyIn  = Math.min(STARTING_CHIPS, getBalance(cleanName));
-    if (buyIn < BIG_BLIND) { socket.emit('error', { message: 'Insufficient bank balance.' }); return; }
-    const playerIdx = room.players.length;
-    const player    = makePlayer(socket.id, cleanName, avatar, buyIn);
-    player.profilePic = validatePic(profilePic);
-    adjustBank(cleanName, -buyIn);
-    room.players.push(player);
-    socket.join(roomId);
-    socket.emit('room_joined', { roomId, playerIdx, balance: getBalance(cleanName) });
+    socket.join(ROOM_ID);
+    socket.emit('room_joined', { roomId: ROOM_ID, playerIdx, balance: getBalance(cleanName) });
     broadcastRoomUpdate(room);
   });
 
@@ -886,9 +881,14 @@ io.on('connection', socket => {
       } else {
         room.players.splice(playerIdx, 1);
         if (room.players.length === 0) {
-          rooms.delete(roomId);
+          if (roomId === ROOM_ID) {
+            if (room.blindTimer) clearTimeout(room.blindTimer);
+            rooms.set(ROOM_ID, makeRoom(ROOM_ID, null));
+          } else {
+            rooms.delete(roomId);
+          }
         } else {
-          if (room.hostSocketId === socket.id) room.hostSocketId = room.players[0].socketId;
+          if (room.hostSocketId === socket.id) room.hostSocketId = room.players[0]?.socketId || null;
           broadcastRoomUpdate(room);
         }
       }
