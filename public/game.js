@@ -958,7 +958,7 @@ function renderControls(gs) {
   const maxRaise = myPlayer.chips + (myPlayer.roundBet || 0);
   const canRaise = myPlayer.chips > toCall;
 
-  if (!canRaise) {
+  if (!canRaise || maxRaise < minRaise) {
     raiseBtn.classList.add('hidden');
     raiseRow.classList.add('hidden');
   } else {

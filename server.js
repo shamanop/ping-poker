@@ -54,10 +54,19 @@ function saveBank() {
 }
 
 function getLeaderboard() {
+  const inGame = {};
+  for (const room of rooms.values()) {
+    for (const p of room.players) {
+      if (!p.isBot && p.chips > 0) {
+        const k = bankKey(p.name);
+        inGame[k] = (inGame[k] || 0) + p.chips;
+      }
+    }
+  }
   return Object.entries(bank)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 10)
-    .map(([name, balance]) => ({ name, balance }));
+    .map(([name, balance]) => ({ name, balance: balance + (inGame[name] || 0) }))
+    .sort((a, b) => b.balance - a.balance)
+    .slice(0, 10);
 }
 
 // ─── App Setup ───────────────────────────────────────────────────────────────
@@ -687,8 +696,9 @@ io.on('connection', socket => {
   // ── join_room ─────────────────────────────────────────────────────────────
   socket.on('join_room', ({ roomId, name, avatar, profilePic } = {}) => {
     const room = rooms.get(roomId);
-    if (!room)                     { socket.emit('error', { message: 'Room not found' }); return; }
-    if (room.status === 'playing') { socket.emit('error', { message: 'Game already in progress' }); return; }
+    if (!room)                       { socket.emit('error', { message: 'Room not found' }); return; }
+    if (room.status === 'playing')   { socket.emit('error', { message: 'Game already in progress' }); return; }
+    if (room.players.length >= 8)    { socket.emit('error', { message: 'Table is full (max 8 players)' }); return; }
 
     const cleanName  = (name || `Player ${room.players.length + 1}`).trim();
     const buyIn  = Math.min(STARTING_CHIPS, getBalance(cleanName));
