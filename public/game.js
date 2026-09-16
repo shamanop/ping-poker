@@ -864,9 +864,6 @@ function renderMyCards() {
   el.innerHTML = '';
   const labelEl = document.getElementById('my-hand-label');
   if (state.myCards.length === 0) {
-    for (let i = 0; i < 2; i++) {
-      const ph = document.createElement('div'); ph.className = 'card card-md placeholder'; el.appendChild(ph);
-    }
     if (labelEl) labelEl.textContent = '';
     return;
   }
