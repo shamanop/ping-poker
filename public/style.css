@@ -813,6 +813,7 @@ body::after {
 .card-sm { width: 28px; height: 42px; }
 .card-md { width: 54px; height: 78px; }
 .card-lg { width: 74px; height: 108px; }
+.card-xl { width: 96px; height: 138px; }
 
 .card.face .rank-tl {
   position: absolute; top: 3px; left: 4px;
@@ -835,10 +836,12 @@ body::after {
 .card-sm.face { font-size: 9px; }
 .card-md.face { font-size: 14px; }
 .card-lg.face { font-size: 18px; }
+.card-xl.face { font-size: 22px; }
 
 .card-sm.face .suit-ctr { font-size: 14px; }
 .card-md.face .suit-ctr { font-size: 26px; }
 .card-lg.face .suit-ctr { font-size: 34px; }
+.card-xl.face .suit-ctr { font-size: 44px; }
 
 .card-sm.face .rank-tl, .card-sm.face .rank-br { font-size: 8px; }
 .card-sm.face .rank-tl .card-suit, .card-sm.face .rank-br .card-suit { font-size: 7px; }

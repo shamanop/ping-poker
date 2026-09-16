@@ -841,7 +841,7 @@ function renderCommunity(gs) {
   el.innerHTML = '';
   for (let i = 0; i < 5; i++) {
     if (gs.community?.[i]) {
-      const card = buildFaceCard(gs.community[i], 'lg', i);
+      const card = buildFaceCard(gs.community[i], 'xl', i);
       if (i >= prevCount) {
         card.classList.add('reveal-flash');
         card.style.animationDelay = `${(i - prevCount) * 0.12}s`;
