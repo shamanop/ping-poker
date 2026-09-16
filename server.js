@@ -107,6 +107,8 @@ function makePlayer(socketId, name, avatar, chips) {
     avatar:     avatar || '🃏',
     profilePic: null,
     chips:      chips !== undefined ? chips : STARTING_CHIPS,
+    chipsBought: chips !== undefined ? chips : STARTING_CHIPS,
+    lastAction: null,
     cards:      [],
     roundBet:   0,
     folded:     false,
@@ -330,6 +332,7 @@ function startHand(room) {
     p.roundBet = 0;
     p.folded   = false;
     p.allIn    = false;
+    p.lastAction = null;
     if (p.chips === 0)  p.sittingOut = true;
     else                p.sittingOut = p.sitOutRequest;
   }
@@ -381,12 +384,14 @@ function processAction(room, playerIdx, action, amount) {
   switch (action) {
     case 'fold': {
       p.folded = true;
+      p.lastAction = 'FOLD';
       room.actionQueue = room.actionQueue.filter(i => i !== playerIdx);
       roomLog(room, `${name} folds`);
       break;
     }
     case 'check': {
       if (p.roundBet !== room.currentBet) { roomLog(room, `${name} cannot check`); return false; }
+      p.lastAction = 'CHECK';
       room.actionQueue.shift();
       roomLog(room, `${name} checks`);
       break;
@@ -395,6 +400,7 @@ function processAction(room, playerIdx, action, amount) {
       const callAmt = Math.min(toCall, p.chips);
       p.chips -= callAmt; p.roundBet += callAmt; room.pot += callAmt;
       if (p.chips === 0) p.allIn = true;
+      p.lastAction = 'CALL';
       room.actionQueue.shift();
       roomLog(room, `${name} calls ${callAmt}`);
       break;
@@ -406,6 +412,7 @@ function processAction(room, playerIdx, action, amount) {
       p.chips -= addAmt; p.roundBet += addAmt; room.pot += addAmt;
       if (p.chips === 0) p.allIn = true;
       room.currentBet = p.roundBet;
+      p.lastAction = 'RAISE';
       roomLog(room, `${name} raises to ${p.roundBet}`);
       const nextIdx = (playerIdx + 1) % room.players.length;
       room.actionQueue = buildActionQueue(room, nextIdx).filter(i => i !== playerIdx);
@@ -601,6 +608,8 @@ function publicGameState(room) {
       isDealer:      i === room.dealerIdx,
       isActive:      currentPlayerIdx === i,
       cardCount:     p.cards.length,
+      chipsBought:   p.chipsBought || 0,
+      lastAction:    p.lastAction || null,
     })),
     log:         room.log.slice(-8),
     handHistory: room.handHistory,
@@ -782,6 +791,7 @@ io.on('connection', socket => {
 
     const newBalance = adjustBank(player.name, -buyIn);
     player.chips     = buyIn;
+    player.chipsBought = (player.chipsBought || 0) + buyIn;
     player.sittingOut = false;
     socket.emit('balance_update', { balance: newBalance });
     broadcastGameState(room);

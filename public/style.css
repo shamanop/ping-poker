@@ -2101,3 +2101,40 @@ body::after {
   padding: 8px var(--s3);
   cursor: pointer;
 }
+
+/* ─── Session P&L ──────────────────────────────────────────────────────── */
+.seat-pnl {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.5px;
+  font-variant-numeric: tabular-nums;
+  margin-top: 1px;
+}
+.pnl-up   { color: #6be08a; }
+.pnl-down { color: #e07070; }
+
+/* ─── Position Badges (SB/BB) ────────────────────────────────────────── */
+.blind-btn {
+  border-radius: 50%; width: 18px; height: 18px;
+  font-size: 8px; font-weight: 900;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Space Grotesk', sans-serif;
+  flex-shrink: 0; letter-spacing: 0;
+}
+.sb-btn { background: rgba(245,185,66,0.18); color: var(--gold); border: 1px solid rgba(245,185,66,0.4); }
+.bb-btn { background: rgba(107,224,138,0.15); color: #6be08a; border: 1px solid rgba(107,224,138,0.35); }
+
+/* ─── Last Action Badge ──────────────────────────────────────────────── */
+.action-badge {
+  border-radius: 2px; font-size: 8px; font-weight: 800;
+  padding: 1px 4px; letter-spacing: 0.5px; flex-shrink: 0;
+  font-family: 'Space Grotesk', sans-serif;
+}
+.action-fold  { background: rgba(180,40,40,0.2);  color: #e07070; border: 1px solid rgba(180,40,40,0.35); }
+.action-call  { background: rgba(60,120,220,0.2); color: #7aacf0; border: 1px solid rgba(60,120,220,0.35); }
+.action-check { background: rgba(100,100,100,0.2); color: #aaa;   border: 1px solid rgba(100,100,100,0.3); }
+.action-raise { background: rgba(245,185,66,0.2); color: var(--gold); border: 1px solid rgba(245,185,66,0.4); }
+
+/* ─── Chip Leader ────────────────────────────────────────────────────── */
+.chip-leader-badge {
+  font-size: 11px; line-height: 1;
+  filter: drop-shadow(0 0 4px rgba(245,185,66,0.7));
+}

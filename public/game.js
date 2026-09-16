@@ -722,6 +722,16 @@ function renderGame() {
   renderLog(gs.log);
 }
 
+// ─── SB/BB Helper ─────────────────────────────────────────────────
+function nextActiveSeat(fromIdx, players) {
+  const n = players.length;
+  for (let offset = 1; offset <= n; offset++) {
+    const c = (fromIdx + offset) % n;
+    if (!players[c].sittingOut && players[c].connected) return c;
+  }
+  return (fromIdx + 1) % n;
+}
+
 // ─── Seat Positions ────────────────────────────────────────────────
 const SEATS = {
   2: [[50,94],[50,4]],
@@ -745,6 +755,9 @@ function renderSeats(gs) {
   const n     = gs.players.length;
   const pos   = SEATS[Math.min(n, 8)] || SEATS[8];
   const myIdx = state.myIdx ?? 0;
+  const maxChips = Math.max(...gs.players.map(p => p.chips));
+  const sbIdx = gs.status === 'playing' ? nextActiveSeat(gs.dealerIdx, gs.players) : -1;
+  const bbIdx = gs.status === 'playing' ? nextActiveSeat(sbIdx, gs.players) : -1;
 
   gs.players.forEach((p, i) => {
     const offset   = (i - myIdx + n) % n;
@@ -758,14 +771,23 @@ function renderSeats(gs) {
 
     const betHtml = p.roundBet > 0 ? `<span class="seat-bet">${p.roundBet.toLocaleString()}</span>` : '';
 
+    const pl = p.chips - (p.chipsBought || p.chips);
+    const plHtml = pl !== 0
+      ? `<div class="seat-pnl ${pl > 0 ? 'pnl-up' : 'pnl-down'}">${pl > 0 ? '+' : ''}${pl.toLocaleString()}</div>`
+      : '';
     seat.innerHTML = `
       <div class="seat-box throw-target" data-player-idx="${i}">
         ${avatarHtml(p)}
         <div class="seat-name">${esc(p.name)}</div>
         <div class="seat-chips">◈ ${p.chips.toLocaleString()}</div>
+        ${plHtml}
         <div class="seat-bet-row">${betHtml}</div>
         <div class="seat-tags">
           ${p.isDealer ? '<div class="dealer-btn">D</div>' : ''}
+          ${i === sbIdx ? '<div class="blind-btn sb-btn">SB</div>' : ''}
+          ${i === bbIdx ? '<div class="blind-btn bb-btn">BB</div>' : ''}
+          ${p.lastAction ? `<div class="action-badge action-${p.lastAction.toLowerCase()}">${p.lastAction}</div>` : ''}
+          ${p.chips === maxChips && p.chips > 0 && gs.players.filter(p2 => p2.chips === maxChips).length === 1 ? '<div class="chip-leader-badge">👑</div>' : ''}
           ${p.allIn    ? '<div class="allin-tag">ALL IN</div>' : ''}
           ${p.isBot    ? '<div class="bot-badge">CPU</div>' : ''}
           ${p.sittingOut  ? '<div class="away-badge">AWAY</div>' : ''}
@@ -793,13 +815,22 @@ function renderSeats(gs) {
     mSeat.className = `player-seat${myPlayer.isActive ? ' is-active' : ''}`;
     mSeat.style.left = `${mpx}%`;
     mSeat.style.top  = `${mpy}%`;
+    const myPl = myPlayer.chips - (myPlayer.chipsBought || myPlayer.chips);
+    const myPlHtml = myPl !== 0
+      ? `<div class="seat-pnl ${myPl > 0 ? 'pnl-up' : 'pnl-down'}">${myPl > 0 ? '+' : ''}${myPl.toLocaleString()}</div>`
+      : '';
     mSeat.innerHTML = `<div class="seat-box" data-player-idx="${myIdx}">
       ${avatarHtml(myPlayer)}
       <div class="seat-name">${esc(myPlayer.name)}</div>
       <div class="seat-chips">◈ ${myPlayer.chips.toLocaleString()}</div>
+      ${myPlHtml}
       <div class="seat-bet-row">${myPlayer.roundBet > 0 ? `<span class="seat-bet">${myPlayer.roundBet.toLocaleString()}</span>` : ''}</div>
       <div class="seat-tags">
         ${myPlayer.isDealer ? '<div class="dealer-btn">D</div>' : ''}
+        ${myIdx === sbIdx ? '<div class="blind-btn sb-btn">SB</div>' : ''}
+        ${myIdx === bbIdx ? '<div class="blind-btn bb-btn">BB</div>' : ''}
+        ${myPlayer.lastAction ? `<div class="action-badge action-${myPlayer.lastAction.toLowerCase()}">${myPlayer.lastAction}</div>` : ''}
+        ${myPlayer.chips === maxChips && myPlayer.chips > 0 && gs.players.filter(p2 => p2.chips === maxChips).length === 1 ? '<div class="chip-leader-badge">👑</div>' : ''}
         ${myPlayer.allIn    ? '<div class="allin-tag">ALL IN</div>' : ''}
       </div>
     </div>
