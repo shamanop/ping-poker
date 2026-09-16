@@ -526,14 +526,21 @@ function scheduleNextHand(room, nextDealerIdx) {
     });
 
     const active = room.players.filter(p => p.connected && p.chips > 0);
-    if (active.length < 2) {
+    const willPlay = active.filter(p => !p.sitOutRequest);
+    if (active.length < 2 || willPlay.length < 2) {
       // Award remaining chips back to bank
       for (const p of room.players) {
         if (!p.isBot && p.chips > 0) { adjustBank(p.name, p.chips); p.chips = 0; }
       }
       if (room.blindTimer) { clearTimeout(room.blindTimer); room.blindTimer = null; }
       room.status = 'waiting';
-      roomLog(room, 'Not enough players. Waiting...');
+      if (active.length >= 2 && willPlay.length < 2) {
+        // Everyone sat out — bring them back automatically
+        for (const p of room.players) p.sitOutRequest = false;
+        roomLog(room, 'All players sat out. Sit-out requests cleared.');
+      } else {
+        roomLog(room, 'Not enough players. Waiting...');
+      }
       broadcastGameState(room);
       return;
     }
