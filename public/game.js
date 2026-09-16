@@ -849,7 +849,7 @@ function renderCommunity(gs) {
       el.appendChild(card);
     } else {
       const ph = document.createElement('div');
-      ph.className = 'card card-md placeholder';
+      ph.className = 'card card-xl placeholder';
       ph.innerHTML = `<span class="placeholder-suit">${GHOST_SUITS[i]}</span>`;
       el.appendChild(ph);
     }
@@ -868,7 +868,7 @@ function renderMyCards() {
     return;
   }
   state.myCards.forEach((card, i) => {
-    const cardEl = buildFaceCard(card, 'md', 0);
+    const cardEl = buildFaceCard(card, 'lg', 0);
     cardEl.classList.add('flip-in');
     cardEl.style.animationDelay = `${i * 0.08}s`;
     el.appendChild(cardEl);

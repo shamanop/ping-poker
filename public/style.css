@@ -620,7 +620,7 @@ body::after {
 }
 
 .community-cards {
-  display: flex; gap: var(--s2); align-items: center; min-height: 82px;
+  display: flex; gap: var(--s3); align-items: center; min-height: 140px;
 }
 
 .street-label {
@@ -631,12 +631,12 @@ body::after {
 
 .pot-display {
   font-family: 'Space Grotesk', sans-serif;
-  font-size: 20px; font-weight: 700;
+  font-size: 26px; font-weight: 700;
   color: var(--gold);
   letter-spacing: 2px;
   font-variant-numeric: tabular-nums;
-  text-shadow: 0 0 20px var(--gold-glow);
-  min-height: 28px;
+  text-shadow: 0 0 24px var(--gold-glow);
+  min-height: 34px;
 }
 
 /* ─── Player Seats ─────────────────────────────────────────────── */
@@ -946,10 +946,8 @@ body::after {
 .btn-raise:hover { background: rgba(245,185,66,0.25); border-color: var(--gold); box-shadow: 0 0 16px var(--gold-glow); }
 
 .waiting-action {
-  flex: 1; text-align: center; font-size: 13px; color: var(--ivory-dim);
-  padding: var(--s4); background: var(--ink-up);
-  border-radius: var(--radius-sm); border: 1px solid rgba(255,255,255,0.04);
-  letter-spacing: 0.5px;
+  flex: 1; text-align: center; font-size: 12px; color: rgba(255,255,255,0.25);
+  letter-spacing: 1.5px; text-transform: uppercase;
 }
 
 /* ─── Game Log ─────────────────────────────────────────────────── */
@@ -1126,6 +1124,7 @@ body::after {
   pointer-events: none;
 }
 .card-md .placeholder-suit { font-size: 22px; }
+.card-xl .placeholder-suit { font-size: 38px; }
 
 /* ─── Keyframes ────────────────────────────────────────────────── */
 @keyframes cardDeal {
@@ -1607,6 +1606,7 @@ body::after {
    ───────────────────────────────────────────────────────────────────────── */
 .raise-presets {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--s1);
   margin-bottom: var(--s2);
 }
