@@ -923,7 +923,7 @@ function renderControls(gs) {
   const raiseBtn = document.getElementById('btn-raise');
   const presets  = document.getElementById('raise-presets');
 
-  const minRaise = gs.currentBet + 20;
+  const minRaise = gs.currentBet + (gs.bb || BIG_BLIND);
   const maxRaise = myPlayer.chips + (myPlayer.roundBet || 0);
   const canRaise = myPlayer.chips > toCall;
 
