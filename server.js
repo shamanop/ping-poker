@@ -491,7 +491,10 @@ function advanceStreet(room) {
 
   const firstIdx = nextActiveIdx(room, room.dealerIdx, 1);
   room.actionQueue = buildActionQueue(room, firstIdx);
-  if (room.actionQueue.length === 0) advanceStreet(room);
+  if (room.actionQueue.length === 0) {
+    broadcastGameState(room);
+    setTimeout(() => advanceStreet(room), 1500);
+  }
 }
 
 // ─── Showdown ─────────────────────────────────────────────────────────────────

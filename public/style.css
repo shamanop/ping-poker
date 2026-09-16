@@ -1623,6 +1623,9 @@ body::after {
 }
 .preset-btn:hover { border-color: var(--gold); color: var(--gold); background: var(--gold-faint); }
 .preset-btn.active { border-color: var(--gold); color: var(--ink); background: var(--gold); }
+.preset-btn.preset-allin { border-color: rgba(220,60,60,0.5); color: #e05555; }
+.preset-btn.preset-allin:hover { border-color: #e05555; color: #fff; background: rgba(220,60,60,0.2); }
+.preset-btn.preset-allin.active { border-color: #e05555; background: #e05555; color: #fff; }
 
 /* ─────────────────────────────────────────────────────────────────────────
    TURN TIMER

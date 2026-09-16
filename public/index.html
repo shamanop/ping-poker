@@ -6,7 +6,7 @@
   <title>PokerPing</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=13">
+  <link rel="stylesheet" href="style.css?v=14">
 </head>
 <body>
 
@@ -163,9 +163,11 @@
           <div id="raise-row" class="raise-row hidden">
             <div class="raise-label">RAISE TO</div>
             <div class="raise-presets" id="raise-presets">
-              <button class="preset-btn" data-preset="2x">2× BB</button>
-              <button class="preset-btn" data-preset="3x">3× BB</button>
+              <button class="preset-btn" data-preset="qtr">¼ Pot</button>
+              <button class="preset-btn" data-preset="half">½ Pot</button>
+              <button class="preset-btn" data-preset="3qtr">¾ Pot</button>
               <button class="preset-btn" data-preset="pot">Pot</button>
+              <button class="preset-btn preset-allin" data-preset="allin">All-In</button>
             </div>
             <div class="raise-amount-wrap">
               <input id="raise-slider" type="range" class="raise-slider">
@@ -276,6 +278,6 @@
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="game.js?v=9"></script>
+  <script src="game.js?v=10"></script>
 </body>
 </html>

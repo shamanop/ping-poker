@@ -841,7 +841,7 @@ function renderCommunity(gs) {
   el.innerHTML = '';
   for (let i = 0; i < 5; i++) {
     if (gs.community?.[i]) {
-      const card = buildFaceCard(gs.community[i], 'md', i);
+      const card = buildFaceCard(gs.community[i], 'lg', i);
       if (i >= prevCount) {
         card.classList.add('reveal-flash');
         card.style.animationDelay = `${(i - prevCount) * 0.12}s`;
@@ -948,10 +948,12 @@ function renderControls(gs) {
       presets.querySelectorAll('.preset-btn').forEach(btn => {
         btn.onclick = () => {
           let val;
-          const bb = gs.bb || BIG_BLIND;
-          if (btn.dataset.preset === '2x')  val = Math.min(bb * 2, maxRaise);
-          if (btn.dataset.preset === '3x')  val = Math.min(bb * 3, maxRaise);
-          if (btn.dataset.preset === 'pot') val = Math.min(gs.pot + gs.currentBet, maxRaise);
+          const potSize = gs.pot + gs.currentBet;
+          if (btn.dataset.preset === 'qtr')   val = Math.min(Math.floor(potSize * 0.25), maxRaise);
+          if (btn.dataset.preset === 'half')  val = Math.min(Math.floor(potSize * 0.5), maxRaise);
+          if (btn.dataset.preset === '3qtr')  val = Math.min(Math.floor(potSize * 0.75), maxRaise);
+          if (btn.dataset.preset === 'pot')   val = Math.min(potSize, maxRaise);
+          if (btn.dataset.preset === 'allin') val = maxRaise;
           val = Math.max(val || minRaise, minRaise);
           slider.value = val;
           display.textContent = Number(val).toLocaleString();
