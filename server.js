@@ -786,6 +786,7 @@ function showdown(room) {
   const winners = [...paid.keys()].sort((a, b) => a.idx - b.idx);
 
   const winnerList = winners.map(w => ({ name: w.player.name, handName: w.hand.name, cards: w.player.cards, amount: paid.get(w), net: paid.get(w) - (w.player.handBet || 0) }));
+  for (const w of winners) w.player.winHand = w.hand.name;
   for (const w of winners) roomLog(room, `${w.player.name} wins ${paid.get(w)} with ${w.hand.name}`);
 
   room.handHistory.unshift({
@@ -1024,7 +1025,7 @@ io.on('connection', socket => {
     socket.data.sessionH = r.sessionH || crypto.createHash('sha256').update(r.token).digest('hex');
     socket.emit('auth_ok', withToken ? { account: accounts.publicAccount(a), token: r.token } : { account: accounts.publicAccount(a) });
     accounts.emit('auth', socket, a.key);
-    try { socket.emit('account:stats', social.statsView(a.key)); } catch {}
+    try { socket.emit('account:stats', social.statsView(a.key)); socket.emit('achv:state', social.achvView(a.key)); } catch {}
   };
   const authed = () => { if (!socket.data.acct) { socket.emit('error', { message: 'Sign in first', code: 'auth' }); return null; } return socket.data.acct; };
   on('auth_signup', ({ name, pin, avatar } = {}) => { const r = accounts.signup(name, pin, avatar, ctxOf()); r.ok ? authOk(r, true) : authFail(r); });
@@ -1127,6 +1128,7 @@ io.on('connection', socket => {
   });
 
   tables.register(socket, on, authed);
+  socket.on('table_create', () => { try { const k = socket.data.acct; if (k && [...tables.tables.values()].some(t => t.hostKey === k && t.id !== tables.LEGACY_ID && Date.now() - t.createdAt < 3000)) social.onAction(socket, 'host'); } catch {} });
 
   // ── join_game ─────────────────────────────────────────────────────────────
   on('join_game', ({ name, avatar, profilePic, password } = {}) => {
@@ -1325,6 +1327,7 @@ io.on('connection', socket => {
     if (!room) return;
     const sender = room.players.find(p => p.socketId === socket.id);
     if (!sender) return;
+    try { social.onAction(socket, 'sticker'); } catch {}
     io.to(roomId).emit('sticker_dropped', { emoji: String(emoji || '').slice(0, 8), fromName: sender.name });
   });
 
@@ -1340,6 +1343,7 @@ io.on('connection', socket => {
     const now = Date.now();
     if (now - lastEmoteAt < 3000) return;
     lastEmoteAt = now;
+    try { social.onAction(socket, 'sticker'); } catch {}
     io.to(roomId).emit('emote', { idx, id, name: room.players[idx].name });
   });
 
@@ -1352,6 +1356,7 @@ io.on('connection', socket => {
     if (typeof targetIdx !== 'number' || targetIdx < 0 || targetIdx >= room.players.length) return;
     if (targetIdx === fromIdx) return;
     const safe = String(item || '').slice(0, 8);
+    try { social.onAction(socket, 'throw'); } catch {}
     io.to(roomId).emit('item_thrown', { fromIdx, targetIdx, item: safe, fromName: room.players[fromIdx].name });
   });
 
@@ -1451,7 +1456,7 @@ function dropSeat(room, player, opts = {}) {
 
 // ─── Start Server ─────────────────────────────────────────────────────────────
 
-const social = require('./social.js').createSocial({ io, accounts, now: () => Date.now() });
+const social = require('./social.js').createSocial({ io, accounts, now: () => Date.now(), file: path.join(path.dirname(ACCOUNTS_FILE), 'bigwins.json') });
 try{ const g = require('./games')({io, rooms, ledger, accounts, tables, social, now:()=>Date.now()}); social.setWallet(g.wallet); }catch(e){ if(e.code!=='MODULE_NOT_FOUND') throw e; }
 
 const PORT = process.env.PORT || 3000;

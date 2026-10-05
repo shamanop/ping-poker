@@ -254,6 +254,7 @@ function createAccounts({ file, roomPassword = 'ping' }) {
     if (mode === 'chips') a.stats.netChips += net;
     else { a.stats.netCents += net; if (net > a.stats.bestNightCents) a.stats.bestNightCents = net; }
     save();
+    emit('night', key, { mode, net });
   }
   function rebuildStats(entries) {
     const net = {};
