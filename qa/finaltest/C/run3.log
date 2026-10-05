@@ -1,0 +1,7 @@
+  typing fcr in chat -> {'foldDis': False, 'mode': 'turn', 'chat': 'fcr'}
+  F hotkey -> {'mode': 'idle', 'folded': True, 'last': 'HotKey folds'}
+  fonts loaded ['Bebas Neue 400', 'Bitter 400', 'Bitter 600', 'Bitter 700', 'Libre Baskerville 700']
+  10 extents {"sz": "sm", "cardW": 38, "ch0": [3, 8.9210524559021], "ch1": [8.87993335723877, 22.695722579956055], "advGap": -0.04111909866333008, "textW": 21.68422508239746, "cardUnits": 100, "fontFam": "\"Libre Baskerville\", Georgia, serif"}
+  10 extents {"sz": "md", "cardW": 60, "ch0": [3, 9.354166507720947], "ch1": [9.328125, 22.348958015441895], "advGap": -0.026041507720947266, "textW": 21.333337783813477, "cardUnits": 100, "fontFam": "\"Libre Baskerville\", Georgia, serif"}
+  10 extents {"sz": "lg", "cardW": 74, "ch0": [3, 9.123311042785645], "ch1": [9.10219669342041, 21.982264518737793], "advGap": -0.021114349365234375, "textW": 20.972978591918945, "cardUnits": 100, "fontFam": "\"Libre Baskerville\", Georgia, serif"}
+  10 dark-pixel column runs (x ranges) in index crop [(3, 16), (21, 27)] size (29, 23)

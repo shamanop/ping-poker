@@ -1,0 +1,178 @@
+[
+ {
+  "label": "raise below min (5)",
+  "errs": [],
+  "currentBet": 40,
+  "pot": 70,
+  "myChips": 1460,
+  "myRoundBet": 40,
+  "curIdxNow": 1,
+  "turnRemainingMs": 29651,
+  "exited": false
+ },
+ {
+  "label": "raise above stack (1e9)",
+  "errs": [],
+  "currentBet": 1500,
+  "pot": 1530,
+  "myChips": 0,
+  "myRoundBet": 1500,
+  "curIdxNow": 1,
+  "turnRemainingMs": null,
+  "exited": false
+ },
+ {
+  "label": "raise string \"abc\"",
+  "errs": [
+   "Raise amount must be a whole number"
+  ],
+  "currentBet": 20,
+  "pot": 30,
+  "myChips": 1500,
+  "myRoundBet": 0,
+  "curIdxNow": 0,
+  "turnRemainingMs": 29531,
+  "exited": false
+ },
+ {
+  "label": "raise numeric string \"100\"",
+  "errs": [
+   "Raise amount must be a whole number"
+  ],
+  "currentBet": 20,
+  "pot": 30,
+  "myChips": 1500,
+  "myRoundBet": 0,
+  "curIdxNow": 0,
+  "turnRemainingMs": 29530,
+  "exited": false
+ },
+ {
+  "label": "raise null",
+  "errs": [
+   "Raise amount must be a whole number"
+  ],
+  "currentBet": 20,
+  "pot": 30,
+  "myChips": 1500,
+  "myRoundBet": 0,
+  "curIdxNow": 0,
+  "turnRemainingMs": 29530,
+  "exited": false
+ },
+ {
+  "label": "raise object {}",
+  "errs": [
+   "Raise amount must be a whole number"
+  ],
+  "currentBet": 20,
+  "pot": 30,
+  "myChips": 1500,
+  "myRoundBet": 0,
+  "curIdxNow": 0,
+  "turnRemainingMs": 29529,
+  "exited": false
+ },
+ {
+  "label": "raise negative",
+  "errs": [],
+  "currentBet": 40,
+  "pot": 70,
+  "myChips": 1460,
+  "myRoundBet": 40,
+  "curIdxNow": 1,
+  "turnRemainingMs": 29649,
+  "exited": false
+ },
+ {
+  "label": "raise fractional 45.5",
+  "errs": [
+   "Raise amount must be a whole number"
+  ],
+  "currentBet": 20,
+  "pot": 30,
+  "myChips": 1500,
+  "myRoundBet": 0,
+  "curIdxNow": 0,
+  "turnRemainingMs": 29530,
+  "exited": false
+ },
+ {
+  "label": "raise NaN/Infinity (null on wire)",
+  "errs": [
+   "Raise amount must be a whole number"
+  ],
+  "currentBet": 20,
+  "pot": 30,
+  "myChips": 1500,
+  "myRoundBet": 0,
+  "curIdxNow": 0,
+  "turnRemainingMs": 29531,
+  "exited": false
+ },
+ {
+  "label": "raise array [200]",
+  "errs": [
+   "Raise amount must be a whole number"
+  ],
+  "currentBet": 20,
+  "pot": 30,
+  "myChips": 1500,
+  "myRoundBet": 0,
+  "curIdxNow": 0,
+  "turnRemainingMs": 29530,
+  "exited": false
+ },
+ {
+  "label": "unknown action \"foo\"",
+  "errs": [
+   "Unknown action"
+  ],
+  "currentBet": 20,
+  "pot": 30,
+  "myChips": 1500,
+  "myRoundBet": 0,
+  "curIdxNow": 0,
+  "turnRemainingMs": 29531,
+  "exited": false
+ },
+ {
+  "label": "uppercase action \"RAISE\"",
+  "errs": [
+   "Unknown action"
+  ],
+  "currentBet": 20,
+  "pot": 30,
+  "myChips": 1500,
+  "myRoundBet": 0,
+  "curIdxNow": 0,
+  "turnRemainingMs": 29532,
+  "exited": false
+ },
+ {
+  "label": "illegal check (facing blind)",
+  "errs": [
+   "Cannot check: call, raise or fold"
+  ],
+  "currentBet": 20,
+  "pot": 30,
+  "myChips": 1500,
+  "myRoundBet": 0,
+  "curIdxNow": 0,
+  "turnRemainingMs": 29530,
+  "exited": false
+ },
+ {
+  "label": "undefined action",
+  "errs": [
+   "Unknown action"
+  ],
+  "currentBet": 20,
+  "pot": 30,
+  "myChips": 1500,
+  "myRoundBet": 0,
+  "curIdxNow": 0,
+  "turnRemainingMs": 29531,
+  "exited": false
+ }
+]

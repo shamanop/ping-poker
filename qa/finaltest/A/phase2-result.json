@@ -1,0 +1,36 @@
+{
+ "hands": {
+  "1": {
+   "stacks0": "Hume:1500 Rex:1490 Sly:1480",
+   "overlay": "Sly | Two Pair | +420",
+   "dur": 11.754510879516602
+  },
+  "2": {
+   "stacks0": "Hume:1340 Rex:1360 Sly:1770",
+   "overlay": "Rex | Two Pair | +2,250 | Sly | Pair | +2,250",
+   "dur": 12.226096630096436
+  },
+  "3": {
+   "stacks0": "Hume:0 Rex:4070 Sly:400",
+   "overlay": "Rex | Two Pair | +160",
+   "dur": 9.80254316329956
+  }
+ },
+ "console": [],
+ "pageerrors": [],
+ "reqfail": [],
+ "http_err": [],
+ "final": {
+  "st": "waiting_next",
+  "cur": null,
+  "my": 0,
+  "street": "river",
+  "hand": 3,
+  "sd": true,
+  "ctl": false,
+  "stacks": "Hume:0 Rex:4160 Sly:340",
+  "pot": 0,
+  "ph": 3
+ },
+ "dom_seats": "Hume | 0 | AWAY | 3 | 3 | 7 | 7 | x | Rex | 4,160 | CALL 0 | x | Sly | 340 | RAISE TO 0"
+}

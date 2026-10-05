@@ -1,0 +1,157 @@
+== 1440 900
+  LANDING {"artLogin": true, "bdBg": "linear-gradient(90deg, rgba(10, 6, 3, 0) 0%, rgba(10, 6, 3, 0) 66%, rgba(10, 6, 3, 0.55) 100%), url(\"http://localhost:31", "bdBgAfter": "none", "bodyBg": "none", "avatars": 12, "avatarImgs": [[256, true], [256, true], [256, true], [256, true], [256, true], [256, true], [256, true], [256, true], [256, true], [256, true], [256, true], [256, true]], "avRects": [[50, 50], [47, 47], [47, 47]], "photoArea": 56, "eyebrow": "Take a seat", "joinBtn": "Join table", "brokenImgs": [], "fonts": ["Bebas Neue", "Bitter"]}
+  CHECK landing {"docScroll": [1440, 900, 1440, 900], "bodyScroll": [1440, 900], "bar": {"l": 0, "t": 0, "r": 0, "b": 0}, "barVisible": true, "seatsClipped": [], "seats": [], "hdr": {"l": 0, "t": 0, "r": 0, "b": 0}, "rail": {"l": 0, "t": 0, "r": 0, "b": 0}, "stage": {"l": 0, "t": 0, "r": 0, "b": 0}, "overlaps": [], "textOverflow": []}
+  AVATAR select [[0, true, 1], [1, true, 1], [2, true, 1], [3, true, 1], [4, true, 1], [5, true, 1], [6, true, 1], [7, true, 1], [8, true, 1], [9, true, 1], [10, true, 1], [11, true, 1]]
+  PHOTO preview <img src="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1BST0ZJTEUAAQEAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AA profilePic len 1087
+  shot 01-landing
+  CHECK lobby {"docScroll": [1440, 900, 1440, 900], "bodyScroll": [1440, 900], "bar": {"l": 0, "t": 0, "r": 0, "b": 0}, "barVisible": true, "seatsClipped": [], "seats": [], "hdr": {"l": 0, "t": 0, "r": 0, "b": 0}, "rail": {"l": 0, "t": 0, "r": 0, "b": 0}, "stage": {"l": 0, "t": 0, "r": 0, "b": 0}, "overlaps": [], "textOverflow": []}
+  shot 02-lobby-solo
+  lobby count 3 startbtn True
+  shot 03-lobby-3p
+  CHECK dealt {"docScroll": [1440, 900, 1440, 900], "bodyScroll": [1440, 900], "bar": {"l": 0, "t": 804, "r": 1140, "b": 900}, "barVisible": true, "seatsClipped": [], "seats": [{"cls": "seat hero active", "l": 482, "t": 681, "r": 658, "b": 739}, {"cls": "seat", "l": 104, "t": 159, "r": 280, "b": 217}, {"cls": "seat", "l": 860, "t": 159, "r": 1036, "b": 217}], "hdr": {"l": 0, "t": 0, "r": 1140, "b": 44}, "rail": {"l": 1140, "t": 0, "r": 1440, "b": 900}, "stage": {"l": 0, "t": 44, "r": 1140, "b": 804}, "overlaps": [], "textOverflow": []}
+  shot 04-dealt
+  shot 05-myturn-preflop
+  CHECK myturn-preflop {"docScroll": [1440, 900, 1440, 900], "bodyScroll": [1440, 900], "bar": {"l": 0, "t": 804, "r": 1140, "b": 900}, "barVisible": true, "seatsClipped": [], "seats": [{"cls": "seat hero active", "l": 482, "t": 681, "r": 658, "b": 739}, {"cls": "seat", "l": 104, "t": 159, "r": 280, "b": 217}, {"cls": "seat", "l": 860, "t": 159, "r": 1036, "b": 217}], "hdr": {"l": 0, "t": 0, "r": 1140, "b": 44}, "rail": {"l": 1140, "t": 0, "r": 1440, "b": 900}, "stage": {"l": 0, "t": 44, "r": 1140, "b": 804}, "overlaps": [], "textOverflow": []}
+  BAR {"main": "Your turn", "sub": "20 to call \u00b7 pot 30", "fold": "FOLD\n\u00a0\nF", "call": "CALL\n20\nC", "raise": "RAISE\nto 40\nR", "presets": [["Min40", "40", false], ["\u00bd pot45", "45", false], ["\u00be pot58", "58", false], ["Pot70", "70", false], ["All-in1,500", "1500", false]], "slider": ["40", "1500", "40"], "input": "40", "plaque": ["BLINDS 10 / 20", "LEVEL 1", "NEXT 9:58", "STREET PREFLOP", "TO CALL 20", "MIN RAISE 40"], "comm": 0, "hero": 2, "label": "Your handSuited Connectors"}
+  HOTKEY R focus -> raise-input raiseVal before/up/down 40 60 40
+  PRESET 0 [40, '40', 'to 40', '0.0%']
+  PRESET 1 [45, '45', 'to 45', '0.3%']
+  PRESET 2 [58, '58', 'to 58', '1.2%']
+  PRESET 3 [70, '70', 'to 70', '2.1%']
+  PRESET 4 [1500, '1500', 'to 1,500 · all-in', '100.0%']
+  shot 06-raise-preset-last
+  SLIDER mid -> [770, '770', 'to 770']
+  HOTKEY C pressed
+  shot 05-myturn-flop
+  CHECK myturn-flop {"docScroll": [1440, 900, 1440, 900], "bodyScroll": [1440, 900], "bar": {"l": 0, "t": 804, "r": 1140, "b": 900}, "barVisible": true, "seatsClipped": [], "seats": [{"cls": "seat hero active", "l": 482, "t": 681, "r": 658, "b": 739}, {"cls": "seat", "l": 104, "t": 159, "r": 280, "b": 217}, {"cls": "seat", "l": 860, "t": 159, "r": 1036, "b": 217}], "hdr": {"l": 0, "t": 0, "r": 1140, "b": 44}, "rail": {"l": 1140, "t": 0, "r": 1440, "b": 900}, "stage": {"l": 0, "t": 44, "r": 1140, "b": 804}, "overlaps": [], "textOverflow": []}
+  BAR {"main": "Your turn", "sub": "Check or bet \u00b7 pot 60", "fold": "FOLD\n\u00a0\nF", "call": "CHECK\n\u00a0\nC", "raise": "BET\nto 20\nR", "presets": [["Min20", "20", false], ["\u00bd pot30", "30", false], ["\u00be pot45", "45", false], ["Pot60", "60", false], ["All-in1,480", "1480", false]], "slider": ["20", "1480", "20"], "input": "20", "plaque": ["BLINDS 10 / 20", "LEVEL 1", "NEXT 9:54", "STREET FLOP", "TO CALL Check", "MIN RAISE 20"], "comm": 3, "hero": 2, "label": "Your handPair"}
+  RAISE via R+arrows+Enter [inputValue, state.raiseVal, subText, focus] ['20', 60, 'to 60', 'raise-input']
+  shot 05-myturn-turn
+  CHECK myturn-turn {"docScroll": [1440, 900, 1440, 900], "bodyScroll": [1440, 900], "bar": {"l": 0, "t": 804, "r": 1140, "b": 900}, "barVisible": true, "seatsClipped": [], "seats": [{"cls": "seat hero active", "l": 482, "t": 681, "r": 658, "b": 739}, {"cls": "seat", "l": 104, "t": 159, "r": 280, "b": 217}, {"cls": "seat", "l": 860, "t": 159, "r": 1036, "b": 217}], "hdr": {"l": 0, "t": 0, "r": 1140, "b": 44}, "rail": {"l": 1140, "t": 0, "r": 1440, "b": 900}, "stage": {"l": 0, "t": 44, "r": 1140, "b": 804}, "overlaps": [], "textOverflow": []}
+  BAR {"main": "Your turn", "sub": "Check or bet \u00b7 pot 120", "fold": "FOLD\n\u00a0\nF", "call": "CHECK\n\u00a0\nC", "raise": "BET\nto 20\nR", "presets": [["Min20", "20", false], ["\u00bd pot60", "60", false], ["\u00be pot90", "90", false], ["Pot120", "120", false], ["All-in1,460", "1460", false]], "slider": ["20", "1460", "20"], "input": "20", "plaque": ["BLINDS 10 / 20", "LEVEL 1", "NEXT 9:52", "STREET TURN", "TO CALL Check", "MIN RAISE 20"], "comm": 4, "hero": 2, "label": "Your handPair"}
+  TAB log {"on": true, "r": [1141, 44, 1440, 843], "rail": [1140, 0, 1440, 900], "sw": 299, "cw": 299, "txt": "Hand 1 10/20 | Dealer Isabelle | Bob posts SB 10 | Carla posts BB 20 | Isabelle calls 20"}
+  TAB chat {"on": true, "r": [1141, 44, 1440, 843], "rail": [1140, 0, 1440, 900], "sw": 299, "cw": 299, "txt": "No chatter yet. Say something. | SEND"}
+  shot 07-tab-chat
+  TAB rank {"on": true, "r": [1141, 44, 1440, 843], "rail": [1140, 0, 1440, 900], "sw": 299, "cw": 299, "txt": "1 | bob | 10,030 | 2 | carla | 9,930 | 3 | isabelle | 9,920 | 4 | testplayer | 7,000"}
+  shot 08-tab-rank
+  TAB stk {"on": true, "r": [1141, 44, 1440, 843], "rail": [1140, 0, 1440, 900], "sw": 299, "cw": 299, "txt": "DROP A STICKER | THROW AT A PLAYER |  | Click any opponent's seat on the table, then p"}
+  BANK chip present True {"x": 314.40625, "y": 7.5, "width": 58.40625, "height": 28}
+  shot 05-myturn-river
+  CHECK myturn-river {"docScroll": [1440, 900, 1440, 900], "bodyScroll": [1440, 900], "bar": {"l": 0, "t": 804, "r": 1140, "b": 900}, "barVisible": true, "seatsClipped": [], "seats": [{"cls": "seat hero active", "l": 482, "t": 681, "r": 658, "b": 739}, {"cls": "seat", "l": 104, "t": 159, "r": 280, "b": 217}, {"cls": "seat", "l": 860, "t": 159, "r": 1036, "b": 217}], "hdr": {"l": 0, "t": 0, "r": 1140, "b": 44}, "rail": {"l": 1140, "t": 0, "r": 1440, "b": 900}, "stage": {"l": 0, "t": 44, "r": 1140, "b": 804}, "overlaps": [], "textOverflow": []}
+  BAR {"main": "Your turn", "sub": "Check or bet \u00b7 pot 120", "fold": "FOLD\n\u00a0\nF", "call": "CHECK\n\u00a0\nC", "raise": "BET\nto 20\nR", "presets": [["Min20", "20", false], ["\u00bd pot60", "60", false], ["\u00be pot90", "90", false], ["Pot120", "120", false], ["All-in1,460", "1460", false]], "slider": ["20", "1460", "20"], "input": "20", "plaque": ["BLINDS 10 / 20", "LEVEL 1", "NEXT 9:48", "STREET RIVER", "TO CALL Check", "MIN RAISE 20"], "comm": 5, "hero": 2, "label": "Your handPair"}
+  shot 09-tab-stickers
+  STICKER floating [['floating-sticker', 532, 286, 76]]
+  TRAY 💣 target 1 [108, 223, 276, 301, 1440, 900, 4]
+  shot 12-throw-tray
+  shot 13-throw-0-flight
+  THROW 💣 projectiles in flight 1 splat imgs [["bomb-explosion.png", 105, 101, 174, 512], ["smoke-puff.png", 168, 149, 49, 512]]
+  shot 14-throw-0-splat
+  TRAY 🍅 target 2 [864, 223, 1032, 301, 1440, 900, 4]
+  shot 13-throw-1-flight
+  THROW 🍅 projectiles in flight 1 splat imgs [["tomato-splat.png", 850, 91, 195, 512]]
+  shot 14-throw-1-splat
+  TRAY 💦 target 1 [108, 223, 276, 301, 1440, 900, 4]
+  THROW 💦 projectiles in flight 1 splat imgs [["water-splash.png", 92, 88, 200, 512]]
+  TRAY 🎉 target 2 [864, 223, 1032, 301, 1440, 900, 4]
+  THROW 🎉 projectiles in flight 1 splat imgs [["party-popper-burst.png", 848, 89, 198, 512]]
+  MUTE before/after/after2 [False, '#i-sound', None] [True, '#i-mute', '1'] [False, '#i-sound', '0']
+  BANK panel ['bank-panel open', 0, 44, 1140, 804, 1440, 900, 760, 760]
+  shot 15-bank-panel
+  CHECK bank [1440, 900, 1440, 900]
+  BANK closed? bank-panel
+  shot 10-showdown-early
+  CHECK showdown {"docScroll": [1440, 900, 1440, 900], "bodyScroll": [1440, 900], "bar": {"l": 0, "t": 804, "r": 1140, "b": 900}, "barVisible": true, "seatsClipped": [], "seats": [{"cls": "seat hero", "l": 482, "t": 681, "r": 658, "b": 739}, {"cls": "seat winner", "l": 104, "t": 159, "r": 280, "b": 217}, {"cls": "seat", "l": 860, "t": 159, "r": 1036, "b": 217}], "hdr": {"l": 0, "t": 0, "r": 1140, "b": 44}, "rail": {"l": 1140, "t": 0, "r": 1440, "b": 900}, "stage": {"l": 0, "t": 44, "r": 1140, "b": 804}, "overlaps": [], "textOverflow": []}
+  shot 11-showdown-sunburst
+  FX at showdown []
+  seen ['flop', 'preflop', 'river', 'sd', 'turn'] {'tabs': True, 'throws': True, 'raise': True, 'hotkey': True, 'mute': True, 'bank': False, 'cards': False} hand_done True
+  shot 20-herowin-0
+  HEROWIN FX 0 [["win-burst.png", 343, 179, 455, 455, "0.394458"], ["party-popper-burst.png", 469, 606, 202, 202, "1"]] float [['win-float', '+30', 531, 349]]
+  shot 20-herowin-1
+  HEROWIN FX 1 [["win-burst.png", 303, 139, 534, 534, "0.168178"], ["party-popper-burst.png", 463, 584, 213, 213, "0.681889"]] float [['win-float', '+30', 548, 681]]
+  shot 20-herowin-2
+  HEROWIN FX 2 [["win-burst.png", 308, 144, 524, 524, "0.00533613"]] float []
+  CHECK herowin {"docScroll": [1440, 900, 1440, 900], "bodyScroll": [1440, 900], "bar": {"l": 0, "t": 804, "r": 1140, "b": 900}, "barVisible": true, "seatsClipped": [], "seats": [{"cls": "seat hero active winner", "l": 482, "t": 681, "r": 658, "b": 739}, {"cls": "seat folded", "l": 104, "t": 159, "r": 280, "b": 217}, {"cls": "seat folded", "l": 860, "t": 159, "r": 1036, "b": 217}], "hdr": {"l": 0, "t": 0, "r": 1140, "b": 44}, "rail": {"l": 1140, "t": 0, "r": 1440, "b": 900}, "stage": {"l": 0, "t": 44, "r": 1140, "b": 804}, "overlaps": [], "textOverflow": []}
+  hero won phase2 True
+  CARDTEST images 12 broken []
+  10 GLYPH {"txt": "10", "rect": [2.219999313354492, 17.740005493164062, 74], "bbox": [3, 20.972978591918945]}
+  shot 16-cards-grid
+  shot 16b-card-10-zoom
+======1920
+== 1920 1080
+  LANDING {"artLogin": true, "bdBg": "linear-gradient(90deg, rgba(10, 6, 3, 0) 0%, rgba(10, 6, 3, 0) 66%, rgba(10, 6, 3, 0.55) 100%), url(\"http://localhost:31", "bdBgAfter": "none", "bodyBg": "none", "avatars": 12, "avatarImgs": [[256, true], [256, true], [256, true], [256, true], [256, true], [256, true], [256, true], [256, true], [256, true], [256, true], [256, true], [256, true]], "avRects": [[60, 60], [57, 57], [57, 57]], "photoArea": 67.1875, "eyebrow": "Take a seat", "joinBtn": "Join table", "brokenImgs": [], "fonts": ["Bebas Neue", "Bitter"]}
+  CHECK landing {"docScroll": [1920, 1080, 1920, 1080], "bodyScroll": [1920, 1080], "bar": {"l": 0, "t": 0, "r": 0, "b": 0}, "barVisible": true, "seatsClipped": [], "seats": [], "hdr": {"l": 0, "t": 0, "r": 0, "b": 0}, "rail": {"l": 0, "t": 0, "r": 0, "b": 0}, "stage": {"l": 0, "t": 0, "r": 0, "b": 0}, "overlaps": [], "textOverflow": []}
+  AVATAR select [[0, true, 1], [1, true, 1], [2, true, 1], [3, true, 1], [4, true, 1], [5, true, 1], [6, true, 1], [7, true, 1], [8, true, 1], [9, true, 1], [10, true, 1], [11, true, 1]]
+  PHOTO preview <img src="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1BST0ZJTEUAAQEAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AA profilePic len 1087
+  shot 01-landing
+  CHECK lobby {"docScroll": [1920, 1080, 1920, 1080], "bodyScroll": [1920, 1080], "bar": {"l": 0, "t": 0, "r": 0, "b": 0}, "barVisible": true, "seatsClipped": [], "seats": [], "hdr": {"l": 0, "t": 0, "r": 0, "b": 0}, "rail": {"l": 0, "t": 0, "r": 0, "b": 0}, "stage": {"l": 0, "t": 0, "r": 0, "b": 0}, "overlaps": [], "textOverflow": []}
+  shot 02-lobby-solo
+  lobby count 3 startbtn True
+  shot 03-lobby-3p
+  CHECK dealt {"docScroll": [1920, 1080, 1920, 1080], "bodyScroll": [1920, 1080], "bar": {"l": 0, "t": 965, "r": 1560, "b": 1080}, "barVisible": true, "seatsClipped": [], "seats": [{"cls": "seat hero active", "l": 674, "t": 883, "r": 886, "b": 953}, {"cls": "seat", "l": 153, "t": 185, "r": 364, "b": 254}, {"cls": "seat", "l": 1196, "t": 185, "r": 1407, "b": 254}], "hdr": {"l": 0, "t": 0, "r": 1560, "b": 53}, "rail": {"l": 1560, "t": 0, "r": 1920, "b": 1080}, "stage": {"l": 0, "t": 53, "r": 1560, "b": 965}, "overlaps": [], "textOverflow": []}
+  shot 04-dealt
+  shot 05-myturn-preflop
+  CHECK myturn-preflop {"docScroll": [1920, 1080, 1920, 1080], "bodyScroll": [1920, 1080], "bar": {"l": 0, "t": 965, "r": 1560, "b": 1080}, "barVisible": true, "seatsClipped": [], "seats": [{"cls": "seat hero active", "l": 674, "t": 883, "r": 886, "b": 953}, {"cls": "seat", "l": 153, "t": 185, "r": 364, "b": 254}, {"cls": "seat", "l": 1196, "t": 185, "r": 1407, "b": 254}], "hdr": {"l": 0, "t": 0, "r": 1560, "b": 53}, "rail": {"l": 1560, "t": 0, "r": 1920, "b": 1080}, "stage": {"l": 0, "t": 53, "r": 1560, "b": 965}, "overlaps": [], "textOverflow": []}
+  BAR {"main": "Your turn", "sub": "10 to call \u00b7 pot 50", "fold": "FOLD\n\u00a0\nF", "call": "CALL\n10\nC", "raise": "RAISE\nto 40\nR", "presets": [["Min40", "40", false], ["\u00bd pot50", "50", false], ["\u00be pot65", "65", false], ["Pot80", "80", false], ["All-in1,500", "1500", false]], "slider": ["40", "1500", "40"], "input": "40", "plaque": ["BLINDS 10 / 20", "LEVEL 1", "NEXT 9:58", "STREET PREFLOP", "TO CALL 10", "MIN RAISE 40"], "comm": 0, "hero": 2, "label": "Your handA-9 Suited"}
+  HOTKEY R focus -> raise-input raiseVal before/up/down 40 60 40
+  PRESET 0 [40, '40', 'to 40', '0.0%']
+  PRESET 1 [50, '50', 'to 50', '0.7%']
+  PRESET 2 [65, '65', 'to 65', '1.7%']
+  PRESET 3 [80, '80', 'to 80', '2.7%']
+  PRESET 4 [1500, '1500', 'to 1,500 · all-in', '100.0%']
+  shot 06-raise-preset-last
+  SLIDER mid -> [770, '770', 'to 770']
+  HOTKEY C pressed
+  shot 05-myturn-flop
+  CHECK myturn-flop {"docScroll": [1920, 1080, 1920, 1080], "bodyScroll": [1920, 1080], "bar": {"l": 0, "t": 965, "r": 1560, "b": 1080}, "barVisible": true, "seatsClipped": [], "seats": [{"cls": "seat hero active", "l": 674, "t": 883, "r": 886, "b": 953}, {"cls": "seat", "l": 153, "t": 185, "r": 364, "b": 254}, {"cls": "seat", "l": 1196, "t": 185, "r": 1407, "b": 254}], "hdr": {"l": 0, "t": 0, "r": 1560, "b": 53}, "rail": {"l": 1560, "t": 0, "r": 1920, "b": 1080}, "stage": {"l": 0, "t": 53, "r": 1560, "b": 965}, "overlaps": [], "textOverflow": []}
+  BAR {"main": "Your turn", "sub": "Check or bet \u00b7 pot 60", "fold": "FOLD\n\u00a0\nF", "call": "CHECK\n\u00a0\nC", "raise": "BET\nto 20\nR", "presets": [["Min20", "20", false], ["\u00bd pot30", "30", false], ["\u00be pot45", "45", false], ["Pot60", "60", false], ["All-in1,480", "1480", false]], "slider": ["20", "1480", "20"], "input": "20", "plaque": ["BLINDS 10 / 20", "LEVEL 1", "NEXT 9:54", "STREET FLOP", "TO CALL Check", "MIN RAISE 20"], "comm": 3, "hero": 2, "label": "Your handHigh Card"}
+  RAISE via R+arrows+Enter [inputValue, state.raiseVal, subText, focus] ['20', 60, 'to 60', 'raise-input']
+  shot 05-myturn-turn
+  CHECK myturn-turn {"docScroll": [1920, 1080, 1920, 1080], "bodyScroll": [1920, 1080], "bar": {"l": 0, "t": 965, "r": 1560, "b": 1080}, "barVisible": true, "seatsClipped": [], "seats": [{"cls": "seat hero active", "l": 674, "t": 883, "r": 886, "b": 953}, {"cls": "seat", "l": 153, "t": 185, "r": 364, "b": 254}, {"cls": "seat", "l": 1196, "t": 185, "r": 1407, "b": 254}], "hdr": {"l": 0, "t": 0, "r": 1560, "b": 53}, "rail": {"l": 1560, "t": 0, "r": 1920, "b": 1080}, "stage": {"l": 0, "t": 53, "r": 1560, "b": 965}, "overlaps": [], "textOverflow": []}
+  BAR {"main": "Your turn", "sub": "Check or bet \u00b7 pot 120", "fold": "FOLD\n\u00a0\nF", "call": "CHECK\n\u00a0\nC", "raise": "BET\nto 20\nR", "presets": [["Min20", "20", false], ["\u00bd pot60", "60", false], ["\u00be pot90", "90", false], ["Pot120", "120", false], ["All-in1,460", "1460", false]], "slider": ["20", "1460", "20"], "input": "20", "plaque": ["BLINDS 10 / 20", "LEVEL 1", "NEXT 9:52", "STREET TURN", "TO CALL Check", "MIN RAISE 20"], "comm": 4, "hero": 2, "label": "Your handHigh Card"}
+  TAB log {"on": true, "r": [1561, 53, 1920, 1012], "rail": [1560, 0, 1920, 1080], "sw": 359, "cw": 359, "txt": "Bob disconnected | Isabelle wins 30 (all others folded) | Isabelle disconnected | Not "}
+  TAB chat {"on": true, "r": [1561, 53, 1920, 1012], "rail": [1560, 0, 1920, 1080], "sw": 359, "cw": 359, "txt": "No chatter yet. Say something. | SEND"}
+  shot 07-tab-chat
+  TAB rank {"on": true, "r": [1561, 53, 1920, 1012], "rail": [1560, 0, 1920, 1080], "sw": 359, "cw": 359, "txt": "1 | bob | 10,090 | 2 | isabelle | 9,910 | 3 | carla | 9,880 | 4 | testplayer | 7,000"}
+  shot 08-tab-rank
+  TAB stk {"on": true, "r": [1561, 53, 1920, 1012], "rail": [1560, 0, 1920, 1080], "sw": 359, "cw": 359, "txt": "DROP A STICKER | THROW AT A PLAYER |  | Click any opponent's seat on the table, then p"}
+  BANK chip present True {"x": 376.59375, "y": 9.09375, "width": 70.46875, "height": 33.59375}
+  shot 05-myturn-river
+  CHECK myturn-river {"docScroll": [1920, 1080, 1920, 1080], "bodyScroll": [1920, 1080], "bar": {"l": 0, "t": 965, "r": 1560, "b": 1080}, "barVisible": true, "seatsClipped": [], "seats": [{"cls": "seat hero active", "l": 674, "t": 883, "r": 886, "b": 953}, {"cls": "seat", "l": 153, "t": 185, "r": 364, "b": 254}, {"cls": "seat", "l": 1196, "t": 185, "r": 1407, "b": 254}], "hdr": {"l": 0, "t": 0, "r": 1560, "b": 53}, "rail": {"l": 1560, "t": 0, "r": 1920, "b": 1080}, "stage": {"l": 0, "t": 53, "r": 1560, "b": 965}, "overlaps": [], "textOverflow": []}
+  BAR {"main": "Your turn", "sub": "Check or bet \u00b7 pot 120", "fold": "FOLD\n\u00a0\nF", "call": "CHECK\n\u00a0\nC", "raise": "BET\nto 20\nR", "presets": [["Min20", "20", false], ["\u00bd pot60", "60", false], ["\u00be pot90", "90", false], ["Pot120", "120", false], ["All-in1,460", "1460", false]], "slider": ["20", "1460", "20"], "input": "20", "plaque": ["BLINDS 10 / 20", "LEVEL 1", "NEXT 9:49", "STREET RIVER", "TO CALL Check", "MIN RAISE 20"], "comm": 5, "hero": 2, "label": "Your handBoard pair"}
+  shot 09-tab-stickers
+  STICKER floating [['floating-sticker', 734, 369, 91]]
+  TRAY 💣 target 1 [174, 260, 342, 354, 1920, 1080, 4]
+  shot 12-throw-tray
+  shot 13-throw-0-flight
+  THROW 💣 projectiles in flight 1 splat imgs [["bomb-explosion.png", 157, 121, 202, 512], ["smoke-puff.png", 224, 154, 70, 512]]
+  shot 14-throw-0-splat
+  TRAY 🍅 target 2 [1218, 260, 1386, 354, 1920, 1080, 4]
+  shot 13-throw-1-flight
+  THROW 🍅 projectiles in flight 1 splat imgs [["tomato-splat.png", 1192, 110, 220, 512]]
+  shot 14-throw-1-splat
+  TRAY 💦 target 1 [174, 260, 342, 354, 1920, 1080, 4]
+  THROW 💦 projectiles in flight 1 splat imgs [["water-splash.png", 138, 99, 240, 512]]
+  TRAY 🎉 target 2 [1218, 260, 1386, 354, 1920, 1080, 4]
+  THROW 🎉 projectiles in flight 1 splat imgs [["party-popper-burst.png", 1181, 99, 240, 512]]
+  MUTE before/after/after2 [False, '#i-sound', None] [True, '#i-mute', '1'] [False, '#i-sound', '0']
+  BANK panel ['bank-panel open', 0, 53, 1560, 965, 1920, 1080, 912, 912]
+  shot 15-bank-panel
+  CHECK bank [1920, 1080, 1920, 1080]
+  BANK closed? bank-panel
+  shot 10-showdown-early
+  CHECK showdown {"docScroll": [1920, 1080, 1920, 1080], "bodyScroll": [1920, 1080], "bar": {"l": 0, "t": 965, "r": 1560, "b": 1080}, "barVisible": true, "seatsClipped": [], "seats": [{"cls": "seat hero winner", "l": 674, "t": 883, "r": 886, "b": 953}, {"cls": "seat", "l": 153, "t": 185, "r": 364, "b": 254}, {"cls": "seat", "l": 1196, "t": 185, "r": 1407, "b": 254}], "hdr": {"l": 0, "t": 0, "r": 1560, "b": 53}, "rail": {"l": 1560, "t": 0, "r": 1920, "b": 1080}, "stage": {"l": 0, "t": 53, "r": 1560, "b": 965}, "overlaps": [], "textOverflow": []}
+  shot 11-showdown-sunburst
+  FX at showdown [["win-burst.png", 629, 465, 206]]
+  seen ['flop', 'preflop', 'river', 'sd', 'turn'] {'tabs': True, 'throws': True, 'raise': True, 'hotkey': True, 'mute': True, 'bank': False, 'cards': False} hand_done True
+  shot 20-herowin-0
+  HEROWIN FX 0 [] float []
+  shot 20-herowin-1
+  HEROWIN FX 1 [] float []
+  shot 20-herowin-2
+  HEROWIN FX 2 [] float []
+  CHECK herowin {"docScroll": [1920, 1080, 1920, 1080], "bodyScroll": [1920, 1080], "bar": {"l": 0, "t": 965, "r": 1560, "b": 1080}, "barVisible": true, "seatsClipped": [], "seats": [{"cls": "seat hero winner", "l": 674, "t": 883, "r": 886, "b": 953}, {"cls": "seat", "l": 153, "t": 185, "r": 364, "b": 254}, {"cls": "seat", "l": 1196, "t": 185, "r": 1407, "b": 254}], "hdr": {"l": 0, "t": 0, "r": 1560, "b": 53}, "rail": {"l": 1560, "t": 0, "r": 1920, "b": 1080}, "stage": {"l": 0, "t": 53, "r": 1560, "b": 965}, "overlaps": [], "textOverflow": []}
+  hero won phase2 True
+  CARDTEST images 12 broken []
+  10 GLYPH {"txt": "10", "rect": [2.6639060974121094, 21.887981414794922, 88.796875], "bbox": [3, 21.64949607849121]}
+  shot 16-cards-grid
+  shot 16b-card-10-zoom

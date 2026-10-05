@@ -1,0 +1,29 @@
+Ping Poker server running on port 3114
+Socket connected: ihwX8zmyE3l62GZMAAAA
+Socket connected: y3nNjRoocLYMYgRaAAAB
+Socket connected: IbGkTJCYU1JO8OjjAAAC
+Socket connected: UVB-2UQv-y3XAuM_AAAD
+Socket connected: PJzvURjUgQm4EATKAAAE
+Socket connected: GkLRklvdzc4T4KbKAAAF
+Socket disconnected: UVB-2UQv-y3XAuM_AAAD
+Socket disconnected: ihwX8zmyE3l62GZMAAAA
+Socket disconnected: IbGkTJCYU1JO8OjjAAAC
+Socket disconnected: PJzvURjUgQm4EATKAAAE
+Socket disconnected: GkLRklvdzc4T4KbKAAAF
+Socket disconnected: y3nNjRoocLYMYgRaAAAB
+Socket connected: soKFZ7z5RJCQwwfFAAAG
+Socket connected: 3KPRIn1TmgZoDIzrAAAH
+Socket connected: 2lq9lacoAaUT1OceAAAI
+Socket connected: Kixpf2wbrayq-wivAAAJ
+handler start_game failed: TypeError: Cannot read properties of undefined (reading 'name')
+    at startHand (/home/isabelle/.openclaw/workspace/ping-poker-v2/server.js:427:52)
+    at /home/isabelle/.openclaw/workspace/ping-poker-v2/server.js:854:5
+    at Socket.<anonymous> (/home/isabelle/.openclaw/workspace/ping-poker-v2/server.js:784:11)
+    at Socket.emit (node:events:509:20)
+    at Socket.emitUntyped (/home/isabelle/.openclaw/workspace/ping-poker-v2/node_modules/socket.io/dist/typed-events.js:69:22)
+    at /home/isabelle/.openclaw/workspace/ping-poker-v2/node_modules/socket.io/dist/socket.js:697:39
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+Socket disconnected: 3KPRIn1TmgZoDIzrAAAH
+Socket disconnected: 2lq9lacoAaUT1OceAAAI
+Socket disconnected: Kixpf2wbrayq-wivAAAJ
+Socket disconnected: soKFZ7z5RJCQwwfFAAAG

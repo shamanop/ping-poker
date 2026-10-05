@@ -1,0 +1,72 @@
+game started; playing until hand 7
+--- 1920x1080 LIVE HAND, panel via B key
+ panelOpen True status waiting_next hand 7 pot 0
+ panel rect [0, 53, 1560, 965] bar rect [0, 965, 1560, 1080] barHit True vp [1920, 1080] fold btn [262, 987, 454, 1059]
+ tooltip {'shown': True, 'text': 'Hand 4 Fay 1,800 Eve 1,520 Dee 1,400 Bob 1,280'}
+ compare at hand end (hand 7 waiting_next )
+   ok Fay bank 8,500 8,500
+   ok Fay atTable 1,710 1,710
+   ok Fay net +210 +210
+   ok Fay buyins 1 1
+   ok Fay best 360 360
+   ok Bob bank 8,500 8,500
+   ok Bob atTable 1,530 1,530
+   ok Bob net +30 +30
+   ok Bob buyins 1 1
+   ok Bob best 130 130
+   ok Eve bank 8,500 8,500
+   ok Eve atTable 1,440 1,440
+   ok Eve net −60 −60
+   ok Eve buyins 1 1
+   ok Eve best 220 220
+   ok Dee bank 8,500 8,500
+   ok Dee atTable 1,320 1,320
+   ok Dee net −180 −180
+   ok Dee buyins 1 1
+   ok Dee best 40 40
+   MISMATCH header BANKED 34,000 Banked 34,000
+   MISMATCH header ON THE TABLE 6,000 On the table 6,000
+   MISMATCH header BOUGHT IN 6,000 Bought in 6,000
+   MISMATCH header HANDS 7 Hands 7
+   ok bar values ['1,500', '1,500', '1,500', '1,500'] ['1,500', '1,500', '1,500', '1,500']
+   ok feed (name,amount) order [('Eve', '1,500'), ('Fay', '1,500'), ('Dee', '1,500'), ('Bob', '1,500')] [('Eve', '1,500'), ('Fay', '1,500'), ('Dee', '1,500'), ('Bob', '1,500')] 4 4
+   ok line end labels ['Bob 1.5k', 'Dee 1.3k', 'Eve 1.4k', 'Fay 1.7k'] ['Bob 1.5k', 'Dee 1.3k', 'Eve 1.4k', 'Fay 1.7k']
+   ok line paths vs series 4 4
+  1920: 24/28 ok, 4 bad
+ game chips [['Bob', 1530], ['Dee', 1320], ['Fay', 1710], ['Eve', 1440]] hcount Dashed line = 1,500 starting stack · 7 hands pcount 4 players ecount 4 recent
+--- 1440x900 LIVE HAND (panel stays open through resize)
+ panelOpen True status playing hand 8 pot 50
+ panel rect [0, 44, 1140, 804] bar rect [0, 804, 1140, 900] barHit True vp [1440, 900] fold btn [218, 823, 378, 883]
+ tooltip {'shown': True, 'text': 'Hand 4 Fay 1,800 Eve 1,520 Dee 1,400 Bob 1,280'}
+ compare at hand end (hand 8 )
+   ok Dee bank 8,500 8,500
+   ok Dee atTable 2,040 2,040
+   ok Dee net +540 +540
+   ok Dee buyins 1 1
+   ok Dee best 720 720
+   ok Fay bank 8,500 8,500
+   ok Fay atTable 1,470 1,470
+   ok Fay net −30 −30
+   ok Fay buyins 1 1
+   ok Fay best 360 360
+   ok Bob bank 8,500 8,500
+   ok Bob atTable 1,290 1,290
+   ok Bob net −210 −210
+   ok Bob buyins 1 1
+   ok Bob best 130 130
+   ok Eve bank 8,500 8,500
+   ok Eve atTable 1,200 1,200
+   ok Eve net −300 −300
+   ok Eve buyins 1 1
+   ok Eve best 220 220
+   MISMATCH header BANKED 34,000 Banked 34,000
+   MISMATCH header ON THE TABLE 6,000 On the table 6,000
+   MISMATCH header BOUGHT IN 6,000 Bought in 6,000
+   MISMATCH header HANDS 8 Hands 8
+   ok bar values ['1,500', '1,500', '1,500', '1,500'] ['1,500', '1,500', '1,500', '1,500']
+   ok feed (name,amount) order [('Eve', '1,500'), ('Fay', '1,500'), ('Dee', '1,500'), ('Bob', '1,500')] [('Eve', '1,500'), ('Fay', '1,500'), ('Dee', '1,500'), ('Bob', '1,500')] 4 4
+   ok line end labels ['Bob 1.3k', 'Dee 2k', 'Eve 1.2k', 'Fay 1.5k'] ['Bob 1.3k', 'Dee 2k', 'Eve 1.2k', 'Fay 1.5k']
+   ok line paths vs series 4 4
+  1440: 24/28 ok, 4 bad
+ panel closed after Esc: True
+--- console/page errors: NONE

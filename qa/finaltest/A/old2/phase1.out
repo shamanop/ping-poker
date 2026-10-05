@@ -1,0 +1,19 @@
+[0.3s] CHECK PASS wrong room password rejected: ["Incorrect password"]
+[1.4s] CHECK PASS 5 players seated: Ann:0 Bob:1 Cat:2 Dan:3 Eve:4
+[1.4s] CHECK PASS buy-in debited from bank: {"testplayer":7000,"ann":8500,"bob":8500,"cat":8500,"dan":8500,"eve":8500}
+[1.7s] CHECK PASS start_game by non-host rejected (pre-game): ["Only host can start"]
+[1.7s] HAND #1 (server 1) mode=checkdown dealer=Ann stacks=Ann:1500 Bob:1500 Cat:1500 Dan:1500 Eve:1500 pot=30
+[2.5s] CHECK PASS join during a hand rejected: ["Game in progress — wait for next round"]
+[3.3s] CHECK PASS hand 1: showdown_result received and pot == my tracked contributions: hand 1: server pot=100 my sum of contributions=100 ({"Ann":20,"Bob":20,"Cat":20,"Dan":20,"Eve":20})
+[3.3s] CHECK PASS hand 1: payouts match independent evaluator + side-pot layering: hand 1 showdown, pot 100, 1 layer(s) [[20,100,["Ann"]]], winners server=["Ann:Flush"]
+[3.3s] CHECK PASS hand 1: chip conservation bank+stacks+pot: hand 1: bank 49500 + stacks 7500 + pot 0 = 57000, expected 57000
+[3.3s] CHECK PASS hand 1: no stall (completed within 25s): hand 1 took 1570ms from deal to result
+[3.3s] HAND #1 DONE showdown pot=100 layers=1 stacks: Ann:1580 Bob:1480 Cat:1480 Dan:1480 Eve:1480
+[8.1s] HAND #2 (server 2) mode=random dealer=Bob stacks=Ann:1580 Bob:1480 Cat:1480 Dan:1480 Eve:1480 pot=30
+[8.5s] CHECK PASS negative: out-of-turn action rejected: errors to non-actor: ["Not your turn"]
+[8.5s] CHECK PASS negative: illegal check/fractional/NaN/unknown rejected w/o stalling: errors to actor: ["Cannot check: call, raise or fold","Raise amount must be a whole number","Raise amount must be a whole number","Unknown action"]
+[10.1s] CHECK PASS hand 2: showdown_result received and pot == my tracked contributions: hand 2: server pot=580 my sum of contributions=580 ({"Ann":140,"Bob":20,"Cat":140,"Dan":140,"Eve":140})
+[10.1s] CHECK PASS hand 2: payouts match independent evaluator + side-pot layering: hand 2 showdown, pot 580, 2 layer(s) [[20,100,["Ann"]],[140,480,["Ann"]]], winners server=["Ann:Flush"]
+[10.1s] CHECK PASS hand 2: chip conservation bank+stacks+pot: hand 2: bank 49500 + stacks 7500 + pot 0 = 57000, expected 57000
+[10.1s] CHECK PASS hand 2: no stall (completed within 25s): hand 2 took 1995ms from deal to result
+[10.1s] HAND #2 DONE showdown pot=580 layers=2 stacks: Ann:2020 Bob:1460 Cat:1340 Dan:1340 Eve:1340

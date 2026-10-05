@@ -1,0 +1,5 @@
+bots joined; waiting for START signal file
+hand 1 waiting_next [["Bob",1480],["Dee",1490],["Fay",1550],["Gus",1480]]
+hand 2 waiting_next [["Bob",1900],["Dee",1350],["Fay",1410],["Gus",1340]]
+hand 3 waiting_next [["Bob",2080],["Dee",1290],["Fay",1350],["Gus",1280]]
+hand 4 waiting_next [["Bob",2070],["Dee",1360],["Fay",1350],["Gus",1220]]

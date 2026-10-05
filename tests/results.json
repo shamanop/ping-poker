@@ -1,0 +1,60 @@
+{
+ "hands": 63,
+ "seconds": 155.086,
+ "findings": [
+  {
+   "key": "S15 one player sits out at 2-player table (and restart)|One player sitting out at a 2-player table ends the game and cashes out BOTH players, leaving them seated with 0 chips",
+   "scenario": "S15 one player sits out at 2-player table (and restart)",
+   "sev": "high",
+   "title": "One player sitting out at a 2-player table ends the game and cashes out BOTH players, leaving them seated with 0 chips",
+   "expected": "sitter simply skips hands; other player waits (or game pauses) without losing the table",
+   "actual": "status=waiting; stacks sg1=1520,sg2=1480; bank returned",
+   "suspect": "server.js:553-569 (willPlay<2 branch cashes out everyone, then clears sitOutRequest only after chips already zeroed)"
+  },
+  {
+   "key": "S1 soak (5 players, random play, 30 hands)|Showdown winner differs from independent evaluator",
+   "scenario": "S1 soak (5 players, random play, 30 hands)",
+   "sev": "high",
+   "title": "Showdown winner differs from independent evaluator",
+   "expected": "winners soak2",
+   "actual": "hand 23: server says soak2,soak5; board J♣,10♠,7♠,2♣,J♥",
+   "suspect": "server.js evaluate5/compareHands (160-205)"
+  },
+  {
+   "key": "S11 join mid-hand|Mid-hand join accepted",
+   "scenario": "S11 join mid-hand",
+   "sev": "medium",
+   "title": "Mid-hand join accepted",
+   "expected": "rejected",
+   "actual": "accepted",
+   "suspect": "server.js:691"
+  },
+  {
+   "key": "S4 bad inputs on player_action|Raise below the minimum is silently promoted to a min-raise (no error sent)",
+   "scenario": "S4 bad inputs on player_action",
+   "sev": "low",
+   "title": "Raise below the minimum is silently promoted to a min-raise (no error sent)",
+   "expected": "error message to client or exact-amount handling",
+   "actual": "raise 5 accepted, roundBet=40, currentBet=40, errors=[]",
+   "suspect": "server.js:422-423"
+  },
+  {
+   "key": "S10 disconnect mid-hand then reconnect|Disconnected player seat persisted",
+   "scenario": "S10 disconnect mid-hand then reconnect",
+   "sev": "low",
+   "title": "Disconnected player seat persisted",
+   "expected": "removed",
+   "actual": "still present",
+   "suspect": "server.js:545"
+  },
+  {
+   "key": "S7 turn timeout (AFK player)|AFK player auto-folded but never sat out: stays in every hand and stalls the table 30s each time",
+   "scenario": "S7 turn timeout (AFK player)",
+   "sev": "low",
+   "title": "AFK player auto-folded but never sat out: stays in every hand and stalls the table 30s each time",
+   "expected": "auto sit-out after N consecutive timeouts",
+   "actual": "after timeout player to1 connected=true sittingOut=false sitOutRequest=false",
+   "suspect": "server.js:281-290"
+  }
+ ]
+}

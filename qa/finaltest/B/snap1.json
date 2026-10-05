@@ -1,0 +1,98 @@
+{
+ "s": {
+  "label": "final",
+  "status": "waiting_next",
+  "handNum": 13,
+  "pot": 0,
+  "rows": [
+   {
+    "name": "Ann",
+    "bank": 8500,
+    "atTable": 1730,
+    "start": 10000,
+    "expectedNet": 230,
+    "apiNet": 230,
+    "apiBank": 8500,
+    "apiAtTable": 1730,
+    "status": "seated",
+    "totalBuyIns": 1500,
+    "buyIns": 1,
+    "rebuys": 0,
+    "rebuyTotal": 0,
+    "cashedOut": 0,
+    "hands": 13,
+    "bestWin": 1250
+   },
+   {
+    "name": "Bob",
+    "bank": 7000,
+    "atTable": 6990,
+    "start": 10000,
+    "expectedNet": 3990,
+    "apiNet": 3990,
+    "apiBank": 7000,
+    "apiAtTable": 6990,
+    "status": "seated",
+    "totalBuyIns": 3000,
+    "buyIns": 2,
+    "rebuys": 1,
+    "rebuyTotal": 1500,
+    "cashedOut": 0,
+    "hands": 13,
+    "bestWin": 5440
+   },
+   {
+    "name": "Cy",
+    "bank": 8780,
+    "atTable": 0,
+    "start": 10000,
+    "expectedNet": -1220,
+    "apiNet": -1220,
+    "apiBank": 8780,
+    "apiAtTable": 0,
+    "status": "offline",
+    "totalBuyIns": 1500,
+    "buyIns": 1,
+    "rebuys": 0,
+    "rebuyTotal": 0,
+    "cashedOut": 280,
+    "hands": 7,
+    "bestWin": 1250
+   },
+   {
+    "name": "Dee",
+    "bank": 7000,
+    "atTable": 0,
+    "start": 10000,
+    "expectedNet": -3000,
+    "apiNet": -3000,
+    "apiBank": 7000,
+    "apiAtTable": 0,
+    "status": "sitting-out",
+    "totalBuyIns": 3000,
+    "buyIns": 2,
+    "rebuys": 1,
+    "rebuyTotal": 1500,
+    "cashedOut": 0,
+    "hands": 6,
+    "bestWin": 0
+   }
+  ],
+  "sumApiNet": 0,
+  "sumExpectedNet": 0,
+  "maxHand": 13,
+  "events": 7,
+  "seriesKeys": [
+   "Ann",
+   "Bob",
+   "Cy",
+   "Dee"
+  ]
+ },
+ "start": {
+  "ann": 10000,
+  "bob": 10000,
+  "cy": 10000,
+  "dee": 10000
+ }
+}

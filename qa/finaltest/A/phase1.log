@@ -1,0 +1,217 @@
+[0.3s] CHECK PASS wrong room password rejected: ["Incorrect password"]
+[1.4s] CHECK PASS 5 players seated: Ann:0 Bob:1 Cat:2 Dan:3 Eve:4
+[1.4s] CHECK PASS buy-in debited from bank: {"testplayer":7000,"ann":8500,"bob":8500,"cat":8500,"dan":8500,"eve":8500}
+[1.7s] CHECK PASS start_game by non-host rejected (pre-game): ["Only host can start"]
+[1.7s] HAND #1 (server 1) mode=checkdown dealer=Ann stacks=Ann:1500 Bob:1500 Cat:1500 Dan:1500 Eve:1500 pot=30
+[2.5s] CHECK PASS join during a hand rejected: ["Game in progress — wait for next round"]
+[3.2s] CHECK PASS hand 1: showdown_result received and pot == my tracked contributions: hand 1: server pot=100 my sum of contributions=100 ({"Ann":20,"Bob":20,"Cat":20,"Dan":20,"Eve":20})
+[3.2s] CHECK PASS hand 1: payouts match independent evaluator + side-pot layering: hand 1 showdown, pot 100, 1 layer(s) [[20,100,["Eve"]]], winners server=["Eve:Two Pair"]
+[3.2s] CHECK PASS hand 1: chip conservation bank+stacks+pot: hand 1: bank 49500 + stacks 7500 + pot 0 = 57000, expected 57000
+[3.2s] CHECK PASS hand 1: no stall (completed within 25s): hand 1 took 1553ms from deal to result
+[3.2s] HAND #1 DONE showdown pot=100 layers=1 stacks: Ann:1480 Bob:1480 Cat:1480 Dan:1480 Eve:1580
+[8.1s] HAND #2 (server 2) mode=random dealer=Bob stacks=Ann:1480 Bob:1480 Cat:1480 Dan:1480 Eve:1580 pot=30
+[8.5s] CHECK PASS negative: out-of-turn action rejected: errors to non-actor: ["Not your turn"]
+[8.5s] CHECK PASS negative: illegal check/fractional/NaN/unknown rejected w/o stalling: errors to actor: ["Cannot check: call, raise or fold","Raise amount must be a whole number","Raise amount must be a whole number","Unknown action"]
+[9.9s] CHECK PASS hand 2: showdown_result received and pot == my tracked contributions: hand 2: server pot=570 my sum of contributions=570 ({"Ann":140,"Bob":140,"Cat":10,"Dan":140,"Eve":140})
+[9.9s] CHECK PASS hand 2: payouts match independent evaluator + side-pot layering: hand 2 showdown, pot 570, 2 layer(s) [[10,50,["Ann"]],[140,520,["Ann"]]], winners server=["Ann:Pair"]
+[9.9s] CHECK PASS hand 2: chip conservation bank+stacks+pot: hand 2: bank 49500 + stacks 7500 + pot 0 = 57000, expected 57000
+[9.9s] CHECK PASS hand 2: no stall (completed within 25s): hand 2 took 1766ms from deal to result
+[9.9s] HAND #2 DONE showdown pot=570 layers=2 stacks: Ann:1910 Bob:1340 Cat:1470 Dan:1340 Eve:1440
+[14.7s] HAND #3 (server 3) mode=random dealer=Cat stacks=Ann:1910 Bob:1340 Cat:1470 Dan:1340 Eve:1440 pot=30
+[16.1s] CHECK PASS hand 3: showdown_result received and pot == my tracked contributions: hand 3: server pot=90 my sum of contributions=90 ({"Ann":20,"Bob":20,"Cat":20,"Dan":10,"Eve":20})
+[16.1s] CHECK PASS hand 3: payouts match independent evaluator + side-pot layering: hand 3 showdown, pot 90, 2 layer(s) [[10,50,["Ann"]],[20,40,["Ann"]]], winners server=["Ann:Three of a Kind"]
+[16.1s] CHECK PASS hand 3: chip conservation bank+stacks+pot: hand 3: bank 49500 + stacks 7500 + pot 0 = 57000, expected 57000
+[16.1s] CHECK PASS hand 3: no stall (completed within 25s): hand 3 took 1334ms from deal to result
+[16.1s] HAND #3 DONE showdown pot=90 layers=2 stacks: Ann:1980 Bob:1320 Cat:1450 Dan:1330 Eve:1420
+[20.9s] HAND #4 (server 4) mode=foldwin dealer=Dan stacks=Ann:1980 Bob:1320 Cat:1450 Dan:1330 Eve:1420 pot=30
+[21.4s] CHECK PASS hand 4: showdown_result received and pot == my tracked contributions: hand 4: server pot=150 my sum of contributions=150 ({"Ann":20,"Bob":120,"Cat":0,"Dan":0,"Eve":10})
+[21.4s] CHECK PASS hand 4: payouts match independent evaluator + side-pot layering: hand 4 fold-win, pot 150, 3 layer(s) [[10,30,["Bob"]],[20,20,["Bob"]],[120,100,["Bob"]]], winners server=["Bob:Everyone folded"]
+[21.4s] CHECK PASS hand 4: chip conservation bank+stacks+pot: hand 4: bank 49500 + stacks 7500 + pot 0 = 57000, expected 57000
+[21.4s] CHECK PASS hand 4: no stall (completed within 25s): hand 4 took 491ms from deal to result
+[21.4s] HAND #4 DONE fold-win pot=150 layers=3 stacks: Ann:1960 Bob:1350 Cat:1450 Dan:1330 Eve:1410
+[26.3s] HAND #5 (server 5) mode=shove dealer=Eve stacks=Ann:1960 Bob:1350 Cat:1450 Dan:1330 Eve:1410 pot=30
+[31.4s] CHECK PASS hand 5: showdown_result received and pot == my tracked contributions: hand 5: server pot=3310 my sum of contributions=3310 ({"Ann":1960,"Bob":1350,"Cat":0,"Dan":0,"Eve":0})
+[31.4s] CHECK PASS hand 5: payouts match independent evaluator + side-pot layering: hand 5 showdown, pot 3310, 2 layer(s) [[1350,2700,["Bob"]],[1960,610,["Ann"]]], winners server=["Ann:Pair","Bob:Pair"]
+[31.4s] CHECK PASS hand 5: chip conservation bank+stacks+pot: hand 5: bank 49500 + stacks 7500 + pot 0 = 57000, expected 57000
+[31.4s] CHECK PASS hand 5: no stall (completed within 25s): hand 5 took 5101ms from deal to result
+[31.4s] HAND #5 DONE showdown pot=3310 layers=2 stacks: Ann:610 Bob:2700 Cat:1450 Dan:1330 Eve:1410
+[36.2s] HAND #6 (server 6) mode=mixed dealer=Ann stacks=Ann:610 Bob:2700 Cat:1450 Dan:1330 Eve:1410 pot=30
+[36.2s] Cat requests sit_out
+[39.3s] CHECK PASS hand 6: showdown_result received and pot == my tracked contributions: hand 6: server pot=3640 my sum of contributions=3640 ({"Ann":610,"Bob":65,"Cat":1450,"Dan":105,"Eve":1410})
+[39.3s] CHECK PASS hand 6: payouts match independent evaluator + side-pot layering: hand 6 showdown, pot 3640, 5 layer(s) [[65,325,["Cat"]],[105,160,["Cat"]],[610,1515,["Cat"]],[1410,1600,["Cat"]],[1450,40,["Cat"]]], winners server=["Cat:Two Pair"]
+[39.3s] CHECK PASS hand 6: chip conservation bank+stacks+pot: hand 6: bank 49500 + stacks 7500 + pot 0 = 57000, expected 57000
+[39.3s] CHECK PASS hand 6: no stall (completed within 25s): hand 6 took 3052ms from deal to result
+[39.3s] HAND #6 DONE showdown pot=3640 layers=5 stacks: Ann:0 Bob:2635 Cat:3640 Dan:1225 Eve:0
+[39.3s] BUST Ann in hand 6
+[39.3s] BUST Eve in hand 6
+[44.1s] HAND #7 (server 7) mode=mixed dealer=Bob stacks=Ann:0(out) Bob:2635 Cat:3640(out) Dan:1225 Eve:0(out) pot=30
+[44.1s] CHECK PASS sit_out: requested player skipped next hand: hand 7: Cat sittingOut=true cardCount=0 stack=3640
+[44.1s] Cat toggles sit_out back
+[44.3s] CHECK PASS hand 7: showdown_result received and pot == my tracked contributions: hand 7: server pot=30 my sum of contributions=30 ({"Ann":0,"Bob":20,"Cat":0,"Dan":10,"Eve":0})
+[44.3s] CHECK FAIL hand 7: payouts match independent evaluator + side-pot layering: Ann: server=1500 expected=0 (start 0 contrib 0 pay 0)
+[44.3s] CHECK PASS hand 7: chip conservation bank+stacks+pot: hand 7: bank 48000 + stacks 9000 + pot 0 = 57000, expected 57000
+[44.3s] CHECK PASS hand 7: no stall (completed within 25s): hand 7 took 213ms from deal to result
+[44.3s] HAND #7 DONE fold-win pot=30 layers=2 stacks: Ann:1500 Bob:2645 Cat:3640 Dan:1215 Eve:0
+[44.5s] CHECK PASS rebuy: Ann chips restored (bust_out event during playing): hand 7 status=playing: Ann chips 0 -> 1500 (bank balance was 8500, expected buy-in 1500); errors=[]
+[46.1s] CHECK PASS rebuy: Eve chips restored (between hands (waiting_next)): hand 7 status=waiting_next: Eve chips 0 -> 1500 (bank balance was 8500, expected buy-in 1500); errors=[]
+[49.2s] HAND #8 (server 8) mode=shove dealer=Cat stacks=Ann:1500 Bob:2645 Cat:3640 Dan:1215 Eve:1500 pot=30
+[49.2s] CHECK PASS sit_out: toggled back in is dealt in: hand 8: Cat sittingOut=false cardCount=2
+[49.2s] CHECK PASS rebuy: Ann dealt in after rebuy: hand 8: Ann cardCount=2 stack=1500 (rebuy via bust_out event during playing before hand 7)
+[49.2s] CHECK PASS rebuy: Eve dealt in after rebuy: hand 8: Eve cardCount=2 stack=1500 (rebuy via between hands (waiting_next) before hand 7)
+[54.2s] CHECK PASS hand 8: showdown_result received and pot == my tracked contributions: hand 8: server pot=10500 my sum of contributions=10500 ({"Ann":1500,"Bob":2645,"Cat":3640,"Dan":1215,"Eve":1500})
+[54.2s] CHECK PASS hand 8: payouts match independent evaluator + side-pot layering: hand 8 showdown, pot 10500, 4 layer(s) [[1215,6075,["Bob"]],[1500,1140,["Bob"]],[2645,2290,["Bob"]],[3640,995,["Cat"]]], winners server=["Bob:Three of a Kind","Cat:Two Pair"]
+[54.2s] CHECK PASS hand 8: chip conservation bank+stacks+pot: hand 8: bank 46500 + stacks 10500 + pot 0 = 57000, expected 57000
+[54.2s] CHECK PASS hand 8: no stall (completed within 25s): hand 8 took 5028ms from deal to result
+[54.2s] HAND #8 DONE showdown pot=10500 layers=4 stacks: Ann:0 Bob:9505 Cat:995 Dan:0 Eve:0
+[54.2s] BUST Ann in hand 8
+[54.2s] BUST Dan in hand 8
+[54.2s] BUST Eve in hand 8
+[56.0s] CHECK PASS rebuy: Ann chips restored (between hands (waiting_next)): hand 8 status=waiting_next: Ann chips 0 -> 1500 (bank balance was 7000, expected buy-in 1500); errors=[]
+[56.0s] CHECK PASS rebuy: Dan chips restored (between hands (waiting_next)): hand 8 status=waiting_next: Dan chips 0 -> 1500 (bank balance was 8500, expected buy-in 1500); errors=[]
+[56.0s] CHECK PASS rebuy: Eve chips restored (between hands (waiting_next)): hand 8 status=waiting_next: Eve chips 0 -> 1500 (bank balance was 7000, expected buy-in 1500); errors=[]
+[59.1s] HAND #9 (server 9) mode=mixed dealer=Dan stacks=Ann:1500 Bob:9505 Cat:995 Dan:1500 Eve:1500 pot=30
+[59.1s] CHECK PASS rebuy: Ann dealt in after rebuy: hand 9: Ann cardCount=2 stack=1500 (rebuy via between hands (waiting_next) before hand 8)
+[59.1s] CHECK PASS rebuy: Dan dealt in after rebuy: hand 9: Dan cardCount=2 stack=1500 (rebuy via between hands (waiting_next) before hand 8)
+[59.1s] CHECK PASS rebuy: Eve dealt in after rebuy: hand 9: Eve cardCount=2 stack=1500 (rebuy via between hands (waiting_next) before hand 8)
+[60.3s] CHECK PASS hand 9: showdown_result received and pot == my tracked contributions: hand 9: server pot=7075 my sum of contributions=7075 ({"Ann":1500,"Bob":1580,"Cat":995,"Dan":1500,"Eve":1500})
+[60.3s] CHECK PASS hand 9: payouts match independent evaluator + side-pot layering: hand 9 showdown, pot 7075, 3 layer(s) [[995,4975,["Dan"]],[1500,2020,["Dan"]],[1580,80,["Bob"]]], winners server=["Bob:Two Pair","Dan:Full House"]
+[60.3s] CHECK PASS hand 9: chip conservation bank+stacks+pot: hand 9: bank 42000 + stacks 15000 + pot 0 = 57000, expected 57000
+[60.3s] CHECK PASS hand 9: no stall (completed within 25s): hand 9 took 1242ms from deal to result
+[60.3s] HAND #9 DONE showdown pot=7075 layers=3 stacks: Ann:0 Bob:8005 Cat:0 Dan:6995 Eve:0
+[60.3s] BUST Ann in hand 9
+[60.3s] BUST Cat in hand 9
+[60.3s] BUST Eve in hand 9
+[62.1s] CHECK PASS rebuy: Ann chips restored (between hands (waiting_next)): hand 9 status=waiting_next: Ann chips 0 -> 1500 (bank balance was 5500, expected buy-in 1500); errors=[]
+[62.1s] CHECK PASS rebuy: Cat chips restored (between hands (waiting_next)): hand 9 status=waiting_next: Cat chips 0 -> 1500 (bank balance was 8500, expected buy-in 1500); errors=[]
+[62.1s] CHECK PASS rebuy: Eve chips restored (between hands (waiting_next)): hand 9 status=waiting_next: Eve chips 0 -> 1500 (bank balance was 5500, expected buy-in 1500); errors=[]
+[65.2s] HAND #10 (server 10) mode=mixed dealer=Eve stacks=Ann:1500 Bob:8005 Cat:1500 Dan:6995 Eve:1500 pot=30
+[65.2s] CHECK PASS rebuy: Ann dealt in after rebuy: hand 10: Ann cardCount=2 stack=1500 (rebuy via between hands (waiting_next) before hand 9)
+[65.2s] CHECK PASS rebuy: Cat dealt in after rebuy: hand 10: Cat cardCount=2 stack=1500 (rebuy via between hands (waiting_next) before hand 9)
+[65.2s] CHECK PASS rebuy: Eve dealt in after rebuy: hand 10: Eve cardCount=2 stack=1500 (rebuy via between hands (waiting_next) before hand 9)
+[65.2s] IDLE: Cat will not act (turnRemainingMs=null) hand 10
+[97.7s] CHECK PASS hand 10: showdown_result received and pot == my tracked contributions: hand 10: server pot=15010 my sum of contributions=15010 ({"Ann":10,"Bob":8005,"Cat":0,"Dan":6995,"Eve":0})
+[97.7s] CHECK PASS hand 10: payouts match independent evaluator + side-pot layering: hand 10 showdown, pot 15010, 3 layer(s) [[10,30,["Dan"]],[6995,13970,["Dan"]],[8005,1010,["Bob"]]], winners server=["Bob:High Card","Dan:Two Pair"]
+[97.7s] CHECK PASS hand 10: chip conservation bank+stacks+pot: hand 10: bank 37500 + stacks 19500 + pot 0 = 57000, expected 57000
+[97.7s] CHECK PASS turn timer: idle player auto-folded and hand completed: hand 10: Cat folded=true lastAction=FOLD; hand total 32523ms; turnRemainingMs at start of turn null
+[97.7s] HAND #10 DONE showdown pot=15010 layers=3 stacks: Ann:1490 Bob:1010 Cat:1500 Dan:14000 Eve:1500
+[102.5s] HAND #11 (server 11) mode=mixed dealer=Ann stacks=Ann:1490 Bob:1010 Cat:1500 Dan:14000 Eve:1500 pot=30
+[103.8s] CHECK PASS hand 11: showdown_result received and pot == my tracked contributions: hand 11: server pot=1040 my sum of contributions=1040 ({"Ann":440,"Bob":440,"Cat":20,"Dan":20,"Eve":120})
+[103.8s] CHECK PASS hand 11: payouts match independent evaluator + side-pot layering: hand 11 showdown, pot 1040, 3 layer(s) [[20,100,["Bob"]],[120,300,["Bob"]],[440,640,["Bob"]]], winners server=["Bob:Pair"]
+[103.8s] CHECK PASS hand 11: chip conservation bank+stacks+pot: hand 11: bank 37500 + stacks 19500 + pot 0 = 57000, expected 57000
+[103.8s] CHECK PASS hand 11: no stall (completed within 25s): hand 11 took 1289ms from deal to result
+[103.8s] HAND #11 DONE showdown pot=1040 layers=3 stacks: Ann:1050 Bob:1610 Cat:1480 Dan:13980 Eve:1380
+[108.7s] HAND #12 (server 12) mode=shove dealer=Bob stacks=Ann:1050 Bob:1610 Cat:1480 Dan:13980 Eve:1380 pot=30
+[110.8s] CHECK PASS hand 12: showdown_result received and pot == my tracked contributions: hand 12: server pot=17890 my sum of contributions=17890 ({"Ann":1050,"Bob":0,"Cat":1480,"Dan":13980,"Eve":1380})
+[110.8s] CHECK PASS hand 12: payouts match independent evaluator + side-pot layering: hand 12 showdown, pot 17890, 4 layer(s) [[1050,4200,["Ann"]],[1380,990,["Dan"]],[1480,200,["Dan"]],[13980,12500,["Dan"]]], winners server=["Ann:Two Pair","Dan:Two Pair"]
+[110.8s] CHECK PASS hand 12: chip conservation bank+stacks+pot: hand 12: bank 37500 + stacks 19500 + pot 0 = 57000, expected 57000
+[110.8s] CHECK PASS hand 12: no stall (completed within 25s): hand 12 took 2107ms from deal to result
+[110.8s] HAND #12 DONE showdown pot=17890 layers=4 stacks: Ann:4200 Bob:1610 Cat:0 Dan:13690 Eve:0
+[110.8s] BUST Cat in hand 12
+[110.8s] BUST Eve in hand 12
+[112.5s] CHECK PASS rebuy: Cat chips restored (between hands (waiting_next)): hand 12 status=waiting_next: Cat chips 0 -> 1500 (bank balance was 7000, expected buy-in 1500); errors=[]
+[112.5s] CHECK PASS rebuy: Eve chips restored (between hands (waiting_next)): hand 12 status=waiting_next: Eve chips 0 -> 1500 (bank balance was 4000, expected buy-in 1500); errors=[]
+[115.6s] HAND #13 (server 13) mode=mixed dealer=Cat stacks=Ann:4200 Bob:1610 Cat:1500 Dan:13690 Eve:1500 pot=30
+[115.6s] CHECK PASS rebuy: Cat dealt in after rebuy: hand 13: Cat cardCount=2 stack=1500 (rebuy via between hands (waiting_next) before hand 12)
+[115.6s] CHECK PASS rebuy: Eve dealt in after rebuy: hand 13: Eve cardCount=2 stack=1500 (rebuy via between hands (waiting_next) before hand 12)
+[120.9s] CHECK PASS hand 13: showdown_result received and pot == my tracked contributions: hand 13: server pot=19950 my sum of contributions=19950 ({"Ann":3130,"Bob":1610,"Cat":1500,"Dan":13690,"Eve":20})
+[120.9s] CHECK PASS hand 13: payouts match independent evaluator + side-pot layering: hand 13 showdown, pot 19950, 5 layer(s) [[20,100,["Dan"]],[1500,5920,["Dan"]],[1610,330,["Dan"]],[3130,3040,["Dan"]],[13690,10560,["Dan"]]], winners server=["Dan:Three of a Kind"]
+[120.9s] CHECK PASS hand 13: chip conservation bank+stacks+pot: hand 13: bank 34500 + stacks 22500 + pot 0 = 57000, expected 57000
+[120.9s] CHECK PASS hand 13: no stall (completed within 25s): hand 13 took 5289ms from deal to result
+[120.9s] HAND #13 DONE showdown pot=19950 layers=5 stacks: Ann:1070 Bob:0 Cat:0 Dan:19950 Eve:1480
+[120.9s] BUST Bob in hand 13
+[120.9s] BUST Cat in hand 13
+[122.7s] CHECK PASS rebuy: Bob chips restored (between hands (waiting_next)): hand 13 status=waiting_next: Bob chips 0 -> 1500 (bank balance was 8500, expected buy-in 1500); errors=[]
+[122.7s] CHECK PASS rebuy: Cat chips restored (between hands (waiting_next)): hand 13 status=waiting_next: Cat chips 0 -> 1500 (bank balance was 5500, expected buy-in 1500); errors=[]
+[125.8s] HAND #14 (server 14) mode=mixed dealer=Dan stacks=Ann:1070 Bob:1500 Cat:1500 Dan:19950 Eve:1480 pot=30
+[125.8s] CHECK PASS rebuy: Bob dealt in after rebuy: hand 14: Bob cardCount=2 stack=1500 (rebuy via between hands (waiting_next) before hand 13)
+[125.8s] CHECK PASS rebuy: Cat dealt in after rebuy: hand 14: Cat cardCount=2 stack=1500 (rebuy via between hands (waiting_next) before hand 13)
+[126.8s] CHECK PASS hand 14: showdown_result received and pot == my tracked contributions: hand 14: server pot=7090 my sum of contributions=7090 ({"Ann":1070,"Bob":1500,"Cat":1500,"Dan":1540,"Eve":1480})
+[126.8s] CHECK PASS hand 14: payouts match independent evaluator + side-pot layering: hand 14 showdown, pot 7090, 4 layer(s) [[1070,5350,["Eve"]],[1480,1640,["Eve"]],[1500,60,["Bob"]],[1540,40,["Dan"]]], winners server=["Bob:High Card","Dan:High Card","Eve:Pair"]
+[126.8s] CHECK PASS hand 14: chip conservation bank+stacks+pot: hand 14: bank 31500 + stacks 25500 + pot 0 = 57000, expected 57000
+[126.8s] CHECK PASS hand 14: no stall (completed within 25s): hand 14 took 997ms from deal to result
+[126.8s] HAND #14 DONE showdown pot=7090 layers=4 stacks: Ann:0 Bob:60 Cat:0 Dan:18450 Eve:6990
+[126.8s] BUST Ann in hand 14
+[126.8s] BUST Cat in hand 14
+[128.5s] CHECK PASS rebuy: Ann chips restored (between hands (waiting_next)): hand 14 status=waiting_next: Ann chips 0 -> 1500 (bank balance was 4000, expected buy-in 1500); errors=[]
+[128.5s] CHECK PASS rebuy: Cat chips restored (between hands (waiting_next)): hand 14 status=waiting_next: Cat chips 0 -> 1500 (bank balance was 4000, expected buy-in 1500); errors=[]
+[131.6s] HAND #15 (server 15) mode=mixed dealer=Eve stacks=Ann:1500 Bob:60 Cat:1500 Dan:18450 Eve:6990 pot=30
+[131.6s] CHECK PASS rebuy: Ann dealt in after rebuy: hand 15: Ann cardCount=2 stack=1500 (rebuy via between hands (waiting_next) before hand 14)
+[131.6s] CHECK PASS rebuy: Cat dealt in after rebuy: hand 15: Cat cardCount=2 stack=1500 (rebuy via between hands (waiting_next) before hand 14)
+[132.3s] LEAVE Eve (mid-hand, not her turn) hand 15 street flop chips=6695 cur=Ann pot=1200
+[132.4s] LEAVE Dan (on their own turn) hand 15 street flop chips=18155 cur=Dan pot=2440
+[132.8s] CHECK PASS hand 15: showdown_result received and pot == my tracked contributions: hand 15: server pot=3610 my sum of contributions=3610 ({"Ann":1500,"Bob":20,"Cat":1500,"Dan":295,"Eve":295})
+[132.8s] CHECK PASS hand 15: payouts match independent evaluator + side-pot layering: hand 15 showdown, pot 3610, 3 layer(s) [[20,100,["Cat"]],[295,1100,["Cat"]],[1500,2410,["Cat"]]], winners server=["Cat:Two Pair"]
+[132.8s] CHECK PASS hand 15: chip conservation bank+stacks+pot: hand 15: bank 53350 + stacks 3650 + pot 0 = 57000, expected 57000
+[132.8s] CHECK PASS hand 15: no stall (completed within 25s): hand 15 took 1209ms from deal to result
+[132.8s] HAND #15 DONE showdown pot=3610 layers=3 stacks: Ann:0 Bob:40 Cat:3610 Dan:0 Eve:0
+[132.8s] BUST Ann in hand 15
+[132.9s]   room_update after Eve left: [{"t":132288,"hostName":"Ann","players":["Ann","Bob","Cat","Dan","Eve"]},{"t":132409,"hostName":"Ann","players":["Ann","Bob","Cat","Dan","Eve"]}]
+[133.0s]   room_update after Dan left: [{"t":132409,"hostName":"Ann","players":["Ann","Bob","Cat","Dan","Eve"]}]
+[134.6s] CHECK PASS rebuy: Ann chips restored (between hands (waiting_next)): hand 15 status=waiting_next: Ann chips 0 -> 1500 (bank balance was 2500, expected buy-in 1500); errors=[]
+[137.7s] HAND #16 (server 16) mode=mixed dealer=Ann stacks=Ann:1500 Bob:40 Cat:3610 pot=30
+[137.7s] CHECK PASS rebuy: Ann dealt in after rebuy: hand 16: Ann cardCount=2 stack=1500 (rebuy via between hands (waiting_next) before hand 15)
+[138.4s] CHECK PASS hand 16: showdown_result received and pot == my tracked contributions: hand 16: server pot=230 my sum of contributions=230 ({"Ann":140,"Bob":10,"Cat":80})
+[138.4s] CHECK PASS hand 16: payouts match independent evaluator + side-pot layering: hand 16 fold-win, pot 230, 3 layer(s) [[10,30,["Ann"]],[80,140,["Ann"]],[140,60,["Ann"]]], winners server=["Ann:Everyone folded"]
+[138.4s] CHECK PASS hand 16: chip conservation bank+stacks+pot: hand 16: bank 51850 + stacks 5150 + pot 0 = 57000, expected 57000
+[138.4s] CHECK PASS hand 16: no stall (completed within 25s): hand 16 took 705ms from deal to result
+[138.4s] HAND #16 DONE fold-win pot=230 layers=3 stacks: Ann:1590 Bob:30 Cat:3530
+[143.2s] HAND #17 (server 17) mode=mixed dealer=Bob stacks=Ann:1590 Bob:30 Cat:3530 pot=30
+[143.9s] CHECK PASS hand 17: showdown_result received and pot == my tracked contributions: hand 17: server pot=110 my sum of contributions=110 ({"Ann":20,"Bob":30,"Cat":60})
+[143.9s] CHECK PASS hand 17: payouts match independent evaluator + side-pot layering: hand 17 showdown, pot 110, 3 layer(s) [[20,60,["Bob"]],[30,20,["Bob"]],[60,30,["Cat"]]], winners server=["Bob:Two Pair","Cat:High Card"]
+[143.9s] CHECK PASS hand 17: chip conservation bank+stacks+pot: hand 17: bank 51850 + stacks 5150 + pot 0 = 57000, expected 57000
+[143.9s] CHECK PASS hand 17: no stall (completed within 25s): hand 17 took 663ms from deal to result
+[143.9s] HAND #17 DONE showdown pot=110 layers=3 stacks: Ann:1570 Bob:80 Cat:3500
+[148.8s] HAND #18 (server 18) mode=mixed dealer=Cat stacks=Ann:1570 Bob:80 Cat:3500 pot=30
+[149.6s] CHECK PASS hand 18: showdown_result received and pot == my tracked contributions: hand 18: server pot=175 my sum of contributions=175 ({"Ann":10,"Bob":80,"Cat":85})
+[149.6s] CHECK PASS hand 18: payouts match independent evaluator + side-pot layering: hand 18 showdown, pot 175, 3 layer(s) [[10,30,["Cat"]],[80,140,["Cat"]],[85,5,["Cat"]]], winners server=["Cat:High Card"]
+[149.6s] CHECK PASS hand 18: chip conservation bank+stacks+pot: hand 18: bank 51850 + stacks 5150 + pot 0 = 57000, expected 57000
+[149.6s] CHECK PASS hand 18: no stall (completed within 25s): hand 18 took 833ms from deal to result
+[149.6s] HAND #18 DONE showdown pot=175 layers=3 stacks: Ann:1560 Bob:0 Cat:3590
+[149.6s] BUST Bob in hand 18
+[151.3s] CHECK PASS rebuy: Bob chips restored (between hands (waiting_next)): hand 18 status=waiting_next: Bob chips 0 -> 1500 (bank balance was 7000, expected buy-in 1500); errors=[]
+[154.4s] HAND #19 (server 19) mode=mixed dealer=Ann stacks=Ann:1560 Bob:1500 Cat:3590 pot=30
+[154.4s] CHECK PASS rebuy: Bob dealt in after rebuy: hand 19: Bob cardCount=2 stack=1500 (rebuy via between hands (waiting_next) before hand 18)
+[154.7s] LEAVE Ann (HOST mid-hand) hand 19 street flop chips=1400 cur=Bob pot=480
+[154.7s] LEAVE Cat (final leave -> lone player) hand 19 street flop chips=3430 cur=Bob pot=480
+[154.8s] skip stale action Bob:raise (hand already ended server-side)
+[154.9s] CHECK PASS hand 19: showdown_result received and pot == my tracked contributions: hand 19: server pot=480 my sum of contributions=480 ({"Ann":160,"Bob":160,"Cat":160})
+[154.9s] CHECK PASS hand 19: payouts match independent evaluator + side-pot layering: hand 19 fold-win, pot 480, 1 layer(s) [[160,480,["Bob"]]], winners server=["Bob:Everyone folded"]
+[154.9s] CHECK PASS hand 19: chip conservation bank+stacks+pot: hand 19: bank 55180 + stacks 1820 + pot 0 = 57000, expected 57000
+[154.9s] CHECK PASS hand 19: no stall (completed within 25s): hand 19 took 415ms from deal to result
+[154.9s] HAND #19 DONE fold-win pot=480 layers=1 stacks: Ann:0 Bob:1820 Cat:0
+[155.3s]   room_update after Ann left: [{"t":154699,"hostName":"Bob","players":["Ann","Bob","Cat"]},{"t":154701,"hostName":"Bob","players":["Ann","Bob","Cat"]}]
+[155.3s] CHECK PASS host handoff: room_update names a new host when host leaves mid-hand: hand 19: hostName after Ann left = "Bob"
+[155.3s]   room_update after Cat left: [{"t":154699,"hostName":"Bob","players":["Ann","Bob","Cat"]},{"t":154701,"hostName":"Bob","players":["Ann","Bob","Cat"]}]
+[160.0s] LONE WAITING: Bob:0
+[160.0s] CHECK PASS lone survivor: stack cashed out to bank, total conserved: status=waiting: bank 57000 + stacks 0 = 57000, expected 57000; Bob chips=0; lastRoomUpdate.hostName=Bob
+[160.0s] PHASE 2: Bob rebuys, Ann and Eve rejoin as fresh sockets
+[160.4s] CHECK PASS rebuy: Bob chips restored (waiting table (lone survivor)): hand 19 status=waiting: Bob chips 0 -> 1500 (bank balance was 7320, expected buy-in 1500); errors=[]
+[161.1s] CHECK PASS rejoin in waiting: Ann seated: room_joined=true, errors=[]
+[161.5s] CHECK PASS rejoin in waiting: Eve seated: room_joined=true, errors=[]
+[162.2s] CHECK PASS start_game by non-host rejected: Ann errors: ["Only host can start"]
+[162.2s] HAND #20 (server 20) mode=mixed dealer=Bob stacks=Bob:1500 Ann:1500 Eve:1500 pot=30
+[162.2s] CHECK PASS rebuy: Bob dealt in after rebuy: hand 20: Bob cardCount=2 stack=1500 (rebuy via waiting table (lone survivor) before hand 19)
+[163.3s] CHECK PASS hand 20: showdown_result received and pot == my tracked contributions: hand 20: server pot=300 my sum of contributions=300 ({"Bob":20,"Ann":180,"Eve":100})
+[163.3s] CHECK PASS hand 20: payouts match independent evaluator + side-pot layering: hand 20 fold-win, pot 300, 3 layer(s) [[20,60,["Ann"]],[100,160,["Ann"]],[180,80,["Ann"]]], winners server=["Ann:Everyone folded"]
+[163.3s] CHECK PASS hand 20: chip conservation bank+stacks+pot: hand 20: bank 52500 + stacks 4500 + pot 0 = 57000, expected 57000
+[163.3s] CHECK PASS hand 20: no stall (completed within 25s): hand 20 took 1071ms from deal to result
+[163.3s] HAND #20 DONE fold-win pot=300 layers=3 stacks: Bob:1480 Ann:1620 Eve:1400
+[163.4s] CHECK FAIL start_game by handed-off host (Bob) starts a hand: status before=waiting after=waiting_next; handNum=20
+[168.1s] HAND #21 (server 21) mode=mixed dealer=Ann stacks=Bob:1480 Ann:1620 Eve:1400 pot=30
+[169.1s] CHECK PASS hand 21: showdown_result received and pot == my tracked contributions: hand 21: server pot=3090 my sum of contributions=3090 ({"Bob":1480,"Ann":1510,"Eve":100})
+[169.1s] CHECK PASS hand 21: payouts match independent evaluator + side-pot layering: hand 21 showdown, pot 3090, 3 layer(s) [[100,300,["Ann"]],[1480,2760,["Ann"]],[1510,30,["Ann"]]], winners server=["Ann:Three of a Kind"]
+[169.1s] CHECK PASS hand 21: chip conservation bank+stacks+pot: hand 21: bank 52500 + stacks 4500 + pot 0 = 57000, expected 57000
+[169.1s] CHECK PASS hand 21: no stall (completed within 25s): hand 21 took 933ms from deal to result
+[169.1s] HAND #21 DONE showdown pot=3090 layers=3 stacks: Bob:0 Ann:3200 Eve:1300
+[169.1s] BUST Bob in hand 21
+[170.8s] CHECK PASS rebuy: Bob chips restored (between hands (waiting_next)): hand 21 status=waiting_next: Bob chips 0 -> 1500 (bank balance was 5820, expected buy-in 1500); errors=[]
+[173.9s] HAND #22 (server 22) mode=mixed dealer=Eve stacks=Bob:1500 Ann:3200 Eve:1300 pot=30
+[173.9s] CHECK PASS rebuy: Bob dealt in after rebuy: hand 22: Bob cardCount=2 stack=1500 (rebuy via between hands (waiting_next) before hand 21)
+[177.7s] CHECK PASS hand 22: showdown_result received and pot == my tracked contributions: hand 22: server pot=4760 my sum of contributions=4760 ({"Bob":1500,"Ann":3200,"Eve":60})
+[177.7s] CHECK PASS hand 22: payouts match independent evaluator + side-pot layering: hand 22 showdown, pot 4760, 3 layer(s) [[60,180,["Ann"]],[1500,2880,["Ann"]],[3200,1700,["Ann"]]], winners server=["Ann:Two Pair"]
+[177.7s] CHECK PASS hand 22: chip conservation bank+stacks+pot: hand 22: bank 51000 + stacks 6000 + pot 0 = 57000, expected 57000
+[177.7s] CHECK PASS hand 22: no stall (completed within 25s): hand 22 took 3763ms from deal to result
+[177.7s] HAND #22 DONE showdown pot=4760 layers=3 stacks: Bob:0 Ann:4760 Eve:1240
+[177.7s] BUST Bob in hand 22
+[178.4s] FINAL pre-disconnect: {"stacks":6000,"bank":51000}
+[179.9s] CHECK PASS final: all disconnected -> everything back in bank, total conserved: bank sum 57000 expected 57000 :: {"testplayer":7000,"ann":5660,"bob":4320,"cat":5930,"dan":25155,"eve":8935}

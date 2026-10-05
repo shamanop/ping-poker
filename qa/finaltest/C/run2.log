@@ -1,0 +1,30 @@
+== 1440 900
+  lobby count 8
+  lobby check {"docScroll": [1440, 900, 1440, 900]}
+  8-seat dealt: seatsClipped [] overlaps [] docScroll [1440, 900, 1440, 900] barVisible True textOverflow []
+  seats [{"cls": "seat hero active", "l": 482, "t": 681, "r": 658, "b": 739}, {"cls": "seat", "l": 222, "t": 666, "r": 398, "b": 724}, {"cls": "seat", "l": 12, "t": 377, "r": 188, "b": 435}, {"cls": "seat", "l": 251, "t": 81, "r": 427, "b": 139}, {"cls": "seat", "l": 482, "t": 74, "r": 658, "b": 132}, {"cls": "seat", "l": 714, "t": 81, "r": 890, "b": 139}, {"cls": "seat", "l": 952, "t": 377, "r": 1128, "b": 435}, {"cls": "seat", "l": 742, "t": 666, "r": 918, "b": 724}]
+  8-seat myturn-preflop: clipped [] overlaps [] bar True [1440, 900, 1440, 900]
+   bets/pucks {"n": 7, "out": []}
+   after raise bets {"n": 8, "out": [["bet", 0, "x hero card", 0, "bet hero-bet", [523, 516, 616, 544], "95"], ["bet", 0, "x hero card", 1, "bet hero-bet", [523, 516, 616, 544], "95"]]}
+  8-seat myturn-flop: clipped [] overlaps [] bar True [1440, 900, 1440, 900]
+   bets/pucks {"n": 0, "out": []}
+  8-seat myturn-turn: clipped [] overlaps [] bar True [1440, 900, 1440, 900]
+   bets/pucks {"n": 0, "out": []}
+  8-seat myturn-river: clipped [] overlaps [] bar True [1440, 900, 1440, 900]
+   bets/pucks {"n": 0, "out": []}
+  8-seat showdown: clipped [] overlaps []
+== 1920 1080
+  lobby count 8
+  lobby check {"docScroll": [1920, 1080, 1920, 1080]}
+  8-seat dealt: seatsClipped [] overlaps [] docScroll [1920, 1080, 1920, 1080] barVisible True textOverflow []
+  seats [{"cls": "seat hero active", "l": 674, "t": 883, "r": 886, "b": 953}, {"cls": "seat", "l": 325, "t": 874, "r": 536, "b": 943}, {"cls": "seat", "l": 14, "t": 486, "r": 226, "b": 556}, {"cls": "seat", "l": 366, "t": 91, "r": 577, "b": 161}, {"cls": "seat", "l": 674, "t": 89, "r": 886, "b": 158}, {"cls": "seat", "l": 983, "t": 91, "r": 1194, "b": 161}, {"cls": "seat", "l": 1334, "t": 486, "r": 1546, "b": 556}, {"cls": "seat", "l": 1024, "t": 874, "r": 1235, "b": 943}]
+  8-seat myturn-preflop: clipped [] overlaps [] bar True [1920, 1080, 1920, 1080]
+   bets/pucks {"n": 7, "out": []}
+   after raise bets {"n": 8, "out": [["bet", 0, "x hero card", 0, "bet hero-bet", [723, 666, 836, 700], "95"], ["bet", 0, "x hero card", 1, "bet hero-bet", [723, 666, 836, 700], "95"]]}
+  8-seat myturn-flop: clipped [] overlaps [] bar True [1920, 1080, 1920, 1080]
+   bets/pucks {"n": 0, "out": []}
+  8-seat myturn-turn: clipped [] overlaps [] bar True [1920, 1080, 1920, 1080]
+   bets/pucks {"n": 0, "out": []}
+  8-seat myturn-river: clipped [] overlaps [] bar True [1920, 1080, 1920, 1080]
+   bets/pucks {"n": 0, "out": []}
+  8-seat showdown: clipped [] overlaps []

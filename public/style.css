@@ -732,3 +732,22 @@ html.art-login .setup-card { background: linear-gradient(180deg, rgba(34, 22, 14
 
 /* table C hero cards match board size */
 #table-box .hero-cards .card-xl { width: calc(90 * var(--px)); height: calc(130 * var(--px)); }
+
+/* ── UI fix pass: logo mark in the gap, blind chips ── */
+.table-mark { position: absolute; left: 50%; transform: translateX(-50%); width: auto; z-index: 3; pointer-events: none; opacity: .88; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .45)); }
+.seat-tag { display: inline-grid; place-items: center; width: calc(20 * var(--px)); height: calc(20 * var(--px)); padding: 0; border-radius: 50%; font-size: calc(8 * var(--px)); letter-spacing: 0; font-weight: 700; color: #F6EBCB; background: radial-gradient(circle at 35% 30%, #4B72A8, #24406B 75%); border: calc(2px) dashed rgba(246, 235, 203, .85); box-shadow: 0 1px 2px rgba(0, 0, 0, .6); }
+.seat-tag.bb { background: radial-gradient(circle at 35% 30%, #C4533F, #7E2418 75%); }
+
+/* ── Bet/Raise green plate; bar contents stay inside the frame ── */
+.act-raise { border-image-source: url(images/ui/btn-green.png); color: #F2EBCF; text-shadow: 0 1px 2px rgba(0, 0, 0, .75); }
+.act-raise:disabled { filter: grayscale(.4) brightness(.6); }
+.g-bar { grid-template-columns: minmax(0, calc(124 * var(--px))) minmax(0, calc(148 * var(--px))) minmax(0, calc(160 * var(--px))) minmax(calc(250 * var(--px)), 1fr); min-width: 0; padding: 0 var(--p18); column-gap: var(--p8); }
+.act { min-width: 0; overflow: hidden; padding: 0 var(--p4); }
+.act-main, .act-sub { max-width: 100%; overflow: hidden; text-overflow: clip; }
+.raise-box { min-width: 0; overflow: hidden; padding: var(--p2) var(--p4); box-sizing: border-box; }
+.raise-presets { min-width: 0; }
+.raise-slide { grid-template-columns: calc(24 * var(--px)) minmax(0, 1fr) calc(24 * var(--px)) minmax(calc(44 * var(--px)), calc(66 * var(--px))); gap: var(--p6); min-width: 0; padding: 0 var(--p2); }
+.slider-wrap { min-width: 0; overflow: hidden; }
+.step { width: calc(24 * var(--px)); height: calc(24 * var(--px)); }
+.raise-input { min-width: 0; box-sizing: border-box; padding: 0 var(--p4); }
+.pre { overflow: hidden; }

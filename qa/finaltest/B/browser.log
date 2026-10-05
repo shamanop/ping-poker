@@ -1,0 +1,82 @@
+game started; playing until hand 7
+--- 1920x1080 LIVE HAND, panel via B key
+ panelOpen True status playing hand 7 pot 80
+ panel rect [0, 53, 1560, 965] bar rect [0, 965, 1560, 1080] barHit True vp [1920, 1080] fold btn [262, 987, 454, 1059]
+ tooltip {'shown': True, 'text': 'Hand 5 Fay 1,760 Bob 1,520 Dee 1,480 Gus 1,240'}
+ compare at hand end (hand 7 waiting_next )
+   ok Eve bank 9,700 9,700
+   ok Eve atTable 0 0
+   ok Eve net −300 −300
+   ok Eve buyins 1 1
+   ok Eve best 220 220
+   ok Bob bank 7,210 7,210
+   ok Bob atTable 1,860 1,860
+   ok Bob net −930 −930
+   ok Bob buyins 3 3
+   ok Bob best 420 420
+   ok Fay bank 6,770 6,770
+   ok Fay atTable 1,920 1,920
+   ok Fay net −1,310 −1,310
+   ok Fay buyins 3 3
+   ok Fay best 420 420
+   ok Dee bank 7,320 7,320
+   ok Dee atTable 1,320 1,320
+   ok Dee net −1,360 −1,360
+   ok Dee buyins 3 3
+   ok Dee best 720 720
+   ok Gus bank 7,000 7,000
+   ok Gus atTable 900 900
+   ok Gus net −2,100 −2,100
+   ok Gus buyins 2 2
+   ok Gus best 20 20
+   ok header BANKED 38,000 Banked 38,000
+   ok header ON THE TABLE 6,000 On the table 6,000
+   ok header BOUGHT IN 18,000 Bought in 18,000
+   ok header HANDS 10 Hands 10
+   ok bar values ['4,500', '4,500', '4,500', '3,000', '1,500'] ['4,500', '4,500', '4,500', '3,000', '1,500']
+   ok feed (name,amount) order [('Gus', '1,500'), ('Fay', '1,500'), ('Dee', '1,500'), ('Bob', '1,500'), ('Gus', '1,500'), ('Fay', '1,500')] [('Gus', '1,500'), ('Fay', '1,500'), ('Dee', '1,500'), ('Bob', '1,500'), ('Gus', '1,500'), ('Fay', '1,500')] 16 16
+   ok line end labels ['Bob 1.7k', 'Dee 1.8k', 'Eve 1.2k', 'Fay 1.3k', 'Gus 900'] ['Bob 1.7k', 'Dee 1.8k', 'Eve 1.2k', 'Fay 1.3k', 'Gus 900']
+   ok line paths vs series 5 5
+  1920: 33/33 ok, 0 bad
+ game chips [['Bob', 1860], ['Dee', 1320], ['Fay', 1920], ['Gus', 900]] hcount Dashed line = 1,500 starting stack · 10 hands pcount 5 players ecount 16 recent
+--- 1440x900 LIVE HAND (panel stays open through resize)
+ panelOpen True status playing hand 8 pot 50
+ panel rect [0, 44, 1140, 804] bar rect [0, 804, 1140, 900] barHit True vp [1440, 900] fold btn [218, 823, 378, 883]
+ tooltip {'shown': True, 'text': 'Hand 6 Bob 1,880 Fay 1,580 Dee 1,480 Gus 1,060'}
+ compare at hand end (hand 8 )
+   ok Eve bank 9,700 9,700
+   ok Eve atTable 0 0
+   ok Eve net −300 −300
+   ok Eve buyins 1 1
+   ok Eve best 220 220
+   ok Bob bank 7,210 7,210
+   ok Bob atTable 1,840 1,840
+   ok Bob net −950 −950
+   ok Bob buyins 3 3
+   ok Bob best 420 420
+   ok Fay bank 6,770 6,770
+   ok Fay atTable 1,860 1,860
+   ok Fay net −1,370 −1,370
+   ok Fay buyins 3 3
+   ok Fay best 420 420
+   ok Dee bank 7,320 7,320
+   ok Dee atTable 1,260 1,260
+   ok Dee net −1,420 −1,420
+   ok Dee buyins 3 3
+   ok Dee best 720 720
+   ok Gus bank 7,000 7,000
+   ok Gus atTable 1,040 1,040
+   ok Gus net −1,960 −1,960
+   ok Gus buyins 2 2
+   ok Gus best 140 140
+   ok header BANKED 38,000 Banked 38,000
+   ok header ON THE TABLE 6,000 On the table 6,000
+   ok header BOUGHT IN 18,000 Bought in 18,000
+   ok header HANDS 10 Hands 10
+   ok bar values ['4,500', '4,500', '4,500', '3,000', '1,500'] ['4,500', '4,500', '4,500', '3,000', '1,500']
+   ok feed (name,amount) order [('Gus', '1,500'), ('Fay', '1,500'), ('Dee', '1,500'), ('Bob', '1,500'), ('Gus', '1,500'), ('Fay', '1,500')] [('Gus', '1,500'), ('Fay', '1,500'), ('Dee', '1,500'), ('Bob', '1,500'), ('Gus', '1,500'), ('Fay', '1,500')] 16 16
+   ok line end labels ['Bob 1.7k', 'Dee 1.8k', 'Fay 1.3k', 'Gus 1k'] ['Bob 1.7k', 'Dee 1.8k', 'Fay 1.3k', 'Gus 1k']
+   ok line paths vs series 4 4
+  1440: 33/33 ok, 0 bad
+ panel closed after Esc: True
+--- console/page errors: NONE

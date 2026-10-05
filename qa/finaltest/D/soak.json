@@ -1,0 +1,142 @@
+{
+ "samples": [
+  {
+   "t": 0,
+   "mb": 102.86328125
+  },
+  {
+   "t": 10,
+   "mb": 105.7734375,
+   "hand": 2,
+   "status": "waiting_next",
+   "ev": 140
+  },
+  {
+   "t": 20,
+   "mb": 101.85546875,
+   "hand": 4,
+   "status": "waiting_next",
+   "ev": 209
+  },
+  {
+   "t": 30,
+   "mb": 102.30078125,
+   "hand": 5,
+   "status": "waiting_next",
+   "ev": 284
+  },
+  {
+   "t": 40,
+   "mb": 102.51171875,
+   "hand": 7,
+   "status": "waiting_next",
+   "ev": 415
+  },
+  {
+   "t": 50,
+   "mb": 103.15234375,
+   "hand": 9,
+   "status": "waiting_next",
+   "ev": 513
+  },
+  {
+   "t": 60,
+   "mb": 102.4453125,
+   "hand": 11,
+   "status": "waiting_next",
+   "ev": 577
+  },
+  {
+   "t": 70,
+   "mb": 103.01953125,
+   "hand": 13,
+   "status": "waiting_next",
+   "ev": 648
+  },
+  {
+   "t": 80,
+   "mb": 102.47265625,
+   "hand": 15,
+   "status": "playing",
+   "ev": 708
+  },
+  {
+   "t": 90,
+   "mb": 103.0859375,
+   "hand": 16,
+   "status": "waiting_next",
+   "ev": 772
+  },
+  {
+   "t": 100,
+   "mb": 103.40625,
+   "hand": 18,
+   "status": "playing",
+   "ev": 871
+  },
+  {
+   "t": 110,
+   "mb": 102.296875,
+   "hand": 19,
+   "status": "waiting_next",
+   "ev": 969
+  },
+  {
+   "t": 120,
+   "mb": 102.484375,
+   "hand": 21,
+   "status": "playing",
+   "ev": 1037
+  },
+  {
+   "t": 130,
+   "mb": 102.5,
+   "hand": 22,
+   "status": "waiting_next",
+   "ev": 1141
+  },
+  {
+   "t": 140,
+   "mb": 102.5,
+   "hand": 24,
+   "status": "playing",
+   "ev": 1253
+  },
+  {
+   "t": 150,
+   "mb": 101.79296875,
+   "hand": 25,
+   "status": "waiting_next",
+   "ev": 1318
+  },
+  {
+   "t": 160,
+   "mb": 102.546875,
+   "hand": 25,
+   "status": "waiting",
+   "ev": 1352
+  },
+  {
+   "t": 170,
+   "mb": 101.55859375,
+   "hand": 25,
+   "status": "waiting",
+   "ev": 1392
+  },
+  {
+   "t": 180,
+   "mb": 101.55859375,
+   "hand": 25,
+   "status": "waiting",
+   "ev": 1421
+  }
+ ],
+ "hands": 25,
+ "actions": 284,
+ "errTypes": {
+  "Not your turn": 61,
+  "No hand in progress": 303,
+  "Not enough chips in bank to rebuy": 601
+ },
+ "ledgerSize": 24562
+}

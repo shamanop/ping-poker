@@ -1,0 +1,120 @@
+start { ann: 10000, bob: 10000, cy: 10000, dee: 10000 } after join { testplayer: 7000, ann: 8500, bob: 8500, cy: 8500, dee: 8500 }
+hand 1 ended waiting_next {"Ann":1860,"Bob":1440,"Cy":1380,"Dee":1320}
+hand 2 ended waiting_next {"Ann":1700,"Bob":1280,"Cy":1800,"Dee":1220}
+  next hand shove: [ 'Dee', 'Ann' ]
+hand 3 ended waiting_next {"Ann":2950,"Bob":0,"Cy":3050,"Dee":0}
+  rebuy by Bob
+  rebuy by Dee
+hand 4 ended waiting_next {"Ann":2940,"Bob":2310,"Cy":2650,"Dee":1100}
+hand 5 ended waiting_next {"Ann":3260,"Bob":2230,"Cy":2530,"Dee":980}
+  next hand shove: [ 'Bob', 'Dee' ]
+hand 6 ended waiting_next {"Ann":1030,"Bob":7670,"Cy":300,"Dee":0}
+  bust (no rebuy): Dee
+hand 7 ended waiting_next {"Ann":1020,"Bob":7700,"Cy":280,"Dee":0}
+  bust (no rebuy): Dee
+  Cy leaves w/ chips 280
+hand 8 ended waiting_next {"Ann":940,"Bob":7780,"Dee":0}
+  bust (no rebuy): Dee
+  next hand shove: [ 'Ann', 'Bob' ]
+hand 9 ended waiting_next {"Ann":1880,"Bob":6840,"Dee":0}
+  bust (no rebuy): Dee
+hand 10 ended waiting_next {"Ann":1880,"Bob":6840,"Dee":0}
+  bust (no rebuy): Dee
+hand 11 ended waiting_next {"Ann":1870,"Bob":6850,"Dee":0}
+  bust (no rebuy): Dee
+hand 12 ended waiting_next {"Ann":1850,"Bob":6870,"Dee":0}
+  bust (no rebuy): Dee
+hand 13 ended waiting_next {"Ann":1730,"Bob":6990,"Dee":0}
+  bust (no rebuy): Dee
+final hand 13 waiting_next
+{
+ "label": "final",
+ "status": "waiting_next",
+ "handNum": 13,
+ "pot": 0,
+ "rows": [
+  {
+   "name": "Ann",
+   "bank": 8500,
+   "atTable": 1730,
+   "start": 10000,
+   "expectedNet": 230,
+   "apiNet": 230,
+   "apiBank": 8500,
+   "apiAtTable": 1730,
+   "status": "seated",
+   "totalBuyIns": 1500,
+   "buyIns": 1,
+   "rebuys": 0,
+   "rebuyTotal": 0,
+   "cashedOut": 0,
+   "hands": 13,
+   "bestWin": 1250
+  },
+  {
+   "name": "Bob",
+   "bank": 7000,
+   "atTable": 6990,
+   "start": 10000,
+   "expectedNet": 3990,
+   "apiNet": 3990,
+   "apiBank": 7000,
+   "apiAtTable": 6990,
+   "status": "seated",
+   "totalBuyIns": 3000,
+   "buyIns": 2,
+   "rebuys": 1,
+   "rebuyTotal": 1500,
+   "cashedOut": 0,
+   "hands": 13,
+   "bestWin": 5440
+  },
+  {
+   "name": "Cy",
+   "bank": 8780,
+   "atTable": 0,
+   "start": 10000,
+   "expectedNet": -1220,
+   "apiNet": -1220,
+   "apiBank": 8780,
+   "apiAtTable": 0,
+   "status": "offline",
+   "totalBuyIns": 1500,
+   "buyIns": 1,
+   "rebuys": 0,
+   "rebuyTotal": 0,
+   "cashedOut": 280,
+   "hands": 7,
+   "bestWin": 1250
+  },
+  {
+   "name": "Dee",
+   "bank": 7000,
+   "atTable": 0,
+   "start": 10000,
+   "expectedNet": -3000,
+   "apiNet": -3000,
+   "apiBank": 7000,
+   "apiAtTable": 0,
+   "status": "sitting-out",
+   "totalBuyIns": 3000,
+   "buyIns": 2,
+   "rebuys": 1,
+   "rebuyTotal": 1500,
+   "cashedOut": 0,
+   "hands": 6,
+   "bestWin": 0
+  }
+ ],
+ "sumApiNet": 0,
+ "sumExpectedNet": 0,
+ "maxHand": 13,
+ "events": 7,
+ "seriesKeys": [
+  "Ann",
+  "Bob",
+  "Cy",
+  "Dee"
+ ]
+}
+errors [ 'Ann:', 'Bob:', 'Cy:', 'Dee:' ]

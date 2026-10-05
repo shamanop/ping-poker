@@ -1,0 +1,17 @@
+[  1.9s] human joined lobby
+[  2.2s] lobby-count text: 3
+[  3.5s] HAND 1 start: Hume:1500 Rex:1490 Sly:1480
+[  4.3s] shot 1-my-turn
+[ 15.2s] HAND 1 RESULT overlay: Sly | Two Pair | +420  dur=11.8s
+[ 15.6s] shot 2-showdown
+[ 19.4s] HAND 2 start: Hume:1340 Rex:1360 Sly:1770
+[ 22.3s] shot 3-raise-preset
+[ 22.4s] HAND 2 human raised (chips before 1340) raise-input=50
+[ 31.6s] HAND 2 RESULT overlay: Rex | Two Pair | +2,250 | Sly | Pair | +2,250  dur=12.2s
+[ 35.9s] HAND 3 start: Hume:0 Rex:4070 Sly:400
+[ 45.7s] HAND 3 RESULT overlay: Rex | Two Pair | +160  dur=9.8s
+[ 46.6s] shot 4-final
+[ 46.6s] hands seen [1, 2, 3] screens 4
+[ 46.6s] final state {"st": "waiting_next", "cur": null, "my": 0, "street": "river", "hand": 3, "sd": true, "ctl": false, "stacks": "Hume:0 Rex:4160 Sly:340", "pot": 0, "ph": 3}
+[ 46.6s] DOM seats text: Hume | 0 | AWAY | 3 | 3 | 7 | 7 | x | Rex | 4,160 | CALL 0 | x | Sly | 340 | RAISE TO 0
+[ 46.6s] DONE

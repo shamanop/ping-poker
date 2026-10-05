@@ -1,0 +1,9 @@
+[0.0s] Rex joined {"roomId":"POKERPING","playerIdx":1,"balance":8500}
+[0.0s] Sly joined {"roomId":"POKERPING","playerIdx":2,"balance":8500}
+[0.2s] HAND 1 start stacks+pot = 4500 Hume:1500 Rex:1500 Sly:1500
+[12.4s] HAND-END 1 bank 82500 + stacks 4500 + pot 0 = 87000 OK | stacks Hume:1360 Rex:1360 Sly:1780 | log ["Rex calls 60","--- Showdown ---","Sly wins 420 with Two Pair"]
+[17.4s] HAND 2 start stacks+pot = 4500 Hume:1360 Rex:1360 Sly:1780
+[28.7s] HAND-END 2 bank 82500 + stacks 4500 + pot 0 = 87000 OK | stacks Hume:0 Rex:4080 Sly:420 | log ["--- Showdown ---","Rex wins 4080 with Two Pair","Sly wins 420 with Pair"]
+[33.7s] HAND 3 start stacks+pot = 4500 Hume:0 Rex:4080 Sly:420
+[42.8s] HAND-END 3 bank 82500 + stacks 4500 + pot 0 = 87000 OK | stacks Hume:0 Rex:4160 Sly:340 | log ["Rex calls 60","--- Showdown ---","Rex wins 160 with Two Pair"]
+[44.6s] bots exit

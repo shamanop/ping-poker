@@ -1,0 +1,13 @@
+== 1920 1080
+  screens after join: ['game-screen']
+  shot 1-alone
+  helper Bob {'roomId': 'POKERPING', 'playerIdx': 1, 'balance': 8500}
+  helper Carla {'roomId': 'POKERPING', 'playerIdx': 2, 'balance': 8500}
+  shot 2-host-3p
+  start disabled? False
+  shot 3-playing
+  shot 4-late-joiner
+  late screens: ['game-screen'] bar: Watching this hand | Dealt in next hand
+  server status: playing players 4
+  late joiner dealt in: True
+  shot 5-late-dealt

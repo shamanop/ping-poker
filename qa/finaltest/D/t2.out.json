@@ -1,0 +1,139 @@
+{
+ "rows": [
+  {
+   "a": "raise",
+   "amt": "-50",
+   "err": "-",
+   "curBet": "20->40",
+   "pot": 70,
+   "cur": 1,
+   "conserved": true
+  },
+  {
+   "a": "raise",
+   "amt": "0",
+   "err": "-",
+   "curBet": "40->60",
+   "pot": 120,
+   "cur": 2,
+   "conserved": true
+  },
+  {
+   "a": "raise",
+   "amt": "1",
+   "err": "-",
+   "curBet": "60->80",
+   "pot": 180,
+   "cur": 0,
+   "conserved": true
+  },
+  {
+   "a": "raise",
+   "amt": "NaN",
+   "err": "Raise amount must be a whole number",
+   "curBet": "80->80",
+   "pot": 180,
+   "cur": 0,
+   "conserved": true
+  },
+  {
+   "a": "raise",
+   "amt": "Infinity",
+   "err": "Raise amount must be a whole number",
+   "curBet": "80->80",
+   "pot": 180,
+   "cur": 0,
+   "conserved": true
+  },
+  {
+   "a": "raise",
+   "amt": "1.5",
+   "err": "Raise amount must be a whole number",
+   "curBet": "80->80",
+   "pot": 180,
+   "cur": 0,
+   "conserved": true
+  },
+  {
+   "a": "raise",
+   "amt": "100",
+   "err": "Raise amount must be a whole number",
+   "curBet": "80->80",
+   "pot": 180,
+   "cur": 0,
+   "conserved": true
+  },
+  {
+   "a": "raise",
+   "amt": "null",
+   "err": "Raise amount must be a whole number",
+   "curBet": "80->80",
+   "pot": 180,
+   "cur": 0,
+   "conserved": true
+  },
+  {
+   "a": "raise",
+   "amt": "undefined",
+   "err": "Raise amount must be a whole number",
+   "curBet": "80->80",
+   "pot": 180,
+   "cur": 0,
+   "conserved": true
+  },
+  {
+   "a": "raise",
+   "amt": "1e+308",
+   "err": "Raise amount must be a whole number",
+   "curBet": "80->80",
+   "pot": 180,
+   "cur": 0,
+   "conserved": true
+  },
+  {
+   "a": "raise",
+   "amt": "[object Object]",
+   "err": "Raise amount must be a whole number",
+   "curBet": "80->80",
+   "pot": 180,
+   "cur": 0,
+   "conserved": true
+  },
+  {
+   "a": "bogus",
+   "amt": "1",
+   "err": "Unknown action",
+   "curBet": "80->80",
+   "pot": 180,
+   "cur": 0,
+   "conserved": true
+  },
+  {
+   "a": null,
+   "amt": "1",
+   "err": "Unknown action",
+   "curBet": "80->80",
+   "pot": 180,
+   "cur": 0,
+   "conserved": true
+  },
+  {
+   "a": {},
+   "amt": "1",
+   "err": "Unknown action",
+   "curBet": "80->80",
+   "pot": 180,
+   "cur": 0,
+   "conserved": true
+  },
+  {
+   "a": "check",
+   "amt": "undefined",
+   "err": "Cannot check: call, raise or fold",
+   "curBet": "80->80",
+   "pot": 180,
+   "cur": 0,
+   "conserved": true
+  }
+ ]
+}

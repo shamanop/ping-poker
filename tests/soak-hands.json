@@ -1,0 +1,481 @@
+[
+ {
+  "hand": 1,
+  "dealer": "soak1",
+  "sb": "soak2",
+  "bb": "soak3",
+  "prevEnd": null,
+  "expDealer": null,
+  "stacks": "soak1:1500 soak2:1490 soak3:1480 soak4:1500 soak5:1500",
+  "log": [
+   "--- Hand #1 · 10/20 ---",
+   "Dealer: soak1",
+   "soak2 posts SB 10",
+   "soak3 posts BB 20"
+  ]
+ },
+ {
+  "hand": 2,
+  "dealer": "soak2",
+  "sb": "soak3",
+  "bb": "soak4",
+  "prevEnd": "showdown",
+  "expDealer": "soak2",
+  "stacks": "soak1:1480 soak2:1480 soak3:1470 soak4:1480 soak5:1560",
+  "log": [
+   "soak5 wins 80 with Two Pair",
+   "--- Hand #2 · 10/20 ---",
+   "Dealer: soak2",
+   "soak3 posts SB 10",
+   "soak4 posts BB 20"
+  ]
+ },
+ {
+  "hand": 3,
+  "dealer": "soak3",
+  "sb": "soak4",
+  "bb": "soak5",
+  "prevEnd": "showdown",
+  "expDealer": "soak3",
+  "stacks": "soak1:1420 soak2:1420 soak3:1420 soak4:1730 soak5:1480",
+  "log": [
+   "soak4 wins 300 with Two Pair",
+   "--- Hand #3 · 10/20 ---",
+   "Dealer: soak3",
+   "soak4 posts SB 10",
+   "soak5 posts BB 20"
+  ]
+ },
+ {
+  "hand": 4,
+  "dealer": "soak4",
+  "sb": "soak5",
+  "bb": "soak1",
+  "prevEnd": "showdown",
+  "expDealer": "soak4",
+  "stacks": "soak1:1480 soak2:1400 soak3:1400 soak4:1720 soak5:1470",
+  "log": [
+   "soak1 wins 100 with Full House",
+   "--- Hand #4 · 10/20 ---",
+   "Dealer: soak4",
+   "soak5 posts SB 10",
+   "soak1 posts BB 20"
+  ]
+ },
+ {
+  "hand": 5,
+  "dealer": "soak5",
+  "sb": "soak1",
+  "bb": "soak2",
+  "prevEnd": "showdown",
+  "expDealer": "soak5",
+  "stacks": "soak1:1390 soak2:1200 soak3:1400 soak4:2180 soak5:1300",
+  "log": [
+   "soak4 wins 640 with Pair",
+   "--- Hand #5 · 10/20 ---",
+   "Dealer: soak5",
+   "soak1 posts SB 10",
+   "soak2 posts BB 20"
+  ]
+ },
+ {
+  "hand": 6,
+  "dealer": "soak1",
+  "sb": "soak2",
+  "bb": "soak3",
+  "prevEnd": "showdown",
+  "expDealer": "soak1",
+  "stacks": "soak1:1580 soak2:1110 soak3:1320 soak4:2160 soak5:1300",
+  "log": [
+   "soak1 wins 280 with Two Pair",
+   "--- Hand #6 · 10/20 ---",
+   "Dealer: soak1",
+   "soak2 posts SB 10",
+   "soak3 posts BB 20"
+  ]
+ },
+ {
+  "hand": 7,
+  "dealer": "soak2",
+  "sb": "soak3",
+  "bb": "soak4",
+  "prevEnd": "showdown",
+  "expDealer": "soak2",
+  "stacks": "soak1:1560 soak2:1080 soak3:1450 soak4:2100 soak5:1280",
+  "log": [
+   "soak3 wins 160 with Two Pair",
+   "--- Hand #7 · 10/20 ---",
+   "Dealer: soak2",
+   "soak3 posts SB 10",
+   "soak4 posts BB 20"
+  ]
+ },
+ {
+  "hand": 8,
+  "dealer": "soak3",
+  "sb": "soak4",
+  "bb": "soak5",
+  "prevEnd": "showdown",
+  "expDealer": "soak3",
+  "stacks": "soak1:2120 soak2:940 soak3:1320 soak4:1970 soak5:1120",
+  "log": [
+   "soak1 wins 700 with Three of a Kind",
+   "--- Hand #8 · 10/20 ---",
+   "Dealer: soak3",
+   "soak4 posts SB 10",
+   "soak5 posts BB 20"
+  ]
+ },
+ {
+  "hand": 9,
+  "dealer": "soak4",
+  "sb": "soak5",
+  "bb": "soak1",
+  "prevEnd": "showdown",
+  "expDealer": "soak4",
+  "stacks": "soak1:2100 soak2:940 soak3:1350 soak4:1970 soak5:1110",
+  "log": [
+   "soak3 wins 50 with Pair",
+   "--- Hand #9 · 10/20 ---",
+   "Dealer: soak4",
+   "soak5 posts SB 10",
+   "soak1 posts BB 20"
+  ]
+ },
+ {
+  "hand": 10,
+  "dealer": "soak5",
+  "sb": "soak1",
+  "bb": "soak2",
+  "prevEnd": "showdown",
+  "expDealer": "soak5",
+  "stacks": "soak1:2090 soak2:900 soak3:1420 soak4:1950 soak5:1110",
+  "log": [
+   "soak3 wins 90 with Two Pair",
+   "--- Hand #10 · 10/20 ---",
+   "Dealer: soak5",
+   "soak1 posts SB 10",
+   "soak2 posts BB 20"
+  ]
+ },
+ {
+  "hand": 11,
+  "dealer": "soak1",
+  "sb": "soak2",
+  "bb": "soak3",
+  "prevEnd": "showdown",
+  "expDealer": "soak1",
+  "stacks": "soak1:1920 soak2:730 soak3:1340 soak4:1850 soak5:1630",
+  "log": [
+   "soak5 wins 700 with Pair",
+   "--- Hand #11 · 10/20 ---",
+   "Dealer: soak1",
+   "soak2 posts SB 10",
+   "soak3 posts BB 20"
+  ]
+ },
+ {
+  "hand": 12,
+  "dealer": "soak2",
+  "sb": "soak3",
+  "bb": "soak4",
+  "prevEnd": "showdown",
+  "expDealer": "soak2",
+  "stacks": "soak1:1760 soak2:580 soak3:1190 soak4:2470 soak5:1470",
+  "log": [
+   "soak4 wins 800 with Pair",
+   "--- Hand #12 · 10/20 ---",
+   "Dealer: soak2",
+   "soak3 posts SB 10",
+   "soak4 posts BB 20"
+  ]
+ },
+ {
+  "hand": 13,
+  "dealer": "soak3",
+  "sb": "soak4",
+  "bb": "soak5",
+  "prevEnd": "showdown",
+  "expDealer": "soak3",
+  "stacks": "soak1:1660 soak2:560 soak3:1180 soak4:2720 soak5:1350",
+  "log": [
+   "soak4 wins 340 with Straight",
+   "--- Hand #13 · 10/20 ---",
+   "Dealer: soak3",
+   "soak4 posts SB 10",
+   "soak5 posts BB 20"
+  ]
+ },
+ {
+  "hand": 14,
+  "dealer": "soak4",
+  "sb": "soak5",
+  "bb": "soak1",
+  "prevEnd": "showdown",
+  "expDealer": "soak4",
+  "stacks": "soak1:1580 soak2:500 soak3:1120 soak4:2710 soak5:1560",
+  "log": [
+   "soak5 wins 260 with Two Pair",
+   "--- Hand #14 · 10/20 ---",
+   "Dealer: soak4",
+   "soak5 posts SB 10",
+   "soak1 posts BB 20"
+  ]
+ },
+ {
+  "hand": 15,
+  "dealer": "soak5",
+  "sb": "soak1",
+  "bb": "soak2",
+  "prevEnd": "showdown",
+  "expDealer": "soak5",
+  "stacks": "soak1:1490 soak2:780 soak3:1020 soak4:2710 soak5:1470",
+  "log": [
+   "soak2 wins 400 with Full House",
+   "--- Hand #15 · 10/20 ---",
+   "Dealer: soak5",
+   "soak1 posts SB 10",
+   "soak2 posts BB 20"
+  ]
+ },
+ {
+  "hand": 16,
+  "dealer": "soak1",
+  "sb": "soak2",
+  "bb": "soak3",
+  "prevEnd": "showdown",
+  "expDealer": "soak1",
+  "stacks": "soak1:1380 soak2:630 soak3:980 soak4:3170 soak5:1310",
+  "log": [
+   "soak4 wins 620 with Two Pair",
+   "--- Hand #16 · 10/20 ---",
+   "Dealer: soak1",
+   "soak2 posts SB 10",
+   "soak3 posts BB 20"
+  ]
+ },
+ {
+  "hand": 17,
+  "dealer": "soak2",
+  "sb": "soak3",
+  "bb": "soak4",
+  "prevEnd": "showdown",
+  "expDealer": "soak2",
+  "stacks": "soak1:1280 soak2:540 soak3:890 soak4:3150 soak5:1610",
+  "log": [
+   "soak5 wins 400 with Three of a Kind",
+   "--- Hand #17 · 10/20 ---",
+   "Dealer: soak2",
+   "soak3 posts SB 10",
+   "soak4 posts BB 20"
+  ]
+ },
+ {
+  "hand": 18,
+  "dealer": "soak3",
+  "sb": "soak4",
+  "bb": "soak5",
+  "prevEnd": "showdown",
+  "expDealer": "soak3",
+  "stacks": "soak1:1520 soak2:480 soak3:840 soak4:3100 soak5:1530",
+  "log": [
+   "soak1 wins 300 with Two Pair",
+   "--- Hand #18 · 10/20 ---",
+   "Dealer: soak3",
+   "soak4 posts SB 10",
+   "soak5 posts BB 20"
+  ]
+ },
+ {
+  "hand": 19,
+  "dealer": "soak4",
+  "sb": "soak5",
+  "bb": "soak1",
+  "prevEnd": "showdown",
+  "expDealer": "soak4",
+  "stacks": "soak1:1220 soak2:200 soak3:600 soak4:4190 soak5:1260",
+  "log": [
+   "soak4 wins 1360 with Two Pair",
+   "--- Hand #19 · 10/20 ---",
+   "Dealer: soak4",
+   "soak5 posts SB 10",
+   "soak1 posts BB 20"
+  ]
+ },
+ {
+  "hand": 20,
+  "dealer": "soak5",
+  "sb": "soak1",
+  "bb": "soak2",
+  "prevEnd": "showdown",
+  "expDealer": "soak5",
+  "stacks": "soak1:1550 soak2:80 soak3:500 soak4:4170 soak5:1170",
+  "log": [
+   "soak1 wins 420 with Two Pair",
+   "--- Hand #20 · 10/20 ---",
+   "Dealer: soak5",
+   "soak1 posts SB 10",
+   "soak2 posts BB 20"
+  ]
+ },
+ {
+  "hand": 21,
+  "dealer": "soak1",
+  "sb": "soak2",
+  "bb": "soak3",
+  "prevEnd": "showdown",
+  "expDealer": "soak1",
+  "stacks": "soak1:1500 soak2:180 soak3:420 soak4:4260 soak5:1110",
+  "log": [
+   "soak4 wins 150 with Two Pair",
+   "--- Hand #21 · 10/20 ---",
+   "Dealer: soak1",
+   "soak2 posts SB 10",
+   "soak3 posts BB 20"
+  ]
+ },
+ {
+  "hand": 22,
+  "dealer": "soak2",
+  "sb": "soak3",
+  "bb": "soak4",
+  "prevEnd": "showdown",
+  "expDealer": "soak2",
+  "stacks": "soak1:1440 soak2:130 soak3:370 soak4:4180 soak5:1350",
+  "log": [
+   "soak5 wins 300 with Two Pair",
+   "--- Hand #22 · 10/20 ---",
+   "Dealer: soak2",
+   "soak3 posts SB 10",
+   "soak4 posts BB 20"
+  ]
+ },
+ {
+  "hand": 23,
+  "dealer": "soak3",
+  "sb": "soak4",
+  "bb": "soak5",
+  "prevEnd": "showdown",
+  "expDealer": "soak3",
+  "stacks": "soak1:1380 soak2:130 soak3:370 soak4:4320 soak5:1270",
+  "log": [
+   "soak4 wins 190 with Pair",
+   "--- Hand #23 · 10/20 ---",
+   "Dealer: soak3",
+   "soak4 posts SB 10",
+   "soak5 posts BB 20"
+  ]
+ },
+ {
+  "hand": 24,
+  "dealer": "soak4",
+  "sb": "soak5",
+  "bb": "soak1",
+  "prevEnd": "showdown",
+  "expDealer": "soak4",
+  "stacks": "soak1:1220 soak2:530 soak3:230 soak4:4320 soak5:1170",
+  "log": [
+   "soak5 wins 30 with Two Pair",
+   "--- Hand #24 · 10/20 ---",
+   "Dealer: soak4",
+   "soak5 posts SB 10",
+   "soak1 posts BB 20"
+  ]
+ },
+ {
+  "hand": 25,
+  "dealer": "soak5",
+  "sb": "soak1",
+  "bb": "soak2",
+  "prevEnd": "showdown",
+  "expDealer": "soak5",
+  "stacks": "soak1:1170 soak2:410 soak3:130 soak4:4300 soak5:1460",
+  "log": [
+   "soak5 wins 380 with Pair",
+   "--- Hand #25 · 10/20 ---",
+   "Dealer: soak5",
+   "soak1 posts SB 10",
+   "soak2 posts BB 20"
+  ]
+ },
+ {
+  "hand": 26,
+  "dealer": "soak1",
+  "sb": "soak2",
+  "bb": "soak3",
+  "prevEnd": "showdown",
+  "expDealer": "soak1",
+  "stacks": "soak1:1080 soak2:320 soak3:10 soak4:4620 soak5:1440",
+  "log": [
+   "soak4 wins 420 with Pair",
+   "--- Hand #26 · 10/20 ---",
+   "Dealer: soak1",
+   "soak2 posts SB 10",
+   "soak3 posts BB 20"
+  ]
+ },
+ {
+  "hand": 27,
+  "dealer": "soak2",
+  "sb": "soak3",
+  "bb": "soak4",
+  "prevEnd": "showdown",
+  "expDealer": "soak2",
+  "stacks": "soak1:1060 soak2:310 soak3:0 soak4:4680 soak5:1420",
+  "log": [
+   "soak4 wins 100 with Two Pair",
+   "--- Hand #27 · 10/20 ---",
+   "Dealer: soak2",
+   "soak3 posts SB 10",
+   "soak4 posts BB 20"
+  ]
+ },
+ {
+  "hand": 28,
+  "dealer": "soak3",
+  "sb": "soak4",
+  "bb": "soak5",
+  "prevEnd": "showdown",
+  "expDealer": "soak3",
+  "stacks": "soak1:1060 soak2:390 soak3:30 soak4:4590 soak5:1400",
+  "log": [
+   "soak3 wins 30 with Pair",
+   "--- Hand #28 · 10/20 ---",
+   "Dealer: soak3",
+   "soak4 posts SB 10",
+   "soak5 posts BB 20"
+  ]
+ },
+ {
+  "hand": 29,
+  "dealer": "soak4",
+  "sb": "soak5",
+  "bb": "soak1",
+  "prevEnd": "showdown",
+  "expDealer": "soak4",
+  "stacks": "soak1:1020 soak2:250 soak3:30 soak4:4540 soak5:1630",
+  "log": [
+   "soak5 wins 360 with Straight",
+   "--- Hand #29 · 10/20 ---",
+   "Dealer: soak4",
+   "soak5 posts SB 10",
+   "soak1 posts BB 20"
+  ]
+ },
+ {
+  "hand": 30,
+  "dealer": "soak5",
+  "sb": "soak1",
+  "bb": "soak2",
+  "prevEnd": "showdown",
+  "expDealer": "soak5",
+  "stacks": "soak1:970 soak2:170 soak3:0(SO) soak4:4480 soak5:1850",
+  "log": [
+   "soak5 wins 270 with Two Pair",
+   "--- Hand #30 · 10/20 ---",
+   "Dealer: soak5",
+   "soak1 posts SB 10",
+   "soak2 posts BB 20"
+  ]
+ }
+]

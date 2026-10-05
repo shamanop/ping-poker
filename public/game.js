@@ -725,7 +725,16 @@ function layoutTable() {
   tb.style.top    = tbTop + 'px';
   tb.style.width  = W + 'px';
   tb.style.height = H + 'px';
-  state.geo = { sw, sh, u, seatW, seatH, W, H, cx, cy, tbTop, seats: {}, scales: {} };
+  const heroShift = 18 * u;
+  const boardBot = 0.34 * H - 69 * u + 121 * u;
+  const heroTop = 0.44 * H + 0.37 * 1.12 * H + heroShift - 152 * u;
+  const mk = $('table-mark');
+  if (mk) {
+    const top = boardBot + 7 * u;
+    mk.style.top = top + 'px';
+    mk.style.height = Math.max(24 * u, heroTop - 7 * u - top) + 'px';
+  }
+  state.geo = { sw, sh, u, seatW, seatH, W, H, cx, cy, tbTop, heroShift, seats: {}, scales: {} };
   return state.geo;
 }
 
@@ -909,10 +918,11 @@ function renderSeats(gs) {
 
   const html = gs.players.map((p, i) => {
     const off = (i - myIdx + n) % n;
-    const [x, y, sc] = seatCenter(angles[off]);
+    const [x, y0, sc] = seatCenter(angles[off]);
+    const hero = i === myIdx;
+    const y = hero ? y0 + g.heroShift : y0;
     g.seats[i] = [x, y];
     g.scales[i] = sc;
-    const hero = i === myIdx;
     const peekUp = y > g.cy + 10 * g.u;
     const [stText, stCls] = seatStatus(p);
     const tag = i === sbIdx ? 'SB' : i === bbIdx ? 'BB' : '';
@@ -940,7 +950,7 @@ function renderSeats(gs) {
       <div class="seat-pill">
         <div class="seat-av">${avatarInner(p.avatar, p.profilePic)}</div>
         <div class="seat-info">
-          <div class="seat-l1"><span class="seat-name">${esc(p.name)}</span>${tag ? `<span class="seat-tag">${tag}</span>` : ''}</div>
+          <div class="seat-l1"><span class="seat-name">${esc(p.name)}</span>${tag ? `<span class="seat-tag ${tag.toLowerCase()}">${tag}</span>` : ''}</div>
           <div class="seat-l2"><span class="seat-chips">${p.chips.toLocaleString()}</span>${stText || stCls === 'secs' ? `<span class="seat-status ${stCls}">${stText}</span>` : ''}</div>
         </div>
         ${p.isActive ? `<div class="seat-timer"><i style="--t:${state.turnEndAt ? Math.min(1, Math.max(0, (state.turnEndAt - Date.now()) / TURN_MS)).toFixed(3) : 1}"></i></div>` : ''}
@@ -1007,14 +1017,11 @@ function renderBets(gs) {
 
   const d = gs.players[gs.dealerIdx];
   if (gs.status === 'playing' && d && g.seats[gs.dealerIdx]) {
-    const s = betSpot(gs.dealerIdx, gs);
-    let px = -s.uy, py = s.ux;
-    if (px < -1e-3 || (Math.abs(px) <= 1e-3 && py < 0)) { px = -px; py = -py; }
-    const off = (gs.dealerIdx === myIdx ? 138 : 68) * g.u;
-    const pxp = s.x + px * off, pyp = s.y + py * off;
-    const dk = 34 * g.u;
-    pucks.innerHTML = `<div class="puck" style="left:${pxp.toFixed(1)}px;top:${pyp.toFixed(1)}px">D</div>
-      <div class="deck" style="left:${(pxp + px * dk).toFixed(1)}px;top:${(pyp + py * dk).toFixed(1)}px"><div class="card back card-sm"></div><div class="card back card-sm"></div><div class="card back card-sm"></div></div>`;
+    const [dsx, dsy] = g.seats[gs.dealerIdx];
+    let pxp, pyp;
+    if (gs.dealerIdx === myIdx) { pxp = g.cx + 118 * g.u; pyp = dsy - 38 * g.u; }
+    else { const dir = Math.abs(g.cx - dsx) < g.seatW * 0.4 ? 1 : Math.sign(g.cx - dsx); pxp = dsx + dir * (g.seatW / 2 + 22 * g.u); pyp = dsy + 4 * g.u; }
+    pucks.innerHTML = `<div class="puck" style="left:${pxp.toFixed(1)}px;top:${pyp.toFixed(1)}px">D</div>`;
   } else {
     pucks.innerHTML = '';
   }

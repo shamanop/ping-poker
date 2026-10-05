@@ -1,0 +1,8 @@
+flop state {'street': 'flop', 'status': 'playing', 'cur': 0, 'my': 0, 'n': 6, 'hand': 1}
+shot final []
+{'pill': [711, 693, 168, 56], 'tm': [729, 743, 132, 3], 'l2': [775, 722, 88, 18], 'chat': [34, 126, 92, 208], 'chatn': 1, 'chatVis': 'flex', 'topseat': [279, 605, 168, 56], 'head': [0, 0, 1440, 58]}
+after Pot preset input= 120
+notturn {'street': 'turn', 'status': 'playing', 'cur': 1, 'my': 0, 'n': 6, 'hand': 1} precall hidden? False
+pre classes ['act act-pre on', 'act act-pre']
+bank vs bar {'barTop': 792, 'bankBottom': 764, 'bankLeft': 150}
+errors []

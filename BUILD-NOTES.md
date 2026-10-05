@@ -12,3 +12,9 @@
 ## Panel left/right toggle
 - Brass arrow button in the Chat header (#btn-panel-side) toggles `.panel-right` on #game-screen (swaps .g-grid areas in style.css); saved as localStorage `ping.panelSide` ('left' default). Logic: `initPanelSide()` in game.js.
 - Bank slide-over (bank.css) fills the stage column and slides from the side opposite the panel; bar and stage stay centred in the remaining column. Frame art is symmetric, so no mirroring was needed. QA: qa/panel_qa.py -> qa/final/panel-left.png, panel-right.png.
+
+## Table C re-lay (slanted table, scratch build)
+- public/images/ui/table.png is now art-src/persp/table-C.png (old flat oval kept as table-flat.png); layoutTable() sizes it at 1152:535 from stage width/height, seats ride the rim ellipse (seatCenter) with per-seat scale 0.85 (far) to 1.0 (near) via --ss; hero cards sit just above the hero plate; board at 34% of table height over the baked-in VP logo.
+- QA: qa/capture_c.py (port 3217, 6 players, turn street) -> qa/final/c-1440.png, c-1920.png; tests/preselect.js passes.
+- Gaps vs mock: VP logo is baked into the art so the board hides most of it (mock shows it fully below the board); hero card bottom corners slightly tucked under plate; blind marks are SB/BB tags, not chips.
+- Dealer D puck still uses old betSpot offsets (floats on felt near the dealer's bet), not pinned beside hero cards as in the mock.

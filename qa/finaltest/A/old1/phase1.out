@@ -1,0 +1,32 @@
+[0.3s] CHECK PASS wrong room password rejected: ["Incorrect password"]
+[1.4s] CHECK PASS 5 players seated: Ann:0 Bob:1 Cat:2 Dan:3 Eve:4
+[1.4s] CHECK PASS buy-in debited from bank: {"testplayer":7000,"ann":8500,"bob":8500,"cat":8500,"dan":8500,"eve":8500}
+[1.7s] CHECK PASS start_game by non-host rejected (pre-game): ["Only host can start"]
+[1.7s] HAND #1 (server 1) mode=checkdown dealer=Ann stacks=Ann:1500 Bob:1500 Cat:1500 Dan:1500 Eve:1500 pot=30
+[2.5s] CHECK PASS join during a hand rejected: ["Game in progress — wait for next round"]
+[3.2s] CHECK PASS hand 1: showdown_result received and pot == my tracked contributions: hand 1: server pot=100 my sum of contributions=100 ({"Ann":20,"Bob":20,"Cat":20,"Dan":20,"Eve":20})
+[3.2s] CHECK PASS hand 1: payouts match independent evaluator + side-pot layering: hand 1 showdown, pot 100, 1 layer(s) [[20,100,["Ann"]]], winners server=["Ann:Two Pair"]
+[3.2s] CHECK PASS hand 1: chip conservation bank+stacks+pot: hand 1: bank 49500 + stacks 7500 + pot 0 = 57000, expected 57000
+[3.2s] CHECK PASS hand 1: no stall (completed within 25s): hand 1 took 1515ms from deal to result
+[3.2s] HAND #1 DONE showdown pot=100 layers=1 stacks: Ann:1580 Bob:1480 Cat:1480 Dan:1480 Eve:1480
+[8.1s] HAND #2 (server 2) mode=random dealer=Bob stacks=Ann:1580 Bob:1480 Cat:1480 Dan:1480 Eve:1480 pot=30
+[8.5s] CHECK PASS negative: out-of-turn action rejected: errors to non-actor: ["Not your turn"]
+[8.5s] CHECK PASS negative: illegal check/fractional/NaN/unknown rejected w/o stalling: errors to actor: ["Cannot check: call, raise or fold","Raise amount must be a whole number","Raise amount must be a whole number","Unknown action"]
+[10.2s] CHECK PASS hand 2: showdown_result received and pot == my tracked contributions: hand 2: server pot=600 my sum of contributions=600 ({"Ann":120,"Bob":120,"Cat":120,"Dan":120,"Eve":120})
+[10.2s] CHECK PASS hand 2: payouts match independent evaluator + side-pot layering: hand 2 showdown, pot 600, 1 layer(s) [[120,600,["Dan"]]], winners server=["Dan:Two Pair"]
+[10.2s] CHECK PASS hand 2: chip conservation bank+stacks+pot: hand 2: bank 49500 + stacks 7500 + pot 0 = 57000, expected 57000
+[10.2s] CHECK PASS hand 2: no stall (completed within 25s): hand 2 took 2154ms from deal to result
+[10.2s] HAND #2 DONE showdown pot=600 layers=1 stacks: Ann:1460 Bob:1360 Cat:1360 Dan:1960 Eve:1360
+[15.1s] HAND #3 (server 3) mode=random dealer=Cat stacks=Ann:1460 Bob:1360 Cat:1360 Dan:1960 Eve:1360 pot=30
+[17.1s] CHECK PASS hand 3: showdown_result received and pot == my tracked contributions: hand 3: server pot=560 my sum of contributions=560 ({"Ann":120,"Bob":120,"Cat":120,"Dan":120,"Eve":80})
+[17.1s] CHECK PASS hand 3: payouts match independent evaluator + side-pot layering: hand 3 showdown, pot 560, 2 layer(s) [[80,400,["Cat"]],[120,160,["Cat"]]], winners server=["Cat:Full House"]
+[17.1s] CHECK PASS hand 3: chip conservation bank+stacks+pot: hand 3: bank 49500 + stacks 7500 + pot 0 = 57000, expected 57000
+[17.1s] CHECK PASS hand 3: no stall (completed within 25s): hand 3 took 2092ms from deal to result
+[17.1s] HAND #3 DONE showdown pot=560 layers=2 stacks: Ann:1340 Bob:1240 Cat:1800 Dan:1840 Eve:1280
+[22.0s] HAND #4 (server 4) mode=foldwin dealer=Dan stacks=Ann:1340 Bob:1240 Cat:1800 Dan:1840 Eve:1280 pot=30
+[22.6s] CHECK PASS hand 4: showdown_result received and pot == my tracked contributions: hand 4: server pot=150 my sum of contributions=150 ({"Ann":20,"Bob":120,"Cat":0,"Dan":0,"Eve":10})
+[22.6s] CHECK PASS hand 4: payouts match independent evaluator + side-pot layering: hand 4 fold-win, pot 150, 3 layer(s) [[10,30,["Bob"]],[20,20,["Bob"]],[120,100,["Bob"]]], winners server=["Bob:Everyone folded"]
+[22.6s] CHECK PASS hand 4: chip conservation bank+stacks+pot: hand 4: bank 49500 + stacks 7500 + pot 0 = 57000, expected 57000
+[22.6s] CHECK PASS hand 4: no stall (completed within 25s): hand 4 took 588ms from deal to result
+[22.6s] HAND #4 DONE fold-win pot=150 layers=3 stacks: Ann:1320 Bob:1270 Cat:1800 Dan:1840 Eve:1270
+[27.4s] HAND #5 (server 5) mode=shove dealer=Eve stacks=Ann:1320 Bob:1270 Cat:1800 Dan:1840 Eve:1270 pot=30
