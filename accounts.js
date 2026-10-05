@@ -23,7 +23,7 @@ function scrypt(pin, saltHex) {
 function createAccounts({ file, roomPassword = 'ping' }) {
   let skew = Number(process.env.AUTH_CLOCK_SKEW) || 0;
   const now = () => Date.now() + skew;
-  const signupLimit = Number(process.env.AUTH_SIGNUP_LIMIT) || 5;
+  const signupLimit = Number(process.env.AUTH_SIGNUP_LIMIT) || 40;
   const adminClaim = process.env.ADMIN_CLAIM_PASSWORD || null;
   const listeners = { auth: [] };
 
@@ -120,10 +120,10 @@ function createAccounts({ file, roomPassword = 'ping' }) {
     const ip = ctx.ip || '?';
     const recent = (signups.get(ip) || []).filter(x => t - x < 3600000);
     if (recent.length >= signupLimit) { signups.set(ip, recent); return limited(Math.max(1000, 3600000 - (t - recent[0]))); }
-    recent.push(t); signups.set(ip, recent);
     const key = n.toLowerCase();
     const ex = db.accounts[key];
     if (ex) return ex.claimed ? err('name_taken', 'That name is taken') : err('claim_required', 'This name belongs to an existing player. Claim it with the table password.');
+    recent.push(t); signups.set(ip, recent);
     const a = blank(key, n);
     if (AVATAR_RE.test(String(avatar))) a.avatar = avatar;
     setPin(a, pin);
@@ -143,7 +143,7 @@ function createAccounts({ file, roomPassword = 'ping' }) {
     if (!a) return err('bad_name', 'No such player to claim');
     if (a.claimed) return err('name_taken', 'That name is taken');
     const need = (a.isAdmin && adminClaim) ? adminClaim : roomPassword;
-    if (String(password) !== need) { recordFail(ids); const m = lockedMs(ids); return m ? limited(m) : err('bad_login', 'Wrong table password'); }
+    if (String(password == null ? '' : password).trim().toLowerCase() !== String(need).trim().toLowerCase()) { recordFail(ids); const m = lockedMs(ids); return m ? limited(m) : err('bad_login', 'Wrong table password'); }
     recordOk(ids);
     if (AVATAR_RE.test(String(avatar))) a.avatar = avatar;
     setPin(a, pin);

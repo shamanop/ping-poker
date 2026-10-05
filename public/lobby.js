@@ -155,10 +155,10 @@ function viewSignin() {
   const wrap = h('div', { class: 'lb-center' });
   const draw = () => {
     const err = h('div', { class: 'lb-err', id: 'lb-err', role: 'alert' });
-    const name = h('input', { class: 'text-input', id: 'lb-name', type: 'text', maxlength: 16, autocomplete: 'username', placeholder: 'Your name', value: LS.get('ping.name') || '' });
+    const name = h('input', { class: 'text-input', id: 'lb-name', type: 'text', maxlength: 16, autocomplete: 'username', autocapitalize: 'off', autocorrect: 'off', spellcheck: 'false', placeholder: 'Your name', value: LS.get('ping.name') || '' });
     const pin = h('input', { class: 'text-input', id: 'lb-pin', type: 'password', inputmode: 'numeric', maxlength: 6, autocomplete: tab === 'in' ? 'current-password' : 'new-password', placeholder: '4 to 6 digits',
       oninput: (e) => { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6); } });
-    const room = h('input', { class: 'text-input', id: 'lb-room', type: 'password', autocomplete: 'off', placeholder: 'Room password' });
+    const room = h('input', { class: 'text-input', id: 'lb-room', type: 'password', autocomplete: 'off', autocapitalize: 'off', autocorrect: 'off', spellcheck: 'false', placeholder: 'Room password' });
     const submit = h('button', { class: 'lb-btn big', id: 'lb-submit', type: 'submit' }, tab === 'in' ? 'Sign in' : claim ? 'Claim name' : 'Create account');
     const fieldsAv = tab === 'up' ? h('div', { class: 'lb-field' }, h('label', null, 'Avatar'),
       h('div', { class: 'lb-avatars', id: 'lb-avatars' }, Array.from({ length: 12 }, (_, i) => { const id = 'a' + String(i + 1).padStart(2, '0');
