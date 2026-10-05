@@ -28,7 +28,7 @@
     const dollars = mode === 'usd';
     const a = Math.abs(v);
     let body;
-    if (opts.compact && a >= 10000) {
+    if (opts.compact && a >= (typeof opts.compact === 'number' ? opts.compact : 10000)) {
       const k = a >= 1e6 ? a / 1e6 : a / 1e3;
       const suf = a >= 1e6 ? 'M' : 'K';
       body = (Math.round(k * 10) / 10).toString().replace(/\.0$/, '') + suf;
@@ -95,6 +95,19 @@
   }
   onChange(() => toggles.forEach(paintToggle));
 
+  function mountToggles() {
+    const doc = root.document;
+    if (!doc) return;
+    doc.querySelectorAll('[data-money-toggle]').forEach(slot => { if (!slot.firstElementChild) slot.appendChild(toggleEl()); });
+  }
+  if (root.document) {
+    const boot = () => {
+      mountToggles();
+      if (root.MutationObserver) new root.MutationObserver(mountToggles).observe(root.document.body, { childList: true, subtree: true });
+    };
+    if (root.document.readyState === 'loading') root.document.addEventListener('DOMContentLoaded', boot); else boot();
+  }
+
   // nice step in units for slider/presets: 25 cents-mode (quarters), 1 in chips
   function niceStep(bb) {
     if (unit !== 'cents') return 1;
@@ -105,7 +118,7 @@
   }
 
   root.Money = {
-    fmt, parse, setMode, setUnit, onChange, toggleEl, niceStep,
+    fmt, parse, setMode, setUnit, onChange, toggleEl, mountToggles, niceStep,
     getMode: effective,
     getPref: () => pref,
     getUnit: () => unit,

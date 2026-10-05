@@ -40,6 +40,13 @@ const state = {
 
 const TURN_MS       = 30000;
 const BIG_BLIND     = 20;
+const buyInDefault = () => state.table?.buyIn?.default ?? state.gameState?.table?.buyIn?.default ?? 1500;
+const bustMin      = () => state.gameState?.bb || state.table?.bb || 20;
+const inputText    = v => (Money.getMode() === 'usd' && Money.getUnit() === 'cents')
+  ? (v % 100 ? (v / 100).toFixed(2) : String(v / 100)) : String(v);
+const readInput    = txt => Money.parse(txt);
+const niceStep     = () => Money.niceStep(state.gameState?.bb || BIG_BLIND);
+const niceRound    = v => { const st = niceStep(); return st > 1 ? Math.round(v / st) * st : Math.round(v); };
 let activeTray      = null;
 const prevChipsMap  = {};
 let balanceTimeout  = null;
@@ -156,6 +163,12 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   window.addEventListener('resize', onResize);
+  $('raise-input')?.setAttribute('step', 'any');
+  Money.onChange(() => {
+    if (state.lastBust != null && !$('bust-panel').classList.contains('hidden')) showBust(state.lastBust);
+    if (state.lastLb) renderLeaderboard(state.lastLb);
+    if (state.gameState && $('game-screen')?.classList.contains('active')) renderGame();
+  });
   setInterval(tickTimer, 200);
 
   const savedName = localStorage.getItem('ppName');
@@ -451,6 +464,7 @@ window.PingGame = {
     state.dealt = {}; state.heroKey = ''; state.reveal = null; state.gameState = null;
     state.myCards = []; state.spectating = false;
     state.roomId = tableId;
+    state.table  = table || null;
     state.myIdx  = playerIdx;
     state.myName = (you && (you.display || you.name)) || lobbyName() || state.myName || null;
     if (stack !== undefined) state.myBalance = stack;
@@ -461,7 +475,7 @@ window.PingGame = {
   },
   leave() {
     resetDeal();
-    state.roomId = null; state.myIdx = null; state.gameState = null; state.myCards = [];
+    state.roomId = null; state.table = null; state.myIdx = null; state.gameState = null; state.myCards = [];
     state.dealt = {}; state.heroKey = ''; state.reveal = null; state.spectating = false;
     state.turnEndAt = null; state.turnKey = '';
     $('game-screen')?.classList.remove('active');
@@ -476,7 +490,7 @@ function bindSocket() {
 
   s.on('balance_data', ({ balance }) => {
     state.myBalance = balance;
-    $('bank-amount').textContent = balance.toLocaleString();
+    $('bank-amount').textContent = Money.fmt(balance);
     $('bank-display').classList.remove('hidden');
   });
 
@@ -493,6 +507,8 @@ function bindSocket() {
   s.on('game_state', gs => {
     const prev = state.gameState;
     state.gameState = gs;
+    const gu = gs.unit || gs.table?.unit;
+    if (gu) Money.setUnit(gu);
     if (!state.myName && gs.players[state.myIdx]) state.myName = gs.players[state.myIdx].name;
     const idxNow = gs.players.findIndex(p => p.name === state.myName);
     if (idxNow >= 0) state.myIdx = idxNow;
@@ -543,8 +559,9 @@ function bindSocket() {
 
   s.on('chat_message', ({ name, text }) => { appendChatMsg(name, text); playSound('msg'); });
 
-  s.on('blinds_up', ({ level, sb, bb }) => {
-    toast(`BLINDS UP · LEVEL ${level + 1}`, `${sb} / ${bb}`, '', 4200);
+  s.on('blinds_up', ({ level, sb, bb, unit }) => {
+    if (unit) Money.setUnit(unit);
+    toast(`BLINDS UP · LEVEL ${level + 1}`, `${Money.fmt(sb)} / ${Money.fmt(bb)}`, '', 4200);
     playSound('blinds_up');
   });
 
@@ -664,15 +681,16 @@ function initBust() {
 }
 
 function showBust(balance) {
+  state.lastBust = balance;
   state.spectating = false;
   $('bust-panel').classList.remove('hidden');
-  $('bust-balance').textContent = `Bank ${balance.toLocaleString()}`;
+  $('bust-balance').textContent = `Bank ${Money.fmt(balance)}`;
   const rebuyBtn = $('btn-rebuy');
   const brokeMsg = $('bust-broke-msg');
-  if (balance >= 20) {
+  if (balance >= bustMin()) {
     rebuyBtn.classList.remove('hidden');
     brokeMsg.classList.add('hidden');
-    rebuyBtn.textContent = `Rebuy ${Math.min(1500, balance).toLocaleString()}`;
+    rebuyBtn.textContent = `Rebuy ${Money.fmt(Math.min(buyInDefault(), balance))}`;
   } else {
     rebuyBtn.classList.add('hidden');
     brokeMsg.classList.remove('hidden');
@@ -681,12 +699,13 @@ function showBust(balance) {
 
 // ─── Leaderboard ───────────────────────────────────────────────────
 function renderLeaderboard(entries) {
+  state.lastLb = entries;
   const me = (state.gameState?.players[state.myIdx]?.name || '').toLowerCase();
   $('leaderboard-entries').innerHTML = entries.map((e, i) => `
     <div class="lb-row ${e.name.toLowerCase() === me ? 'lb-me' : ''}">
       <span class="lb-rank">${i + 1}</span>
       <span class="lb-name">${esc(e.name)}</span>
-      <span class="lb-balance">${e.balance.toLocaleString()}</span>
+      <span class="lb-balance">${Money.fmt(e.balance)}</span>
     </div>`).join('') || '<div class="empty-note">No standings yet</div>';
 }
 
@@ -738,10 +757,12 @@ const DENOMS = [500, 100, 25, 5, 1];
 function chipStacksHtml(amount, maxCols = 3, cap = 6) {
   const cols = [];
   let rem = Math.max(0, Math.floor(amount));
+  const sc = (Money.getUnit() === 'cents' && state.gameState?.bb) ? state.gameState.bb / BIG_BLIND : 1;
   for (const d of DENOMS) {
     if (cols.length >= maxCols) break;
-    const c = Math.floor(rem / d);
-    if (c > 0) { cols.push({ d, c: Math.min(c, cap) }); rem -= c * d; }
+    const val = d * sc;
+    const c = Math.floor(rem / val);
+    if (c > 0) { cols.push({ d, c: Math.min(c, cap) }); rem -= c * val; }
   }
   if (!cols.length && amount > 0) cols.push({ d: 1, c: 1 });
   return `<div class="stacks">${cols.map(col =>
@@ -851,11 +872,11 @@ function noteActions(prev, gs) {
     if (p.allIn && (p.lastAction === 'RAISE' || p.lastAction === 'CALL')) { kind = 'allin'; text = 'All-in'; }
     else if (p.lastAction === 'FOLD')  text = 'Fold';
     else if (p.lastAction === 'CHECK') text = 'Check';
-    else if (p.lastAction === 'CALL')  text = `Call ${p.roundBet.toLocaleString()}`;
+    else if (p.lastAction === 'CALL')  text = `Call ${Money.fmt(p.roundBet)}`;
     else if (p.lastAction === 'RAISE') {
       const opening = prev && prev.handNum === gs.handNum && prev.street === gs.street && prev.currentBet === 0;
       kind = opening ? 'bet' : 'raise';
-      text = `${opening ? 'Bet' : 'Raise to'} ${p.roundBet.toLocaleString()}`;
+      text = `${opening ? 'Bet' : 'Raise to'} ${Money.fmt(p.roundBet)}`;
     } else return;
     bubbles[i] = { text, kind, t: Date.now() };
   });
@@ -993,7 +1014,7 @@ function renderSeats(gs) {
         <div class="seat-av">${avatarInner(p.avatar, p.profilePic)}</div>
         <div class="seat-info">
           <div class="seat-l1"><span class="seat-name">${esc(p.name)}</span>${tag ? `<span class="seat-tag ${tag.toLowerCase()}">${tag}</span>` : ''}</div>
-          <div class="seat-l2"><span class="seat-chips">${p.chips.toLocaleString()}</span>${stText || stCls === 'secs' ? `<span class="seat-status ${stCls}">${stText}</span>` : ''}</div>
+          <div class="seat-l2"><span class="seat-chips">${Money.fmt(p.chips)}</span>${stText || stCls === 'secs' ? `<span class="seat-status ${stCls}">${stText}</span>` : ''}</div>
         </div>
         ${p.isActive ? `<div class="seat-timer"><i style="--t:${state.turnEndAt ? Math.min(1, Math.max(0, (state.turnEndAt - Date.now()) / TURN_MS)).toFixed(3) : 1}"></i></div>` : ''}
       </div>
@@ -1052,7 +1073,7 @@ function renderBets(gs) {
     const key = `${gs.handNum}|${gs.street}|${i}|${p.roundBet}`;
     const fresh = state.betKey?.[i] !== key;
     (state.betKey ||= {})[i] = key;
-    bh += `<div class="bet${i === myIdx ? ' hero-bet' : ''}" style="left:${s.x.toFixed(1)}px;top:${s.y.toFixed(1)}px${fresh ? '' : ';animation:none'}">${chipStacksHtml(p.roundBet, 3, 6)}<span class="bet-amt">${p.roundBet.toLocaleString()}</span></div>`;
+    bh += `<div class="bet${i === myIdx ? ' hero-bet' : ''}" style="left:${s.x.toFixed(1)}px;top:${s.y.toFixed(1)}px${fresh ? '' : ';animation:none'}">${chipStacksHtml(p.roundBet, 3, 6)}<span class="bet-amt">${Money.fmt(p.roundBet)}</span></div>`;
   });
   gs.players.forEach((p, i) => { if (!(p.roundBet > 0) && state.betKey) delete state.betKey[i]; });
   layer.innerHTML = bh;
@@ -1074,7 +1095,7 @@ function renderPot(gs) {
   const row = $('pot-row');
   if (!(gs.pot > 0)) { row.innerHTML = ''; state.prevPot = 0; return; }
   const grow = gs.pot > state.prevPot;
-  row.innerHTML = `<div class="pile">${chipStacksHtml(gs.pot, 3, 5)}</div><div class="pot-txt"><small>Pot</small><span class="pot-num">${gs.pot.toLocaleString()}</span></div>`;
+  row.innerHTML = `<div class="pile">${chipStacksHtml(gs.pot, 3, 5)}</div><div class="pot-txt"><small>Pot</small><span class="pot-num">${Money.fmt(gs.pot, { compact: true })}</span></div>`;
   if (grow) {
     row.classList.remove('pot-pulse'); void row.offsetWidth; row.classList.add('pot-pulse');
     playSound('chip');
@@ -1133,7 +1154,7 @@ function renderMyCards() { if (state.gameState) renderHero(state.gameState); }
 // ─── Plaque (header) ──────────────────────────────────────────────
 function renderPlaque(gs) {
   const sb = gs.sb || 10, bb = gs.bb || BIG_BLIND;
-  $('pl-blinds').textContent = `${sb} / ${bb}`;
+  $('pl-blinds').textContent = `${Money.fmt(sb)} / ${Money.fmt(bb)}`;
   $('pl-level-wrap').classList.toggle('hidden', !gs.blindsEnabled);
   $('pl-next-wrap').classList.toggle('hidden', !gs.blindsEnabled);
   if (gs.blindsEnabled) {
@@ -1144,8 +1165,8 @@ function renderPlaque(gs) {
   const me = gs.players[state.myIdx];
   const inHand = gs.status === 'playing' && me && !me.folded;
   const toCall = me ? Math.max(0, gs.currentBet - (me.roundBet || 0)) : 0;
-  $('pl-tocall').textContent  = inHand ? (toCall ? Math.min(toCall, me.chips).toLocaleString() : 'Check') : '—';
-  $('pl-minraise').textContent = gs.status === 'playing' ? (gs.currentBet + bb).toLocaleString() : '—';
+  $('pl-tocall').textContent  = inHand ? (toCall ? Money.fmt(Math.min(toCall, me.chips)) : 'Check') : '—';
+  $('pl-minraise').textContent = gs.status === 'playing' ? Money.fmt(gs.currentBet + bb) : '—';
 }
 
 // ─── Action bar ───────────────────────────────────────────────────
@@ -1172,7 +1193,7 @@ function renderControls(gs) {
   const callAmt = me ? Math.min(toCall, me.chips) : 0;
 
   call.querySelector('.act-main').textContent = toCall === 0 ? 'Check' : (allInCall ? 'All-in' : 'Call');
-  call.querySelector('.act-sub').innerHTML = toCall === 0 ? '&nbsp;' : callAmt.toLocaleString();
+  call.querySelector('.act-sub').innerHTML = toCall === 0 ? '&nbsp;' : Money.fmt(callAmt);
 
   const minRaise = gs.currentBet + bb;
   const maxRaise = me ? me.chips + (me.roundBet || 0) : 0;
@@ -1197,7 +1218,7 @@ function renderControls(gs) {
   else if (me.allIn) setBar('idle', "You're all-in", 'Good luck');
   else if (canAct) {
     state.helper = { toCall, callAmt, allInCall, pot: gs.pot, chips: me.chips, roundBet: me.roundBet || 0, canRaise };
-    setBar('turn', toCall ? `${allInCall ? 'All-in' : 'Call'} ${callAmt.toLocaleString()} to win ${(gs.pot + callAmt).toLocaleString()}` : `Check, or bet to win ${gs.pot.toLocaleString()}`, '');
+    setBar('turn', toCall ? `${allInCall ? 'All-in' : 'Call'} ${Money.fmt(callAmt)} to win ${Money.fmt(gs.pot + callAmt)}` : `Check, or bet to win ${Money.fmt(gs.pot)}`, '');
     updateHelper();
   } else {
     const who = gs.players[gs.currentPlayerIdx];
@@ -1216,7 +1237,7 @@ function renderControls(gs) {
   const key = `${gs.handNum}|${gs.street}|${gs.currentBet}|${me?.chips}|${canAct}`;
   const preflop = gs.street === 'preflop';
   const base = gs.currentBet > bb ? gs.currentBet : bb;
-  const clampV = v => Math.max(minRaise, Math.min(maxRaise, Math.round(v)));
+  const clampV = v => Math.max(minRaise, Math.min(maxRaise, niceRound(v)));
   const potRaise = f => gs.currentBet + f * (gs.pot + toCall);
   const presetDefs = preflop
     ? [['2.5x', clampV(2.5 * base)], ['3x', clampV(3 * base)], ['4x', clampV(4 * base)], ['All-in', maxRaise]]
@@ -1226,15 +1247,15 @@ function renderControls(gs) {
   slider.disabled = input.disabled = !canRaise;
   $('raise-minus').disabled = $('raise-plus').disabled = !canRaise;
   $('raise-presets').innerHTML = presetDefs.map(([label, v]) =>
-    `<button type="button" class="pre" data-v="${v}"${canRaise ? '' : ' disabled'}><span>${label}</span><b>${canRaise ? v.toLocaleString() : '—'}</b></button>`).join('');
+    `<button type="button" class="pre" data-v="${v}"${canRaise ? '' : ' disabled'}><span>${label}</span><b>${canRaise ? Money.fmt(v) : '—'}</b></button>`).join('');
 
   if (canRaise) {
     slider.min = minRaise; slider.max = maxRaise;
     state.raiseMin = minRaise; state.raiseMax = maxRaise;
     if (state.raiseKey !== key) { state.raiseKey = key; state.raiseVal = minRaise; }
     setRaiseValue(state.raiseVal);
-    $('tick-min').textContent = minRaise.toLocaleString();
-    $('tick-max').textContent = maxRaise.toLocaleString();
+    $('tick-min').textContent = Money.fmt(minRaise);
+    $('tick-max').textContent = Money.fmt(maxRaise);
   } else {
     state.raiseKey = '';
     slider.min = 0; slider.max = 100; slider.value = 0; slider.style.setProperty('--fill', '0%');
@@ -1248,11 +1269,11 @@ function renderControls(gs) {
 function updateHelper() {
   const h = state.helper;
   if (!h) return;
-  const afterCall = (h.chips - h.callAmt).toLocaleString();
+  const afterCall = Money.fmt(h.chips - h.callAmt);
   let sub = `${afterCall} behind after ${h.toCall ? 'calling' : 'checking'}`;
   if (h.canRaise && state.raiseVal) {
     const put = state.raiseVal - h.roundBet;
-    sub += ` · ${(h.chips - put).toLocaleString()} after ${state.raiseVal >= state.raiseMax ? 'all-in' : 'raising to ' + state.raiseVal.toLocaleString()}`;
+    sub += ` · ${Money.fmt(h.chips - put)} after ${state.raiseVal >= state.raiseMax ? 'all-in' : 'raising to ' + Money.fmt(state.raiseVal)}`;
   }
   $('bar-status-sub').textContent = sub;
 }
@@ -1266,7 +1287,7 @@ function renderPreselect(show, toCall, callAmt) {
   if (pre && pre.mode === 'call' && pre.amount !== toCall) pre = state.pre = null;
   const cf = $('pre-checkfold'), cl = $('pre-call');
   cl.disabled = toCall <= 0;
-  $('pre-call-sub').innerHTML = toCall > 0 ? callAmt.toLocaleString() : '&nbsp;';
+  $('pre-call-sub').innerHTML = toCall > 0 ? Money.fmt(callAmt) : '&nbsp;';
   cf.classList.toggle('on', !!pre && pre.mode === 'checkfold');
   cl.classList.toggle('on', !!pre && pre.mode === 'call' && toCall > 0);
   cf.setAttribute('aria-pressed', cf.classList.contains('on'));
@@ -1296,8 +1317,8 @@ function setRaiseValue(v) {
   const slider = $('raise-slider');
   slider.value = v;
   slider.style.setProperty('--fill', hi > lo ? ((v - lo) / (hi - lo) * 100).toFixed(1) + '%' : '100%');
-  $('raise-input').value = v;
-  $('raise-sub').textContent = v.toLocaleString();
+  $('raise-input').value = inputText(v);
+  $('raise-sub').textContent = Money.fmt(v);
   document.querySelectorAll('#raise-presets .pre').forEach(b => b.classList.toggle('on', parseInt(b.dataset.v) === v));
   updateHelper();
 }
@@ -1308,16 +1329,19 @@ function bindActions() {
   $('btn-check-call').addEventListener('click', () => doCall());
   $('btn-raise').addEventListener('click', () => doRaise());
 
-  $('raise-slider').addEventListener('input', e => setRaiseValue(parseInt(e.target.value)));
+  $('raise-slider').addEventListener('input', e => {
+    const raw = parseInt(e.target.value), lo = state.raiseMin, hi = state.raiseMax;
+    setRaiseValue(raw <= lo ? lo : raw >= hi ? hi : niceRound(raw));
+  });
   $('raise-input').addEventListener('input', e => {
-    const v = parseInt(e.target.value);
-    if (!isNaN(v)) {
+    const v = readInput(e.target.value);
+    if (v !== null) {
       const slider = $('raise-slider');
       state.raiseVal = Math.max(state.raiseMin, Math.min(state.raiseMax, v));
       slider.value = state.raiseVal;
       const lo = state.raiseMin, hi = state.raiseMax;
       slider.style.setProperty('--fill', hi > lo ? ((state.raiseVal - lo) / (hi - lo) * 100).toFixed(1) + '%' : '100%');
-      $('raise-sub').textContent = state.raiseVal.toLocaleString();
+      $('raise-sub').textContent = Money.fmt(state.raiseVal);
       updateHelper();
     }
   });
@@ -1370,7 +1394,7 @@ function doCall() {
 
 function doRaise() {
   if ($('btn-raise').disabled) return;
-  const amount = Math.max(state.raiseMin, Math.min(state.raiseMax, parseInt($('raise-input').value) || state.raiseVal));
+  const amount = Math.max(state.raiseMin, Math.min(state.raiseMax, readInput($('raise-input').value) || state.raiseVal));
   playSound('raise');
   sendAction('raise', amount);
 }
@@ -1550,7 +1574,7 @@ function showWinFloat(amount) {
   const px = r.left + g.cx, py = r.top + g.cy - g.H * 0.12;
   const el = document.createElement('div');
   el.className = 'win-float';
-  el.textContent = `+${amount.toLocaleString()}`;
+  el.textContent = `+${Money.fmt(amount)}`;
   el.style.cssText = `position:fixed;left:${px}px;top:${py}px;z-index:70;pointer-events:none;transform:translate(-50%,-50%);`;
   document.body.appendChild(el);
   const dx = mx - px, dy = my - py;
@@ -1665,7 +1689,7 @@ function renderShowdown(winners, pot, reveals) {
     <div class="sd-row">
       <span class="showdown-winner-name">${esc(w.name)}</span>
       <span class="showdown-hand-name">${esc(w.handName || '')}</span>
-      <span class="showdown-pot"><strong>+${(Number.isFinite(w.amount) ? w.amount : share + (i === 0 ? pot - share * winners.length : 0)).toLocaleString()}</strong></span>
+      <span class="showdown-pot"><strong>+${Money.fmt(Number.isFinite(w.amount) ? w.amount : share + (i === 0 ? pot - share * winners.length : 0))}</strong></span>
     </div>`).join('');
 
   if (g) {

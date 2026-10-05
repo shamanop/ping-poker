@@ -8,9 +8,9 @@
   let data = null, isOpen = false, pollTimer = null;
 
   const $ = id => document.getElementById(id);
-  const fmt = n => Math.round(n).toLocaleString('en-US');
-  const signed = n => (n > 0 ? '+' : n < 0 ? '−' : '') + fmt(Math.abs(n));
-  const short = n => (Math.abs(n) >= 1000 ? (Math.round(n / 100) / 10) + 'k' : String(Math.round(n)));
+  const fmt = n => Money.fmt(n);
+  const signed = n => Money.fmt(n, { signed: true }).replace('-', '−');
+  const short = n => Money.fmt(n, { compact: 1000 });
   const U = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--u')) || 1;
   const E = s => (typeof esc === 'function' ? esc(s) : String(s));
   const colorOf = name => {
@@ -138,16 +138,17 @@
     $('bank-players').querySelectorAll('.bp-bal b.editable').forEach(b => b.addEventListener('click', () => editBank(b)));
   }
 
+  const inputText = v => (Money.getMode() === 'usd' && Money.getUnit() === 'cents') ? (v % 100 ? (v / 100).toFixed(2) : String(v / 100)) : String(v);
   function editBank(b) {
     const name = b.dataset.name;
     const input = document.createElement('input');
-    input.type = 'number'; input.min = '0'; input.step = '1'; input.value = b.dataset.total; input.className = 'bp-edit';
+    input.type = 'number'; input.min = '0'; input.step = 'any'; input.value = inputText(Number(b.dataset.total)); input.className = 'bp-edit';
     input.setAttribute('aria-label', 'New total money for ' + name);
     b.replaceWith(input); input.focus(); input.select();
     let done = false;
     const finish = save => {
       if (done) return; done = true;
-      if (save && input.value !== '' && state.socket) state.socket.emit('bank_set', { name, balance: Number(input.value) });
+      if (save && Money.parse(input.value) !== null && state.socket) state.socket.emit('bank_set', { name, balance: Money.parse(input.value) });
       input.remove(); request(); render();
     };
     input.addEventListener('keydown', e => { if (e.key === 'Enter') finish(true); else if (e.key === 'Escape') { e.stopPropagation(); finish(false); } e.stopPropagation(); });
@@ -280,7 +281,12 @@
 
   function attach() {
     if (!state.socket) return false;
-    state.socket.on('bank_summary', d => { data = d; if (isOpen) render(); });
+    state.socket.on('bank_summary', d => {
+      data = d;
+      const u = d && (d.unit || (d.table && d.table.unit)); if (u) Money.setUnit(u);
+      if (isOpen) render();
+    });
+    Money.onChange(() => { if (isOpen && data) render(); });
     return true;
   }
 
