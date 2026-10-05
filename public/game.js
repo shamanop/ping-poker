@@ -693,7 +693,11 @@ function showEmote(idx, id) {
   const [x, y] = seatClientPos(idx);
   const el = document.createElement('img');
   el.className = 'emote-float'; el.alt = ''; el.src = `images/fx2/sticker-emote-${id}.png`;
-  el.style.left = x + 'px'; el.style.top = (y - 92 * state.u) + 'px';
+  const sr = ($('stage') || document.body).getBoundingClientRect(), u = state.u, half = 44 * u;
+  const topY = sr.top + half + 36 * u, wantY = y - 92 * u, crowded = wantY < topY;
+  const ex = Math.min(sr.right - half, Math.max(sr.left + half, crowded ? x - 110 * u : x));
+  const ey = Math.min(sr.bottom - half, crowded ? y - 20 * u : wantY);
+  el.style.left = ex + 'px'; el.style.top = ey + 'px';
   document.body.appendChild(el);
   setTimeout(() => el.remove(), 2100);
   if (window.PingJuice) PingJuice.sfx('sticker', { minGap: 120 });
@@ -1102,7 +1106,7 @@ function renderSeats(gs) {
       if (age < BUBBLE_MS) bubble = `<div class="seat-bubble k-${b.kind} ${peekUp ? 'below' : 'above'}" style="animation-delay:${-age}ms">${esc(b.text)}</div>`;
     }
 
-    const cls = ['seat', hero ? 'hero' : '', p.isActive ? 'active' : '', p.folded ? 'folded' : '', p.sittingOut ? 'away' : '', state.winners?.has(p.name) ? 'winner' : ''].filter(Boolean).join(' ');
+    const cls = ['seat', hero ? 'hero' : '', peekUp ? '' : 'upper', p.isActive ? 'active' : '', p.folded ? 'folded' : '', p.sittingOut ? 'away' : '', state.winners?.has(p.name) ? 'winner' : ''].filter(Boolean).join(' ');
     return `<div class="${cls}" data-player-idx="${i}" style="left:${x.toFixed(1)}px;top:${y.toFixed(1)}px;--ss:${sc.toFixed(3)}">
       ${peek}
       <div class="seat-pill">
@@ -1120,10 +1124,11 @@ function renderSeats(gs) {
   el.innerHTML = html;
 
   if (window.PingJuice) el.querySelectorAll('.seat:not(.empty) .seat-pill').forEach(pill => {
-    const w = PingJuice.charm(pill, { side: 'right', offset: 4, overlap: 16 });
+    const w = PingJuice.charm(pill, { side: 'right', size: Math.round(81 * state.u), offset: 2, overlap: Math.round(22 * state.u) });
     if (!w) return;
     if (state.charmDropped) w.classList.remove('drop');
     const seat = pill.parentElement;
+    if (seat.classList.contains('upper')) { w.classList.add('above'); w.style.top = 'auto'; w.style.bottom = `calc(100% - ${Math.round(22 * state.u)}px)`; }
     if (seat.classList.contains('active')) w.classList.add('turn');
     if (seat.classList.contains('winner')) {
       w.classList.add('win');
