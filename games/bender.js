@@ -68,7 +68,7 @@ module.exports = {
       if (h.length > HISTORY_MAX) h.length = HISTORY_MAX;
       history.set(key, h);
 
-      try { if (ctx.social) ctx.social.onSpin(socket, { bet: p.bet, totalWin, tier: r.tier, mode: p.mode }); } catch {}
+      try { if (ctx.social) ctx.social.onSpin(socket, { bet: p.bet, totalWin, tier: r.tier, mode: p.mode, feature: r.bonus ? 'free spins' : null }); } catch {}
       socket.emit('g:bender:result', {
         roundId, bet: p.bet, cost, mode: p.mode, buyBonus: buy,
         grid: r.grid, cascades: r.cascades, finalGrid: r.finalGrid, scatters: r.scatters, scatterPay: r.scatterPay,

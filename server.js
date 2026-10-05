@@ -1193,6 +1193,7 @@ io.on('connection', socket => {
 
     socket.join(ROOM_ID);
     socket.emit('room_joined', { roomId: ROOM_ID, playerIdx, balance: getBalance(cleanName) });
+    try { social.onJoin(socket, { players: room.players.filter(p => !p.isBot).length }); } catch {}
     broadcastRoomUpdate(room);
     broadcastGameState(room);
     maybeAutoStart(room);
@@ -1325,6 +1326,21 @@ io.on('connection', socket => {
     const sender = room.players.find(p => p.socketId === socket.id);
     if (!sender) return;
     io.to(roomId).emit('sticker_dropped', { emoji: String(emoji || '').slice(0, 8), fromName: sender.name });
+  });
+
+  // ── emote ─────────────────────────────────────────────────────────────────
+  const EMOTE_IDS = ['thumbs', 'laugh', 'mindblown', 'sweat', 'clap', 'tilt'];
+  let lastEmoteAt = 0;
+  on('emote', ({ roomId, id } = {}) => {
+    const room = rooms.get(roomId);
+    if (!room) return;
+    const idx = room.players.findIndex(p => p.socketId === socket.id);
+    if (idx === -1) return;
+    if (typeof id !== 'string' || !EMOTE_IDS.includes(id)) return;
+    const now = Date.now();
+    if (now - lastEmoteAt < 3000) return;
+    lastEmoteAt = now;
+    io.to(roomId).emit('emote', { idx, id, name: room.players[idx].name });
   });
 
   // ── throw_item ────────────────────────────────────────────────────────────
