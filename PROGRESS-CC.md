@@ -104,7 +104,26 @@ Server events `g:coldcall:state|history|spin` -> `g:coldcall:result`; buy ids `r
 - Branch `coldcall` only. No push to master, no deploy.
 - Own clone (`projects/ping-coldcall` on Frank's box), dev port 4610, at most 2 browser processes, kill by PID.
 - No paid APIs: art on shaman's local models (GPU lock first), code written here.
+  One exception, asked for by Chris directly (2026-10-05 17:54): the concept stills menu was made with GPT image
+  through OpenRouter, $3.31 (`cold-call/art/concepts/spend.jsonl`). Nothing else has used a paid API.
+
+## Milestone 3a: concept stills menu (done, waiting on Chris's pick)
+Five concepts, four stills each (portrait, wide, low angle, mascot), 832x1248. Sent to Chris 2026-10-05 18:20; no pick yet.
+Contact sheets: `cold-call/art/concepts/sheet_A.jpg` .. `sheet_E.jpg`. Single stills: `cold-call/art/concepts/stills/A1.jpg` .. `E4.jpg`
+(JPEG copies; the 37 MB of source PNGs stay on Frank's box in `raw/`, not in git). Prompts: `gen_concepts.py`.
+
+| | Concept | Look |
+|---|---|---|
+| A | Boiler Room | painted caricature, warm office yellows |
+| B | Graveyard Shift | flat shapes |
+| C | Rubber Hose | 1930s cartoon |
+| D | Jackpot Poster | glossy 3D, purple and gold |
+| E | Clay | stop-motion clay |
+
+No text is drawn in any still; labels on the sheets are added afterwards. No brands, no drug names.
+Next in milestone 3, after the pick: one polished hero scene and the cutout symbol set in that look.
 
 ## Log
+- 2026-10-05 18:50 Milestone 3a committed (concept menu). Frank re-ran `tests/coldcall.js` (27 pass) and `tests/bender.js` (17 pass); engine copies byte-identical.
 - 2026-10-05 Milestone 2 done: engine, server module, sim, 27 tests; 200M-spin sim 98.10% +- 0.10; buys 97.99% / 98.07%.
 - 2026-10-05 17:50 Milestone 1 plan written. Branch created from master bffe087.
