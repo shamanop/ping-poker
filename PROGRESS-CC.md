@@ -8,7 +8,7 @@ This file is the status line: Isabelle reads it on GitHub. Newest milestone at t
 | Milestone | State |
 |---|---|
 | 1. Plan | done 2026-10-05 17:50 (below) |
-| 2. Engine + sim + tests, measured RTP / bonus rate | in progress |
+| 2. Engine + sim + tests, measured RTP / bonus rate | done 2026-10-05 (numbers below) |
 | 3. Concept stills menu, hero pick, symbol set (`cold-call/art/`) | not started |
 | 4. Playable front end, both bonuses, SFX/MUSIC switches | not started |
 | 5. QA pass, screenshots + numbers | not started |
@@ -65,10 +65,46 @@ This file is the status line: Isabelle reads it on GitHub. Newest milestone at t
   brief names on Bender).
 - Levers: per-reel symbol weights, one pay-table scale, phone weight, quote weight, respin landing chance, field prizes.
 
+## Milestone 2: measured
+
+Final sim, 200,000,000 plain spins, seed 20261005, 6 threads (`nice -n 15 node games/coldcall-sim.js 200000000 20261005`), levers as committed:
+
+| Metric | Measured | Plan |
+|---|---|---|
+| Total RTP | 98.098% +- 0.103 (95%) | 98.0 +- 0.3 |
+| Hit rate (base ways pay) | 31.20% (any win incl. bonuses 32.03%) | 28-32% |
+| ROTARY | 1 in 173.5, avg value 36.06x | 1 in 170 |
+| QUOTE ACCEPTED | 1 in 244.6, avg value 41.80x | 1 in 240 |
+| Any bonus | 1 in 101.6 (both on one spin: 1,276 times) | 1 in 100 |
+| RTP by part | base ways 60.23 (+-0.04), ROTARY 20.78 (+-0.06), QUOTE 17.09 (+-0.08) | 60 / 21 / 17 |
+| Max win seen | 2,504x | cap 10,000x |
+| Cap (10,000x) hit | 0 times in 200M (enforced and tested with a low cap; natural reach is rarer than 1 in 200M) | |
+| QUOTE grand (all 4 fields) | 549 times, 1 in 364,299 spins | |
+
+Buys (30,000,000 runs each, same seed), price = measured avg / 0.98 rounded to a whole tenth, then re-simulated at that price:
+
+| Buy | Avg bonus value | Price | RTP at that price |
+|---|---|---|---|
+| ROTARY | 36.060x (+-0.015) | 36.8x (368 tenths) | 97.99% (+-0.04) |
+| QUOTE ACCEPTED | 41.778x (+-0.028) | 42.6x (426 tenths) | 98.07% (+-0.07) |
+
+Final levers (top of `games/coldcall-engine.js`): reel weights per reel `[cash, pile, rx, headset, can, mug, note, ball, closer]` =
+`[3,4,5,7,8,9,10,10, 0|3|3|3|0]`, phoneW 4.4, quoteW 7.65, free spins use the same strips with no bubbles, payScale 1 (pay table is explicit integers in tenths per way,
+3/4/5 of a kind: cash 25/100/400, pile 20/70/250, rx 12/45/140, headset 6/18/55, can 4/10/24, mug 3/7/12, note 2/5/9, ball 2/4/7),
+dial spins 5..20 (weights 14,14,13,12,12,10,9,7,5,4), dial multiplier x1..x5 (55,28,11,4,2), free-spin cap 30, landP 0.047 per empty box per respin,
+upsellP 0.02 (max x8 per field), field prizes mini 5x / minor 15x / major 50x / mega 200x, grand 2,000x.
+
+Rules as built (small things the plan left open): phones and bubbles pay nothing by themselves; QUOTE plays before ROTARY if one spin triggers both;
+an UPSELL bubble fills a box, carries no amount and doubles its field's amounts (up to three doublings); each empty box gets a bubble with probability landP on every respin
+(same thing as "random empty box"); a QUOTE buy starts with a bubble count drawn from the same distribution as natural triggers (6-15).
+Script shape: `resolveRound(rng, buy)` -> `{winTenths, costTenths, script:{base:{grid,wins,phones,quotes,tease,triggers}, features:[{kind:'quote'|'rotary',...}]}}`.
+Server events `g:coldcall:state|history|spin` -> `g:coldcall:result`; buy ids `rotary` and `quote`. Tests: `node tests/coldcall.js` (27). Not wired into `npm test`, same as Bender.
+
 ## Rules I am holding to
 - Branch `coldcall` only. No push to master, no deploy.
 - Own clone (`projects/ping-coldcall` on Frank's box), dev port 4610, at most 2 browser processes, kill by PID.
 - No paid APIs: art on shaman's local models (GPU lock first), code written here.
 
 ## Log
+- 2026-10-05 Milestone 2 done: engine, server module, sim, 27 tests; 200M-spin sim 98.10% +- 0.10; buys 97.99% / 98.07%.
 - 2026-10-05 17:50 Milestone 1 plan written. Branch created from master bffe087.
