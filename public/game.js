@@ -22,8 +22,6 @@ const state = {
   unread:         0,
   logAll:         [],
   logPinned:      true,
-  lobbyPlayers:   [],
-  lobbyHost:      '',
   actKey:         {},
   actSeen:        {},
   connKey:        {},
@@ -73,7 +71,6 @@ function probeArt() {
     if (--pending > 0) return;
     renderAvatarGrid();
     renderLandingTable();
-    if (state.lobbyPlayers.length) renderLobbySockets();
     if (state.gameState && $('game-screen').classList.contains('active')) renderGame();
   };
   AV_FILES.forEach(f => {
@@ -131,7 +128,7 @@ document.addEventListener('DOMContentLoaded', () => {
   renderAvatarGrid();
   renderLandingTable();
   bindLanding();
-  bindLobby();
+  bindWaitPanel();
   bindActions();
   bindSocket();
   bindRail();
@@ -140,7 +137,6 @@ document.addEventListener('DOMContentLoaded', () => {
   initChat();
   initBust();
   bindCopy($('room-code-btn'));
-  bindCopy($('lobby-room-btn'));
   placeStaticSockets();
 
   $('player-seats').addEventListener('click', (e) => {
@@ -245,7 +241,7 @@ const SAMPLE_COMMUNITY = [
   { rank: 'J', suit: '♣' }, { rank: '10', suit: '♠' },
 ];
 
-// ─── Static tables (landing + lobby) ──────────────────────────────
+// ─── Static table (landing) ──────────────────────────────
 function placeSockets(tb, host, seats) {
   if (!tb || !host) return;
   const W = tb.clientWidth, H = tb.clientHeight;
@@ -260,7 +256,6 @@ function placeSockets(tb, host, seats) {
 
 function placeStaticSockets() {
   placeSockets($('landing-tb'), $('landing-sockets'));
-  placeSockets($('lobby-tb'),   $('lobby-sockets'));
 }
 
 function renderAvatarGrid() {
@@ -379,8 +374,8 @@ function showError(msg) {
   if (!$('landing-screen')?.classList.contains('active')) toast(msg, '', 'warn');
 }
 
-// ─── Lobby ────────────────────────────────────────────────────────
-function bindLobby() {
+// ─── Waiting panel (on the table, before the first hand) ──────────
+function bindWaitPanel() {
   $('btn-start').addEventListener('click', () => {
     const on = document.querySelector('#blind-seg .seg-btn.on');
     const blindInterval = parseInt(on?.dataset.v || '0');
@@ -392,39 +387,19 @@ function bindLobby() {
   });
 }
 
-function renderLobbySockets() {
-  const players = state.lobbyPlayers;
-  const host = $('lobby-sockets');
-  host.innerHTML = Array.from({ length: 8 }, (_, i) => {
-    const p = players[i];
-    if (!p) return '<div class="sock"></div>';
-    const isHost = p.name === state.lobbyHost;
-    return `<div class="sock filled"><span class="av-wrap">${avatarInner(p.avatar, p.profilePic)}</span><span class="nm">${esc(p.name)}</span>${isHost ? '<svg class="host"><use href="#i-crown"/></svg>' : ''}</div>`;
-  }).join('');
-  host.querySelectorAll('.sock.filled .av-wrap > img').forEach(im => im.classList.add('av'));
-  $('lobby-count').textContent = players.length;
-  placeStaticSockets();
-}
-
-function renderLobbyPlayers(players, hostName) {
-  state.lobbyPlayers = players;
-  state.lobbyHost    = hostName;
-  renderLobbySockets();
-
-  if (!state.myName && players[state.myIdx]) state.myName = players[state.myIdx].name;
-  const idxNow = players.findIndex(p => p.name === state.myName);
-  if (idxNow >= 0) state.myIdx = idxNow;
-  const isHost   = !!state.myName && hostName === state.myName;
-  const btnStart = $('btn-start');
-  const waitMsg  = $('waiting-msg');
-  if (isHost) {
-    btnStart.classList.remove('hidden'); waitMsg.classList.add('hidden');
-    const canStart = players.length >= 2;
-    btnStart.disabled    = !canStart;
-    btnStart.textContent = canStart ? 'Start game' : 'Waiting for players';
-  } else {
-    btnStart.classList.add('hidden'); waitMsg.classList.remove('hidden');
-  }
+function renderWaitPanel(gs) {
+  const panel = $('wait-panel');
+  const on = gs.status === 'waiting';
+  panel.classList.toggle('hidden', !on);
+  if (!on) return;
+  const seated = gs.players.length;
+  const isHost = !!state.myName && gs.hostName === state.myName;
+  const canStart = gs.players.filter(p => p.connected && p.chips > 0).length >= 2;
+  $('wp-count').textContent = seated;
+  $('wp-text').textContent = !canStart ? 'Waiting for players' : isHost ? 'Ready when you are' : 'Waiting for the host to start';
+  $('btn-start').classList.toggle('hidden', !isHost);
+  $('btn-start').disabled = !canStart;
+  $('btn-start').textContent = canStart ? 'Start game' : 'Need 2 players';
   $('blind-settings').classList.toggle('hidden', !isHost);
 }
 
@@ -445,15 +420,15 @@ function bindSocket() {
     state.myIdx  = playerIdx;
     if (balance !== undefined) state.myBalance = balance;
     $('room-code').textContent       = roomId;
-    $('lobby-room-code').textContent = roomId;
-    showScreen('lobby-screen');
+    showScreen('game-screen');
   });
-
-  s.on('room_update', ({ players, hostName }) => { renderLobbyPlayers(players, hostName); });
 
   s.on('game_state', gs => {
     const prev = state.gameState;
     state.gameState = gs;
+    if (!state.myName && gs.players[state.myIdx]) state.myName = gs.players[state.myIdx].name;
+    const idxNow = gs.players.findIndex(p => p.name === state.myName);
+    if (idxNow >= 0) state.myIdx = idxNow;
     if (!prev || prev.handNum !== gs.handNum) { resetDeal(); state.dealt = {}; state.heroKey = ''; state.reveal = null; hideShowdown(); }
     if (!prev && gs.street && gs.street !== 'preflop') state.noDealHand = gs.handNum;
     noteTable(prev, gs);
@@ -467,10 +442,8 @@ function bindSocket() {
     }
     state.blindEndAt = (gs.blindNextMs != null) ? Date.now() + gs.blindNextMs : null;
 
-    if (gs.status === 'playing' || gs.status === 'waiting_next') {
-      if (!$('game-screen').classList.contains('active')) showScreen('game-screen');
-      renderGame();
-    }
+    if (!$('game-screen').classList.contains('active')) showScreen('game-screen');
+    renderGame();
   });
 
   s.on('your_cards', ({ cards, myIdx }) => {
@@ -606,9 +579,9 @@ function initBust() {
     $('bust-panel').classList.add('hidden');
   });
   $('btn-leave').addEventListener('click', () => { location.reload(); });
-  ['btn-home', 'btn-home-lobby'].forEach(id => $(id)?.addEventListener('click', () => {
+  $('btn-home').addEventListener('click', () => {
     if (confirm('Leave the table and go back to the home screen?')) location.href = location.pathname;
-  }));
+  });
 }
 
 function showBust(balance) {
@@ -748,12 +721,13 @@ function renderGame() {
   renderCommunity(gs);
   renderHero(gs);
   renderPlaque(gs);
+  renderWaitPanel(gs);
   renderControls(gs);
   renderLog(gs.log);
 
   const me = gs.players[state.myIdx];
   const so = $('btn-sit-out');
-  if (me && gs.status === 'playing') {
+  if (me && gs.status === 'playing' && !(me.sittingOut && !me.sitOutRequest && !me.cardCount)) {
     so.hidden = false;
     so.textContent = me.sitOutRequest ? "I'm back" : 'Sit out next hand';
     so.classList.toggle('on', !!me.sitOutRequest);
@@ -876,7 +850,7 @@ function planHoleDeal(gs) {
 function seatStatus(p) {
   if (p.connected === false && !p.isBot) return ['Offline', 'offline'];
   if (p.allIn)       return ['All-in', 'allin'];
-  if (p.sittingOut)  return ['Away', ''];
+  if (p.sittingOut)  return [p.sitOutRequest ? 'Away' : 'Joining', ''];
   if (p.isActive)    return ['', 'secs'];
   if (p.folded)      return ['Folded', ''];
   if (p.isBot)       return ['CPU', ''];
@@ -1116,6 +1090,8 @@ function renderControls(gs) {
   // Status text
   if (!me) setBar('idle', 'Spectating', '');
   else if (me.chips === 0 && !me.allIn && gs.status === 'playing' && !me.cardCount) setBar('idle', state.spectating ? 'Spectating' : 'Out of chips', '');
+  else if (gs.status === 'waiting') setBar('idle', 'Waiting for players', '');
+  else if (me.sittingOut && !me.sitOutRequest && !me.cardCount) setBar('idle', 'Watching this hand', 'Dealt in next hand');
   else if (gs.status === 'waiting_next') setBar('idle', 'Next hand starting', 'Hang tight');
   else if (me.folded) setBar('idle', 'You folded', 'Next hand soon');
   else if (me.allIn) setBar('idle', "You're all-in", 'Good luck');

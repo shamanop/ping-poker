@@ -707,6 +707,7 @@ function publicGameState(room) {
     currentPlayerIdx,
     handNum:         room.handNum,
     status:          room.status,
+    hostName:        room.players.find(p => p.socketId === room.hostSocketId)?.name || '',
     sb:              room.sb,
     bb:              room.bb,
     blindLevel:      room.blindLevel,
@@ -809,9 +810,6 @@ io.on('connection', socket => {
     const room = rooms.get(ROOM_ID);
     if (!room) { socket.emit('error', { message: 'Server error' }); return; }
     if (room.players.some(p => p.socketId === socket.id)) return;
-    if (room.status === 'playing' || room.status === 'waiting_next') {
-      socket.emit('error', { message: 'Game in progress — wait for next round' }); return;
-    }
     if (room.players.length >= 8) {
       socket.emit('error', { message: 'Table is full (max 8 players)' }); return;
     }
@@ -824,12 +822,15 @@ io.on('connection', socket => {
     const player = makePlayer(socket.id, cleanName, avatar, buyIn);
     player.profilePic = validatePic(profilePic);
     adjustBank(cleanName, -buyIn, 'buyin', room, buyIn);
+    // mid-hand joiners watch from the rail and are dealt in at the next hand (startHand clears this)
+    if (room.status === 'playing' || room.status === 'waiting_next') player.sittingOut = true;
     room.players.push(player);
     if (!room.hostSocketId) room.hostSocketId = socket.id;
 
     socket.join(ROOM_ID);
     socket.emit('room_joined', { roomId: ROOM_ID, playerIdx, balance: getBalance(cleanName) });
     broadcastRoomUpdate(room);
+    broadcastGameState(room);
   });
 
   // ── start_game ────────────────────────────────────────────────────────────
@@ -1029,6 +1030,7 @@ io.on('connection', socket => {
           }
         } else {
           broadcastRoomUpdate(room);
+          broadcastGameState(room);
         }
       }
       break;

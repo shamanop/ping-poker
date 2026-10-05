@@ -93,54 +93,6 @@
     </div>
   </div>
 
-  <!-- ── LOBBY ──────────────────────────────────────────────────── -->
-  <div id="lobby-screen" class="screen">
-    <div class="scr-backdrop"></div>
-    <div class="lobby-grid">
-      <section class="lobby-main">
-        <div class="lobby-top">
-          <button type="button" class="g-brand" id="btn-home-lobby" title="Back to home" aria-label="PokerPing home"><span class="wordmark sm">Poker<em>Ping</em></span></button>
-          <button type="button" class="room-chip" id="lobby-room-btn" title="Copy invite link">
-            <span>Room</span><b id="lobby-room-code">&mdash;</b>
-            <svg class="ico"><use href="#i-copy"/></svg>
-            <span class="copy-flash">Copied</span>
-          </button>
-        </div>
-        <div class="lobby-table-wrap">
-          <div class="table-box tb-static" id="lobby-tb">
-            <div class="t-rail"></div><div class="t-felt"></div><div class="t-inlay"></div>
-            <svg class="t-ping" viewBox="-160 -160 320 320" aria-hidden="true"></svg>
-            <div class="t-lamp"></div>
-            <div class="lobby-count"><b id="lobby-count">1</b><span>of 8 seated</span></div>
-            <div id="lobby-sockets"></div>
-          </div>
-        </div>
-      </section>
-
-      <aside class="lobby-side">
-        <div class="side-card">
-          <div class="rules-head">Texas Hold'em</div>
-          <div class="rules-row"><span>Starting chips</span><b>1,500</b></div>
-          <div class="rules-row"><span>Blinds</span><b>10 / 20</b></div>
-          <div class="rules-row"><span>Players</span><b>2 &ndash; 8</b></div>
-        </div>
-        <div id="blind-settings" class="side-card hidden">
-          <span class="field-label">Blind escalation</span>
-          <div class="seg" id="blind-seg" role="radiogroup">
-            <button type="button" class="seg-btn" data-v="0">Off</button>
-            <button type="button" class="seg-btn" data-v="300000">5 min</button>
-            <button type="button" class="seg-btn on" data-v="600000">10 min</button>
-            <button type="button" class="seg-btn" data-v="900000">15 min</button>
-          </div>
-        </div>
-        <div class="lobby-cta">
-          <button id="btn-start" class="btn btn-brass btn-large hidden">Start game</button>
-          <div id="waiting-msg" class="waiting-text"><span class="pulse-dot"></span>Waiting for the host to start</div>
-        </div>
-      </aside>
-    </div>
-  </div>
-
   <!-- ── GAME ───────────────────────────────────────────────────── -->
   <div id="game-screen" class="screen">
     <div class="g-grid">
@@ -179,6 +131,20 @@
             <div id="my-hand-label" class="hero-label"></div>
             <div id="hole-cards" class="hero-cards"></div>
           </div>
+        </div>
+        <div id="wait-panel" class="wait-panel hidden">
+          <div class="wp-count"><b id="wp-count">1</b><span>of 8 seated</span></div>
+          <div class="wp-msg" id="wp-msg"><span class="pulse-dot"></span><span id="wp-text">Waiting for players</span></div>
+          <div id="blind-settings" class="wp-blinds hidden">
+            <span class="field-label">Blind escalation</span>
+            <div class="seg" id="blind-seg" role="radiogroup">
+              <button type="button" class="seg-btn" data-v="0">Off</button>
+              <button type="button" class="seg-btn" data-v="300000">5 min</button>
+              <button type="button" class="seg-btn on" data-v="600000">10 min</button>
+              <button type="button" class="seg-btn" data-v="900000">15 min</button>
+            </div>
+          </div>
+          <button id="btn-start" class="btn btn-brass hidden">Start game</button>
         </div>
         <div id="bet-layer" class="bet-layer"></div>
         <div id="puck-layer" class="puck-layer"></div>

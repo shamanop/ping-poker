@@ -26,6 +26,7 @@ async function startServer(seed = {}) {
   const port = nextPort();
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ppmp-'));
   fs.copyFileSync(path.join(ROOT, 'server.js'), path.join(dir, 'server.js'));
+  fs.copyFileSync(path.join(ROOT, 'ledger.js'), path.join(dir, 'ledger.js'));
   fs.symlinkSync(fs.realpathSync(path.join(ROOT, 'node_modules')), path.join(dir, 'node_modules'));
   fs.mkdirSync(path.join(dir, 'public'));
   fs.writeFileSync(path.join(dir, 'bank.json'), JSON.stringify(seed));
