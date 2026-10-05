@@ -898,7 +898,7 @@ io.on('connection', socket => {
 
   // ── join_game ─────────────────────────────────────────────────────────────
   on('join_game', ({ name, avatar, profilePic, password } = {}) => {
-    if (password !== ROOM_PASSWORD) {
+    if (String(password || '').trim().toLowerCase() !== ROOM_PASSWORD) {
       socket.emit('error', { message: 'Incorrect password' }); return;
     }
     const room = rooms.get(ROOM_ID);
