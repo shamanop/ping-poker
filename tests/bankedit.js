@@ -40,6 +40,6 @@ function client(name) {
     ok(chris.errors.some(e => /0 to 100,000,000/.test(e)), 'negative amount rejected');
     chris.s.emit('bank_set', { name: 'chris', balance: 50000 }); await sleep(300);
     ok(await tot('chris') === 50000, 'chris can edit own total');
-  } finally { proc.kill(); fs.rmSync(dir, { recursive: true, force: true }); }
+  } finally { proc.kill(); setTimeout(() => { try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5 }); } catch {} }, 300); }
   console.log(fails ? `FAILED ${fails}` : 'ALL PASS'); process.exit(fails ? 1 : 0);
 })();
