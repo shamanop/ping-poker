@@ -1388,10 +1388,9 @@ function faceCardSvg(card) {
       return `<use href="#${sym}" x="${x - sz / 2}" y="${y - sz / 2}" width="${sz}" height="${sz}"${y > 70 ? ` transform="rotate(180 ${x} ${y})"` : ''}/>`;
     }).join('');
   } else {
-    body = `<rect x="26" y="26" width="48" height="88" rx="4" fill="none" stroke="currentColor" stroke-width="1.6" opacity=".7"/>
-      <text x="50" y="86" text-anchor="middle" font-family="Libre Baskerville, Georgia, serif" font-weight="700" font-size="50" fill="currentColor">${esc(r)}</text>
-      <use href="#${sym}" x="40" y="31" width="20" height="20"/>
-      <use href="#${sym}" x="40" y="89" width="20" height="20" transform="rotate(180 50 99)"/>`;
+    const file = r + ({ '♠': 'S', '♥': 'H', '♦': 'D', '♣': 'C' }[card.suit] || 'S');
+    body = `<rect x="24" y="30" width="52" height="80" rx="3" fill="#EBDDB8" stroke="#8A6A2B" stroke-width="1.2"/>
+      <image href="/images/faces/${file}.png" x="24.5" y="33" width="51" height="76" preserveAspectRatio="xMidYMax meet"/>`;
   }
   return `<svg viewBox="0 0 100 140" aria-hidden="true">${index}<g transform="rotate(180 50 70)">${index}</g>${body}</svg>`;
 }
