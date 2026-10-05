@@ -135,6 +135,17 @@
     if (animate && from !== v) { const el = $('bal'); const t0 = performance.now(), ms = 700 * speed(); const tick = (now) => { const k = Math.min(1, (now - t0) / ms); el.textContent = fmtBal(from + (v - from) * (1 - Math.pow(1 - k, 3))); if (k < 1) requestAnimationFrame(tick); else el.textContent = fmtBal(v); }; requestAnimationFrame(tick); }
     else $('bal').textContent = fmtBal(v);
   }
+  const HC = [];
+  function hcRecord(net) {
+    HC.push(net); if (HC.length > 10) HC.shift();
+    const el = $('hc'), sum = HC.reduce((x, y) => x + y, 0);
+    if (!el) return;
+    if (HC.length < 3 || sum === 0) { el.className = 'hc'; el.textContent = ''; return; }
+    const hot = sum > 0;
+    el.className = 'hc ' + (hot ? 'hot' : 'cold');
+    el.textContent = (hot ? 'HOT +' : 'COLD -') + fmt(Math.abs(sum));
+    el.title = 'Last ' + HC.length + ' spins';
+  }
   function drawBet() { $('bet').textContent = fmt(bet()); $('betDn').disabled = st.busy || st.betIdx === 0; $('betUp').disabled = st.busy || st.betIdx === BETS.length - 1; $('buy').disabled = st.busy; $('buyFrom').textContent = 'from ' + fmt(bet() * E.CFG.buyCost.election); }
   function setBusy(b) {
     st.busy = b; $('spin').classList.toggle('run', b); $('spin').classList.toggle('idle', !b); drawBet();
@@ -485,7 +496,7 @@
         st.lastLose = quip;
       }
     } catch (e) { console.error(e); }
-    credit();
+    credit(); hcRecord(total - cost);
     if (money.live) { setBal(walletBal(), true); toParent({ type: 'round', win: total, bet: b, mode: money.mode, tier: juiceTier_ }); }
     else if (st.bal < BETS[0]) { setBal(50000, true); toast('Out of VOTES. Free refill to 50,000.', 2200); }
     st.skip = false; setBusy(false);

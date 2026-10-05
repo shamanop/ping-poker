@@ -754,3 +754,32 @@ html.art-login .setup-card { background: linear-gradient(180deg, rgba(34, 22, 14
 .step { width: calc(24 * var(--px)); height: calc(24 * var(--px)); }
 .raise-input { min-width: 0; box-sizing: border-box; padding: 0 var(--p4); }
 .pre { overflow: hidden; }
+
+/* Quick emotes */
+.emote-strip { flex: none; display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--p4); padding: 0 var(--p4) var(--p6); transition: opacity .2s, filter .2s; }
+.emote-btn { position: relative; aspect-ratio: 1; padding: var(--p2); border: 1px solid #5A4128; border-radius: var(--p6); background: rgba(20, 12, 8, .55); cursor: pointer; transition: transform .12s, border-color .12s; }
+.emote-btn img { display: block; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+.emote-btn kbd { position: absolute; right: 1px; bottom: 0; font: 700 var(--p8, 8px) var(--f-card, sans-serif); color: #D8C79E; opacity: .75; }
+.emote-btn:hover { border-color: var(--gold); transform: translateY(-1px); }
+.emote-btn:active { transform: scale(.94); }
+.emote-btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
+.emote-strip.cool { opacity: .4; filter: grayscale(1); pointer-events: none; }
+.emote-float { position: fixed; z-index: 9000; width: calc(88 * var(--px)); height: calc(88 * var(--px)); margin: calc(-44 * var(--px)) 0 0 calc(-44 * var(--px)); pointer-events: none; object-fit: contain; filter: drop-shadow(0 4px 0 rgba(0, 0, 0, .5)); animation: emoteFloat 2s cubic-bezier(.2, .9, .3, 1) both; }
+@keyframes emoteFloat {
+  0% { opacity: 0; transform: translateY(14px) scale(.3) rotate(-14deg); }
+  12% { opacity: 1; transform: translateY(0) scale(1.18) rotate(4deg); }
+  22% { transform: translateY(-4px) scale(1) rotate(0); }
+  78% { opacity: 1; transform: translateY(-22px) scale(1); }
+  100% { opacity: 0; transform: translateY(-34px) scale(.92); }
+}
+
+/* Hot / cold chip */
+.seat { --hc-hot: #6FCF7A; --hc-cold: #7FB8F0; }
+.hc-chip { position: absolute; right: calc(100% + var(--p6)); top: 50%; transform: translateY(-50%); display: inline-flex; align-items: center; gap: var(--p3); white-space: nowrap; padding: var(--p2) var(--p6) var(--p2) var(--p4); border-radius: 999px; background: rgba(10, 22, 40, .88); border: 1px solid currentColor; font: 700 var(--p11) var(--f-card, sans-serif); letter-spacing: .06em; pointer-events: none; }
+.hc-chip svg { width: var(--p14); height: var(--p14); flex: none; }
+.hc-chip span { color: #F3E7C8; letter-spacing: 0; }
+.hc-chip.hot { color: var(--hc-hot); }
+.hc-chip.cold { color: var(--hc-cold); }
+.hc-chip.hot svg { animation: hcFlicker 1.1s ease-in-out infinite; transform-origin: 50% 90%; }
+@keyframes hcFlicker { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.14, 1.2); } }
+@media (prefers-reduced-motion: reduce) { .emote-float { animation-duration: 2s; } .hc-chip.hot svg { animation: none; } }

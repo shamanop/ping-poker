@@ -149,6 +149,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('#throw-grid .throw-item').forEach(b => { b.innerHTML = art('throws', b.dataset.item); });
   initSoundToggle();
   initChat();
+  initEmotes();
   initPanelSide();
   initBust();
   bindCopy($('room-code-btn'));
@@ -476,6 +477,7 @@ window.PingGame = {
     state.roomId = tableId;
     state.table  = table || null;
     state.myIdx  = playerIdx;
+    state.hands = { room: tableId, base: null, played: {}, log: [], seen: -1 };
     state.myName = (you && (you.display || you.name)) || lobbyName() || state.myName || null;
     if (stack !== undefined) state.myBalance = stack;
     if (table && window.Money) window.Money.setUnit(table.unit === 'chips' ? 'chips' : 'cents');
@@ -525,6 +527,7 @@ function bindSocket() {
     if (!prev || prev.handNum !== gs.handNum) { resetDeal(); state.dealt = {}; state.heroKey = ''; state.reveal = null; hideShowdown(); }
     if (!prev && gs.street && gs.street !== 'preflop') state.noDealHand = gs.handNum;
     noteTable(prev, gs);
+    trackHands(gs);
 
     const cur = gs.currentPlayerIdx;
     if (cur == null || gs.status !== 'playing' || gs.players[cur]?.isBot) { state.turnEndAt = null; state.turnKey = ''; }
@@ -569,6 +572,7 @@ function bindSocket() {
   });
 
   s.on('chat_message', ({ name, text }) => { appendChatMsg(name, text); playSound('msg'); });
+  s.on('emote', ({ idx, id }) => showEmote(idx, id));
 
   s.on('blinds_up', ({ level, sb, bb, unit }) => {
     if (unit) Money.setUnit(unit);
@@ -650,6 +654,84 @@ function initPanelSide() {
     try { localStorage.setItem('ping.panelSide', side); } catch (e) {}
     apply(side);
   });
+}
+
+// ─── Quick emotes ─────────────────────────────────────────────────
+const EMOTE_KEYS = ['thumbs', 'laugh', 'mindblown', 'sweat', 'clap', 'tilt'];
+const EMOTE_COOLDOWN_MS = 3000;
+let emoteReadyAt = 0;
+
+function sendEmote(id) {
+  if (!state.roomId || state.spectating || !EMOTE_KEYS.includes(id)) return;
+  const now = Date.now();
+  if (now < emoteReadyAt) return;
+  emoteReadyAt = now + EMOTE_COOLDOWN_MS;
+  state.socket.emit('emote', { roomId: state.roomId, id });
+  const strip = $('emote-strip');
+  if (strip) { strip.classList.add('cool'); setTimeout(() => strip.classList.remove('cool'), EMOTE_COOLDOWN_MS); }
+}
+
+function initEmotes() {
+  const strip = $('emote-strip');
+  if (!strip) return;
+  strip.addEventListener('click', e => {
+    const b = e.target.closest('.emote-btn');
+    if (b) sendEmote(b.dataset.emote);
+  });
+  document.addEventListener('keydown', e => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    const t = e.target, tag = t && t.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable)) return;
+    if (!$('game-screen')?.classList.contains('active') || document.querySelector('.modal-back:not(.hidden), .pj-modal')) return;
+    const i = '123456'.indexOf(e.key);
+    if (e.key.length === 1 && i >= 0) sendEmote(EMOTE_KEYS[i]);
+  });
+}
+
+function showEmote(idx, id) {
+  if (!EMOTE_KEYS.includes(id) || !state.gameState?.players[idx]) return;
+  const [x, y] = seatClientPos(idx);
+  const el = document.createElement('img');
+  el.className = 'emote-float'; el.alt = ''; el.src = `images/fx2/sticker-emote-${id}.png`;
+  el.style.left = x + 'px'; el.style.top = (y - 92 * state.u) + 'px';
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 2100);
+  if (window.PingJuice) PingJuice.sfx('sticker', { minGap: 120 });
+}
+
+// ─── Hot / cold chip ──────────────────────────────────────────────
+const HOT_MIN = 3, HOT_WINDOW = 10;
+
+function trackHands(gs) {
+  const h = state.hands;
+  const me = gs.players[state.myIdx];
+  if (!h || !me) return;
+  if (gs.status === 'playing') {
+    if (me.cardCount > 0 || state.myCards?.length) h.played[gs.handNum] = true;
+    return;
+  }
+  if (h.seen === gs.handNum) return;
+  h.seen = gs.handNum;
+  if (h.base != null && h.played[gs.handNum]) {
+    h.log.push(me.chips - h.base);
+    if (h.log.length > HOT_WINDOW) h.log.shift();
+  }
+  h.base = me.chips;
+}
+
+function handsNet() {
+  const log = state.hands?.log || [];
+  return log.length >= HOT_MIN ? { n: log.length, net: log.reduce((a, b) => a + b, 0) } : null;
+}
+
+const HC_FLAME = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2c1 3.2 4.6 5.2 4.6 10A4.6 4.6 0 0 1 12 17a4.6 4.6 0 0 1-4.6-5c0-1.6.6-2.8 1.6-3.8.2 1.2.8 2 1.6 2.4C10.2 7.4 10.6 4.6 12 2zm0 20a6.2 6.2 0 0 1-6-6.4c0-1 .3-2 .7-2.8.2 1.8 1.2 3.4 2.6 4.3 1 .7 2.2 1 3.4.9 1.8-.2 3.2-1.4 3.8-3.1.4 1.1.5 2.2.2 3.2A6.1 6.1 0 0 1 12 22z" opacity=".9"/></svg>';
+const HC_FLAKE = '<svg viewBox="0 0 24 24" aria-hidden="true"><g stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"><path d="M12 2v20M3.3 7l17.4 10M3.3 17L20.7 7"/><path d="M9.5 3.8L12 6l2.5-2.2M9.5 20.2L12 18l2.5 2.2M4 10.2l3.2-.4-.9-3.1M20 13.8l-3.2.4.9 3.1M4 13.8l3.2.4-.9 3.1M20 10.2l-3.2-.4.9-3.1"/></g></svg>';
+
+function hotColdHtml(r, what) {
+  if (!r || r.net === 0) return '';
+  const hot = r.net > 0;
+  const amt = Money.fmt(Math.abs(r.net), {});
+  return `<div class="hc-chip ${hot ? 'hot' : 'cold'}" title="Last ${r.n} ${what}">${hot ? HC_FLAME : HC_FLAKE}<b>${hot ? 'HOT' : 'COLD'}</b><span>${hot ? '+' : '-'}${esc(amt)}</span></div>`;
 }
 
 function initChat() {
@@ -1032,11 +1114,28 @@ function renderSeats(gs) {
         ${p.isActive ? `<div class="seat-timer"><i style="--t:${state.turnEndAt ? Math.min(1, Math.max(0, (state.turnEndAt - Date.now()) / TURN_MS)).toFixed(3) : 1}"></i></div>` : ''}
       </div>
       ${bubble}
+      ${hero ? hotColdHtml(handsNet(), 'hands') : ''}
     </div>`;
   }).join('');
   el.innerHTML = html;
 
-  if (window.PingJuice) el.querySelectorAll('.seat:not(.empty) .seat-pill').forEach(pill => PingJuice.charm(pill, { side: 'right', offset: 4, overlap: 16 }));
+  if (window.PingJuice) el.querySelectorAll('.seat:not(.empty) .seat-pill').forEach(pill => {
+    const w = PingJuice.charm(pill, { side: 'right', offset: 4, overlap: 16 });
+    if (!w) return;
+    if (state.charmDropped) w.classList.remove('drop');
+    const seat = pill.parentElement;
+    if (seat.classList.contains('active')) w.classList.add('turn');
+    if (seat.classList.contains('winner')) {
+      w.classList.add('win');
+      const key = state.gameState.handNum + ':' + seat.dataset.playerIdx;
+      if (!state.charmBursts?.[key]) {
+        (state.charmBursts = state.charmBursts || {})[key] = 1;
+        const r = pill.getBoundingClientRect();
+        PingJuice.burst('glitter', r.right - 10 * state.u, r.bottom, { size: 120 * state.u, ms: 800, rotate: false });
+      }
+    }
+  });
+  state.charmDropped = true;
   gs.players.forEach((p, i) => {
     if (prevChipsMap[i] !== undefined && prevChipsMap[i] !== p.chips) {
       const c = el.querySelector(`.seat[data-player-idx="${i}"] .seat-chips`);

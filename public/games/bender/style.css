@@ -285,3 +285,9 @@ canvas#fxb{z-index:49}
 #modenote{font-size:23px;letter-spacing:.04em;color:var(--cream);text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #modebar[data-state=practice]{grid-template-columns:1fr}
 #modebar[data-state=practice] #modenote{text-align:center;color:var(--gold)}
+
+#betM{position:relative}
+.hc{position:absolute;right:34px;top:-14px;font-weight:800;font-size:22px;letter-spacing:.08em;padding:2px 14px;border-radius:999px;background:rgba(10,22,40,.88);border:2px solid currentColor;white-space:nowrap}
+.hc:empty{display:none}
+.hc.hot{color:#6FCF7A}.hc.hot::before{content:"\25B2  "}
+.hc.cold{color:#7FB8F0}.hc.cold::before{content:"\25BC  "}
