@@ -212,6 +212,8 @@
 .host-drawer h4 { font-family: var(--f-display); font-weight: 400; font-size: var(--p22); letter-spacing: .1em; display: flex; justify-content: space-between; align-items: baseline; }
 .host-drawer h4 small { font-family: var(--f-text); font-size: var(--p12); color: var(--ink-dim); letter-spacing: 0; }
 .host-drawer .lb-seat button { margin-left: auto; }
+.host-drawer h4 .host-x { margin-left: auto; background: transparent; border: 0; color: var(--ink-dim); font-size: var(--p22); line-height: 1; cursor: pointer; padding: 0 var(--p4, 4px); }
+.host-drawer h4 .host-x:hover { color: var(--gold); }
 .host-drawer .lb-btns { display: grid; grid-template-columns: 1fr 1fr; }
 
 .lb-toast { position: fixed; z-index: 80; left: 50%; bottom: var(--p32); transform: translateX(-50%); padding: var(--p12) var(--p20); background: #1D130C; border: 1px solid var(--brass); border-radius: var(--p6); font-size: var(--p14); }

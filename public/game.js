@@ -1154,7 +1154,7 @@ function renderHero(gs) {
   }
 
   const comm = gs.community || [];
-  const label = comm.length >= 3 ? evalHandLabel(cards, comm) : evalPreflopLabel(cards);
+  const label = comm.length >= 3 ? richHandLabel(evalHandLabel(cards, comm), cards, comm) : evalPreflopLabel(cards);
   $('my-hand-label').innerHTML = `<span class="hl-k">Your hand</span><span class="hl-v">${esc(label)}</span>`;
 }
 
@@ -1698,22 +1698,28 @@ function renderShowdown(winners, pot, reveals) {
   const ov = $('showdown-overlay');
   const g  = state.geo;
   state.reveal = { handNum: gs?.handNum, cards: {}, names: {} };
-  (reveals || winners).forEach(w => { if (w.cards?.length) { state.reveal.cards[w.name] = w.cards; state.reveal.names[w.name] = w.handName || ''; } });
+  (reveals || winners).forEach(w => { if (w.cards?.length) { state.reveal.cards[w.name] = w.cards; state.reveal.names[w.name] = richHandLabel(w.handName || '', w.cards, gs?.community); } });
   state.winners = new Set(winners.map(w => w.name));
 
   const share = Math.floor(pot / Math.max(1, winners.length));
   $('showdown-content').innerHTML = winners.map((w, i) => `
     <div class="sd-row">
       <span class="showdown-winner-name">${esc(w.name)}</span>
-      <span class="showdown-hand-name">${esc(w.handName || '')}</span>
-      <span class="showdown-pot"><strong>+${Money.fmt(Number.isFinite(w.amount) ? w.amount : share + (i === 0 ? pot - share * winners.length : 0))}</strong></span>
+      <span class="showdown-hand-name">${esc(richHandLabel(w.handName || '', w.cards, gs?.community))}</span>
+      <span class="showdown-pot">wins <strong>${Money.fmt(Number.isFinite(w.net) ? w.net : Number.isFinite(w.amount) ? w.amount : share + (i === 0 ? pot - share * winners.length : 0))}</strong></span>
     </div>`).join('');
 
+  ov.classList.remove('hidden');
   if (g) {
     ov.style.left = (g.cx) + 'px';
     ov.style.top  = (g.cy - 158 * g.u) + 'px';
+    const cards = document.querySelectorAll('#community-cards .card');
+    if (cards.length) {
+      const sr = $('stage').getBoundingClientRect();
+      const bottom = Math.max(...[...cards].map(c => c.getBoundingClientRect().bottom));
+      ov.style.top = (bottom - sr.top + 10 * g.u) + 'px';
+    }
   }
-  ov.classList.remove('hidden');
   ov.classList.toggle('split', winners.length > 1);
   if (state.gameState) renderSeats(state.gameState);
 
@@ -1803,6 +1809,32 @@ function handEval(cards) {
   return { cat: 0, tb: singles.slice(0, 5) };
 }
 
+const RANK_PL = { 2: 'Twos', 3: 'Threes', 4: 'Fours', 5: 'Fives', 6: 'Sixes', 7: 'Sevens', 8: 'Eights', 9: 'Nines', 10: 'Tens', 11: 'Jacks', 12: 'Queens', 13: 'Kings', 14: 'Aces' };
+const RANK_SG = { 2: 'Two', 3: 'Three', 4: 'Four', 5: 'Five', 6: 'Six', 7: 'Seven', 8: 'Eight', 9: 'Nine', 10: 'Ten', 11: 'Jack', 12: 'Queen', 13: 'King', 14: 'Ace' };
+
+// Names the ranks in a category label: "Pair of Twos", "Two Pair, Aces and Kings", "Three of a Kind, Threes"
+function namedHand(cards) {
+  const e = handEval(cards), t = e.tb;
+  switch (e.cat) {
+    case 0: return `${RANK_SG[t[0]]} High`;
+    case 1: return `Pair of ${RANK_PL[t[0]]}`;
+    case 2: return `Two Pair, ${RANK_PL[t[0]]} and ${RANK_PL[t[1]]}`;
+    case 3: return `Three of a Kind, ${RANK_PL[t[0]]}`;
+    case 4: return `${RANK_SG[t[0]]}-high Straight`;
+    case 5: return `${RANK_SG[t[0]]}-high Flush`;
+    case 6: return `Full House, ${RANK_PL[t[0]]} over ${RANK_PL[t[1]]}`;
+    case 7: return `Four of a Kind, ${RANK_PL[t[0]]}`;
+    case 8: return `${RANK_SG[t[0]]}-high Straight Flush`;
+    default: return 'Royal Flush';
+  }
+}
+
+// Swaps a bare category label for the rank-naming version; leaves anything else ("Board plays", server text) alone
+function richHandLabel(label, hole, community) {
+  if (!HAND_NAMES.includes(label) || !hole || hole.length < 2 || !community || community.length < 3) return label;
+  return namedHand([...hole, ...community]);
+}
+
 function evalHandLabel(hole, community) {
   const me = handEval([...hole, ...community]);
   const bd = handEval(community);
@@ -1859,6 +1891,7 @@ function juiceShowdown(winners, pot) {
     const idx = gs.players.findIndex(p => p.name === w.name);
     const seat = idx >= 0 ? juiceSeat(idx) : null;
     const amt = Number.isFinite(w.amount) ? w.amount : Math.floor(pot / winners.length);
+    const netAmt = Number.isFinite(w.net) ? w.net : amt;
     if (seat) PJ.chipShower(potEl, seat, Math.max(6, Math.min(18, Math.round(6 + bbs / 3))));
     if (seat && idx >= 0) setTimeout(() => {
       const chipsEl = juiceSeat(idx)?.querySelector('.seat-chips');
@@ -1870,7 +1903,7 @@ function juiceShowdown(winners, pot) {
     const callout = /^(Full House|Four of a Kind|Straight Flush|Royal Flush)/i.test(hn);
     if (callout) setTimeout(() => PJ.calloutHand(hn + '!', $('stage')), 200);
     if (mine || bbs >= 20) {
-      setTimeout(() => PJ.winCelebration(tier, seat || potEl, mine ? amt : `${w.name} +${Money.fmt(amt)}`), (callout ? 1700 : 350) + wi * 200);
+      setTimeout(() => PJ.winCelebration(tier, seat || potEl, mine ? netAmt : `${w.name} +${Money.fmt(netAmt)}`), (callout ? 1700 : 350) + wi * 200);
     }
   });
   if (bbs >= 50) {

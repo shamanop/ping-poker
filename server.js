@@ -783,7 +783,7 @@ function showdown(room) {
   }
   const winners = [...paid.keys()].sort((a, b) => a.idx - b.idx);
 
-  const winnerList = winners.map(w => ({ name: w.player.name, handName: w.hand.name, cards: w.player.cards, amount: paid.get(w) }));
+  const winnerList = winners.map(w => ({ name: w.player.name, handName: w.hand.name, cards: w.player.cards, amount: paid.get(w), net: paid.get(w) - (w.player.handBet || 0) }));
   for (const w of winners) roomLog(room, `${w.player.name} wins ${paid.get(w)} with ${w.hand.name}`);
 
   room.handHistory.unshift({

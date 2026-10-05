@@ -624,18 +624,20 @@ html.art-login .setup-card { background: linear-gradient(180deg, rgba(34, 22, 14
 @keyframes confetti { from { opacity: 1; transform: translate(0, 0) rotate(0); } to { opacity: 0; transform: translate(var(--tx), var(--ty)) rotate(var(--rot)); } }
 
 /* ── Showdown plaque (non-modal, sits on the felt) ─────────────── */
-.showdown-overlay { position: absolute; z-index: 8; transform: translateX(-50%); min-width: calc(380 * var(--px)); padding: var(--p8) var(--p20) var(--p10); border-radius: var(--p10); text-align: center; background: linear-gradient(180deg, rgba(44, 27, 17, .94), rgba(26, 16, 10, .94)); border: 1px solid var(--brass); box-shadow: 0 var(--p10) var(--p28) rgba(0, 0, 0, .6); pointer-events: none; animation: sdIn .35s ease-out; }
+.showdown-overlay { position: absolute; z-index: 8; transform: translateX(-50%); display: flex; align-items: center; gap: var(--p16); padding: var(--p6) var(--p16); border-radius: var(--p10); text-align: center; background: linear-gradient(180deg, rgba(44, 27, 17, .94), rgba(26, 16, 10, .94)); border: 1px solid var(--brass); box-shadow: 0 var(--p10) var(--p28) rgba(0, 0, 0, .6); pointer-events: none; animation: sdIn .35s ease-out; }
 @keyframes sdIn { from { opacity: 0; translate: 0 calc(8 * var(--px)); } }
 .sd-row { display: flex; align-items: baseline; justify-content: center; gap: var(--p12); white-space: nowrap; }
-.showdown-winner-name { font-family: var(--f-display); font-size: var(--p32); letter-spacing: .06em; line-height: 1.1; color: var(--gold); }
+.showdown-winner-name { font-family: var(--f-display); font-size: var(--p24); letter-spacing: .06em; line-height: 1.1; color: var(--gold); }
 .showdown-hand-name { font-size: var(--p14); color: var(--ink); font-style: italic; }
-.showdown-pot strong { font-family: var(--f-display); font-weight: 400; font-size: var(--p24); color: var(--ink); letter-spacing: .04em; }
-.sd-foot { display: flex; align-items: center; gap: var(--p10); margin-top: var(--p4); }
+.showdown-pot { font-size: var(--p13, 13px); color: var(--ink-dim); }
+.showdown-pot strong { font-family: var(--f-display); font-weight: 400; font-size: var(--p20, 20px); color: var(--ink); letter-spacing: .04em; }
+.sd-foot { display: flex; flex-direction: column; align-items: stretch; gap: var(--p4); padding-left: var(--p16); border-left: 1px solid var(--line-lt, rgba(255,255,255,.15)); }
+.sd-foot .sd-bar { flex: none; width: 100%; }
 .showdown-timer { font-size: var(--p11); color: var(--ink-dim); white-space: nowrap; }
 .sd-bar { flex: 1; height: var(--p3); background: rgba(0, 0, 0, .5); border-radius: var(--p2); overflow: hidden; }
 .sd-bar i { display: block; height: 100%; background: var(--gold); transform-origin: left; transform: scaleX(var(--t, 1)); }
 .seat.winner .seat-pill { border-color: var(--gold); box-shadow: 0 0 var(--p18) rgba(245, 185, 66, .6); }
-.seat-peek.reveal { z-index: 3; }
+.seat-peek.reveal { z-index: 5; }
 .seat-peek.reveal .card:first-child { rotate: -4deg; }
 .seat-peek.reveal .card:last-child { rotate: 4deg; }
 
@@ -649,8 +651,9 @@ html.art-login .setup-card { background: linear-gradient(180deg, rgba(34, 22, 14
 .sticker-item { padding: var(--p6); }
 .throw-option { padding: var(--p3); }
 .float-emoji { width: calc(84 * var(--px)); height: calc(84 * var(--px)); font-size: calc(64 * var(--px)); }
-.seat-peek.reveal.down { top: calc(100% + var(--p4)); }
-.seat-peek.reveal.up { bottom: calc(100% + var(--p4)); }
+.seat-peek.reveal.down { top: calc(100% + var(--p10)); }
+.seat-peek.reveal.up { bottom: calc(100% + var(--p10)); }
+.seat-peek.reveal.up .peek-hand, .seat-peek.reveal.down .peek-hand { top: 50%; bottom: auto; left: calc(100% + var(--p8)); transform: translateY(-50%); }
 
 .wait-panel { position: absolute; z-index: 5; left: 50%; top: 50%; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: var(--p14); width: calc(400 * var(--px)); padding: var(--p20) var(--p24); border-radius: var(--p14); background: rgba(24, 14, 9, .86); border: 1px solid var(--brass); box-shadow: 0 var(--p8) var(--p24) rgba(0, 0, 0, .55); text-align: center; }
 .wp-msg { display: flex; align-items: center; justify-content: center; font-family: var(--f-card); font-weight: 700; font-size: var(--p18, var(--p20)); color: var(--cream); white-space: nowrap; }

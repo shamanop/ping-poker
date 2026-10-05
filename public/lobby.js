@@ -314,6 +314,7 @@ function openJoin(code) {
 function onInfo(info) {
   const t = info.table; if (!t) return;
   S.info[tId(t)] = info;
+  if (hostDrawer && S.cur && tId(S.cur) === tId(t)) drawDrawer();
   if (S.view === 'share' && S.arg === tId(t)) { drawShare(); return; }
   if (S.pendingJoin && S.pendingJoin === tId(t)) {
     S.pendingJoin = null; S.onError = null;
@@ -524,24 +525,40 @@ function viewSettle(d) {
 
 // ── host drawer ───────────────────────────────────────────────────
 function hostUi(on) {
-  if (hostDrawer) { hostDrawer.remove(); hostDrawer = null; }
+  closeDrawer();
   if (hostBtn) { hostBtn.remove(); hostBtn = null; }
   if (!on) return;
   const slot = $('host-slot'); if (!slot) return;
   hostBtn = h('button', { class: 'host-btn', id: 'host-btn', type: 'button', onclick: toggleDrawer }, 'Host'); slot.append(hostBtn);
 }
+let drawerPoll = null;
+function closeDrawer() {
+  if (hostDrawer) { hostDrawer.remove(); hostDrawer = null; }
+  clearInterval(drawerPoll); drawerPoll = null;
+  document.removeEventListener('pointerdown', drawerOutside, true);
+  document.removeEventListener('keydown', drawerEsc, true);
+}
+function drawerOutside(e) {
+  if (!hostDrawer || hostDrawer.contains(e.target) || (hostBtn && hostBtn.contains(e.target))) return;
+  closeDrawer();
+}
+function drawerEsc(e) { if (e.key === 'Escape') closeDrawer(); }
 function toggleDrawer() {
-  if (hostDrawer) { hostDrawer.remove(); hostDrawer = null; return; }
+  if (hostDrawer) { closeDrawer(); return; }
   const t = S.cur; if (!t) return; const id = tId(t);
   emit('table_preview', { code: id });
   hostDrawer = h('div', { class: 'host-drawer', id: 'host-drawer' }); drawDrawer(); document.body.append(hostDrawer);
+  drawerPoll = setInterval(() => { if (S.cur) emit('table_preview', { code: tId(S.cur) }); }, 2000);
+  document.addEventListener('pointerdown', drawerOutside, true);
+  document.addEventListener('keydown', drawerEsc, true);
 }
 function drawDrawer(confirmEnd) {
   if (!hostDrawer || !S.cur) return;
   const t = S.cur, id = tId(t), info = S.info[id], paused = t.state === 'paused';
   const unit = t.unit || unitOf(t.mode);
   hostDrawer.replaceChildren(
-    h('h4', null, 'Host controls', h('small', null, t.name + '  /  ' + id)),
+    h('h4', null, 'Host controls', h('small', null, t.name + '  /  ' + id),
+      h('button', { class: 'host-x', id: 'host-close', type: 'button', 'aria-label': 'Close host controls', onclick: closeDrawer }, '\u00d7')),
     h('div', { class: 'lb-btns' },
       h('button', { class: 'lb-btn sm', id: 'host-start', onclick: () => emit('table_start', { tableId: id }) }, 'Start'),
       h('button', { class: 'lb-btn sm blue', id: 'host-pause', onclick: () => emit('table_pause', { tableId: id, paused: !paused }) }, paused ? 'Resume' : 'Pause')),
