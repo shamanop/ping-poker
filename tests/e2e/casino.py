@@ -43,6 +43,11 @@ def signup(pg, name):
     pg.goto(URL); pg.wait_for_function('window.PingSocket && window.PingSocket.connected && window.Shell', timeout=10000)
     r = emit_wait(pg, 'auth_signup', {'name': name, 'pin': '1234', 'avatar': 'A'}, 'auth_ok')
     pg.wait_for_selector('body.sh-on', timeout=8000)
+    try:
+        pg.wait_for_selector('.pj-modal.open .claim', timeout=3000)
+        pg.click('.pj-modal.open .claim'); pg.wait_for_selector('.pj-modal', state='detached', timeout=4000)
+    except Exception:
+        pass
     return r
 
 

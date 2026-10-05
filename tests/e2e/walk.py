@@ -34,6 +34,12 @@ def signup(page, name, pin, av='a03'):
     page.fill('#lb-pin', pin)
     page.click(f'[data-av={av}]')
     page.click('#lb-submit')
+    try:
+        page.wait_for_selector('.pj-modal.open .claim', timeout=2500)
+        if name == 'Hank': page.wait_for_timeout(1300); page.screenshot(path=f'{SHOTS}/s-bonus-modal.png')
+        page.click('.pj-modal.open .claim'); page.wait_for_selector('.pj-modal', state='detached', timeout=4000)
+    except Exception:
+        pass
 
 
 if BASE is None:
