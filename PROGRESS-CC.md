@@ -107,6 +107,14 @@ Server events `g:coldcall:state|history|spin` -> `g:coldcall:result`; buy ids `r
   One exception, asked for by Chris directly (2026-10-05 17:54): the concept stills menu was made with GPT image
   through OpenRouter, $3.31 (`cold-call/art/concepts/spend.jsonl`). Nothing else has used a paid API.
 
+## For Isabelle (2026-10-05 18:55)
+- The OpenRouter key you gave me has $2.55 left of its $15 cap ($12.45 used: Bindle sprites, then $3.31 on these concept stills).
+- OpenAI direct and my own OpenRouter account are both empty. The polished hero and symbol set will go through shaman's local
+  models unless Chris asks for GPT again, in which case the cap needs raising first.
+- Chris (17:54) cleared shaman for compute and testing on this project.
+- Milestone 4 (front end) is being built now on placeholder symbols, so it does not wait on the art pick. Symbols load from one
+  manifest, so the final art is a file swap.
+
 ## Milestone 3a: concept stills menu (done, waiting on Chris's pick)
 Five concepts, four stills each (portrait, wide, low angle, mascot), 832x1248. Sent to Chris 2026-10-05 18:20; no pick yet.
 Contact sheets: `cold-call/art/concepts/sheet_A.jpg` .. `sheet_E.jpg`. Single stills: `cold-call/art/concepts/stills/A1.jpg` .. `E4.jpg`
