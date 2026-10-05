@@ -65,7 +65,7 @@
 
 /* Stickers and charm */
 .pj-sticker { position: absolute; left: 0; top: 0; max-width: none; pointer-events: none; will-change: transform, opacity; filter: drop-shadow(0 4px 0 rgba(0, 0, 0, .55)); }
-.pj-charm { position: absolute; z-index: 3; width: 34px; height: 34px; pointer-events: none; transform-origin: 50% 2%; animation: pj-swing 3.4s ease-in-out infinite; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, .5)); }
+.pj-charm { position: absolute; z-index: 3; width: 54px; height: 54px; pointer-events: none; transform-origin: 50% 2%; animation: pj-swing 3.4s ease-in-out infinite; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, .5)); }
 .pj-charm img { display: block; width: 100%; height: 100%; object-fit: contain; }
 .pj-charm.drop { animation: pj-charm-drop .7s cubic-bezier(.3, 1.4, .5, 1) both, pj-swing 3.4s ease-in-out .7s infinite; }
 @keyframes pj-swing { 0%, 100% { transform: rotate(-7deg); } 50% { transform: rotate(7deg); } }

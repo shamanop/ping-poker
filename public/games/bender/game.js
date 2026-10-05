@@ -218,7 +218,7 @@
     await Promise.all([...landings, ...outs]);
     stage.classList.remove('anticip'); for (const id of teaseIds) els.get(id)?.classList.remove('tease');
     reconcile(grid);
-    if (!isBonus && script.scatters === 2) { pose('shock', 1500); say('nearMiss'); }
+    if (!isBonus && script.scatters === 2) { pose('shock', 1500); say('nearMiss'); if (PJ) PJ.sfx('nearMiss'); }
   }
 
   // ---------- a step (one tumble) ----------
@@ -318,6 +318,16 @@
     await p;
   }
 
+  // ---------- PingJuice win tiers ----------
+  const PJ = window.PingJuice;
+  if (PJ) PJ.config.stage = '#stage';
+  function juiceTier(x, maxed) { return maxed || x >= 1000 ? 'jackpot' : x >= 100 ? 'mega' : x >= 20 ? 'big' : x >= 5 ? 'nice' : null; }
+  function juiceWin(x, amt, maxed) {
+    const t = juiceTier(x, maxed); if (!PJ || !t) return null;
+    if (t === 'big' || t === 'mega' || t === 'jackpot') PJ.screenShake(t === 'big' ? 0.7 : 1.2, 450);
+    setTimeout(() => PJ.winCelebration(t, $('board'), amt), 250);
+    return t;
+  }
   // ---------- big-win overlay ----------
   const mugPt = () => { const [mx, my] = sOff(mascot); return [mx + mascot.offsetWidth * 0.2, my + mascot.offsetHeight * 0.13]; };
   function holdUntilTap(ms, minMs) {
@@ -437,7 +447,7 @@
     } else res = engine.round(rng, mode, Q.get('force') === 'bonus' ? 'bonus' : undefined);
     st.last = res;
     const run = { x: 0, lvl: 0, hold: false };
-    let credited = false; const total = srvTotal != null ? srvTotal : Math.round(res.win * b);
+    let juiceTier_ = null, credited = false; const total = srvTotal != null ? srvTotal : Math.round(res.win * b);
     const credit = () => { if (credited) return; credited = true; setWin(total, true, 500); setBal(st.bal + total, true); };
     try {
       if (res.base) {
@@ -454,9 +464,10 @@
           await wait(900); clearFx();
         }
       }
-      if (res.bonus) { st.streak = 0; st.losses = 0; await runBonus(res, run); }
+      if (res.bonus) { st.streak = 0; st.losses = 0; await runBonus(res, run); juiceTier_ = juiceTier(res.win, !!res.maxed); }
       if (!res.bonus && total > 0) {
         st.streak = 0; st.lastLose = false;
+        juiceTier_ = juiceWin(res.win, total, false);
         if (tierOf(res.win)) { try { await bigWin(res.win, { onCount: credit }); } finally { credit(); } }
         else { await setWin(total, false); credit(); SFX.coin(); if (!smallTier(res.win)) { SFX.clink(res.win >= 1 ? 2 : 0); pose('hype', 1500); if (Math.random() < 0.8) say('smallWin'); } }
       } else if (res.bonus) { await setWin(total, false); credit(); }
@@ -475,7 +486,7 @@
       }
     } catch (e) { console.error(e); }
     credit();
-    if (money.live) { setBal(walletBal(), true); toParent({ type: 'round', win: total, bet: b, mode: money.mode }); }
+    if (money.live) { setBal(walletBal(), true); toParent({ type: 'round', win: total, bet: b, mode: money.mode, tier: juiceTier_ }); }
     else if (st.bal < BETS[0]) { setBal(50000, true); toast('Out of VOTES. Free refill to 50,000.', 2200); }
     st.skip = false; setBusy(false);
     if (st.queued) { const m = st.queued; st.queued = null; setTimeout(() => play(m), 300); return; }
@@ -509,6 +520,7 @@
     const t = tierOf(res.win);
     SFX.fanfare(); SFX.cheer(t ? t.lvl : 2); SFX.clink(2); FX.confetti(90); FX.rain(40); FX.cannon(-1, 40); FX.cannon(1, 40); pose('cheer', 5000, { erupt: true }); say('bonusEnd');
     const amt = Math.round(res.win * b);
+    juiceWin(res.win, amt, !!res.maxed);
     const p = modal(`<div class="scene out"><img class="ttl" src="assets/img/title_stack.webp" alt="">
       ${t ? `<img class="banner" src="assets/img/banner_${t.img}.webp" alt="${t.n}">` : `<h2 class="sm">${name} done</h2>`}
       <div class="big" id="sumAmt">0</div><p>${xFmt(res.win)}x your bet${res.maxed ? ' (max win)' : ''}</p>
@@ -530,7 +542,7 @@
   $('betUp').addEventListener('click', () => { if (st.busy) return; st.betIdx = Math.min(BETS.length - 1, st.betIdx + 1); SFX.click(); drawBet(); });
   $('turbo').addEventListener('click', () => { st.turbo = !st.turbo; $('turbo').classList.toggle('on', st.turbo); SFX.click(); });
   $('auto').addEventListener('click', () => { SFX.init(); st.auto = !st.auto; $('auto').classList.toggle('on', st.auto); SFX.click(); if (st.auto && !st.busy) play('spin'); });
-  $('snd').addEventListener('click', () => { SFX.init(); const on = SFX.toggle(); $('sndw').style.display = on ? '' : 'none'; $('snd').classList.toggle('on', !on); });
+  $('snd').addEventListener('click', () => { SFX.init(); const on = SFX.toggle(); if (PJ) PJ.setSfx(on); $('sndw').style.display = on ? '' : 'none'; $('snd').classList.toggle('on', !on); });
   $('pigeon').addEventListener('click', () => { SFX.init(); SFX.hic(); say('idle'); });
   stage.addEventListener('click', (e) => { if (e.target.closest('#tier')) st.tap++; });
   addEventListener('keydown', (e) => { if (e.code === 'Space' && !e.repeat) { e.preventDefault(); if (ov.querySelector('.scrim')) { ov.querySelector('.scrim')._done?.('x'); return; } SFX.init(); st.tap++; st.busy ? (st.skip = true) : play('spin'); } });

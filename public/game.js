@@ -555,9 +555,10 @@ function bindSocket() {
     if (myName && winners.some(w => w.name === myName)) {
       setTimeout(() => showWinFloat(pot), 250);
     }
+    juiceShowdown(winners, pot);
   });
 
-  s.on('sticker_dropped', ({ emoji, fromName }) => { showFloatingSticker(emoji, fromName); });
+  s.on('sticker_dropped', ({ emoji, fromName }) => { showFloatingSticker(emoji, fromName); juiceSticker(emoji, fromName); });
   s.on('item_thrown', ({ fromIdx, targetIdx, item }) => {
     animateProjectile(item, seatClientPos(fromIdx), seatClientPos(targetIdx));
   });
@@ -581,6 +582,7 @@ function bindSocket() {
 // Toasts for table-level events: players dropping and returning.
 function noteTable(prev, gs) {
   if (!prev || prev.handNum === undefined) return;
+  juiceAllIn(prev, gs);
   gs.players.forEach((p, i) => {
     const was = prev.players[i];
     if (!was || was.name !== p.name || i === state.myIdx) return;
@@ -596,6 +598,7 @@ function initSoundToggle() {
   btn.addEventListener('click', () => {
     state.soundOn = !state.soundOn;
     if (window.PPSound) PPSound.setMuted(!state.soundOn);
+    if (window.PingJuice) PingJuice.setSfx(state.soundOn);
     btn.querySelector('use').setAttribute('href', state.soundOn ? '#i-sound' : '#i-mute');
     btn.classList.toggle('muted', !state.soundOn);
   });
@@ -1028,6 +1031,7 @@ function renderSeats(gs) {
   }).join('');
   el.innerHTML = html;
 
+  if (window.PingJuice) el.querySelectorAll('.seat:not(.empty) .seat-pill').forEach(pill => PingJuice.charm(pill, { side: 'right', offset: 4, overlap: 16 }));
   gs.players.forEach((p, i) => {
     if (prevChipsMap[i] !== undefined && prevChipsMap[i] !== p.chips) {
       const c = el.querySelector(`.seat[data-player-idx="${i}"] .seat-chips`);
@@ -1536,6 +1540,13 @@ function showSplat(item, x, y) {
   playSound('splat');
   const name = SPLAT_FX[item];
   if (!name) return;
+  if (item === '💣' && window.PingJuice) {
+    PingJuice.burst('bomb', x, y, { size: 300 * state.u, ms: 900 });
+    PingJuice.shockwave(x, y, { size: 260 * state.u });
+    PingJuice.screenShake(1, 500); PingJuice.sfx('bombBoom');
+    PingJuice.burst('glitter', x, y, { size: 220 * state.u, ms: 700, delay: 120 });
+    return;
+  }
   const el = fxImg(name, x, y, 170);
   const settle = item === '🍅' ? 1.05 : 1.0;
   el.animate([
@@ -1599,6 +1610,7 @@ function audioCtx() {
 }
 
 function playSound(type) {
+  if ((type === 'chip' || type === 'raise') && window.PingJuice) PingJuice.sfx('chipClink', { minGap: 70 });
   if (window.PPSound) return PPSound.play(type); // sound.js owns audio; legacy synth below is fallback
   if (!state.soundOn) return;
   try {
@@ -1828,4 +1840,60 @@ function safePic(pic) {
   if (typeof pic !== 'string') return null;
   if (!/^data:image\/(jpeg|png|webp|gif);base64,[A-Za-z0-9+\/=]+$/.test(pic)) return null;
   return pic;
+}
+
+
+// ─── Juice wiring (PingJuice) ─────────────────────────────────────
+const juiceSeat = idx => document.querySelector(`.seat[data-player-idx="${idx}"]`);
+const juiceSeatByName = name => { const i = state.gameState?.players.findIndex(p => p.name === name); return i >= 0 ? juiceSeat(i) : null; };
+
+function juiceShowdown(winners, pot) {
+  const PJ = window.PingJuice, gs = state.gameState;
+  if (!PJ || !gs) return;
+  const bb = gs.bb || BIG_BLIND, bbs = pot / bb;
+  const potEl = $('t-center'), myName = gs.players[state.myIdx]?.name;
+  const allInPot = gs.players.some(p => p.allIn);
+  const tier = bbs >= 25 ? 'mega' : (bbs >= 5 || allInPot) ? 'big' : 'nice';
+  if (bbs >= 20) PJ.screenShake(bbs >= 50 ? 1.3 : 0.8, 500);
+  winners.forEach((w, wi) => {
+    const idx = gs.players.findIndex(p => p.name === w.name);
+    const seat = idx >= 0 ? juiceSeat(idx) : null;
+    const amt = Number.isFinite(w.amount) ? w.amount : Math.floor(pot / winners.length);
+    if (seat) PJ.chipShower(potEl, seat, Math.max(6, Math.min(18, Math.round(6 + bbs / 3))));
+    if (seat && idx >= 0) setTimeout(() => {
+      const chipsEl = juiceSeat(idx)?.querySelector('.seat-chips');
+      const now = state.gameState?.players[idx]?.chips;
+      if (chipsEl && Number.isFinite(now)) PJ.countUp(chipsEl, Math.max(0, now - amt), now, 800);
+    }, 750);
+    const mine = w.name === myName;
+    const hn = w.handName || '';
+    const callout = /^(Full House|Four of a Kind|Straight Flush|Royal Flush)/i.test(hn);
+    if (callout) setTimeout(() => PJ.calloutHand(hn + '!', $('stage')), 200);
+    if (mine || bbs >= 20) {
+      setTimeout(() => PJ.winCelebration(tier, seat || potEl, mine ? amt : `${w.name} +${Money.fmt(amt)}`), (callout ? 1700 : 350) + wi * 200);
+    }
+  });
+  if (bbs >= 50) {
+    const top = winners[0];
+    PJ.toast(`**${top.name}** won a **${Money.fmt(pot)}** pot`, { sticker: 'vp-chip' });
+  }
+}
+
+function juiceAllIn(prev, gs) {
+  const PJ = window.PingJuice;
+  if (!PJ || !prev.players || prev.handNum !== gs.handNum) return;
+  gs.players.forEach((p, i) => {
+    const was = prev.players[i];
+    if (!was || was.name !== p.name || was.allIn || !p.allIn) return;
+    const [x, y] = seatClientPos(i);
+    if (p.lastAction === 'CALL') { PJ.shockwave(x, y, { size: 380 * state.u }); PJ.screenShake(0.6, 400); PJ.sfx('thud'); PJ.sfx('whoosh'); }
+    else { PJ.shockwave(x, y, { size: 260 * state.u }); PJ.sfx('whoosh'); }
+  });
+}
+
+function juiceSticker(emoji, fromName) {
+  const PJ = window.PingJuice, seat = juiceSeatByName(fromName);
+  if (!PJ || !seat) return;
+  let h = 0; for (const c of String(emoji)) h = (h * 31 + c.codePointAt(0)) >>> 0;
+  PJ.stickerPop(PJ.stickerNames[h % PJ.stickerNames.length], seat, { size: 56 });
 }

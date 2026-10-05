@@ -376,7 +376,7 @@
     if (!targetEl) return null;
     o = o || {};
     PJ.uncharm(targetEl);
-    var size = o.size || 36, w = document.createElement('div');
+    var size = o.size || 58, w = document.createElement('div');
     w.className = 'pj-charm' + (reduced() ? '' : ' drop');
     w.style.width = w.style.height = size + 'px';
     w.style[o.side === 'left' ? 'left' : 'right'] = (o.offset != null ? o.offset : 10) + 'px';

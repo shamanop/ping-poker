@@ -344,7 +344,10 @@
       const p = { bet: m.bet, mode: m.mode }; if (m.buy) p.buyBonus = m.buy;
       s.emit('g:bender:spin', p);
     } else if (m.type === 'mode') { wmode = m.mode === 'ledger' ? 'ledger' : 'play'; }
-    else if (m.type === 'round') { if (typeof m.win === 'number') lastWin = m.win; refreshDock(); }
+    else if (m.type === 'round') {
+      if (typeof m.win === 'number') lastWin = m.win; refreshDock();
+      if (window.PingJuice && (m.tier === 'mega' || m.tier === 'jackpot') && m.bet > 0) PingJuice.toast(`**You** hit **${Math.round(m.win / m.bet)}x** on Ballot Bender`, { sticker: 'ballot-cherry' });
+    }
     else if (m.type === 'esc') focus('poker');
   });
 
