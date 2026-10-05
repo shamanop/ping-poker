@@ -4,7 +4,7 @@ const fs = require('fs'), os = require('os'), path = require('path');
 const { io } = require(process.env.SIO_CLIENT || '/home/isabelle/.cache/node_modules/socket.io-client');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pprj-'));
-const PORT = 4777, ROOT = path.join(__dirname, '..');
+const PORT = Number(process.env.TEST_PORT || 4777), ROOT = path.join(__dirname, '..');
 const proc = spawn('node', ['server.js'], { cwd: ROOT, env: { ...process.env, PORT: String(PORT), AUTO_START_MS: '600000', BANK_FILE: path.join(dir, 'bank.json'), LEDGER_FILE: path.join(dir, 'ledger.json') } });
 let fails = 0; const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails++; };
 function client(name) {

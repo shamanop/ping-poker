@@ -433,13 +433,9 @@ function createTables(E) {
       const { key, t, room } = hostFor(tableId); if (!t) return;
       if (t.state === 'ended' || !room) { err('This table has ended'); return; }
       const p = paused !== false;
-      room.paused = p;
-      t.state = p ? 'paused' : 'open';
-      t.pausedBy = p ? dispOf(key) : null;
-      E.roomLog(room, p ? `Paused by ${dispOf(key)}` : 'Table resumed');
+      E.setPaused(room, p, dispOf(key));
       event(t, p ? 'paused' : 'resumed', { paused: p, by: dispOf(key) });
       E.broadcastGameState(room);
-      if (!p) E.maybeAutoStart(room, true);
       save(); pushLobby();
     });
 
