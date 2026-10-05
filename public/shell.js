@@ -328,6 +328,7 @@
     });
     s.on('g:bender:error', (e) => benderErr(e));
     s.on('error', (e) => { if (spinQ.length) benderErr(e); });
+    if (user()) { setSignedIn(true); s.emit('wallet_get'); s.emit('account:stats'); bonusShown = false; s.emit('bonus:status'); }
     return true;
   }
   let bonusShown = false;
