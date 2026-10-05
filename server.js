@@ -959,8 +959,18 @@ io.on('connection', socket => {
     if (room.blindTimer) { clearTimeout(room.blindTimer); room.blindTimer = null; }
 
     for (const p of room.players) {
+      if (!p.isBot && p.chips > 0) { const c = p.chips; p.chips = 0; adjustBank(p.name, c, 'cashout', room, 0); }
+    }
+    // Everyone's total money becomes the chosen stack, so the bank matches what they sit down with.
+    for (const k of Object.keys(bank)) {
+      if (bank[k] === stack) continue;
+      const delta = stack - bank[k];
+      bank[k] = stack;
+      ledger.log('adjust', k, Math.abs(delta), stack, 0, room.handNum, room.id, { delta });
+    }
+    saveBank();
+    for (const p of room.players) {
       if (p.isBot) continue;
-      if (p.chips > 0) { const c = p.chips; p.chips = 0; adjustBank(p.name, c, 'cashout', room, 0); }
       if (p.connected) {
         const buyIn = Math.min(stack, getBalance(p.name));
         if (buyIn >= BIG_BLIND) {

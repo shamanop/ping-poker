@@ -24,11 +24,11 @@ const { startServer, mk, waitFor, sleep } = require('./lib.js');
     await waitFor(() => !a.gs.paused && a.gs.pot === 0, 3000);
     check(!a.gs.paused && !b.gs.paused, 'reset unpauses the table');
     check(a.gs.pot === 0 && a.gs.community.length === 0, 'pot and board cleared');
-    check(total(a) === t0.a && total(b) === t0.b, `money conserved (Chris ${total(a)}, Liam ${total(b)})`);
+    check(total(a) === 3000 && total(b) === 3000 && srv.bank().chris === 0 && srv.bank().liam === 0, `everyone's total set to the chosen stack (Chris ${total(a)}, Liam ${total(b)})`);
     check(a.me().chips === 3000 && b.me().chips === 3000, 'both re-seated with the chosen 3000 stacks');
     await waitFor(() => a.gs.status === 'playing' && a.gs.handNum === hn + 1, 6000);
     check(a.gs.status === 'playing' && a.gs.handNum === hn + 1, 'new game deals automatically');
-    check(total(a) + total(b) + a.gs.pot === t0.a + t0.b, 'money conserved after new deal');
+    check(total(a) + total(b) + a.gs.pot === 6000, 'money conserved after new deal');
   } catch (e) { console.log('ERR', e); fail++; }
   srv.stop(); process.exit(fail ? 1 : 0);
 })();
