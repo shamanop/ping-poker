@@ -78,7 +78,7 @@ function createLedger({ file, onWrite }) {
     const P = new Map();
     const ensure = (name, isBot) => {
       const k = key(name);
-      if (!P.has(k)) P.set(k, { name, isBot: !!isBot, bank: isBot ? null : (bank[k] ?? null), atTable: 0, status: 'offline', totalBuyIns: 0, rebuys: 0, cashedOut: 0, net: 0, biggestWin: 0, handsPlayed: 0, lastSeen: null });
+      if (!P.has(k)) P.set(k, { name, isBot: !!isBot, bank: isBot ? null : (bank[k] ?? null), atTable: 0, status: 'offline', totalBuyIns: 0, buyIns: 0, rebuys: 0, rebuyTotal: 0, cashedOut: 0, net: 0, biggestWin: 0, handsPlayed: 0, lastSeen: null });
       return P.get(k);
     };
     const events = [];
@@ -96,11 +96,11 @@ function createLedger({ file, onWrite }) {
         hands.set(e.handNum, h);
         continue;
       }
-      if (!e.name) continue;
+      if (!e.name || e.type === 'bank-start') continue;
       const p = ensure(e.name, false);
       p.lastSeen = Math.max(p.lastSeen || 0, e.t);
-      if (e.type === 'buyin') p.totalBuyIns += e.amount;
-      else if (e.type === 'rebuy') { p.totalBuyIns += e.amount; p.rebuys++; }
+      if (e.type === 'buyin') { p.totalBuyIns += e.amount; p.buyIns++; }
+      else if (e.type === 'rebuy') { p.totalBuyIns += e.amount; p.buyIns++; p.rebuys++; p.rebuyTotal += e.amount; }
       else if (e.type === 'cashout') p.cashedOut += e.amount;
       else if (e.type === 'win') p.biggestWin = Math.max(p.biggestWin, e.amount);
       if (e.type === 'buyin' || e.type === 'rebuy' || e.type === 'cashout') events.push(e);
