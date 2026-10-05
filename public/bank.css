@@ -134,8 +134,13 @@
 .pause-banner {
   position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%); z-index: 12; pointer-events: none;
   display: flex; flex-direction: column; align-items: center; gap: var(--p4);
-  padding: var(--p16) var(--p40); border: 1px solid var(--brass); border-radius: var(--p10);
+  padding: var(--p10) var(--p32); border: 1px solid var(--brass); border-radius: var(--p10);
   background: rgba(26, 16, 10, .92); box-shadow: 0 var(--p10) var(--p28) rgba(0, 0, 0, .6);
 }
-.pause-banner b { font-family: var(--f-display); font-weight: 400; font-size: var(--p40, 40px); letter-spacing: .2em; color: var(--gold); }
+.pause-banner b { font-family: var(--f-display); font-weight: 400; font-size: var(--p32, 32px); line-height: 1; letter-spacing: .2em; color: var(--gold); }
 .pause-banner span { font-size: var(--p12); color: var(--ink-dim); letter-spacing: .08em; text-transform: uppercase; }
+
+.pause-reset.hidden { display: none; }
+.pause-reset { pointer-events: auto; margin-top: var(--p4); padding: var(--p4) var(--p16); border-radius: var(--p6); cursor: pointer;
+  border: 1px solid #E2674F; background: transparent; color: #E2674F; font-family: var(--f-display); letter-spacing: .14em; text-transform: uppercase; font-size: var(--p12); }
+.pause-reset:hover { background: #E2674F; color: #fff; }

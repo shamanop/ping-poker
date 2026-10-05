@@ -795,6 +795,7 @@ function publicGameState(room) {
     handNum:         room.handNum,
     status:          room.status,
     paused:          !!room.paused,
+    startChips:      room.startChips || STARTING_CHIPS,
     hostName:        room.players.find(p => p.socketId === room.hostSocketId)?.name || '',
     sb:              room.sb,
     bb:              room.bb,
@@ -938,6 +939,55 @@ io.on('connection', socket => {
     broadcastGameState(room);
   });
 
+  on('reset_table', ({ amount } = {}) => {
+    const room = rooms.get(ROOM_ID);
+    const me = room && room.players.find(p => !p.isBot && p.socketId === socket.id);
+    if (!me || bankKey(me.name) !== 'chris') { socket.emit('error', { message: 'Only Chris can reset the table' }); return; }
+    if (!room.paused) { socket.emit('error', { message: 'Pause the table first' }); return; }
+    const stack = amount === undefined ? (room.startChips || STARTING_CHIPS) : Math.floor(Number(amount));
+    if (!Number.isFinite(stack) || stack < BIG_BLIND * 10 || stack > 10000000) {
+      socket.emit('error', { message: `Starting stack must be between ${BIG_BLIND * 10} and 10,000,000` }); return;
+    }
+    room.startChips = stack;
+
+    if (room.status === 'playing') {
+      for (const p of room.players) { p.chips += p.handBet || 0; p.handBet = 0; }
+      ledger.endHand(room, getBalance);
+    }
+    clearHandTimers(room);
+    if (room.autoStartTimer) { clearTimeout(room.autoStartTimer); room.autoStartTimer = null; }
+    if (room.blindTimer) { clearTimeout(room.blindTimer); room.blindTimer = null; }
+
+    for (const p of room.players) {
+      if (p.isBot) continue;
+      if (p.chips > 0) { const c = p.chips; p.chips = 0; adjustBank(p.name, c, 'cashout', room, 0); }
+      if (p.connected) {
+        const buyIn = Math.min(stack, getBalance(p.name));
+        if (buyIn >= BIG_BLIND) {
+          adjustBank(p.name, -buyIn, 'buyin', room, buyIn);
+          p.chips = buyIn;
+          p.chipsBought = buyIn;
+        }
+      }
+      p.cards = []; p.roundBet = 0; p.handBet = 0; p.folded = false; p.allIn = false; p.lastAction = null;
+      p.sittingOut = p.chips === 0 || !!p.sitOutRequest;
+    }
+
+    room.status = 'waiting';
+    room.community = []; room.pot = 0; room.currentBet = 0; room.street = null;
+    room.actionQueue = []; room.dealerIdx = 0; room.shown = {}; room.lastStacks = {};
+    room.sb = SMALL_BLIND; room.bb = BIG_BLIND; room.blindLevel = 0; room.blindsEnabled = false;
+    room.paused = false;
+    roomLog(room, `Table reset by Chris, stacks ${stack.toLocaleString()}`);
+
+    broadcastRoomUpdate(room);
+    broadcastGameState(room);
+    emitPrivateCards(room);
+    for (const p of room.players) if (!p.isBot && p.connected) io.to(p.socketId).emit('balance_data', { balance: getBalance(p.name) });
+    io.to(room.id).emit('bank_summary', bankSummary(room.id));
+    maybeAutoStart(room);
+  });
+
   on('show_cards', ({ which } = {}) => {
     const room = rooms.get(ROOM_ID);
     const me = room && room.players.find(p => !p.isBot && p.socketId === socket.id);
@@ -969,7 +1019,7 @@ io.on('connection', socket => {
     const key = bankKey(cleanName);
     const buyInFor = () => {
       const prior = room.lastStacks[key] || 0;
-      return Math.min(prior >= BIG_BLIND ? prior : STARTING_CHIPS, getBalance(cleanName));
+      return Math.min(prior >= BIG_BLIND ? prior : (room.startChips || STARTING_CHIPS), getBalance(cleanName));
     };
 
     // Same name already at this table: take that seat back (refresh, dropped phone, second tab)
@@ -1106,7 +1156,7 @@ io.on('connection', socket => {
     }
 
     const balance = getBalance(player.name);
-    const buyIn   = Math.min(STARTING_CHIPS, balance);
+    const buyIn   = Math.min(room.startChips || STARTING_CHIPS, balance);
     if (buyIn < BIG_BLIND) { socket.emit('error', { message: 'Not enough chips in bank to rebuy' }); return; }
 
     const newBalance = adjustBank(player.name, -buyIn, 'rebuy', room, buyIn);

@@ -45,7 +45,17 @@
     head.insertBefore(pz, btn.nextSibling);
     const pb = document.createElement('div');
     pb.id = 'pause-banner'; pb.className = 'pause-banner hidden';
-    pb.innerHTML = '<b>Paused</b><span>The table is on hold</span>';
+    pb.innerHTML = '<b>Paused</b><span>The table is on hold</span><button type="button" id="reset-btn" class="pause-reset hidden">Reset table</button>';
+    pb.querySelector('#reset-btn').addEventListener('click', () => {
+      if (!state.socket) return;
+      const last = Number((state.gameState && state.gameState.startChips) || localStorage.getItem('pp-reset-stack')) || 1500;
+      const raw = window.prompt('Reset the table? The hand is cancelled and bets are refunded. Starting stack for everyone (chips from their bank):', String(last));
+      if (raw === null) return;
+      const amount = Math.floor(Number(String(raw).replace(/[, $]/g, '')));
+      if (!Number.isFinite(amount) || amount < 200) { window.alert('Enter a whole number of chips, 200 or more.'); return; }
+      localStorage.setItem('pp-reset-stack', String(amount));
+      state.socket.emit('reset_table', { amount });
+    });
     grid.appendChild(pb);
 
     const panel = document.createElement('section');
@@ -311,8 +321,9 @@
       if (pz) { pz.classList.toggle('hidden', !mine); pz.textContent = gs.paused ? 'Resume' : 'Pause'; pz.classList.toggle('on', !!gs.paused); }
       if (pb) {
         pb.classList.toggle('hidden', !gs.paused);
+        const rb = $('reset-btn'); if (rb) rb.classList.toggle('hidden', !mine);
         const g = state.geo;
-        if (g) { pb.style.left = g.cx + 'px'; pb.style.top = (g.cy - 140 * g.u) + 'px'; }
+        if (g) { pb.style.left = g.cx + 'px'; pb.style.top = (g.cy - 165 * g.u) + 'px'; }
       }
     });
     return true;
