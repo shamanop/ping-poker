@@ -54,7 +54,7 @@ function probeArt() {
   const html  = document.documentElement;
   const slots = {
     'art-felt': 'table-felt.jpg', 'art-rail': 'table-rail.jpg', 'art-backdrop': 'backdrop.jpg',
-    'art-back': 'card-back.png', 'art-puck': 'dealer-button.png', 'art-lockup': 'logo-lockup.png',
+    'art-back': 'card-back.png', 'art-puck': 'dealer-button.png', 
     'art-c1': 'chip-1.png', 'art-c5': 'chip-5.png', 'art-c25': 'chip-25.png', 'art-c100': 'chip-100.png', 'art-c500': 'chip-500.png',
   };
   Object.entries(slots).forEach(([cls, file]) => {
@@ -599,6 +599,9 @@ function initBust() {
     $('bust-panel').classList.add('hidden');
   });
   $('btn-leave').addEventListener('click', () => { location.reload(); });
+  $('btn-home').addEventListener('click', () => {
+    if (confirm('Leave the table and go back to the home screen?')) location.href = location.pathname;
+  });
 }
 
 function showBust(balance) {

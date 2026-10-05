@@ -97,7 +97,7 @@ html.art-backdrop .stage-backdrop {
 }
 
 /* ── Brand ─────────────────────────────────────────────────────── */
-.wordmark { font-family: var(--f-display); font-size: var(--p48); letter-spacing: .06em; line-height: 1; color: var(--ink); }
+.wordmark { font-family: var(--f-card); font-weight: 700; font-size: var(--p48); letter-spacing: .01em; line-height: 1; color: var(--ink); }
 .wordmark em { color: var(--gold); }
 .wordmark.sm { font-size: var(--p22); }
 .lockup-fallback { display: flex; align-items: center; gap: var(--p14); }
@@ -107,7 +107,6 @@ html.art-backdrop .stage-backdrop {
 .lockup-sub { font-size: var(--p12); color: var(--ink-dim); letter-spacing: .08em; text-transform: uppercase; margin-top: var(--p4); }
 .lockup-img { height: var(--p56); width: auto; display: block; }
 .lockup-img.sm { height: var(--p28); }
-html.art-lockup .lockup-fallback { display: none; }
 
 /* ── Buttons / fields ──────────────────────────────────────────── */
 .btn {
@@ -422,7 +421,9 @@ html.art-login .setup-card { background: linear-gradient(180deg, rgba(34, 22, 14
   grid-template-areas: "head rail" "stage rail" "bar rail";
 }
 .g-head { grid-area: head; display: flex; align-items: center; gap: var(--p16); padding: 0 var(--p16); background: linear-gradient(180deg, #2A1B11, #1B110A); border-bottom: 1px solid var(--line); min-width: 0; z-index: 10; }
-.g-brand { display: flex; align-items: center; flex: none; }
+.g-brand { display: flex; align-items: center; flex: none; background: none; border: 0; padding: 0; cursor: pointer; color: inherit; font: inherit; }
+.g-brand:hover .wordmark { filter: brightness(1.15); }
+.g-brand:focus-visible { outline: 2px solid var(--gold); outline-offset: 4px; }
 .g-plaque { display: flex; align-items: center; gap: var(--p18); margin-left: auto; }
 .pl { display: flex; flex-direction: column; line-height: 1.05; min-width: calc(48 * var(--px)); }
 .pl label { font-size: var(--p10); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-dim); }
