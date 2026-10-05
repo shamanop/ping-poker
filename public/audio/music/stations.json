@@ -1,0 +1,79 @@
+{
+  "stations": [
+    {
+      "id": "placeholder-a",
+      "name": "Placeholder A",
+      "tagline": "Slow two-tone loop (test)",
+      "tracks": [
+        {
+          "file": "01-placeholder-tone-a1.mp3",
+          "title": "Placeholder Tone A1",
+          "artist": "Placeholder Synth",
+          "durationSec": 20.0
+        },
+        {
+          "file": "02-placeholder-tone-a2.mp3",
+          "title": "Placeholder Tone A2",
+          "artist": "Placeholder Synth",
+          "durationSec": 17.3
+        },
+        {
+          "file": "03-placeholder-tone-a3.mp3",
+          "title": "Placeholder Tone A3",
+          "artist": "Placeholder Synth",
+          "durationSec": 23.0
+        }
+      ]
+    },
+    {
+      "id": "placeholder-b",
+      "name": "Placeholder B",
+      "tagline": "Mid-tempo pulse (test)",
+      "tracks": [
+        {
+          "file": "01-placeholder-tone-b1.mp3",
+          "title": "Placeholder Tone B1",
+          "artist": "Placeholder Synth",
+          "durationSec": 19.0
+        },
+        {
+          "file": "02-placeholder-tone-b2.mp3",
+          "title": "Placeholder Tone B2",
+          "artist": "Placeholder Synth",
+          "durationSec": 21.501
+        },
+        {
+          "file": "03-placeholder-tone-b3.mp3",
+          "title": "Placeholder Tone B3",
+          "artist": "Placeholder Synth",
+          "durationSec": 16.0
+        }
+      ]
+    },
+    {
+      "id": "placeholder-c",
+      "name": "Placeholder C",
+      "tagline": "Fast tremolo (test)",
+      "tracks": [
+        {
+          "file": "01-placeholder-tone-c1.mp3",
+          "title": "Placeholder Tone C1",
+          "artist": "Placeholder Synth",
+          "durationSec": 22.0
+        },
+        {
+          "file": "02-placeholder-tone-c2.mp3",
+          "title": "Placeholder Tone C2",
+          "artist": "Placeholder Synth",
+          "durationSec": 18.0
+        },
+        {
+          "file": "03-placeholder-tone-c3.mp3",
+          "title": "Placeholder Tone C3",
+          "artist": "Placeholder Synth",
+          "durationSec": 20.7
+        }
+      ]
+    }
+  ]
+}
