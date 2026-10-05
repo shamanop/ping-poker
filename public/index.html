@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Bitter:wght@400;500;600;700&family=Libre+Baskerville:wght@700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=21">
+  <link rel="stylesheet" href="style.css?v=23">
   <link rel="stylesheet" href="bank.css?v=1">
 </head>
 <body>
@@ -133,8 +133,14 @@
           </div>
         </div>
         <div id="wait-panel" class="wait-panel hidden">
-          <div class="wp-count"><b id="wp-count">1</b><span>of 8 seated</span></div>
-          <div class="wp-msg" id="wp-msg"><span class="pulse-dot"></span><span id="wp-text">Waiting for players</span></div>
+          <div class="wp-msg" id="wp-msg"><span class="pulse-dot"></span><span id="wp-text">Waiting for a second player</span></div>
+          <div class="wp-sub" id="wp-sub">Deals automatically when a second player sits down.</div>
+          <div class="wp-seats" id="wp-seats"></div>
+          <button type="button" class="wp-invite" id="wp-invite" title="Copy invite link">
+            <span class="wp-invite-label">Invite a friend</span>
+            <span class="wp-invite-link" id="wp-invite-link"></span>
+            <span class="wp-invite-cta">Copy link</span>
+          </button>
           <div id="blind-settings" class="wp-blinds hidden">
             <span class="field-label">Blind escalation</span>
             <div class="seg" id="blind-seg" role="radiogroup">
@@ -145,6 +151,12 @@
             </div>
           </div>
           <button id="btn-start" class="btn btn-brass hidden">Start game</button>
+        </div>
+        <div id="show-panel" class="show-panel hidden">
+          <span class="sp-label">Show your cards</span>
+          <button type="button" data-w="0">Show left</button>
+          <button type="button" data-w="both">Show both</button>
+          <button type="button" data-w="1">Show right</button>
         </div>
         <div id="bet-layer" class="bet-layer"></div>
         <div id="puck-layer" class="puck-layer"></div>
@@ -245,7 +257,7 @@
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="sound.js?v=1"></script>
-  <script src="game.js?v=21"></script>
-  <script src="bank.js?v=1"></script>
+  <script src="game.js?v=23"></script>
+  <script src="bank.js?v=2"></script>
 </body>
 </html>

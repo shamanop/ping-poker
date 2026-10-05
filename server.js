@@ -428,6 +428,7 @@ function startHand(room) {
   room.currentBet = room.bb;
   room.street    = 'preflop';
   room.handNum  += 1;
+  room.shown = {};
   ledger.startHand(room);
 
   for (const p of players) {
@@ -565,11 +566,11 @@ function instantWin(room, winner) {
   });
   if (room.handHistory.length > 10) room.handHistory.pop();
   io.to(room.id).emit('showdown_result', {
-    winners: [{ name: winner.name, handName: 'Everyone folded', cards: winner.cards, amount: room.pot }],
-    pot: room.pot,
+    winners: [{ name: winner.name, handName: 'Everyone folded', cards: [], amount: room.pot }],
+    pot: room.pot, nextMs: 7000,
   });
   room.pot = 0;
-  scheduleNextHand(room);
+  scheduleNextHand(room, 7000);
 }
 
 // ─── Advance Street ───────────────────────────────────────────────────────────
@@ -666,14 +667,16 @@ function showdown(room) {
     pot:      room.pot,
   });
   if (room.handHistory.length > 10) room.handHistory.pop();
-  io.to(room.id).emit('showdown_result', { winners: winnerList, pot: room.pot });
+  const reveals = results.map(r => ({ name: r.player.name, handName: r.hand.name, cards: r.player.cards }));
+  for (const r of reveals) (room.shown ||= {})[bankKey(r.name)] = [true, true];
+  io.to(room.id).emit('showdown_result', { winners: winnerList, pot: room.pot, reveals, nextMs: 5000 });
   room.pot = 0;
-  scheduleNextHand(room);
+  scheduleNextHand(room, 5000);
 }
 
 // ─── Schedule Next Hand ───────────────────────────────────────────────────────
 
-function scheduleNextHand(room) {
+function scheduleNextHand(room, delayMs = 5000) {
   clearHandTimers(room);
   ledger.endHand(room, getBalance);
   room.status = 'waiting_next';
@@ -732,7 +735,7 @@ function scheduleNextHand(room) {
     emitPrivateCards(room);
     scheduleBotActionsIfNeeded(room);
     scheduleTurnTimeout(room);
-  }, 5000);
+  }, delayMs);
 }
 
 // ─── Broadcasting ─────────────────────────────────────────────────────────────
@@ -839,24 +842,54 @@ io.on('connection', socket => {
     socket.emit('bank_summary', bankSummary(roomId));
   });
 
-  // Only the seated player named "chris" can edit banks.
+  // Only the seated player named "chris" can edit money. `balance` is the player's TOTAL (bank + chips at the table).
   on('bank_set', ({ name, balance } = {}) => {
     const room = rooms.get(ROOM_ID);
     const me = room && room.players.find(p => !p.isBot && p.socketId === socket.id);
     if (!me || bankKey(me.name) !== 'chris') { socket.emit('error', { message: 'Only Chris can edit the bank' }); return; }
     const target = cleanNameOf(name);
-    const amount = Math.round(Number(balance));
-    if (!target || bank[bankKey(target)] === undefined) { socket.emit('error', { message: 'Unknown player' }); return; }
-    if (!Number.isFinite(amount) || amount < 0 || amount > 100000000) { socket.emit('error', { message: 'Enter a bank amount from 0 to 100,000,000' }); return; }
+    const total = Math.round(Number(balance));
+    if (!target) { socket.emit('error', { message: 'Unknown player' }); return; }
+    if (!Number.isFinite(total) || total < 0 || total > 100000000) { socket.emit('error', { message: 'Enter an amount from 0 to 100,000,000' }); return; }
     const k = bankKey(target);
-    const delta = amount - bank[k];
-    bank[k] = amount;
-    saveBank();
-    ledger.log('adjust', target, Math.abs(delta), amount, null, room.handNum, room.id);
-    roomLog(room, `${me.name} set ${target}'s bank to ${amount}`);
+    getBalance(target);
     const seat = room.players.find(p => !p.isBot && bankKey(p.name) === k);
-    if (seat && seat.connected) io.to(seat.socketId).emit('balance_data', { balance: amount });
+    const stack = seat ? seat.chips : 0;
+    let newStack = stack;
+    if (total < stack) {
+      if (room.status === 'playing' && seat.cards.length && !seat.folded) { socket.emit('error', { message: `${target} is in a hand. Lower their money after it ends.` }); return; }
+      newStack = total;
+    }
+    const before = bank[k] + stack;
+    bank[k] = total - newStack;
+    saveBank();
+    if (seat && newStack !== stack) {
+      seat.chips = newStack;
+      if (newStack === 0 && !seat.allIn) seat.sittingOut = true;
+    }
+    ledger.log('adjust', target, Math.abs(total - before), bank[k], newStack, room.handNum, room.id);
+    roomLog(room, `${me.name} set ${target}'s money to ${total.toLocaleString()}`);
+    if (seat && seat.connected) {
+      io.to(seat.socketId).emit('balance_data', { balance: bank[k] });
+      if (seat.chips === 0) io.to(seat.socketId).emit('bust_out', { balance: bank[k] });
+    }
+    broadcastGameState(room);
     io.to(room.id).emit('bank_summary', bankSummary(room.id));
+  });
+
+  // Voluntarily show hole cards once the hand is over. idx is 0, 1 or 'both'.
+  on('show_cards', ({ which } = {}) => {
+    const room = rooms.get(ROOM_ID);
+    const me = room && room.players.find(p => !p.isBot && p.socketId === socket.id);
+    if (!me || room.status !== 'waiting_next' || me.cards.length !== 2) return;
+    const slots = which === 'both' ? [0, 1] : (which === 0 || which === 1) ? [which] : [];
+    if (!slots.length) return;
+    const shown = (room.shown ||= {});
+    const rec = shown[bankKey(me.name)] || [false, false];
+    slots.forEach(i => { rec[i] = true; });
+    shown[bankKey(me.name)] = rec;
+    io.to(room.id).emit('cards_shown', { handNum: room.handNum, name: me.name, cards: me.cards.map((c, i) => (rec[i] ? c : null)) });
+    roomLog(room, `${me.name} shows ${rec[0] && rec[1] ? 'both cards' : 'one card'}`);
   });
 
   on('get_leaderboard', () => {

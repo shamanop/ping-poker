@@ -94,14 +94,17 @@
   function renderHead() {
     const humans = data.players.filter(p => !p.isBot);
     const bankSum = humans.reduce((s, p) => s + (p.bank || 0), 0);
-    const onTable = data.players.reduce((s, p) => s + (p.status === 'offline' ? 0 : p.atTable), 0);
+    const onTable = humans.reduce((s, p) => s + (p.status === 'offline' ? 0 : p.atTable), 0);
     const buy = humans.reduce((s, p) => s + p.totalBuyIns, 0);
     $('bank-total').innerHTML =
-      `<div class="pl"><label>Banked</label><b>${fmt(bankSum)}</b></div>` +
+      `<div class="pl"><label>Total money</label><b>${fmt(bankSum + onTable)}</b></div>` +
+      `<div class="pl"><label>In bank</label><b>${fmt(bankSum)}</b></div>` +
       `<div class="pl"><label>On the table</label><b>${fmt(onTable)}</b></div>` +
       `<div class="pl"><label>Bought in</label><b>${fmt(buy)}</b></div>` +
       `<div class="pl"><label>Hands</label><b>${data.maxHand || 0}</b></div>`;
   }
+
+  const totalOf = p => (p.bank || 0) + (p.status === 'offline' ? 0 : p.atTable);
 
   function renderPlayers() {
     const me = state.gameState && state.gameState.players[state.myIdx];
@@ -122,11 +125,11 @@
         <div class="bp-avw"><div class="bp-av">${avatarFor(p.name)}</div><span class="bp-dot ${p.status}" title="${STATUS[p.status] || ''}"></span></div>
         <div class="bp-who">${E(p.name)}${tag}</div>
         <div class="bp-sub">${E(sub.join(' · '))}</div>
-        <div class="bp-bal"><b${canEdit && !p.isBot ? ` class="editable" data-name="${E(p.name)}" data-bank="${p.bank || 0}" title="Click to edit this bank"` : ''}>${p.isBot ? '&mdash;' : fmt(p.bank || 0)}</b><span>Bank</span></div>
+        <div class="bp-bal"><b${canEdit && !p.isBot ? ` class="editable" data-name="${E(p.name)}" data-total="${totalOf(p)}" title="Click to set this player's money"` : ''}>${p.isBot ? '&mdash;' : fmt(totalOf(p))}</b><span>Total</span></div>
         <div class="bp-stats">
-          <div><label>At table</label><b>${fmt(p.atTable)}</b></div>
+          <div><label>In bank</label><b>${p.isBot ? '&mdash;' : fmt(p.bank || 0)}</b></div>
+          <div><label>At table</label><b>${fmt(p.status === 'offline' ? 0 : p.atTable)}</b></div>
           <div><label>Net P&amp;L</label><b class="${netCls}">${p.isBot ? '&mdash;' : signed(p.net)}</b></div>
-          <div><label>Buy-ins</label><b>${p.isBot ? '&mdash;' : p.buyIns}</b></div>
           <div><label>Best win</label><b>${p.isBot ? '&mdash;' : (p.biggestWin ? fmt(p.biggestWin) : '&ndash;')}</b></div>
         </div>
       </div>`;
@@ -137,8 +140,8 @@
   function editBank(b) {
     const name = b.dataset.name;
     const input = document.createElement('input');
-    input.type = 'number'; input.min = '0'; input.step = '1'; input.value = b.dataset.bank; input.className = 'bp-edit';
-    input.setAttribute('aria-label', 'New bank amount for ' + name);
+    input.type = 'number'; input.min = '0'; input.step = '1'; input.value = b.dataset.total; input.className = 'bp-edit';
+    input.setAttribute('aria-label', 'New total money for ' + name);
     b.replaceWith(input); input.focus(); input.select();
     let done = false;
     const finish = save => {

@@ -375,7 +375,27 @@ function showError(msg) {
 }
 
 // ─── Waiting panel (on the table, before the first hand) ──────────
+function renderShowPanel(gs) {
+  const panel = $('show-panel');
+  const me = gs.players[state.myIdx];
+  const rev = state.reveal && state.reveal.handNum === gs.handNum && me && state.reveal.cards[me.name];
+  const on = gs.status === 'waiting_next' && !!me && me.cardCount === 2 && state.myCards.length === 2 && !(rev && rev[0] && rev[1]);
+  panel.classList.toggle('hidden', !on);
+  if (!on) return;
+  const shown = i => !!(rev && rev[i]);
+  const b = panel.querySelectorAll('button');
+  b[0].disabled = shown(0); b[1].disabled = shown(0) && shown(1); b[2].disabled = shown(1);
+  b[0].textContent = shown(0) ? 'Shown' : 'Show left';
+  b[2].textContent = shown(1) ? 'Shown' : 'Show right';
+}
+
 function bindWaitPanel() {
+  $('show-panel').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b || b.disabled) return;
+    const w = b.dataset.w;
+    state.socket.emit('show_cards', { which: w === 'both' ? 'both' : Number(w) });
+  });
+  bindCopy($('wp-invite'));
   $('btn-start').addEventListener('click', () => {
     const on = document.querySelector('#blind-seg .seg-btn.on');
     const blindInterval = parseInt(on?.dataset.v || '0');
@@ -392,14 +412,15 @@ function renderWaitPanel(gs) {
   const on = gs.status === 'waiting';
   panel.classList.toggle('hidden', !on);
   if (!on) return;
-  const seated = gs.players.length;
   const isHost = !!state.myName && gs.hostName === state.myName;
-  const canStart = gs.players.filter(p => p.connected && p.chips > 0).length >= 2;
-  $('wp-count').textContent = seated;
-  $('wp-text').textContent = canStart ? 'Starting...' : 'Waiting for players';
-  $('btn-start').classList.toggle('hidden', !isHost);
-  $('btn-start').disabled = !canStart;
-  $('btn-start').textContent = canStart ? 'Start game' : 'Need 2 players';
+  const ready = gs.players.filter(p => p.connected && p.chips > 0).length;
+  const canStart = ready >= 2;
+  $('wp-text').textContent = canStart ? 'Dealing shortly' : 'Waiting for a second player';
+  $('wp-sub').textContent = canStart ? 'Everyone is seated. The first hand starts in a moment.' : 'Deals automatically when a second player sits down.';
+  $('wp-seats').innerHTML = Array.from({ length: 8 }, (_, i) => `<i class="${gs.players[i] ? 'on' : ''}"></i>`).join('') + `<span>${gs.players.length} of 8 seated</span>`;
+  $('wp-invite-link').textContent = location.host;
+  $('wp-invite').classList.toggle('hidden', canStart);
+  $('btn-start').classList.toggle('hidden', !(isHost && canStart));
   $('blind-settings').classList.toggle('hidden', !isHost);
 }
 
@@ -452,8 +473,15 @@ function bindSocket() {
     if (state.gameState) renderGame();
   });
 
-  s.on('showdown_result', ({ winners, pot }) => {
-    renderShowdown(winners, pot);
+  s.on('cards_shown', ({ handNum, name, cards }) => {
+    if (!state.reveal || state.reveal.handNum !== handNum) state.reveal = { handNum, cards: {}, names: {} };
+    state.reveal.cards[name] = cards;
+    if (state.gameState) { renderSeats(state.gameState); renderShowPanel(state.gameState); }
+  });
+
+  s.on('showdown_result', ({ winners, pot, reveals, nextMs }) => {
+    state.sdMs = nextMs || 5000;
+    renderShowdown(winners, pot, reveals);
     playSound('win');
     const myName = state.gameState?.players[state.myIdx]?.name;
     if (myName && winners.some(w => w.name === myName)) {
@@ -722,6 +750,7 @@ function renderGame() {
   renderHero(gs);
   renderPlaque(gs);
   renderWaitPanel(gs);
+  renderShowPanel(gs);
   renderControls(gs);
   renderLog(gs.log);
 
@@ -880,7 +909,8 @@ function renderSeats(gs) {
     let peek = '';
     const rev = state.reveal && state.reveal.handNum === gs.handNum && state.reveal.cards[p.name];
     if (!hero && rev) {
-      peek = `<div class="seat-peek reveal ${peekUp ? 'up' : 'down'}">${rev.map(c => faceCardHtml(c, 'md', 0, '', 'flip-in')).join('')}</div>`;
+      const hn = state.reveal.names && state.reveal.names[p.name];
+      peek = `<div class="seat-peek reveal ${peekUp ? 'up' : 'down'}">${rev.map(c => c ? faceCardHtml(c, 'md', 0, '', 'flip-in') : '<div class="card back card-md"></div>').join('')}${hn ? `<span class="peek-hand">${esc(hn)}</span>` : ''}</div>`;
     } else if (!hero && p.cardCount > 0 && !p.folded) {
       peek = `<div class="seat-peek ${peekUp ? 'up' : 'down'}">${Array.from({ length: p.cardCount }, (_, k) =>
         `<div class="card back card-sm${state.dealPend[`${gs.handNum}:s${i}:${k}`] ? ' dealwait' : ''}" data-dk="${gs.handNum}:s${i}:${k}"></div>`).join('')}</div>`;
@@ -1091,7 +1121,7 @@ function renderControls(gs) {
   // Status text
   if (!me) setBar('idle', 'Spectating', '');
   else if (me.chips === 0 && !me.allIn && gs.status === 'playing' && !me.cardCount) setBar('idle', state.spectating ? 'Spectating' : 'Out of chips', '');
-  else if (gs.status === 'waiting') setBar('idle', 'Waiting for players', '');
+  else if (gs.status === 'waiting') setBar('idle', 'Waiting for players', 'Betting opens when the hand is dealt');
   else if (me.sittingOut && !me.sitOutRequest && !me.cardCount) setBar('idle', 'Watching this hand', 'Dealt in next hand');
   else if (gs.status === 'waiting_next') setBar('idle', 'Next hand starting', 'Hang tight');
   else if (me.folded) setBar('idle', 'You folded', 'Next hand soon');
@@ -1103,6 +1133,7 @@ function renderControls(gs) {
     if (who) setBar('wait', `Waiting for ${who.name}`, '', who.name);
     else setBar('idle', 'Waiting', '');
   }
+  $('action-bar').classList.toggle('waiting', gs.status === 'waiting');
   $('turn-ring').classList.toggle('idle', state.barMode === 'idle');
   if (state.barMode === 'idle') { $('my-turn-timer').innerHTML = '&nbsp;'; $('my-turn-ring').style.setProperty('--t', 0); }
 
@@ -1494,12 +1525,12 @@ function faceCardHtml(card, size = 'md', delay = 0, style = '', extra = '') {
 // ─── Showdown (non-modal plaque on the felt + winners' cards at the seats) ─
 let sdTimer = null;
 
-function renderShowdown(winners, pot) {
+function renderShowdown(winners, pot, reveals) {
   const gs = state.gameState;
   const ov = $('showdown-overlay');
   const g  = state.geo;
-  state.reveal = { handNum: gs?.handNum, cards: {} };
-  winners.forEach(w => { if (w.cards?.length) state.reveal.cards[w.name] = w.cards; });
+  state.reveal = { handNum: gs?.handNum, cards: {}, names: {} };
+  (reveals || winners).forEach(w => { if (w.cards?.length) { state.reveal.cards[w.name] = w.cards; state.reveal.names[w.name] = w.handName || ''; } });
   state.winners = new Set(winners.map(w => w.name));
 
   const share = Math.floor(pot / Math.max(1, winners.length));
@@ -1512,7 +1543,7 @@ function renderShowdown(winners, pot) {
 
   if (g) {
     ov.style.left = (g.cx) + 'px';
-    ov.style.top  = (g.cy - 200 * g.u) + 'px';
+    ov.style.top  = (g.cy - 158 * g.u) + 'px';
   }
   ov.classList.remove('hidden');
   ov.classList.toggle('split', winners.length > 1);
@@ -1522,14 +1553,14 @@ function renderShowdown(winners, pot) {
   if (myName && winners.some(w => w.name === myName)) spawnConfetti(state.myIdx);
 
   clearInterval(sdTimer);
-  let secs = 5;
-  $('countdown').textContent = secs;
+  const sdMs = state.sdMs || 5000;
+  $('countdown').textContent = Math.ceil(sdMs / 1000);
   $('showdown-bar').style.setProperty('--t', 1);
   const t0 = Date.now();
   sdTimer = setInterval(() => {
-    const left = Math.max(0, 5000 - (Date.now() - t0));
+    const left = Math.max(0, sdMs - (Date.now() - t0));
     $('countdown').textContent = Math.ceil(left / 1000);
-    $('showdown-bar').style.setProperty('--t', (left / 5000).toFixed(3));
+    $('showdown-bar').style.setProperty('--t', (left / sdMs).toFixed(3));
     if (left <= 0) hideShowdown();
   }, 100);
 }

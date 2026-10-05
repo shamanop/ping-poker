@@ -598,10 +598,32 @@ html.art-login .setup-card { background: linear-gradient(180deg, rgba(34, 22, 14
 .seat-peek.reveal.down { top: calc(100% + var(--p4)); }
 .seat-peek.reveal.up { bottom: calc(100% + var(--p4)); }
 
-.wait-panel { position: absolute; z-index: 5; left: 50%; top: 50%; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: var(--p14); width: calc(340 * var(--px)); padding: var(--p20) var(--p24); border-radius: var(--p14); background: rgba(24, 14, 9, .86); border: 1px solid var(--brass); box-shadow: 0 var(--p8) var(--p24) rgba(0, 0, 0, .55); text-align: center; }
-.wp-count { display: flex; flex-direction: column; line-height: 1; }
-.wp-count b { font-family: var(--f-display); font-size: var(--p56); font-weight: 400; color: var(--cream); }
-.wp-count span { font-size: var(--p12); letter-spacing: .14em; text-transform: uppercase; color: var(--cream); opacity: .85; margin-top: var(--p4); }
-.wp-msg { font-size: var(--p14); color: var(--ink-dim); }
+.wait-panel { position: absolute; z-index: 5; left: 50%; top: 50%; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: var(--p14); width: calc(400 * var(--px)); padding: var(--p20) var(--p24); border-radius: var(--p14); background: rgba(24, 14, 9, .86); border: 1px solid var(--brass); box-shadow: 0 var(--p8) var(--p24) rgba(0, 0, 0, .55); text-align: center; }
+.wp-msg { display: flex; align-items: center; justify-content: center; font-family: var(--f-card); font-weight: 700; font-size: var(--p18, var(--p20)); color: var(--cream); white-space: nowrap; }
+.wp-msg .pulse-dot { flex: none; }
+.wp-sub { font-size: var(--p13, var(--p12)); line-height: 1.4; color: var(--ink-dim); margin-top: calc(var(--p6) * -1); }
+.wp-seats { display: flex; align-items: center; gap: var(--p6); }
+.wp-seats i { width: var(--p14); height: var(--p14); border-radius: 50%; border: 1px dashed var(--brass); opacity: .6; }
+.wp-seats i.on { background: var(--gold); border: 1px solid var(--gold); opacity: 1; }
+.wp-seats span { margin-left: var(--p8); font-size: var(--p12); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-dim); }
+.wp-invite { display: flex; flex-direction: column; align-items: center; gap: var(--p4); width: 100%; padding: var(--p10) var(--p12); border-radius: var(--p10); border: 1px dashed var(--brass); background: rgba(184, 137, 58, .1); color: var(--cream); cursor: pointer; font: inherit; }
+.wp-invite:hover { background: rgba(184, 137, 58, .2); }
+.wp-invite-label { font-size: var(--p11, var(--p12)); letter-spacing: .14em; text-transform: uppercase; color: var(--ink-dim); }
+.wp-invite-link { font-size: var(--p16, var(--p14)); font-weight: 600; word-break: break-all; }
+.wp-invite-cta { font-size: var(--p12); color: var(--gold); }
+.wp-invite.copied .wp-invite-cta::after { content: ' - copied'; }
+.g-bar.waiting .act, .g-bar.waiting .raise-box { display: none; }
+.g-bar.waiting { grid-template-columns: 1fr; justify-items: center; }
+.g-bar.waiting .bar-status { justify-content: center; }
 .wp-blinds { width: 100%; }
 .wait-panel .btn { width: 100%; height: var(--p44); }
+
+.show-panel { position: absolute; z-index: 6; left: 50%; bottom: calc(8 * var(--px)); transform: translateX(-50%); display: flex; align-items: center; gap: var(--p8); padding: var(--p8) var(--p12); border-radius: var(--p12); background: rgba(24, 14, 9, .9); border: 1px solid var(--brass); box-shadow: 0 var(--p8) var(--p20) rgba(0, 0, 0, .5); }
+.show-panel.hidden { display: none; }
+.sp-label { font-size: var(--p11); letter-spacing: .14em; text-transform: uppercase; color: var(--ink-dim); margin-right: var(--p4); }
+.show-panel button { height: var(--p32, calc(32 * var(--px))); padding: 0 var(--p14); border-radius: var(--p8); border: 1px solid var(--brass); background: rgba(184, 137, 58, .14); color: var(--cream); font: inherit; font-size: var(--p13); cursor: pointer; }
+.show-panel button:hover:not(:disabled) { background: var(--brass); color: #1B120C; }
+.show-panel button:disabled { opacity: .45; cursor: default; }
+.peek-hand { position: absolute; left: 50%; transform: translateX(-50%); white-space: nowrap; font-size: var(--p11); font-weight: 600; letter-spacing: .06em; color: var(--gold); text-shadow: 0 1px 2px #000; }
+.seat-peek.up .peek-hand { top: calc(-18 * var(--px)); }
+.seat-peek.down .peek-hand { bottom: calc(-18 * var(--px)); }
