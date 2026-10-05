@@ -11,10 +11,12 @@ const { createLedger } = require('./ledger');
 
 const STARTING_CHIPS  = 1500;
 const BANK_DEFAULT    = 10000;
-const BANK_FILE       = process.env.BANK_FILE || path.join(__dirname, 'bank.json');
+const DATA_DIR        = process.env.DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH || __dirname;
+const BANK_FILE       = process.env.BANK_FILE || path.join(DATA_DIR, 'bank.json');
 const AUTO_START_MS  = Number(process.env.AUTO_START_MS) || 2000;
-const LEDGER_FILE     = process.env.LEDGER_FILE || path.join(__dirname, 'ledger.json');
-const TURN_MS         = 30000;
+const STACKS_FILE     = process.env.STACKS_FILE || path.join(path.dirname(BANK_FILE), 'stacks.json');
+const LEDGER_FILE     = process.env.LEDGER_FILE || path.join(DATA_DIR, 'ledger.json');
+const TURN_MS         = Number(process.env.TURN_MS) || 30000;
 const SMALL_BLIND     = 10;
 const BIG_BLIND       = 20;
 const SUITS           = ['♠', '♥', '♦', '♣'];
@@ -38,6 +40,12 @@ const ROOM_PASSWORD = 'ping';
 
 let bank = {};
 try { bank = JSON.parse(fs.readFileSync(BANK_FILE, 'utf8')); } catch { bank = {}; }
+try {
+  const stacks = JSON.parse(fs.readFileSync(STACKS_FILE, 'utf8'));
+  for (const [k, v] of Object.entries(stacks)) if (v > 0) bank[k] = (bank[k] || 0) + v;
+  fs.writeFileSync(STACKS_FILE, '{}');
+  fs.writeFileSync(BANK_FILE, JSON.stringify(bank));
+} catch {}
 
 function bankKey(name) { return String(name).toLowerCase().trim(); }
 
@@ -95,8 +103,33 @@ function bankSummary(roomId) {
 }
 
 function saveBank() {
-  try { fs.writeFileSync(BANK_FILE, JSON.stringify(bank)); } catch {}
+  try {
+    const tmp = BANK_FILE + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(bank));
+    fs.renameSync(tmp, BANK_FILE);
+  } catch {}
+  saveStacks();
 }
+
+// Chips on the table live only in memory; mirror them to disk so a restart (deploy)
+// returns them to the owner's bank on boot instead of losing them.
+function saveStacks() {
+  try {
+    const stacks = {};
+    for (const room of rooms.values()) {
+      for (const p of room.players) {
+        if (p.isBot || !(p.chips > 0)) continue;
+        const k = bankKey(p.name);
+        stacks[k] = (stacks[k] || 0) + p.chips;
+      }
+    }
+    const tmp = STACKS_FILE + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(stacks));
+    fs.renameSync(tmp, STACKS_FILE);
+  } catch {}
+}
+setInterval(saveStacks, 2000).unref();
+process.on('SIGTERM', () => { saveBank(); process.exit(0); });
 
 function getLeaderboard() {
   const inGame = {};
