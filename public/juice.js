@@ -194,8 +194,8 @@
 
   var TIERS = {
     nice: { label: '', count: 800, hold: 1300 },
-    big: { label: 'BIG WIN', count: 1000, hold: 1700 },
-    mega: { label: 'MEGA WIN', count: 1400, hold: 2200 },
+    big: { label: 'BIG WIN', count: 900, hold: 1200 },
+    mega: { label: 'MEGA WIN', count: 1100, hold: 1500 },
     jackpot: { label: 'JACKPOT', count: 2300, hold: 3400 }
   };
 

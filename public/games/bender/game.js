@@ -321,6 +321,7 @@
   // ---------- PingJuice win tiers ----------
   const PJ = window.PingJuice;
   if (PJ) PJ.config.stage = '#stage';
+  if (!window.Money) window.Money = { fmt: (n) => fmt(n) };
   function juiceTier(x, maxed) { return maxed || x >= 1000 ? 'jackpot' : x >= 100 ? 'mega' : x >= 20 ? 'big' : x >= 5 ? 'nice' : null; }
   function juiceWin(x, amt, maxed) {
     const t = juiceTier(x, maxed); if (!PJ || !t) return null;
