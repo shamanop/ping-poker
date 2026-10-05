@@ -4,6 +4,7 @@ const FX = (() => {
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const COLORS = ['#F5B942', '#FDFBF7', '#C8352B', '#3A7CC4', '#F5B942'];
   const rnd = (a, b) => a + Math.random() * (b - a);
+  const STALE = 0.75;
 
   function star(g, r) {
     g.beginPath();
@@ -15,29 +16,45 @@ const FX = (() => {
     const cv = document.getElementById(id), g = cv.getContext('2d');
     let ps = [], raf = 0, last = 0;
     cv.style.display = 'none'; // idle canvases are expensive to composite under the shell
+    const wipe = () => { g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, cv.width, cv.height); cv.style.display = 'none'; };
+    function clear() { if (raf) cancelAnimationFrame(raf); raf = 0; ps = []; wipe(); }
+    function integrate(p, h) { p.vy += p.g * h; p.vx *= 1 - p.drag * h; p.vy *= 1 - p.drag * h * 0.5; p.x += p.vx * h; p.y += p.vy * h; p.rot += p.vr * h; }
     function frame(now) {
-      const dt = Math.max(0, Math.min((now - last) / 1000, 0.05)); last = now;
-      g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, cv.width, cv.height); g.setTransform(0.5, 0, 0, 0.5, 0, 0);
-      ps = ps.filter((p) => (p.life -= dt) > 0 && p.y < cv.height * 2 + 180);
-      for (const p of ps) {
-        if (p.shape === 'bolt') { drawBolt(g, p); continue; }
-        if (p.shape === 'ring') { const t = Math.min(1, Math.max(0, 1 - p.life / p.dur)); g.save(); g.globalAlpha = Math.max(0, 1 - t); g.strokeStyle = p.c; g.lineWidth = p.w * (1 - t) + 2; g.beginPath(); g.arc(p.x, p.y, p.r0 + (p.r1 - p.r0) * (1 - Math.pow(1 - t, 3)), 0, 7); g.stroke(); g.restore(); continue; }
-        p.vy += p.g * dt; p.vx *= 1 - p.drag * dt; p.vy *= 1 - p.drag * dt * 0.5;
-        p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vr * dt;
-        g.save(); g.translate(p.x, p.y); g.rotate(p.rot);
-        g.globalAlpha = Math.min(1, p.life / 0.35);
-        g.fillStyle = p.c;
-        if (p.shape === 'star') star(g, p.size);
-        else if (p.shape === 'foam') { g.beginPath(); g.arc(0, 0, p.size, 0, 7); g.fill(); g.lineWidth = 2; g.strokeStyle = 'rgba(10,22,40,.45)'; g.stroke(); }
-        else if (p.shape === 'coin') { const sc = Math.abs(Math.cos(p.rot * 1.3)) * 0.8 + 0.2; g.scale(sc, 1); g.beginPath(); g.arc(0, 0, p.size, 0, 7); g.fill(); g.lineWidth = Math.max(2, p.size * 0.16); g.strokeStyle = '#0A1628'; g.stroke(); g.fillStyle = '#D99A1E'; g.beginPath(); g.arc(0, 0, p.size * 0.55, 0, 7); g.fill(); }
-        else if (p.shape === 'ballot') { const w = p.size * 1.5, h = p.size * 2 * (0.55 + 0.45 * Math.abs(Math.cos(p.rot * 1.1))); g.fillStyle = '#FDFBF7'; g.fillRect(-w / 2, -h / 2, w, h); g.strokeStyle = '#0A1628'; g.lineWidth = 2; g.strokeRect(-w / 2, -h / 2, w, h); g.fillStyle = '#C8352B'; g.fillRect(-w / 2 + 4, -h / 2 + 5, w * 0.35, 3); g.fillStyle = '#3A7CC4'; g.fillRect(-w / 2 + 4, -h / 2 + 12, w * 0.6, 2.5); }
-        else if (p.shape === 'spark') { g.fillRect(-p.size * 1.6, -p.size * 0.25, p.size * 3.2, p.size * 0.5); }
-        else { const sc = Math.abs(Math.cos(p.rot * 1.7)); g.fillRect(-p.size / 2, -p.size * sc / 2, p.size, p.size * sc * 0.8 + 2); }
-        g.restore();
-      }
-      if (ps.length) raf = requestAnimationFrame(frame); else { raf = 0; g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, cv.width, cv.height); cv.style.display = 'none'; }
+      // life runs on wall-clock time; physics is substepped. A long gap (hidden tab, minimized or docked iframe) means the effect is stale: drop it.
+      const real = Math.max(0, (now - last) / 1000); last = now;
+      if (real > STALE) { clear(); return; }
+      try {
+        const dt = Math.min(real, 0.2), n = Math.max(1, Math.ceil(dt / 0.05)), h = dt / n;
+        g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, cv.width, cv.height); g.setTransform(0.5, 0, 0, 0.5, 0, 0);
+        ps = ps.filter((p) => (p.life -= real) > 0 && p.y < cv.height * 2 + 180);
+        for (const p of ps) {
+          if (p.shape === 'bolt') { drawBolt(g, p); continue; }
+          if (p.shape === 'ring') { const t = Math.min(1, Math.max(0, 1 - p.life / p.dur)); g.save(); g.globalAlpha = Math.max(0, 1 - t); g.strokeStyle = p.c; g.lineWidth = p.w * (1 - t) + 2; g.beginPath(); g.arc(p.x, p.y, p.r0 + (p.r1 - p.r0) * (1 - Math.pow(1 - t, 3)), 0, 7); g.stroke(); g.restore(); continue; }
+          for (let k = 0; k < n; k++) integrate(p, h);
+          g.save(); g.translate(p.x, p.y); g.rotate(p.rot);
+          g.globalAlpha = Math.min(1, p.life / 0.35);
+          g.fillStyle = p.c;
+          if (p.shape === 'star') star(g, p.size);
+          else if (p.shape === 'foam') { g.beginPath(); g.arc(0, 0, p.size, 0, 7); g.fill(); g.lineWidth = 2; g.strokeStyle = 'rgba(10,22,40,.45)'; g.stroke(); }
+          else if (p.shape === 'coin') { const sc = Math.abs(Math.cos(p.rot * 1.3)) * 0.8 + 0.2; g.scale(sc, 1); g.beginPath(); g.arc(0, 0, p.size, 0, 7); g.fill(); g.lineWidth = Math.max(2, p.size * 0.16); g.strokeStyle = '#0A1628'; g.stroke(); g.fillStyle = '#D99A1E'; g.beginPath(); g.arc(0, 0, p.size * 0.55, 0, 7); g.fill(); }
+          else if (p.shape === 'ballot') { const w = p.size * 1.5, h2 = p.size * 2 * (0.55 + 0.45 * Math.abs(Math.cos(p.rot * 1.1))); g.fillStyle = '#FDFBF7'; g.fillRect(-w / 2, -h2 / 2, w, h2); g.strokeStyle = '#0A1628'; g.lineWidth = 2; g.strokeRect(-w / 2, -h2 / 2, w, h2); g.fillStyle = '#C8352B'; g.fillRect(-w / 2 + 4, -h2 / 2 + 5, w * 0.35, 3); g.fillStyle = '#3A7CC4'; g.fillRect(-w / 2 + 4, -h2 / 2 + 12, w * 0.6, 2.5); }
+          else if (p.shape === 'spark') { g.fillRect(-p.size * 1.6, -p.size * 0.25, p.size * 3.2, p.size * 0.5); }
+          else { const sc = Math.abs(Math.cos(p.rot * 1.7)); g.fillRect(-p.size / 2, -p.size * sc / 2, p.size, p.size * sc * 0.8 + 2); }
+          g.restore();
+        }
+      } catch (e) { console.error('fx frame', e); ps = []; }
+      if (ps.length) raf = requestAnimationFrame(frame); else { raf = 0; wipe(); }
     }
-    return { cv, add(p) { cv.style.display = ''; ps.push(p); if (!raf) { last = performance.now(); raf = requestAnimationFrame(frame); } }, count: () => ps.length };
+    return {
+      cv, clear, count: () => ps.length,
+      // cap every live particle's remaining life so the layer fades out within `sec`
+      settle(sec) { for (const p of ps) if (p.life > sec && p.shape !== 'ring' && p.shape !== 'bolt') p.life = sec; },
+      add(p) {
+        // a frame loop that stopped answering (hidden/frozen page, lost callback) must not keep old particles or block new ones
+        if (raf && performance.now() - last > STALE * 1000) clear();
+        cv.style.display = ''; ps.push(p); if (!raf) { last = performance.now(); raf = requestAnimationFrame(frame); }
+      },
+    };
   }
   function drawBolt(g, p) {
     g.save(); g.globalAlpha = Math.min(1, p.life / 0.06); g.lineJoin = 'round'; g.lineCap = 'round';
@@ -127,5 +144,9 @@ const FX = (() => {
     n = cap(back, Math.round(n * (reduce ? 0.35 : 1)));
     for (let i = 0; i < n; i++) back.add({ x: rnd(0, 1080), y: rnd(-700, -20), vx: rnd(-90, 90), vy: rnd(120, 360), g: 240, drag: 0.8, life: rnd(3, 5), size: rnd(16, 28), rot: rnd(0, 6), vr: rnd(-3, 3), c: '#FDFBF7', shape: 'ballot' });
   }
-  return { burst, radial, foam, ember, lightning, confetti, cannon, shake, rain, eruption, flash, ring, ballots };
+  const clear = () => { front.clear(); back.clear(); };
+  const settle = (sec = 0.4) => { front.settle(sec); back.settle(sec); };
+  document.addEventListener('visibilitychange', clear);
+  addEventListener('pageshow', clear);
+  return { clear, settle, count: () => front.count() + back.count(), burst, radial, foam, ember, lightning, confetti, cannon, shake, rain, eruption, flash, ring, ballots };
 })();

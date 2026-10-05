@@ -134,6 +134,28 @@ function setup(opts = {}) {
     assert.strictEqual(a.grid.length, 6); assert.strictEqual(a.grid[0].length, 5);
   });
 
+  await test('engine: browser copy matches server engine (math source and 300 seeded rounds incl. buys)', () => {
+    const src = fs.readFileSync(path.join(__dirname, '../public/games/bender/engine.js'), 'utf8');
+    const srv = fs.readFileSync(path.join(__dirname, '../games/bender-engine.js'), 'utf8');
+    assert.ok(srv.startsWith(src), 'public/games/bender/engine.js must equal the shared head of games/bender-engine.js');
+    const B = new Function('module', 'self', src + '; return this.BenderEngine || self.BenderEngine;')(undefined, {});
+    const sa = E.createEngine(), sb = B.createEngine();
+    assert.deepStrictEqual(sb.cfg, sa.cfg);
+    for (let seed = 1; seed <= 300; seed++) {
+      const mode = seed % 7 === 0 ? 'buy-election' : seed % 11 === 0 ? 'buy-landslide' : 'spin';
+      const a = sa.round(E.rngFrom(seed), mode, seed % 5 === 0 ? 'bonus' : undefined), b = sb.round(B.rngFrom(seed), mode, seed % 5 === 0 ? 'bonus' : undefined);
+      assert.strictEqual(b.win, a.win, 'seed ' + seed); assert.strictEqual(b.cost, a.cost);
+      assert.strictEqual(!!b.bonus, !!a.bonus);
+    }
+  });
+
+  await test('engine: tuned to 98% RTP (buy costs equal measured bonus EV; bonus about 1 in 100)', () => {
+    const C = E.CFG; assert.ok(C.buyCost.election === 10.91 && C.buyCost.landslide === 77.21, 'buy costs');
+    const eng = E.createEngine(), rng = E.rngFrom(424242); let bonus = 0; const N = 300000;
+    for (let i = 0; i < N; i++) if (eng.round(rng, 'spin').bonus) bonus++;
+    const one = N / bonus; assert.ok(one > 85 && one < 115, 'bonus 1 in ' + one.toFixed(0));
+  });
+
   await test('bender: unsigned socket gets auth error, wallet untouched', async () => {
     const s = setup(); const u = s.sock(null);
     u.send('g:bender:spin', { bet: 10, mode: 'play' }); u.send('wallet_get'); u.send('g:bender:state');
