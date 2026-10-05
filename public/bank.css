@@ -126,3 +126,15 @@
 .bp-bal b.editable:hover { background: rgba(245, 185, 66, .12); }
 .bp-edit { display: block; box-sizing: border-box; width: 6.2em; margin-left: auto; text-align: right; font-family: var(--f-display); font-size: var(--p28); line-height: 1; letter-spacing: .03em; color: var(--gold); background: transparent; border: 1px solid var(--gold); padding: 2px 6px; -moz-appearance: textfield; }
 .bp-edit::-webkit-outer-spin-button, .bp-edit::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+.pause-chip.hidden, .pause-banner.hidden { display: none; }
+.pause-chip { background: linear-gradient(180deg, #E2674F, #B94A35); border-color: #E2674F; color: #fff; }
+.pause-chip.on { background: linear-gradient(180deg, #7FBF6A, #5C9A4A); border-color: #7FBF6A; color: #10200A; }
+.pause-banner {
+  position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%); z-index: 12; pointer-events: none;
+  display: flex; flex-direction: column; align-items: center; gap: var(--p4);
+  padding: var(--p16) var(--p40); border: 1px solid var(--brass); border-radius: var(--p10);
+  background: rgba(26, 16, 10, .92); box-shadow: 0 var(--p10) var(--p28) rgba(0, 0, 0, .6);
+}
+.pause-banner b { font-family: var(--f-display); font-weight: 400; font-size: var(--p40, 40px); letter-spacing: .2em; color: var(--gold); }
+.pause-banner span { font-size: var(--p12); color: var(--ink-dim); letter-spacing: .08em; text-transform: uppercase; }

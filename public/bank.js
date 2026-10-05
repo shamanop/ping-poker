@@ -28,6 +28,14 @@
     btn.title = 'Bank dashboard (B)';
     const chip = $('room-code-btn');
     head.insertBefore(btn, chip ? chip.nextSibling : head.children[1]);
+    const pz = document.createElement('button');
+    pz.type = 'button'; pz.id = 'pause-btn'; pz.className = 'bank-chip pause-chip hidden'; pz.textContent = 'Pause';
+    pz.addEventListener('click', () => { if (state.socket) state.socket.emit('set_pause', { paused: !(state.gameState && state.gameState.paused) }); });
+    head.insertBefore(pz, btn.nextSibling);
+    const pb = document.createElement('div');
+    pb.id = 'pause-banner'; pb.className = 'pause-banner hidden';
+    pb.innerHTML = '<b>Paused</b><span>The table is on hold</span>';
+    grid.appendChild(pb);
 
     const panel = document.createElement('section');
     panel.id = 'bank-panel'; panel.className = 'bank-panel'; panel.setAttribute('aria-label', 'Bank');
@@ -280,6 +288,16 @@
   function attach() {
     if (!state.socket) return false;
     state.socket.on('bank_summary', d => { data = d; if (isOpen) render(); });
+    state.socket.on('game_state', gs => {
+      const pz = $('pause-btn'), pb = $('pause-banner');
+      const mine = String(state.myName || '').toLowerCase().trim() === 'chris';
+      if (pz) { pz.classList.toggle('hidden', !mine); pz.textContent = gs.paused ? 'Resume' : 'Pause'; pz.classList.toggle('on', !!gs.paused); }
+      if (pb) {
+        pb.classList.toggle('hidden', !gs.paused);
+        const g = state.geo;
+        if (g) { pb.style.left = g.cx + 'px'; pb.style.top = (g.cy - 140 * g.u) + 'px'; }
+      }
+    });
     return true;
   }
 

@@ -311,6 +311,7 @@ function scheduleBotActionsIfNeeded(room) {
   room.botTimer = setTimeout(() => {
     room.botTimer = null;
     if (!rooms.has(room.id)) return;
+    if (room.paused) { scheduleBotActionsIfNeeded(room); return; }
     if (room.handNum !== handNum) return;
     if (room.actionQueue[0] !== idx) return;
     if (room.status !== 'playing') return;
@@ -333,7 +334,7 @@ function clearTurnTimeout(room) {
 
 function scheduleTurnTimeout(room) {
   clearTurnTimeout(room);
-  if (room.status !== 'playing') return;
+  if (room.status !== 'playing' || room.paused) return;
   const idx = room.actionQueue[0];
   if (idx === undefined) return;
   if (room.players[idx]?.isBot) return; // bots self-manage
@@ -414,10 +415,12 @@ function maybeAutoStart(room) {
   if (room.id !== ROOM_ID || room.status !== 'waiting' || room.autoStartTimer) return;
   const ready = () => room.status === 'waiting' && room.players.filter(p => p.connected && p.chips > 0 && !p.sitOutRequest).length >= 2;
   if (!ready()) return;
-  room.autoStartTimer = setTimeout(() => {
+  const go = () => {
     room.autoStartTimer = null;
+    if (room.paused && ready()) { room.autoStartTimer = setTimeout(go, 500); return; }
     if (ready()) beginGame(room);
-  }, AUTO_START_MS);
+  };
+  room.autoStartTimer = setTimeout(go, AUTO_START_MS);
 }
 
 function startHand(room) {
@@ -609,10 +612,13 @@ function advanceStreet(room) {
     broadcastGameState(room);
     const handNum = room.handNum;
     if (room.streetTimer) clearTimeout(room.streetTimer);
-    room.streetTimer = setTimeout(() => {
+    const tick = () => {
       room.streetTimer = null;
-      if (room.status === 'playing' && room.handNum === handNum) advanceStreet(room);
-    }, 1500);
+      if (room.status !== 'playing' || room.handNum !== handNum) return;
+      if (room.paused) { room.streetTimer = setTimeout(tick, 500); return; }
+      advanceStreet(room);
+    };
+    room.streetTimer = setTimeout(tick, 1500);
   }
 }
 
@@ -682,9 +688,10 @@ function scheduleNextHand(room, delayMs = 5000) {
   room.status = 'waiting_next';
   broadcastGameState(room);
 
-  room.nextHandTimer = setTimeout(() => {
+  const dealNext = () => {
     room.nextHandTimer = null;
     if (!rooms.has(room.id)) return;
+    if (room.paused) { room.nextHandTimer = setTimeout(dealNext, 500); return; }
 
     // Dealer button moves clockwise to the next seat that is not busted or sitting out
     const n0 = room.players.length;
@@ -735,7 +742,8 @@ function scheduleNextHand(room, delayMs = 5000) {
     emitPrivateCards(room);
     scheduleBotActionsIfNeeded(room);
     scheduleTurnTimeout(room);
-  }, delayMs);
+  };
+  room.nextHandTimer = setTimeout(dealNext, delayMs);
 }
 
 // ─── Broadcasting ─────────────────────────────────────────────────────────────
@@ -751,6 +759,7 @@ function publicGameState(room) {
     currentPlayerIdx,
     handNum:         room.handNum,
     status:          room.status,
+    paused:          !!room.paused,
     hostName:        room.players.find(p => p.socketId === room.hostSocketId)?.name || '',
     sb:              room.sb,
     bb:              room.bb,
@@ -878,6 +887,19 @@ io.on('connection', socket => {
   });
 
   // Voluntarily show hole cards once the hand is over. idx is 0, 1 or 'both'.
+  on('set_pause', ({ paused } = {}) => {
+    const room = rooms.get(ROOM_ID);
+    const me = room && room.players.find(p => !p.isBot && p.socketId === socket.id);
+    if (!me || bankKey(me.name) !== 'chris') { socket.emit('error', { message: 'Only Chris can pause the table' }); return; }
+    const next = typeof paused === 'boolean' ? paused : !room.paused;
+    if (next === !!room.paused) return;
+    room.paused = next;
+    roomLog(room, next ? 'Table paused by Chris' : 'Table resumed');
+    if (next) clearTurnTimeout(room);
+    else { scheduleBotActionsIfNeeded(room); scheduleTurnTimeout(room); }
+    broadcastGameState(room);
+  });
+
   on('show_cards', ({ which } = {}) => {
     const room = rooms.get(ROOM_ID);
     const me = room && room.players.find(p => !p.isBot && p.socketId === socket.id);
@@ -1017,6 +1039,7 @@ io.on('connection', socket => {
     const room = rooms.get(roomId);
     if (!room) { socket.emit('error', { message: 'Room not found' }); return; }
     if (room.status !== 'playing') { socket.emit('error', { message: 'No hand in progress' }); return; }
+    if (room.paused) { socket.emit('error', { message: 'Table is paused' }); return; }
     const playerIdx = room.players.findIndex(p => p.socketId === socket.id);
     if (playerIdx === -1) return;
     if (room.actionQueue[0] !== playerIdx) { socket.emit('error', { message: "Not your turn" }); return; }
@@ -1121,6 +1144,7 @@ io.on('connection', socket => {
 
       player.connected = false;
       roomLog(room, `${player.name} disconnected`);
+      if (room.paused && !player.isBot && bankKey(player.name) === 'chris') { room.paused = false; roomLog(room, 'Chris left, table resumed'); }
       if (room.hostSocketId === socket.id) {
         room.hostSocketId = room.players.find(p => p !== player && p.connected && !p.isBot)?.socketId || null;
       }
