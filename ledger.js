@@ -25,13 +25,15 @@ function createLedger({ file, onWrite }) {
     return e;
   }
 
-  function log(type, name, amount, balanceAfter, tableChips, handNum, room) {
+  function log(type, name, amount, balanceAfter, tableChips, handNum, room, meta) {
     if (type === 'cashout' && room) {
       const m = cashedDuring.get(room) || {};
       m[key(name)] = (m[key(name)] || 0) + amount;
       cashedDuring.set(room, m);
     }
-    return push({ t: Date.now(), name, type, amount, balanceAfter, tableChips: tableChips ?? null, handNum: handNum ?? null, room: room || null });
+    const row = { t: Date.now(), name, type, amount, balanceAfter: balanceAfter ?? null, tableChips: tableChips ?? null, handNum: handNum ?? null, room: room || null };
+    if (meta && typeof meta === 'object') for (const [k, v] of Object.entries(meta)) if (v !== undefined) row[k] = v;
+    return push(row);
   }
 
   function seedBank(bankMap) {
@@ -59,7 +61,9 @@ function createLedger({ file, onWrite }) {
       played: !!start && key(p.name) in start && start[key(p.name)] > 0 && !p.sittingOut,
       isBot: !!p.isBot,
     }));
-    push({ t, type: 'snapshot', room: room.id, handNum: room.handNum, players });
+    const snap = { t, type: 'snapshot', room: room.id, handNum: room.handNum, players };
+    if (room.nightId) { snap.mode = room.unit || 'chips'; snap.tableId = room.id; snap.nightId = room.nightId; }
+    push(snap);
     if (!start) return;
     for (const p of room.players) {
       if (p.isBot) continue;
@@ -67,14 +71,18 @@ function createLedger({ file, onWrite }) {
       if (!(k in start) || start[k] <= 0) continue;
       const delta = p.chips + (cashed[k] || 0) - start[k];
       if (delta === 0) continue;
-      push({ t, name: p.name, type: delta > 0 ? 'win' : 'loss', amount: Math.abs(delta), balanceAfter: bankOf(p.name), tableChips: p.chips, handNum: room.handNum, room: room.id });
+      const row = { t, name: p.name, type: delta > 0 ? 'win' : 'loss', amount: Math.abs(delta), balanceAfter: room.unit === 'cents' ? null : bankOf(p.name), tableChips: p.chips, handNum: room.handNum, room: room.id };
+      if (room.nightId) { row.mode = room.unit || 'chips'; row.tableId = room.id; row.nightId = room.nightId; row.key = key(p.name); }
+      push(row);
     }
     handStart.delete(room.id);
     cashedDuring.delete(room.id);
   }
 
   // live: [{ name, isBot, chips, status }] for players currently in any room
-  function summary(roomId, bank, live) {
+  function summary(roomId, bank, live, opts) {
+    const nightId = (opts && opts.nightId) || null;
+    const rowOk = e => (nightId ? e.nightId === nightId : (!e.nightId && e.mode !== 'cents'));
     const P = new Map();
     const ensure = (name, isBot) => {
       const k = key(name);
@@ -84,6 +92,7 @@ function createLedger({ file, onWrite }) {
     const events = [];
     const handList = []; // snapshots in order; x-axis is sequential so restarts (handNum reset) don't overwrite
     for (const e of entries) {
+      if (!rowOk(e)) continue;
       if (e.type === 'snapshot') {
         if (e.room !== roomId) continue;
         const h = { handNum: handList.length + 1, t: e.t, chips: {} };
@@ -111,7 +120,7 @@ function createLedger({ file, onWrite }) {
       p.status = l.status;
       if (l.status !== 'offline') p.lastSeen = Date.now();
     }
-    for (const p of P.values()) p.net = p.cashedOut + p.atTable - p.totalBuyIns;
+    for (const p of P.values()) { p.net = p.cashedOut + p.atTable - p.totalBuyIns; p.netTonight = nightId ? p.net : null; }
     const series = {};
         for (const [k, p] of P) {
       const pts = [];
@@ -120,6 +129,7 @@ function createLedger({ file, onWrite }) {
     }
     return {
       t: Date.now(),
+      nightId,
       players: [...P.values()].sort((a, b) => (b.bank ?? -1) + b.atTable - ((a.bank ?? -1) + a.atTable)),
       series,
       events: events.sort((x, y) => y.t - x.t).slice(0, 60),
@@ -127,7 +137,94 @@ function createLedger({ file, onWrite }) {
     };
   }
 
-  return { log, seedBank, startHand, endHand, summary, entries: () => entries };
+  // ── nights / accounts (cents or chips; rows without `mode` are legacy chips) ──
+  const rowMode = e => (e.mode === 'cents' ? 'cents' : 'chips');
+  const rowKey = e => e.key || key(e.name || '');
+  const signedOf = e => (e.type === 'cashout' ? e.amount : (e.type === 'buyin' || e.type === 'rebuy') ? -e.amount : e.type === 'adjust' && e.nightId ? (e.signed ?? 0) : 0);
+
+  // nets: [{key, net}] summing to 0 -> [{from, to, amount}] (keys), at most n-1 transfers
+  function settlePayments(nets) {
+    const cred = nets.filter(n => n.net > 0).map(n => ({ key: n.key, v: n.net })).sort((a, b) => b.v - a.v);
+    const debt = nets.filter(n => n.net < 0).map(n => ({ key: n.key, v: -n.net })).sort((a, b) => b.v - a.v);
+    const out = [];
+    let i = 0, j = 0;
+    while (i < debt.length && j < cred.length) {
+      const amt = Math.min(debt[i].v, cred[j].v);
+      if (amt > 0) out.push({ from: debt[i].key, to: cred[j].key, amount: amt });
+      debt[i].v -= amt; cred[j].v -= amt;
+      if (debt[i].v === 0) i++;
+      if (cred[j].v === 0) j++;
+      cred.sort((a, b) => b.v - a.v); debt.sort((a, b) => b.v - a.v);
+      i = 0; j = 0;
+      while (i < debt.length && debt[i].v === 0) i++;
+      while (j < cred.length && cred[j].v === 0) j++;
+      if (i >= debt.length || j >= cred.length) break;
+    }
+    return out;
+  }
+
+  function nightFromRows(rows, nightId, extra) {
+    const P = new Map();
+    let startedAt = null, endedAt = null, tableId = null, unit = null, tableName = null, ended = false;
+    const paid = [];
+    for (const e of rows) {
+      if (e.type === 'night-end') { ended = true; endedAt = e.t; tableName = e.tableName || tableName; continue; }
+      if (e.type === 'settle') { paid.push(e); continue; }
+      if (!['buyin', 'rebuy', 'cashout', 'adjust'].includes(e.type) || !e.name) continue;
+      tableId = tableId || e.tableId || e.room || null;
+      unit = unit || rowMode(e);
+      startedAt = startedAt === null ? e.t : Math.min(startedAt, e.t);
+      if (!ended) endedAt = Math.max(endedAt || 0, e.t);
+      const k = rowKey(e);
+      if (!P.has(k)) P.set(k, { key: k, display: e.name, buyIns: 0, rebuys: 0, cashedOut: 0, adjust: 0, stack: 0, net: 0 });
+      const p = P.get(k);
+      if (e.type === 'buyin') p.buyIns += e.amount;
+      else if (e.type === 'rebuy') p.rebuys += e.amount;
+      else if (e.type === 'cashout') p.cashedOut += e.amount;
+      else p.adjust += (e.signed ?? 0);
+    }
+    const players = [...P.values()];
+    for (const p of players) p.net = p.cashedOut - p.buyIns - p.rebuys + p.adjust;
+    players.sort((a, b) => b.net - a.net);
+    const sum = players.reduce((s, p) => s + p.net, 0);
+    const payments = unit === 'chips' || unit === null ? [] : settlePayments(players.map(p => ({ key: p.key, net: p.net })));
+    for (const pay of payments) pay.paid = paid.some(s => s.from === pay.from && s.to === pay.to && s.amount === pay.amount);
+    const out = { nightId, tableId, mode: unit, unit, startedAt, endedAt, ended, tableName, players, zeroSum: sum === 0, payments };
+    if (sum !== 0) out.drift = sum;
+    return Object.assign(out, extra || {});
+  }
+
+  function nightSummary(nightId) {
+    return nightFromRows(entries.filter(e => e.nightId === nightId), nightId);
+  }
+
+  function accountNet(k, { mode } = {}) {
+    k = key(k);
+    let net = 0;
+    for (const e of entries) {
+      if (!e.name || !['buyin', 'rebuy', 'cashout'].includes(e.type)) continue;
+      if (rowKey(e) !== k) continue;
+      if (mode && rowMode(e) !== mode) continue;
+      net += signedOf(e);
+    }
+    return net;
+  }
+
+  function nightsFor(k, limit = 20) {
+    k = key(k);
+    const ids = new Map();
+    for (const e of entries) if (e.nightId && rowKey(e) === k && ['buyin', 'rebuy', 'cashout', 'adjust'].includes(e.type)) ids.set(e.nightId, 1);
+    const out = [];
+    for (const id of ids.keys()) {
+      const n = nightSummary(id);
+      if (!n.ended) continue;
+      const me = n.players.find(p => p.key === k);
+      out.push({ nightId: id, tableId: n.tableId, tableName: n.tableName, mode: n.mode, unit: n.unit, endedAt: n.endedAt, net: me ? me.net : 0 });
+    }
+    return out.sort((a, b) => b.endedAt - a.endedAt).slice(0, limit);
+  }
+
+  return { log, seedBank, startHand, endHand, summary, nightSummary, nightFromRows, accountNet, nightsFor, settlePayments, entries: () => entries };
 }
 
 module.exports = { createLedger };

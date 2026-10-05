@@ -32,15 +32,16 @@ function client(name) {
     await sleep(2600);
     ok(chris.gs.status === 'playing', 'two players: auto-started within ~2s');
     chris.s.emit('bank_set', { name: 'Bob', balance: 12345 }); await sleep(400);
-    ok(JSON.parse(fs.readFileSync(bankFile)).bob === 12345, 'chris edit saved Bob bank to 12345');
-    ok(bob.bal === 12345, 'Bob got balance_data update');
-    ok(chris.sum && chris.sum.players.find(p => p.name === 'Bob').bank === 12345, 'bank summary reflects edit');
+    const stackOf = (c, n) => { const p = c.gs.players.find(x => x.name === n); return p ? p.chips : 0; };
+    ok(JSON.parse(fs.readFileSync(bankFile)).bob + stackOf(chris, 'Bob') === 12345, 'chris edit set Bob total (bank + stack) to 12345');
+    ok(bob.bal === 12345 - stackOf(chris, 'Bob'), 'Bob got balance_data update');
+    ok(chris.sum && chris.sum.players.find(p => p.name === 'Bob').bank === 12345 - stackOf(chris, 'Bob'), 'bank summary reflects edit');
     chris.s.emit('bank_set', { name: 'Bob', balance: -5 }); await sleep(300);
     ok(chris.errors.some(e => /0 to 100,000,000/.test(e)), 'negative amount rejected');
-    chris.s.emit('bank_set', { name: 'Nobody', balance: 5 }); await sleep(300);
-    ok(chris.errors.some(e => /Unknown player/.test(e)), 'unknown player rejected');
+    chris.s.emit('bank_set', { name: '', balance: 5 }); await sleep(300);
+    ok(chris.errors.some(e => /Unknown player/.test(e)), 'blank player name rejected');
     chris.s.emit('bank_set', { name: 'chris', balance: 50000 }); await sleep(300);
-    ok(JSON.parse(fs.readFileSync(bankFile)).chris === 50000, 'chris can edit own bank');
+    ok(JSON.parse(fs.readFileSync(bankFile)).chris + stackOf(chris, 'chris') === 50000, 'chris can edit own total');
   } finally { proc.kill(); fs.rmSync(dir, { recursive: true, force: true }); }
   console.log(fails ? `FAILED ${fails}` : 'ALL PASS'); process.exit(fails ? 1 : 0);
 })();
