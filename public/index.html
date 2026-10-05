@@ -5,279 +5,279 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>PokerPing</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=16">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Bitter:wght@400;500;600;700&family=Libre+Baskerville:wght@700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=21">
 </head>
 <body>
 
+  <!-- shared SVG sprite: suits + icons -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <symbol id="s-spade" viewBox="0 0 100 100"><path fill="currentColor" d="M50 3C50 3 7 37 7 62c0 15 11 25 24 25 7 0 13-3 16-8-1 10-5 16-13 19h32c-8-3-12-9-13-19 3 5 9 8 16 8 13 0 24-10 24-25C93 37 50 3 50 3Z"/></symbol>
+      <symbol id="s-heart" viewBox="0 0 100 100"><path fill="currentColor" d="M50 95C50 95 5 63 5 32 5 16 17 7 30 7c9 0 17 5 20 14 3-9 11-14 20-14 13 0 25 9 25 25 0 31-45 63-45 63Z"/></symbol>
+      <symbol id="s-diamond" viewBox="0 0 100 100"><path fill="currentColor" d="M50 3C60 22 76 38 91 50 76 62 60 78 50 97 40 78 24 62 9 50 24 38 40 22 50 3Z"/></symbol>
+      <symbol id="s-club" viewBox="0 0 100 100"><g fill="currentColor"><circle cx="50" cy="27" r="22"/><circle cx="25" cy="63" r="22"/><circle cx="75" cy="63" r="22"/><path d="M50 52c0 24-5 37-16 46h32C55 89 50 76 50 52Z"/></g></symbol>
+      <symbol id="i-crown" viewBox="0 0 24 24"><path fill="currentColor" d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5L3 8Z"/></symbol>
+      <symbol id="i-copy" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" d="M9 9h10v11H9zM5 15V4h10"/></symbol>
+      <symbol id="i-sound" viewBox="0 0 24 24"><path fill="currentColor" d="M4 9v6h4l5 4V5L8 9H4Z"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M16 9a4 4 0 010 6M18.5 6.5a8 8 0 010 11"/></symbol>
+      <symbol id="i-mute" viewBox="0 0 24 24"><path fill="currentColor" d="M4 9v6h4l5 4V5L8 9H4Z"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M16 9l5 6M21 9l-5 6"/></symbol>
+    </defs>
+  </svg>
+
   <!-- ── LANDING ────────────────────────────────────────────────── -->
   <div id="landing-screen" class="screen active">
-    <div class="landing-left">
-      <div class="bg-card bg-card-1"></div>
-      <div class="bg-card bg-card-2"></div>
-      <div class="bg-card bg-card-3"></div>
-      <div class="landing-brand">
-        <img src="/images/vp-logo.png" alt="VoterPing" class="brand-vp-logo">
-        <div class="brand-wordmark">
-          <div class="brand-eyebrow">Texas Hold'em · Game Night</div>
-          <div class="brand-title">POKER<span class="brand-ping">PING</span></div>
-          <div class="brand-sub">VoterPing · Private Tables</div>
-        </div>
-      </div>
-      <div class="landing-table-preview">
-        <div class="preview-table">
-          <div class="preview-community">
-            <div class="preview-comm-card"></div>
-            <div class="preview-comm-card"></div>
-            <div class="preview-comm-card"></div>
-            <div class="preview-comm-card pf-gold"><span class="pf-rank">A</span><span class="pf-suit pf-red">♥</span></div>
-            <div class="preview-comm-card pf-gold"><span class="pf-rank">K</span><span class="pf-suit">♠</span></div>
-          </div>
-          <div class="preview-pot">
-            <div class="preview-chips">
-              <span class="preview-chip c1"></span>
-              <span class="preview-chip c2"></span>
-              <span class="preview-chip c1"></span>
-              <span class="preview-chip c3"></span>
-              <span class="preview-chip c4"></span>
+    <div class="scr-backdrop"></div>
+    <div class="landing-grid">
+      <section class="landing-left">
+        <div class="brand-lockup">
+          <img class="lockup-img" src="images/logo-lockup.png" alt="PokerPing" hidden>
+          <div class="lockup-fallback">
+            <img class="lockup-vp" src="/images/vp-logo.png" alt="VoterPing">
+            <div>
+              <div class="wordmark">POKER<em>PING</em></div>
+              <div class="lockup-sub">Texas Hold'em &middot; Private tables &middot; VoterPing</div>
             </div>
-            <div class="preview-pot-label">POT  ◈ 640</div>
           </div>
         </div>
-        <div class="preview-stats">
-          <span>2–8 PLAYERS</span><span class="preview-stat-sep">·</span><span>BLINDS 10 / 20</span><span class="preview-stat-sep">·</span><span>◈ 1,500 BUY-IN</span>
+        <div class="landing-table">
+          <div class="table-box tb-static" id="landing-tb">
+            <div class="t-rail"></div><div class="t-felt"></div><div class="t-inlay"></div>
+            <svg class="t-ping" viewBox="-160 -160 320 320" aria-hidden="true"></svg>
+            <div class="t-lamp"></div>
+            <div class="t-center">
+              <div class="pot-row" id="landing-pot"></div>
+              <div class="community" id="landing-community"></div>
+            </div>
+            <div id="landing-sockets"></div>
+          </div>
         </div>
-      </div>
-    </div>
+        <div class="landing-stats"><span>2&ndash;8 players</span><i></i><span>Blinds 10 / 20</span><i></i><span>1,500 buy-in</span></div>
+      </section>
 
-    <div class="landing-right">
-      <div class="mobile-brand">POKER<span class="brand-ping">PING</span></div>
-      <div class="setup-eyebrow">Take a Seat</div>
-      <div class="setup-form">
-        <div class="setup-field">
-          <label class="field-label">YOUR NAME</label>
-          <input id="player-name" type="text" class="text-input" placeholder="Your name at the table" maxlength="16" autocomplete="off">
-          <div id="bank-display" class="bank-display hidden">BANK &nbsp;◈ <span id="bank-amount">—</span></div>
-        </div>
+      <section class="landing-right">
+        <div class="setup-card">
+          <div class="setup-eyebrow">Take a seat</div>
+          <div class="setup-field">
+            <label class="field-label" for="player-name">Your name</label>
+            <input id="player-name" type="text" class="text-input" placeholder="Name at the table" maxlength="16" autocomplete="off">
+            <div id="bank-display" class="bank-display">Bank <b id="bank-amount">0</b></div>
+          </div>
 
-        <div class="setup-field">
-          <label class="field-label">AVATAR</label>
-          <div class="avatar-section">
-            <div class="photo-upload-area" id="photo-upload-area" title="Upload a profile photo">
-              <input type="file" id="photo-input" accept="image/*" style="display:none">
-              <div class="photo-preview-circle" id="photo-preview-circle">
-                <div class="photo-upload-icon">📷</div>
+          <div class="setup-field">
+            <span class="field-label">Avatar</span>
+            <div class="avatar-section">
+              <div class="photo-upload-area" id="photo-upload-area" title="Upload a profile photo">
+                <input type="file" id="photo-input" accept="image/*" hidden>
+                <div class="photo-preview-circle" id="photo-preview-circle"><span class="photo-plus">+</span></div>
+                <div class="photo-upload-hint">Photo</div>
               </div>
-              <div class="photo-upload-hint">photo</div>
-            </div>
-            <div class="avatar-grid">
-              <div class="avatar-option selected" data-avatar="🤠">🤠</div>
-              <div class="avatar-option" data-avatar="🦊">🦊</div>
-              <div class="avatar-option" data-avatar="🐉">🐉</div>
-              <div class="avatar-option" data-avatar="🎩">🎩</div>
-              <div class="avatar-option" data-avatar="🦁">🦁</div>
-              <div class="avatar-option" data-avatar="🐺">🐺</div>
-              <div class="avatar-option" data-avatar="🦅">🦅</div>
-              <div class="avatar-option" data-avatar="🎲">🎲</div>
-              <div class="avatar-option" data-avatar="👑">👑</div>
-              <div class="avatar-option" data-avatar="💀">💀</div>
-              <div class="avatar-option" data-avatar="🎯">🎯</div>
-              <div class="avatar-option" data-avatar="⚡">⚡</div>
+              <div class="avatar-grid" id="avatar-grid"></div>
             </div>
           </div>
-        </div>
 
-        <div class="setup-field">
-          <label class="field-label">TABLE PASSWORD</label>
-          <input id="password-input" type="password" class="text-input" placeholder="Password" autocomplete="off">
-        </div>
+          <div class="setup-field">
+            <label class="field-label" for="password-input">Table password <span class="field-hint">ask the host</span></label>
+            <input id="password-input" type="password" class="text-input" placeholder="Password" autocomplete="off">
+          </div>
 
-        <div class="setup-actions">
-          <button id="btn-join" class="btn-primary">Join Table</button>
-          <button id="btn-demo" class="btn-demo">Play vs CPU  →</button>
-        </div>
+          <div id="landing-error" class="error-msg" role="alert"></div>
 
-        <div id="landing-error" class="error-msg hidden"></div>
-      </div>
+          <div class="setup-actions">
+            <button id="btn-join" class="btn btn-brass">Join table</button>
+            <button id="btn-demo" class="btn btn-ghost">Play vs CPU</button>
+          </div>
+        </div>
+      </section>
     </div>
   </div>
 
   <!-- ── LOBBY ──────────────────────────────────────────────────── -->
   <div id="lobby-screen" class="screen">
-    <div class="lobby-wrap">
-      <div class="lobby-header">
-        <div class="lobby-brand">POKERPING</div>
-      </div>
+    <div class="scr-backdrop"></div>
+    <div class="lobby-grid">
+      <section class="lobby-main">
+        <div class="lobby-top">
+          <div class="wordmark sm">POKER<em>PING</em></div>
+          <button type="button" class="room-chip" id="lobby-room-btn" title="Copy invite link">
+            <span>Room</span><b id="lobby-room-code">&mdash;</b>
+            <svg class="ico"><use href="#i-copy"/></svg>
+            <span class="copy-flash">Copied</span>
+          </button>
+        </div>
+        <div class="lobby-table-wrap">
+          <div class="table-box tb-static" id="lobby-tb">
+            <div class="t-rail"></div><div class="t-felt"></div><div class="t-inlay"></div>
+            <svg class="t-ping" viewBox="-160 -160 320 320" aria-hidden="true"></svg>
+            <div class="t-lamp"></div>
+            <div class="lobby-count"><b id="lobby-count">1</b><span>of 8 seated</span></div>
+            <div id="lobby-sockets"></div>
+          </div>
+        </div>
+      </section>
 
-      <div class="lobby-body">
-        <div class="lobby-players-section">
-          <div class="section-label">AT THE TABLE</div>
-          <div id="lobby-players-list" class="players-list"></div>
+      <aside class="lobby-side">
+        <div class="side-card">
+          <div class="rules-head">Texas Hold'em</div>
+          <div class="rules-row"><span>Starting chips</span><b>1,500</b></div>
+          <div class="rules-row"><span>Blinds</span><b>10 / 20</b></div>
+          <div class="rules-row"><span>Players</span><b>2 &ndash; 8</b></div>
         </div>
-        <div class="lobby-side">
-          <div class="game-rules-block">
-            <div class="rules-head">Texas Hold'em</div>
-            <div class="rules-row"><span>Starting chips</span><span class="rules-val">1,500</span></div>
-            <div class="rules-row"><span>Blinds</span><span class="rules-val">10 / 20</span></div>
-            <div class="rules-row"><span>Players</span><span class="rules-val">2 – 8</span></div>
+        <div id="blind-settings" class="side-card hidden">
+          <span class="field-label">Blind escalation</span>
+          <div class="seg" id="blind-seg" role="radiogroup">
+            <button type="button" class="seg-btn" data-v="0">Off</button>
+            <button type="button" class="seg-btn" data-v="300000">5 min</button>
+            <button type="button" class="seg-btn on" data-v="600000">10 min</button>
+            <button type="button" class="seg-btn" data-v="900000">15 min</button>
           </div>
-          <div id="blind-settings" class="blind-settings hidden">
-            <label class="field-label">BLIND ESCALATION</label>
-            <select id="blind-interval-select" class="text-input blind-select">
-              <option value="0">Off — fixed blinds</option>
-              <option value="300000">Every 5 min</option>
-              <option value="600000" selected>Every 10 min</option>
-              <option value="900000">Every 15 min</option>
-            </select>
-          </div>
-          <button id="btn-start" class="btn-primary btn-large hidden">Start Game</button>
-          <div id="waiting-msg" class="waiting-text">Waiting for the host to start…</div>
         </div>
-      </div>
+        <div class="lobby-cta">
+          <button id="btn-start" class="btn btn-brass btn-large hidden">Start game</button>
+          <div id="waiting-msg" class="waiting-text"><span class="pulse-dot"></span>Waiting for the host to start</div>
+        </div>
+      </aside>
     </div>
   </div>
 
   <!-- ── GAME ───────────────────────────────────────────────────── -->
   <div id="game-screen" class="screen">
-    <div class="game-layout">
+    <div class="g-grid">
 
-      <div class="table-wrap">
-        <div id="poker-table">
-          <div id="player-seats"></div>
-          <div class="table-center">
-            <div id="community-cards" class="community-cards"></div>
-            <div id="street-label" class="street-label"></div>
-            <div id="pot-display" class="pot-display"></div>
-            <div id="blind-display" class="blind-display"></div>
+      <header class="g-head">
+        <div class="g-brand">
+          <img class="lockup-img sm" src="images/logo-lockup.png" alt="PokerPing" hidden>
+          <span class="lockup-fallback sm"><img class="lockup-vp" src="/images/vp-logo.png" alt=""><span class="wordmark sm">POKER<em>PING</em></span></span>
+        </div>
+        <button type="button" class="room-chip" id="room-code-btn" title="Copy invite link">
+          <span>Room</span><b id="room-code">&mdash;</b>
+          <svg class="ico"><use href="#i-copy"/></svg>
+          <span class="copy-flash">Copied</span>
+        </button>
+        <div class="g-plaque" id="g-plaque">
+          <div class="pl"><label>Blinds</label><b id="pl-blinds">10 / 20</b></div>
+          <div class="pl" id="pl-level-wrap"><label>Level</label><b id="pl-level">1</b></div>
+          <div class="pl" id="pl-next-wrap"><label>Next</label><b id="pl-next">&mdash;</b></div>
+          <div class="pl"><label>Street</label><b id="pl-street">&mdash;</b></div>
+          <span class="pl-sep"></span>
+          <div class="pl"><label>To call</label><b id="pl-tocall">&mdash;</b></div>
+          <div class="pl"><label>Min raise</label><b id="pl-minraise">&mdash;</b></div>
+        </div>
+      </header>
+
+      <main class="g-stage" id="stage">
+        <div class="stage-backdrop"></div>
+        <div id="table-box" class="table-box">
+          <div class="t-rail"></div><div class="t-felt"></div><div class="t-inlay"></div>
+          <svg class="t-ping" viewBox="-160 -160 320 320" aria-hidden="true"></svg>
+          <div class="t-lamp" id="t-lamp"></div>
+          <div class="t-center" id="t-center">
+            <div id="pot-row" class="pot-row"></div>
+            <div id="community-cards" class="community"></div>
+          </div>
+          <div id="hero-cards-wrap" class="hero-cards-wrap">
+            <div id="my-hand-label" class="hero-label"></div>
+            <div id="hole-cards" class="hero-cards"></div>
           </div>
         </div>
-      </div>
+        <div id="bet-layer" class="bet-layer"></div>
+        <div id="puck-layer" class="puck-layer"></div>
+        <div id="player-seats" class="seat-layer"></div>
+        <div id="showdown-overlay" class="showdown-overlay hidden">
+          <div id="showdown-content"></div>
+          <div class="sd-foot"><span class="showdown-timer">Next hand in <span id="countdown">5</span>s</span><span class="sd-bar"><i id="showdown-bar"></i></span></div>
+        </div>
+      </main>
 
-      <div class="bottom-panel">
-        <div id="hole-cards-area" class="hole-cards-area">
-          <div id="hole-cards" class="hole-cards"></div>
-          <div id="my-hand-label" class="my-hand-label"></div>
+      <footer class="g-bar" id="action-bar">
+        <div class="bar-status" id="bar-status">
+          <div class="turn-ring" id="turn-ring">
+            <svg viewBox="0 0 40 40"><circle class="trk" cx="20" cy="20" r="17" pathLength="100"/><circle class="val" id="my-turn-ring" cx="20" cy="20" r="17" pathLength="100"/></svg>
+            <span id="my-turn-timer">&nbsp;</span>
+          </div>
+          <div class="bar-status-text">
+            <b id="bar-status-main">Waiting</b>
+            <span id="bar-status-sub"></span>
+          </div>
         </div>
 
-        <div id="action-controls" class="action-controls hidden">
-          <div id="raise-row" class="raise-row hidden">
-            <div class="raise-label">RAISE TO</div>
-            <div class="raise-presets" id="raise-presets">
-              <button class="preset-btn" data-preset="qtr">¼ Pot</button>
-              <button class="preset-btn" data-preset="half">½ Pot</button>
-              <button class="preset-btn" data-preset="3qtr">¾ Pot</button>
-              <button class="preset-btn" data-preset="pot">Pot</button>
-              <button class="preset-btn preset-allin" data-preset="allin">All-In</button>
+        <button id="btn-fold" class="act act-fold" disabled><span class="act-main">Fold</span><span class="act-sub">&nbsp;</span><kbd>F</kbd></button>
+        <button id="btn-check-call" class="act act-call" disabled><span class="act-main">Check</span><span class="act-sub">&nbsp;</span><kbd>C</kbd></button>
+
+        <div class="raise-box" id="raise-box">
+          <div class="raise-presets" id="raise-presets"></div>
+          <div class="raise-slide">
+            <div class="slider-wrap">
+              <input id="raise-slider" type="range" class="raise-slider" min="0" max="100" value="0" disabled>
+              <div class="slider-ticks"><span id="tick-min"></span><span id="tick-max"></span></div>
             </div>
-            <div class="raise-amount-wrap">
-              <input id="raise-slider" type="range" class="raise-slider">
-              <span id="raise-display" class="raise-display">0</span>
+            <input id="raise-input" class="raise-input" type="number" inputmode="numeric" disabled aria-label="Raise to">
+          </div>
+        </div>
+
+        <button id="btn-raise" class="act act-raise" disabled><span class="act-main">Raise</span><span class="act-sub" id="raise-sub">&nbsp;</span><kbd>R</kbd></button>
+      </footer>
+
+      <aside class="g-rail" id="rail">
+        <nav class="rail-tabs" id="rail-tabs">
+          <button type="button" class="rail-tab on" data-tab="log">Log</button>
+          <button type="button" class="rail-tab" data-tab="chat">Chat<i id="chat-unread" class="unread" hidden>0</i></button>
+          <button type="button" class="rail-tab" data-tab="rank">Rank</button>
+          <button type="button" class="rail-tab" data-tab="stk">Stickers</button>
+        </nav>
+
+        <div id="bust-panel" class="bust-panel hidden">
+          <div class="bust-title">Out of chips</div>
+          <div id="bust-balance" class="bust-balance">Bank 0</div>
+          <div class="bust-actions">
+            <button id="btn-rebuy" class="btn btn-brass sm">Rebuy 1,500</button>
+            <button id="btn-spectate" class="btn btn-ghost sm">Spectate</button>
+            <button id="btn-leave" class="btn btn-ghost sm">Leave</button>
+          </div>
+          <div id="bust-broke-msg" class="bust-broke hidden">Your bank is empty. GG.</div>
+        </div>
+
+        <div class="rail-panels">
+          <section class="rail-panel on" id="tab-log">
+            <div id="log-entries" class="log-entries"></div>
+          </section>
+          <section class="rail-panel" id="tab-chat">
+            <div id="chat-messages" class="chat-messages"><div class="empty-note">No chatter yet. Say something.</div></div>
+            <div class="chat-input-row">
+              <input type="text" class="chat-input" id="chat-input" placeholder="Say something" maxlength="120" autocomplete="off">
+              <button class="btn btn-brass sm" id="chat-send">Send</button>
             </div>
-          </div>
-          <div id="pot-odds-display" class="pot-odds-display hidden"></div>
-          <div class="action-btns">
-            <button id="btn-fold" class="btn-action btn-fold">Fold</button>
-            <button id="btn-check-call" class="btn-action btn-call">Check</button>
-            <button id="btn-raise" class="btn-action btn-raise">Raise</button>
-          </div>
+          </section>
+          <section class="rail-panel" id="tab-rank">
+            <div id="leaderboard-entries" class="leaderboard-entries"><div class="empty-note">Loading standings</div></div>
+          </section>
+          <section class="rail-panel" id="tab-stk">
+            <div class="panel-label">Drop a sticker</div>
+            <div class="sticker-grid" id="sticker-grid">
+              <button class="sticker-item" data-emoji="🔥">🔥</button><button class="sticker-item" data-emoji="💎">💎</button>
+              <button class="sticker-item" data-emoji="🤑">🤑</button><button class="sticker-item" data-emoji="💀">💀</button>
+              <button class="sticker-item" data-emoji="🍀">🍀</button><button class="sticker-item" data-emoji="👑">👑</button>
+              <button class="sticker-item" data-emoji="🎰">🎰</button><button class="sticker-item" data-emoji="🎯">🎯</button>
+              <button class="sticker-item" data-emoji="🃏">🃏</button><button class="sticker-item" data-emoji="🎲">🎲</button>
+              <button class="sticker-item" data-emoji="🏆">🏆</button><button class="sticker-item" data-emoji="😤">😤</button>
+            </div>
+            <div class="panel-label">Throw at a player</div>
+            <p class="panel-note">Click any opponent's seat on the table, then pick something to throw.</p>
+          </section>
         </div>
 
-        <div id="waiting-action" class="waiting-action hidden">
-          Watching the hand…
+        <div class="rail-foot">
+          <button id="btn-sit-out" class="btn btn-ghost sm" hidden>Sit out next hand</button>
+          <button id="sound-toggle" class="icon-btn" title="Toggle sound" aria-label="Toggle sound"><svg class="ico"><use href="#i-sound"/></svg></button>
         </div>
-      </div>
-
-      <div id="game-log" class="game-log">
-        <div class="log-header">HAND LOG <span id="ingame-room-code" class="ingame-room-code" title="Click to copy invite link"></span></div>
-        <div id="log-entries"></div>
-      </div>
-
+      </aside>
     </div>
 
-    <!-- ── SOUND TOGGLE ──────────────────────────────────────── -->
-    <button class="sound-toggle" id="sound-toggle" title="Toggle sound">🔊</button>
+    <div id="toasts" class="toasts"></div>
 
-    <!-- ── CHAT PANEL ────────────────────────────────────────── -->
-    <div class="chat-panel" id="chat-panel">
-      <div class="chat-header" id="chat-header">
-        <span class="chat-title">CHAT</span>
-        <button class="chat-collapse-btn" id="chat-collapse">▼</button>
-      </div>
-      <div class="chat-messages" id="chat-messages"></div>
-      <div class="chat-input-row">
-        <input type="text" class="chat-input" id="chat-input" placeholder="Say something…" maxlength="120" autocomplete="off">
-        <button class="chat-send-btn" id="chat-send">↵</button>
-      </div>
-    </div>
-
-    <!-- ── BUST OVERLAY ───────────────────────────────────────── -->
-    <div id="bust-overlay" class="bust-overlay hidden">
-      <div class="bust-card">
-        <div class="bust-icon">💸</div>
-        <div class="bust-title">YOU'RE OUT OF CHIPS</div>
-        <div id="bust-balance" class="bust-balance">Bank: ◈ —</div>
-        <button id="btn-rebuy" class="btn-primary bust-rebuy-btn">Rebuy ◈ 1,500</button>
-        <div id="bust-broke-msg" class="bust-broke hidden">Your bank is empty. GG.</div>
-      </div>
-    </div>
-
-    <!-- ── LEADERBOARD ────────────────────────────────────────── -->
-    <div id="leaderboard-panel" class="leaderboard-panel hidden">
-      <div class="leaderboard-header">
-        <span>LEADERBOARD</span>
-        <button id="lb-close" class="lb-close-btn">✕</button>
-      </div>
-      <div id="leaderboard-entries" class="leaderboard-entries"></div>
-    </div>
-    <button id="lb-toggle" class="lb-toggle-btn" title="Leaderboard">🏆</button>
-
-    <!-- ── SOCIAL PANEL ─────────────────────────────────────── -->
-    <div class="social-panel" id="social-panel">
-      <button class="social-btn" id="sticker-toggle" title="Stickers & Reactions">🎭</button>
-      <div class="sticker-tray hidden" id="sticker-tray">
-        <div class="sticker-tray-label">DROP A STICKER</div>
-        <div class="sticker-grid">
-          <div class="sticker-item" data-emoji="🔥">🔥</div>
-          <div class="sticker-item" data-emoji="💎">💎</div>
-          <div class="sticker-item" data-emoji="🤑">🤑</div>
-          <div class="sticker-item" data-emoji="💀">💀</div>
-          <div class="sticker-item" data-emoji="🍀">🍀</div>
-          <div class="sticker-item" data-emoji="👑">👑</div>
-          <div class="sticker-item" data-emoji="🎰">🎰</div>
-          <div class="sticker-item" data-emoji="🎯">🎯</div>
-          <div class="sticker-item" data-emoji="🃏">🃏</div>
-          <div class="sticker-item" data-emoji="🎲">🎲</div>
-          <div class="sticker-item" data-emoji="🏆">🏆</div>
-          <div class="sticker-item" data-emoji="😤">😤</div>
-        </div>
-        <div class="sticker-tray-tip">Click any opponent seat to throw 💣🍅</div>
-      </div>
-    </div>
-
-    <!-- ── BLINDS UP BANNER ────────────────────────────────────────── -->
-    <div id="blinds-up-banner" class="blinds-up-banner hidden">
-      <div class="bub-level"></div>
-      <div class="bub-sep">·</div>
-      <div class="bub-label">BLINDS UP</div>
-      <div class="bub-sep">·</div>
-      <div class="bub-value"></div>
-    </div>
-
-    <!-- ── SIT OUT BUTTON ─────────────────────────────────────────── -->
-    <div id="sit-out-wrap" class="sit-out-wrap hidden">
-      <button id="btn-sit-out" class="btn-sit-out">Sit Out Next Hand</button>
-    </div>
-
-    <div id="showdown-overlay" class="showdown-overlay hidden">
-      <div class="showdown-card">
-        <div class="showdown-eyebrow">SHOWDOWN</div>
-        <div id="showdown-content"></div>
-        <div class="showdown-timer">Next hand in <span id="countdown">5</span>s</div>
-      </div>
-    </div>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
-  <script src="game.js?v=12"></script>
+  <script src="game.js?v=21"></script>
 </body>
 </html>
