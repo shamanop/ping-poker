@@ -809,7 +809,7 @@ function bind() {
 // ── public API ────────────────────────────────────────────────────
 const Lobby = {
   show: (name, arg) => { if (name === 'profile') { if (!S.user) return; if (S.view === 'signin') show('lobby'); const over = !root.classList.contains('on'); openProfile(); if (over) root.classList.add('lb-overlay'); return; } if (name === 'lobby' || !name) { S.cur = null; hostUi(false); LS.del('ping.table'); } return show(name || 'lobby', arg); },
-  user: () => (S.user ? { key: S.user.key, display: S.user.display, avatar: S.user.avatar, pic: S.user.pic || null, prefs: S.user.prefs || {} } : null),
+  user: () => (S.user ? { key: S.user.key, display: S.user.display, avatar: S.user.avatar, pic: S.user.pic || null, prefs: S.user.prefs || {}, isAdmin: !!S.user.isAdmin } : null),
   onGameLeft: () => { S.cur = null; LS.del('ping.table'); hostUi(false); if (S.user) show('lobby'); },
   signOut,
   mount: (el) => { ensureRoot(); root.classList.add('lb-host'); el.append(root); },

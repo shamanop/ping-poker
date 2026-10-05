@@ -5,7 +5,7 @@
   const BRASS = '#C99A45', CLAY = '#E2674F';
   const colorMap = new Map();
   const avCache = new Map();
-  let data = null, isOpen = false, pollTimer = null;
+  let data = null, isOpen = false, pollTimer = null, adminHost = null;
 
   const $ = id => document.getElementById(id);
   const fmt = n => Money.fmt(n);
@@ -85,6 +85,7 @@
     btn.addEventListener('click', () => toggle());
     $('bank-close').addEventListener('click', () => toggle(false));
     document.addEventListener('keydown', e => {
+      if (adminHost) return;
       if (e.key === 'Escape' && isOpen) toggle(false);
       else if ((e.key === 'b' || e.key === 'B') && !e.ctrlKey && !e.metaKey && !e.altKey && !/INPUT|TEXTAREA/.test((e.target.tagName || ''))) toggle();
     });
@@ -93,10 +94,32 @@
   }
 
   function request() {
+    if (adminHost) { if (state.socket) state.socket.emit('admin_bank_summary', {}); return; }
     if (state.socket && state.roomId) state.socket.emit('get_bank_summary', { roomId: state.roomId });
   }
 
+  // Admin console hosts the same panel anywhere (no table needed); mount(null) puts it back in the game grid.
+  function mount(host) {
+    const panel = $('bank-panel'), grid = document.querySelector('.g-grid');
+    if (!panel) return false;
+    clearInterval(pollTimer);
+    if (host) {
+      adminHost = host; host.appendChild(panel);
+      panel.classList.add('in-admin', 'open'); isOpen = true;
+      lastHtml.delete($('bank-players'));
+      request(); render(); pollTimer = setInterval(request, 4000);
+    } else {
+      adminHost = null; isOpen = false;
+      panel.classList.remove('in-admin', 'open');
+      if (grid) grid.appendChild(panel);
+      const b = $('bank-btn'); if (b) b.classList.remove('on');
+    }
+    return true;
+  }
+  window.BankPanel = { mount, refresh: () => { if (adminHost) { request(); render(); } } };
+
   function toggle(force) {
+    if (adminHost) return;
     isOpen = force === undefined ? !isOpen : force;
     $('bank-panel').classList.toggle('open', isOpen);
     $('bank-btn').classList.toggle('on', isOpen);
@@ -139,7 +162,8 @@
   function renderPlayers() {
     const me = state.gameState && state.gameState.players[state.myIdx];
     const meName = me && me.name ? me.name.toLowerCase() : '';
-    const canEdit = meName === 'chris';
+    const u = window.Lobby && Lobby.user && Lobby.user();
+    const canEdit = meName === 'chris' || !!(u && u.isAdmin);
     if (document.querySelector('#bank-players .bp-edit')) return;
     $('bank-pcount').textContent = data.players.length ? data.players.length + ' players' : '';
     if (!data.players.length) {

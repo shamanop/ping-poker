@@ -1198,6 +1198,43 @@ io.on('connection', socket => {
     const r = accounts.resetPin(me, key, newPin);
     r.ok ? socket.emit('ok', { what: 'pin_reset' }) : authFail(r);
   });
+  // ── Admin console (floating admin button). Every event re-checks isAdmin server-side. ──
+  const adminOnly = () => {
+    if (accounts.isAdmin(socket.data.acct)) return socket.data.acct;
+    socket.emit('admin_result', { ok: false, code: 'auth', message: 'Admin only' });
+    return null;
+  };
+  on('admin_overview', () => {
+    if (!adminOnly()) return;
+    const room = rooms.get(ROOM_ID);
+    const online = new Set();
+    for (const s of io.sockets.sockets.values()) if (s.data && s.data.acct) online.add(s.data.acct);
+    const rows = Object.values(accounts.all()).map(a => {
+      const k = bankKey(a.key);
+      let atTable = 0;
+      for (const r of rooms.values()) {
+        if (r.unit !== 'chips') continue;
+        for (const p of r.players) if (!p.isBot && bankKey(p.name) === k) atTable += p.chips + (r.status === 'playing' && r.pot > 0 ? (p.handBet || 0) : 0);
+      }
+      const seen = Math.max(a.lastLoginAt || 0, ...(a.sessions || []).map(x => x.lastSeen || 0));
+      return { key: a.key, display: a.display, isAdmin: !!a.isAdmin, claimed: !!a.claimed, lastSeen: seen || null, online: online.has(a.key), balance: bank[k] === undefined ? null : bank[k] + atTable };
+    }).sort((x, y) => (y.online - x.online) || ((y.lastSeen || 0) - (x.lastSeen || 0)) || x.display.localeCompare(y.display));
+    socket.emit('admin_overview', {
+      accounts: rows,
+      table: room ? { paused: !!room.paused, status: room.status, seated: room.players.filter(p => !p.isBot).length, handNum: room.handNum || 0, startChips: room.startChips || STARTING_CHIPS } : null,
+    });
+  });
+  on('admin_bank_summary', () => {
+    if (!adminOnly()) return;
+    socket.emit('bank_summary', bankSummary(ROOM_ID));
+  });
+  on('admin_reset_pin', ({ key, newPin } = {}) => {
+    const me = adminOnly(); if (!me) return;
+    const k = typeof key === 'string' ? accounts.keyOf(key) : '';
+    const r = accounts.resetPin(me, k, typeof newPin === 'string' || typeof newPin === 'number' ? String(newPin) : '');
+    if (r.ok) console.log(`admin ${me} reset PIN for ${k}`);
+    socket.emit('admin_result', { op: 'reset_pin', key: k, ok: !!r.ok, code: r.code, message: r.ok ? 'PIN reset. Their other sessions were signed out.' : r.message });
+  });
   if (process.env.AUTH_CLOCK_SKEW !== undefined) on('__test_skew', ({ ms } = {}) => { accounts.setSkew(ms); socket.emit('ok', { what: 'skew' }); });
 
   // ── Bank queries ──────────────────────────────────────────────────────────
