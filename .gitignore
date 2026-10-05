@@ -5,3 +5,5 @@ qa/*.log
 qa/bank-test.json
 audit/
 qa/_parts/
+ledger.json
+ledger.json.tmp

@@ -5,12 +5,14 @@ const http    = require('http');
 const { Server } = require('socket.io');
 const path    = require('path');
 const fs      = require('fs');
+const { createLedger } = require('./ledger');
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const STARTING_CHIPS  = 1500;
 const BANK_DEFAULT    = 10000;
 const BANK_FILE       = process.env.BANK_FILE || path.join(__dirname, 'bank.json');
+const LEDGER_FILE     = process.env.LEDGER_FILE || path.join(__dirname, 'ledger.json');
 const TURN_MS         = 30000;
 const SMALL_BLIND     = 10;
 const BIG_BLIND       = 20;
@@ -38,18 +40,56 @@ try { bank = JSON.parse(fs.readFileSync(BANK_FILE, 'utf8')); } catch { bank = {}
 
 function bankKey(name) { return String(name).toLowerCase().trim(); }
 
+// Ledger lives in its own file (LEDGER_FILE); bank.json format is unchanged.
+let bankPushTimer = null;
+const ledger = createLedger({
+  file: LEDGER_FILE,
+  onWrite: () => {
+    if (bankPushTimer) return;
+    bankPushTimer = setTimeout(() => {
+      bankPushTimer = null;
+      for (const room of rooms.values()) {
+        if (room.players.some(p => !p.isBot && p.connected)) io.to(room.id).emit('bank_summary', bankSummary(room.id));
+      }
+    }, 250);
+  },
+});
+ledger.seedBank(bank);
+
 function getBalance(name) {
   const k = bankKey(name);
-  if (bank[k] === undefined) { bank[k] = BANK_DEFAULT; saveBank(); }
+  if (bank[k] === undefined) {
+    bank[k] = BANK_DEFAULT; saveBank();
+    ledger.log('bank-start', name, BANK_DEFAULT, BANK_DEFAULT, null, null, null);
+  }
   return bank[k];
 }
 
-function adjustBank(name, delta) {
+// type/room/tableChips are optional ledger metadata only; they do not affect the balance math.
+function adjustBank(name, delta, type, room, tableChips) {
   const k = bankKey(name);
-  if (bank[k] === undefined) bank[k] = BANK_DEFAULT;
+  if (bank[k] === undefined) {
+    bank[k] = BANK_DEFAULT;
+    ledger.log('bank-start', name, BANK_DEFAULT, BANK_DEFAULT, null, null, null);
+  }
   bank[k] = Math.max(0, bank[k] + delta);
   saveBank();
+  if (type) ledger.log(type, name, Math.abs(delta), bank[k], tableChips, room ? room.handNum : null, room ? room.id : null);
   return bank[k];
+}
+
+function bankSummary(roomId) {
+  const live = [];
+  for (const room of rooms.values()) {
+    for (const p of room.players) {
+      let status;
+      if (!p.connected && !p.isBot) status = 'away';
+      else if (p.sittingOut || p.sitOutRequest) status = 'sitting-out';
+      else status = 'seated';
+      live.push({ name: p.name, isBot: !!p.isBot, chips: p.chips, status });
+    }
+  }
+  return ledger.summary(roomId, bank, live);
 }
 
 function saveBank() {
@@ -79,6 +119,12 @@ const server = http.createServer(app);
 const io     = new Server(server, { cors: { origin: '*' } });
 
 app.use(express.static(path.join(__dirname, 'public')));
+
+app.get('/api/bank-summary', (req, res) => {
+  if (req.query.password !== ROOM_PASSWORD) return res.status(403).json({ error: 'Incorrect password' });
+  const roomId = String(req.query.room || ROOM_ID);
+  res.json(bankSummary(roomId));
+});
 
 // ─── Room State ──────────────────────────────────────────────────────────────
 
@@ -339,6 +385,7 @@ function startHand(room) {
   room.currentBet = room.bb;
   room.street    = 'preflop';
   room.handNum  += 1;
+  ledger.startHand(room);
 
   for (const p of players) {
     p.cards    = [];
@@ -557,6 +604,7 @@ function showdown(room) {
 
 function scheduleNextHand(room, nextDealerIdx) {
   clearTurnTimeout(room);
+  ledger.endHand(room, getBalance);
   room.status = 'waiting_next';
   broadcastGameState(room);
 
@@ -575,7 +623,7 @@ function scheduleNextHand(room, nextDealerIdx) {
     if (active.length < 2 || willPlay.length < 2) {
       // Award remaining chips back to bank
       for (const p of room.players) {
-        if (!p.isBot && p.chips > 0) { adjustBank(p.name, p.chips); p.chips = 0; }
+        if (!p.isBot && p.chips > 0) { const c = p.chips; p.chips = 0; adjustBank(p.name, c, 'cashout', room, 0); }
       }
       if (room.blindTimer) { clearTimeout(room.blindTimer); room.blindTimer = null; }
       room.status = 'waiting';
@@ -699,6 +747,11 @@ io.on('connection', socket => {
     socket.emit('balance_data', { balance: getBalance(name.trim()) });
   });
 
+  socket.on('get_bank_summary', ({ roomId } = {}) => {
+    if (typeof roomId !== 'string' || !socket.rooms.has(roomId)) return;
+    socket.emit('bank_summary', bankSummary(roomId));
+  });
+
   socket.on('get_leaderboard', () => {
     socket.emit('leaderboard_data', { entries: getLeaderboard() });
   });
@@ -724,7 +777,7 @@ io.on('connection', socket => {
     const playerIdx = room.players.length;
     const player = makePlayer(socket.id, cleanName, avatar, buyIn);
     player.profilePic = validatePic(profilePic);
-    adjustBank(cleanName, -buyIn);
+    adjustBank(cleanName, -buyIn, 'buyin', room, buyIn);
     room.players.push(player);
     if (!room.hostSocketId) room.hostSocketId = socket.id;
 
@@ -768,7 +821,7 @@ io.on('connection', socket => {
     const room  = makeRoom(roomId, socket.id);
     const human = makePlayer(socket.id, cleanName, avatar, buyIn);
     human.profilePic = validatePic(profilePic);
-    adjustBank(cleanName, -buyIn);
+    adjustBank(cleanName, -buyIn, 'buyin', room, buyIn);
     room.players.push(human);
 
     for (let i = 0; i < 3; i++) {
@@ -819,7 +872,7 @@ io.on('connection', socket => {
     const buyIn   = Math.min(STARTING_CHIPS, balance);
     if (buyIn < BIG_BLIND) { socket.emit('error', { message: 'Not enough chips in bank to rebuy' }); return; }
 
-    const newBalance = adjustBank(player.name, -buyIn);
+    const newBalance = adjustBank(player.name, -buyIn, 'rebuy', room, buyIn);
     player.chips     = buyIn;
     player.chipsBought = (player.chipsBought || 0) + buyIn;
     player.sittingOut = false;
@@ -883,8 +936,9 @@ io.on('connection', socket => {
 
       // Cash out remaining chips back to bank before marking disconnected
       if (!player.isBot && player.chips > 0) {
-        adjustBank(player.name, player.chips);
+        const c = player.chips;
         player.chips = 0;
+        adjustBank(player.name, c, 'cashout', room, 0);
       }
 
       player.connected = false;
