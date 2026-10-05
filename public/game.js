@@ -1165,7 +1165,7 @@ function setRaiseValue(v) {
   const slider = $('raise-slider');
   slider.value = v;
   slider.style.setProperty('--fill', hi > lo ? ((v - lo) / (hi - lo) * 100).toFixed(1) + '%' : '100%');
-  if (document.activeElement !== $('raise-input')) $('raise-input').value = v;
+  $('raise-input').value = v;
   $('raise-sub').textContent = v >= hi ? `to ${v.toLocaleString()} · all-in` : `to ${v.toLocaleString()}`;
   document.querySelectorAll('#raise-presets .pre').forEach(b => b.classList.toggle('on', parseInt(b.dataset.v) === v));
 }
