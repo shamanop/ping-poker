@@ -46,6 +46,25 @@ const ROOM_PASSWORD = 'ping';
 // ─── Bank System ─────────────────────────────────────────────────────────────
 
 let bank = {};
+// One-shot fresh start: when FRESH_START_ID is new, move every data file into backup-<id>/ and begin empty (marker file stops repeats).
+if (process.env.FRESH_START_ID && path.resolve(DATA_DIR) !== path.resolve(__dirname)) {
+  try {
+    const id = String(process.env.FRESH_START_ID).replace(/[^\w.-]/g, '');
+    const marker = path.join(DATA_DIR, `.fresh-${id}`);
+    if (id && !fs.existsSync(marker)) {
+      const bak = path.join(DATA_DIR, `backup-${id}`);
+      fs.mkdirSync(bak, { recursive: true });
+      for (const f of fs.readdirSync(DATA_DIR)) {
+        const src = path.join(DATA_DIR, f);
+        if (f.startsWith('backup-') || f.startsWith('.fresh-') || f === 'lost+found' || !fs.statSync(src).isFile()) continue;
+        fs.renameSync(src, path.join(bak, f));
+      }
+      fs.writeFileSync(path.join(DATA_DIR, 'bank.json'), '{}');
+      fs.writeFileSync(marker, new Date().toISOString());
+      console.log(`fresh start ${id}: old data moved to ${bak}`);
+    }
+  } catch (e) { console.error('fresh start failed:', e.message); }
+}
 // First boot on an empty data dir (Railway volume): copy the repo's seed files in. Never overwrites existing data.
 if (path.resolve(DATA_DIR) !== path.resolve(__dirname)) {
   try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch {}
