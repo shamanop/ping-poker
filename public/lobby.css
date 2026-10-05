@@ -96,8 +96,8 @@
 .lb-seg.tabs button { font-family: var(--f-display); font-size: var(--p20); letter-spacing: .1em; min-height: var(--p44); }
 
 /* avatar grid */
-.lb-avatars { display: grid; grid-template-columns: repeat(6, 1fr); gap: var(--p10); }
-.lb-avatars button { aspect-ratio: 1; padding: var(--p2); background: #100A06; border: 1px solid var(--line); border-radius: 50%; cursor: pointer; }
+.lb-avatars { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: var(--p10); }
+.lb-avatars button { min-width: 0; aspect-ratio: 1; padding: var(--p2); background: #100A06; border: 1px solid var(--line); border-radius: 50%; cursor: pointer; }
 .lb-avatars button img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block; }
 .lb-avatars button:hover { border-color: var(--brass); }
 .lb-avatars button.on { border-color: var(--gold); box-shadow: 0 0 0 2px var(--gold); }
