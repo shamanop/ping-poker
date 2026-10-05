@@ -10,7 +10,7 @@ const fs      = require('fs');
 
 const STARTING_CHIPS  = 1500;
 const BANK_DEFAULT    = 10000;
-const BANK_FILE       = path.join(__dirname, 'bank.json');
+const BANK_FILE       = process.env.BANK_FILE || path.join(__dirname, 'bank.json');
 const TURN_MS         = 30000;
 const SMALL_BLIND     = 10;
 const BIG_BLIND       = 20;

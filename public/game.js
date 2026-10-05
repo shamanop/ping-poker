@@ -910,7 +910,7 @@ function renderBets(gs) {
     const s = betSpot(gs.dealerIdx, gs);
     let px = -s.uy, py = s.ux;
     if (px < -1e-3 || (Math.abs(px) <= 1e-3 && py < 0)) { px = -px; py = -py; }
-    const off = 68 * g.u;
+    const off = (gs.dealerIdx === myIdx ? 138 : 68) * g.u;
     pucks.innerHTML = `<div class="puck" style="left:${(s.x + px * off).toFixed(1)}px;top:${(s.y + py * off).toFixed(1)}px">D</div>`;
   } else {
     pucks.innerHTML = '';
@@ -951,7 +951,7 @@ function renderHero(gs) {
   if (!show) { $('hole-cards').innerHTML = ''; $('my-hand-label').innerHTML = ''; state.heroKey = ''; return; }
   wrap.style.position = 'absolute';
   wrap.style.left = (g.W / 2) + 'px';
-  wrap.style.top  = (g.H - 164 * g.u) + 'px';
+  wrap.style.top  = (g.H - 180 * g.u) + 'px';
 
   const cards = state.myCards;
   const key = `${gs.handNum}|${cards.map(c => c.rank + c.suit).join('')}`;
