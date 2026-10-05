@@ -582,6 +582,7 @@ function bindSocket() {
 
   s.on('bust_out', ({ balance }) => { showBust(balance); });
   s.on('leaderboard_data', ({ entries }) => { renderLeaderboard(entries); });
+  s.on('self_changed', v => { if (v && v.display) state.myName = v.display; });
   s.on('error', ({ message }) => { showError(message); });
 
   s.on('disconnect', () => { toast('Connection lost', 'Trying to reconnect', 'warn', 5000); });
@@ -1980,6 +1981,7 @@ function esc(s) {
 }
 function safePic(pic) {
   if (typeof pic !== 'string') return null;
+  if (/^\/apic\/[A-Za-z0-9._~%-]{1,40}\/[a-f0-9]{10}$/.test(pic)) return pic;
   if (!/^data:image\/(jpeg|png|webp|gif);base64,[A-Za-z0-9+\/=]+$/.test(pic)) return null;
   return pic;
 }

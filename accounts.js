@@ -10,6 +10,23 @@ const NAME_RE = /^[A-Za-z0-9 _.\-']+$/;
 const PIN_RE = /^\d{4,6}$/;
 const AVATAR_RE = /^a(0[1-9]|1[0-2])$/;
 const BOT_NAME_RE = /^(bot|demo|test)/i;
+const PIC_MAX = 40 * 1024;
+const PIC_RE = /^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+\/]+={0,2})$/;
+const RENAME_GAP_MS = 30000;
+
+// Data URL -> clean string or null. Raster only (no SVG/GIF), <=40KB, magic bytes must match the declared type.
+function validAvatarPic(pic) {
+  if (typeof pic !== 'string' || pic.length > PIC_MAX) return null;
+  const m = PIC_RE.exec(pic);
+  if (!m) return null;
+  let b;
+  try { b = Buffer.from(m[2], 'base64'); } catch { return null; }
+  if (b.length < 16) return null;
+  const ok = m[1] === 'jpeg' ? (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff)
+    : m[1] === 'png' ? b.slice(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+    : (b.slice(0, 4).toString('latin1') === 'RIFF' && b.slice(8, 12).toString('latin1') === 'WEBP');
+  return ok ? pic : null;
+}
 
 const cleanName = n => String(n == null ? '' : n).trim().replace(/\s+/g, ' ');
 const keyOf = n => cleanName(n).toLowerCase();
@@ -44,6 +61,7 @@ function createAccounts({ file, roomPassword = 'ping' }) {
     } catch (e) { console.error('accounts save failed:', e.message); }
   }
   function save() {
+    dispIdx = null;
     if (timer) return;
     timer = setTimeout(() => { timer = null; writeNow(); }, 50);
     if (timer.unref) timer.unref();
@@ -75,7 +93,18 @@ function createAccounts({ file, roomPassword = 'ping' }) {
   const get = key => db.accounts[key] || null;
   const isAdmin = key => !!(key && db.accounts[key] && db.accounts[key].isAdmin);
   const displayOf = key => (db.accounts[key] ? db.accounts[key].display : key);
-  const publicAccount = a => ({ key: a.key, display: a.display, avatar: a.avatar, isAdmin: !!a.isAdmin, claimed: !!a.claimed, prefs: a.prefs, stats: a.stats });
+  let dispIdx = null;
+  // Lowercased name (an account key or any current display) -> account key. Unknown names pass through unchanged.
+  function keyForName(name) {
+    const l = String(name == null ? '' : name).trim().toLowerCase();
+    if (db.accounts[l]) return l;
+    if (!dispIdx) { dispIdx = new Map(); for (const a of Object.values(db.accounts)) dispIdx.set(String(a.display).toLowerCase(), a.key); }
+    return dispIdx.get(l) || l;
+  }
+  const picVer = a => (a.avatarPic ? crypto.createHash('sha1').update(a.avatarPic).digest('hex').slice(0, 10) : null);
+  const picUrl = a => (a && a.avatarPic ? '/apic/' + encodeURIComponent(a.key) + '/' + picVer(a) : null);
+  const lastRename = new Map();
+  const publicAccount = a => ({ key: a.key, display: a.display, avatar: a.avatar, pic: picUrl(a), isAdmin: !!a.isAdmin, claimed: !!a.claimed, prefs: a.prefs, stats: a.stats });
 
   function setPin(a, pin) {
     a.salt = crypto.randomBytes(16).toString('hex');
@@ -122,6 +151,7 @@ function createAccounts({ file, roomPassword = 'ping' }) {
     if (recent.length >= signupLimit) { signups.set(ip, recent); return limited(Math.max(1000, 3600000 - (t - recent[0]))); }
     const key = n.toLowerCase();
     const ex = db.accounts[key];
+    if (!ex && keyForName(key) !== key) return err('name_taken', 'That name is taken');
     if (ex) return ex.claimed ? err('name_taken', 'That name is taken') : err('claim_required', 'This name belongs to an existing player. Claim it with the table password.');
     recent.push(t); signups.set(ip, recent);
     const a = blank(key, n);
@@ -134,7 +164,7 @@ function createAccounts({ file, roomPassword = 'ping' }) {
   }
 
   function claim(name, pin, avatar, password, ctx = {}) {
-    const key = keyOf(name);
+    const key = keyForName(keyOf(name));
     const ids = idsFor(ctx.ip, key);
     const ms = lockedMs(ids);
     if (ms) return limited(ms);
@@ -153,7 +183,7 @@ function createAccounts({ file, roomPassword = 'ping' }) {
   }
 
   function login(name, pin, ctx = {}) {
-    const key = keyOf(name);
+    const key = keyForName(keyOf(name));
     const ids = idsFor(ctx.ip, key);
     const ms = lockedMs(ids);
     if (ms) return limited(ms);
@@ -190,6 +220,34 @@ function createAccounts({ file, roomPassword = 'ping' }) {
     if (!a || !h) return;
     a.sessions = (a.sessions || []).filter(s => s.h !== h);
     save();
+  }
+
+  function rename(key, name) {
+    const a = db.accounts[key];
+    if (!a) return err('bad_session', 'Session expired');
+    const n = validName(name);
+    if (!n) return err('bad_name', 'Names are 2-16 letters, numbers, spaces, . _ - \'');
+    if (n === a.display) return { ok: true, account: a, changed: false };
+    const l = n.toLowerCase();
+    for (const o of Object.values(db.accounts)) {
+      if (o.key !== key && (o.key === l || String(o.display).toLowerCase() === l)) return err('name_taken', 'That name is taken');
+    }
+    const t = now(), last = lastRename.get(key) || 0;
+    if (last && t - last < RENAME_GAP_MS) { const ms = RENAME_GAP_MS - (t - last); return err('rate_limited', 'You can change your name again in ' + Math.ceil(ms / 1000) + ' seconds', { retryMs: ms }); }
+    lastRename.set(key, t);
+    a.display = n;
+    save();
+    return { ok: true, account: a, changed: true };
+  }
+
+  // avatarPic: undefined = leave alone, null/'' = remove, string = set (caller validates first; invalid strings are ignored)
+  function setAvatarPic(key, pic) {
+    const a = db.accounts[key];
+    if (!a) return null;
+    if (pic === null || pic === '') delete a.avatarPic;
+    else { const ok = validAvatarPic(pic); if (!ok) return null; a.avatarPic = ok; }
+    save();
+    return a;
   }
 
   function updateProfile(key, { avatar, prefs } = {}) {
@@ -301,7 +359,7 @@ function createAccounts({ file, roomPassword = 'ping' }) {
   const emit = (ev, ...a) => { for (const fn of listeners[ev] || []) { try { fn(...a); } catch (e) { console.error('accounts listener', e); } } };
 
   return {
-    signup, claim, login, resume, logout, logoutHash, get, isAdmin, displayOf, publicAccount, updateProfile,
+    signup, claim, login, resume, logout, logoutHash, get, isAdmin, displayOf, publicAccount, updateProfile, rename, setAvatarPic, keyForName, picUrl, validAvatarPic,
     pinChange, resetPin, recordHand, recordNight, social, rebuildStats, migrateLegacy, flush, on, emit,
     setSkew: ms => { skew = Number(ms) || 0; }, keyOf, cleanName, fileExisted, all: () => db.accounts,
   };

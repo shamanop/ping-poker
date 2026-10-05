@@ -52,6 +52,7 @@ const nearIdx = (vals, v) => { let bi = 0, bd = Infinity; vals.forEach((x, i) =>
 const unitOf = (mode) => (mode === 'chips' ? 'chips' : 'cents');
 const modeLabel = (m) => ({ play: 'Play $', friends: 'Friends $', chips: 'Chips' }[m] || m);
 const modeNote = (m) => ({ play: 'Play $ is fake money from your play wallet.', friends: 'Ledger $ is a friendly tally, settle up on your own.', chips: 'Chips come from your bank balance.' }[m] || '');
+const avSrc = (e) => (e && e.pic) || avUrl(e && e.avatar);
 const avUrl = (a) => { let s = String(a ?? 'a01'); if (/^\d+$/.test(s)) s = 'a' + s.padStart(2, '0'); s = s.replace(/\.png$/, ''); return 'images/avatars/' + s + '.png'; };
 const code6 = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
 const tHost = (t) => (t && (t.hostKey || (t.host && t.host.key))) || '';
@@ -112,7 +113,7 @@ function renderTop() {
     h('div', { class: 'lb-brand' }, h('img', { src: 'images/ui/vp-mark.png', alt: '' }), h('span', null, 'THE ', h('em', null, 'PING'))),
     h('span', { 'data-money-toggle': '' }),
     h('button', { class: 'lb-acct', id: 'lb-acct', style: 'background:none;border:0;color:inherit;font:inherit;text-align:left;cursor:pointer', onclick: openProfile, title: 'Profile' },
-      h('img', { src: avUrl(u.avatar), alt: '' }),
+      h('img', { src: avSrc(u), alt: '' }),
       h('div', null, h('div', { class: 'nm' }, u.display || u.key), h('div', { class: 'nt' }, h('span', { class: cls }, net), net && play ? '  /  ' : '', play))),
     h('button', { class: 'lb-link', id: 'lb-signout', onclick: signOut }, 'Sign out'));
   mountToggles();
@@ -295,7 +296,7 @@ function drawLists() {
     const rows = S.board.slice(0, 5), me = S.boardMe;
     const row = (e, i) => {
       const v = e.netCents ?? 0, mine = S.user && e.key === S.user.key;
-      return h('div', { class: 'lb-lead' + (mine ? ' me' : '') }, h('span', { class: 'rk' }, e.rank || i + 1), h('img', { src: avUrl(e.avatar), alt: '' }), h('span', null, (e.display || e.key) + (mine ? ' (you)' : '')), h('b', { class: v > 0 ? 'up' : v < 0 ? 'down' : '' }, fm(v, 'cents', { signed: true })));
+      return h('div', { class: 'lb-lead' + (mine ? ' me' : '') }, h('span', { class: 'rk' }, e.rank || i + 1), h('img', { src: avSrc(e), alt: '' }), h('span', null, (e.display || e.key) + (mine ? ' (you)' : '')), h('b', { class: v > 0 ? 'up' : v < 0 ? 'down' : '' }, fm(v, 'cents', { signed: true })));
     };
     const out = rows.map(row);
     if (me && !rows.some((e) => e.key === me.key)) out.push(h('div', { class: 'lb-lead-gap' }, '...'), row(me, 0));
@@ -393,7 +394,7 @@ function modalJoin(info, me) {
 }
 function seatCells(info) {
   const t = info.table, unit = t.unit || unitOf(t.mode);
-  const cells = (info.seated || []).map((p) => h('div', { class: 'lb-seat' }, h('img', { src: avUrl(p.avatar), alt: '' }), h('div', null, h('b', null, p.display || p.key), h('span', null, fm(p.stack, unit)))));
+  const cells = (info.seated || []).map((p) => h('div', { class: 'lb-seat' }, h('img', { src: avSrc(p), alt: '' }), h('div', null, h('b', null, p.display || p.key), h('span', null, fm(p.stack, unit)))));
   const open = Math.max(0, (info.openSeats ?? t.seats - cells.length));
   for (let i = 0; i < open; i++) cells.push(h('div', { class: 'lb-seat open' }, 'Open seat'));
   return cells;
@@ -573,6 +574,40 @@ function onBest(p) { if (!p) return; if (typeof p.now === 'number') feedSkew = D
 setInterval(() => { if (S.user && S.view === 'lobby') emit('social:biggest'); }, 300000);
 setInterval(drawBest, 60000);
 // ── profile ───────────────────────────────────────────────────────
+const NAME_OK = /^[A-Za-z0-9 _.\-']+$/;
+function nameProblem(n) {
+  if (n.length < 2 || n.length > 16) return 'Names are 2 to 16 characters.';
+  if (!NAME_OK.test(n)) return 'Use letters, numbers, spaces, . _ - and apostrophes only.';
+  return '';
+}
+// File -> 128x128 centre-cropped JPEG data URL under ~40KB
+function photoToAvatar(file) {
+  return new Promise((resolve, reject) => {
+    if (!/^image\//.test(file.type || '') || /svg/i.test(file.type)) { reject('Pick a photo (JPEG, PNG or WebP), not a vector file.'); return; }
+    const url = URL.createObjectURL(file), img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const w = img.naturalWidth || img.width, hgt = img.naturalHeight || img.height, side = Math.min(w, hgt);
+      if (!side) { reject('Could not read that picture.'); return; }
+      const c = document.createElement('canvas'); c.width = c.height = 128;
+      const x = c.getContext('2d'); x.fillStyle = '#17100B'; x.fillRect(0, 0, 128, 128);
+      x.drawImage(img, (w - side) / 2, (hgt - side) / 2, side, side, 0, 0, 128, 128);
+      for (const q of [0.82, 0.7, 0.55, 0.4]) { const d = c.toDataURL('image/jpeg', q); if (d.length <= 38000) { resolve(d); return; } }
+      reject('That picture is too detailed. Try another one.');
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject('Could not read that picture.'); };
+    img.src = url;
+  });
+}
+// Sync an open profile modal with S.user (after a save from this or another device)
+function refreshProfile() {
+  renderTop();
+  const u = S.user; if (!u) return;
+  const av = $('lb-profav'); if (av) av.src = avSrc(u);
+  const nm = $('lb-profname'); if (nm) nm.textContent = u.display || u.key;
+  const up = $('lb-usepreset'); if (up) up.style.display = u.pic ? '' : 'none';
+  document.querySelectorAll('.lb-avatars button').forEach((b) => b.classList.toggle('on', !u.pic && b.firstChild && b.firstChild.alt === String(u.avatar).replace(/\.png$/, '')));
+}
 function openProfile() {
   emit('profile_get', {}); emit('account:stats', {}); emit('achv:state', {});
   if (S.achv && S.achv.unseen) setTimeout(() => { if ($('lb-ach')) { emit('achv:seen', {}); } }, 1200);
@@ -582,15 +617,33 @@ function openProfile() {
   const oldPin = h('input', { class: 'text-input', type: 'password', inputmode: 'numeric', maxlength: 6, placeholder: 'Current PIN', id: 'lb-oldpin' });
   const newPin = h('input', { class: 'text-input', type: 'password', inputmode: 'numeric', maxlength: 6, placeholder: 'New PIN', id: 'lb-newpin' });
   const recent = (p.recent || []).slice(0, 5);
+  const nameMsg = h('div', { class: 'lb-err', id: 'lb-namemsg' }), photoMsg = h('div', { class: 'lb-err', id: 'lb-photomsg' });
+  const nameIn = h('input', { class: 'text-input', id: 'lb-dispname', type: 'text', maxlength: 16, value: u.display || u.key, autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', onkeydown: (e) => { if (e.key === 'Enter') saveName(); } });
+  const fileIn = h('input', { type: 'file', accept: 'image/*', id: 'lb-photofile', style: 'display:none', onchange: () => { const f = fileIn.files && fileIn.files[0]; fileIn.value = ''; if (!f) return; photoMsg.classList.remove('ok'); photoMsg.textContent = 'Preparing photo...'; photoToAvatar(f).then((url) => { photoMsg.textContent = ''; emit('profile_update', { avatarPic: url }); }, (m) => { photoMsg.textContent = m; }); } });
+  function saveName() {
+    const raw = nameIn.value.replace(/\s+/g, ' ').trim(), bad = nameProblem(raw);
+    nameMsg.classList.remove('ok');
+    if (bad) { nameMsg.textContent = bad; return; }
+    if (raw === S.user.display) { nameMsg.textContent = 'That is already your name.'; return; }
+    nameMsg.textContent = ''; S.pendingName = raw;
+    emit('profile_update', { display: raw });
+  }
   openModal(
-    h('div', { style: 'display:flex;gap:var(--p16);align-items:center' }, h('img', { id: 'lb-profav', src: avUrl(av), style: 'width:var(--p64);height:var(--p64);border-radius:50%;border:1px solid var(--brass)', alt: '' }), h('div', null, h('h3', null, u.display || u.key), h('div', { class: 'lb-muted' }, 'Signed in'))),
+    h('div', { class: 'lb-prof-hd' }, h('img', { id: 'lb-profav', class: 'lb-prof-av', src: avSrc(u), alt: '' }), h('div', { class: 'lb-prof-id' }, h('h3', { id: 'lb-profname' }, u.display || u.key), h('div', { class: 'lb-muted' }, 'Signed in'))),
     h('div', { class: 'lb-xprow', id: 'lb-profxp' }, h('b', null, 'LV ' + (S.acctStats ? S.acctStats.level : 1)), h('span', { class: 'lb-xptrack' }, h('i', { style: 'width:' + Math.max(2, S.acctStats ? S.acctStats.xpPct : 0) + '%' })), h('small', null, S.acctStats ? S.acctStats.xp + ' / ' + S.acctStats.nextXp + ' XP' : '')),
     h('div', { class: 'lb-stats' }, h('div', null, h('b', { class: net > 0 ? 'up' : net < 0 ? 'down' : '' }, fm(net, 'cents', { signed: true })), h('small', null, 'Ledger net')),
       h('div', null, h('b', null, st.nights ?? st.nightsPlayed ?? (p.recent || []).length), h('small', null, 'Nights')), h('div', null, h('b', null, st.hands ?? st.handsPlayed ?? 0), h('small', null, 'Hands'))),
     recent.length ? h('div', { class: 'lb-rows' }, recent.map((r) => h('div', { class: 'lb-row' }, h('div', null, h('div', { class: 't' }, r.name || r.tableName || r.nightId), h('div', { class: 's' }, r.date || '')), h('b', { class: r.net > 0 ? 'up' : 'down' }, fm(r.net, r.unit || 'cents', { signed: true }))))) : null,
     achSection(),
-    h('div', { class: 'lb-field' }, h('label', null, 'Avatar'), h('div', { class: 'lb-avatars' }, Array.from({ length: 12 }, (_, i) => { const id = 'a' + String(i + 1).padStart(2, '0');
-      return h('button', { type: 'button', class: id === String(av).replace(/\.png$/, '') ? 'on' : '', onclick: (e) => { av = id; emit('profile_update', { avatar: id }); $('lb-profav').src = avUrl(id); e.currentTarget.parentNode.querySelectorAll('button').forEach((b) => b.classList.remove('on')); e.currentTarget.classList.add('on'); S.user.avatar = id; renderTop(); } }, h('img', { src: avUrl(id), alt: id })); }))),
+    h('div', { class: 'lb-field' }, h('label', { for: 'lb-dispname' }, 'Display name'),
+      h('div', { class: 'lb-inline' }, nameIn, h('button', { type: 'button', class: 'lb-btn blue sm', id: 'lb-namesave', onclick: saveName }, 'Save')),
+      nameMsg),
+    h('div', { class: 'lb-field' }, h('label', null, 'Avatar'),
+      h('div', { class: 'lb-inline lb-photo' }, h('button', { type: 'button', class: 'lb-btn blue sm', id: 'lb-photobtn', onclick: () => fileIn.click() }, 'Upload photo'), fileIn,
+        h('button', { type: 'button', class: 'lb-ghost', id: 'lb-usepreset', style: u.pic ? '' : 'display:none', onclick: () => { photoMsg.textContent = ''; emit('profile_update', { avatarPic: null }); } }, 'Use preset instead')),
+      photoMsg,
+      h('div', { class: 'lb-avatars' }, Array.from({ length: 12 }, (_, i) => { const id = 'a' + String(i + 1).padStart(2, '0');
+        return h('button', { type: 'button', class: !u.pic && id === String(av).replace(/\.png$/, '') ? 'on' : '', onclick: (e) => { av = id; photoMsg.textContent = ''; emit('profile_update', u.pic ? { avatar: id, avatarPic: null } : { avatar: id }); S.user.avatar = id; S.user.pic = null; refreshProfile(); } }, h('img', { src: avUrl(id), alt: id })); }))),
     h('div', { class: 'lb-field' }, h('label', null, 'Sound'), (() => { const on = () => !(window.PPSound && window.PPSound.muted); const b = h('button', { type: 'button', class: 'lb-btn blue', id: 'lb-sound', onclick: () => { const t = document.getElementById('sound-toggle'); if (t) t.click(); else if (window.PPSound) window.PPSound.setMuted(on()); b.textContent = on() ? 'Sound: on' : 'Sound: off'; } }, on() ? 'Sound: on' : 'Sound: off'); return b; })()),
     h('div', { class: 'lb-field' }, h('label', null, 'Change PIN'), h('div', { class: 'lb-two' }, oldPin, newPin)), msg,
     h('div', { class: 'acts' }, h('button', { class: 'lb-btn blue', onclick: () => { if (!/^\d{4,6}$/.test(newPin.value)) { msg.textContent = 'New PIN must be 4 to 6 digits.'; return; } S.onError = (m) => { msg.textContent = m; }; emit('pin_change', { oldPin: oldPin.value, newPin: newPin.value }); } }, 'Save PIN'), h('button', { class: 'lb-btn', onclick: closeModal }, 'Done')));
@@ -607,7 +660,7 @@ function viewSettle(d) {
   setMain(scrollWrap(h('div', { class: 'lb-settle' },
     h('div', { class: 'hd' }, h('span', { class: 'lb-eyebrow' }, (d.table && d.table.name) || 'The Ping'), h('h1', { id: 'lb-settle-h' }, 'Night closed')),
     h('section', { class: 'lb-card' }, h('h2', null, 'Final results'), players.map((p, i) => h('div', { class: 'lb-net', 'data-key': p.key },
-      h('span', { class: 'rk' }, i + 1), h('img', { src: avUrl(p.avatar), alt: '' }),
+      h('span', { class: 'rk' }, i + 1), h('img', { src: avSrc(p), alt: '' }),
       h('div', { class: 'nm' }, p.display || p.key, h('div', { class: 'sub' }, 'In ' + fm((p.buyIns || 0) + (p.rebuys || 0), unit) + '  /  Out ' + fm(p.cashedOut, unit))),
       h('span'), h('span', { class: 'amt ' + (p.net > 0 ? 'up' : p.net < 0 ? 'down' : '') }, fm(p.net, unit, { signed: true }))))),
     h('section', { class: 'lb-card' }, h('h2', null, 'How to settle'), pays.length ? pays.map((p) => h('div', { class: 'lb-pay' + (p.paid ? ' paid' : ''), 'data-pay': p.from + '>' + p.to },
@@ -661,7 +714,7 @@ function drawDrawer(confirmEnd) {
       h('button', { class: 'lb-btn sm', id: 'host-start', onclick: () => emit('table_start', { tableId: id }) }, 'Start'),
       h('button', { class: 'lb-btn sm blue', id: 'host-pause', onclick: () => emit('table_pause', { tableId: id, paused: !paused }) }, paused ? 'Resume' : 'Pause')),
     h('div', { class: 'lb-label' }, 'Players'),
-    ...((info && info.seated) || []).map((p) => h('div', { class: 'lb-seat' }, h('img', { src: avUrl(p.avatar), alt: '' }), h('div', null, h('b', null, p.display || p.key), h('span', null, fm(p.stack, unit))),
+    ...((info && info.seated) || []).map((p) => h('div', { class: 'lb-seat' }, h('img', { src: avSrc(p), alt: '' }), h('div', null, h('b', null, p.display || p.key), h('span', null, fm(p.stack, unit))),
       p.key !== myKey() ? h('button', { class: 'lb-ghost', onclick: () => emit('table_kick', { tableId: id, key: p.key }) }, 'Kick') : null)),
     confirmEnd ? h('div', { class: 'lb-stack', style: 'gap:var(--p10)' }, h('div', { class: 'lb-notice' }, 'End the night? The current hand finishes, then everyone cashes out.'),
       h('div', { class: 'lb-btns' }, h('button', { class: 'lb-btn sm blue', onclick: () => drawDrawer(false) }, 'Keep playing'), h('button', { class: 'lb-btn sm', id: 'host-end-confirm', onclick: () => { emit('table_end_night', { tableId: id }); toggleDrawer(); } }, 'End night'))) :
@@ -694,7 +747,20 @@ function bind() {
   });
   s.on('auth_out', () => { clearSession(); S.user = null; S.profile = null; S.cur = null; if (window.PingGame && window.PingGame.isIn && window.PingGame.isIn()) window.PingGame.leave(); show('signin'); });
   s.on('account:stats', (st) => { S.acctStats = st; const x = $('lb-profxp'); if (x) { x.querySelector('b').textContent = 'LV ' + st.level; x.querySelector('i').style.width = Math.max(2, st.xpPct) + '%'; x.querySelector('small').textContent = st.xp + ' / ' + st.nextXp + ' XP'; } });
-  s.on('profile', (p) => { S.profile = p; if (S.user && p.display) S.user.display = p.display; renderTop(); });
+  s.on('profile', (p) => {
+    S.profile = p; const mine = S.user && p.key === S.user.key;
+    if (mine) { if (p.display) S.user.display = p.display; S.user.pic = p.pic || null; if (p.avatar) S.user.avatar = p.avatar; }
+    refreshProfile();
+    const ni = $('lb-dispname'), nm = $('lb-namemsg');
+    if (mine && S.pendingName && p.display === S.pendingName) { S.pendingName = null; if (ni) ni.value = p.display; if (nm) { nm.classList.add('ok'); nm.textContent = 'Name saved.'; } }
+  });
+  s.on('profile_error', ({ field, message } = {}) => {
+    S.pendingName = null;
+    const el = $(field === 'display' ? 'lb-namemsg' : 'lb-photomsg');
+    if (el) { el.classList.remove('ok'); el.textContent = message || 'Could not save that.'; } else toast(message || 'Could not save that.');
+  });
+  s.on('self_changed', (v) => { if (!S.user || !v || v.key !== S.user.key) return; Object.assign(S.user, { display: v.display, avatar: v.avatar, pic: v.pic || null }); refreshProfile(); });
+  s.on('account_changed', () => { if (!S.user) return; if (S.view === 'lobby') { emit('get_leaderboard', {}); emit('social:feed'); emit('social:biggest'); emit('lobby_list', {}); } if (S.view === 'share' && S.arg) emit('table_preview', { code: S.arg }); });
   s.on('wallet', (w) => { S.wallet = w; renderTop(); });
   s.on('social:feed', onFeed);
   s.on('social:biggest', onBest);
@@ -742,7 +808,7 @@ function bind() {
 // ── public API ────────────────────────────────────────────────────
 const Lobby = {
   show: (name, arg) => { if (name === 'profile') { if (!S.user) return; if (S.view === 'signin') show('lobby'); const over = !root.classList.contains('on'); openProfile(); if (over) root.classList.add('lb-overlay'); return; } if (name === 'lobby' || !name) { S.cur = null; hostUi(false); LS.del('ping.table'); } return show(name || 'lobby', arg); },
-  user: () => (S.user ? { key: S.user.key, display: S.user.display, avatar: S.user.avatar, prefs: S.user.prefs || {} } : null),
+  user: () => (S.user ? { key: S.user.key, display: S.user.display, avatar: S.user.avatar, pic: S.user.pic || null, prefs: S.user.prefs || {} } : null),
   onGameLeft: () => { S.cur = null; LS.del('ping.table'); hostUi(false); if (S.user) show('lobby'); },
   signOut,
   mount: (el) => { ensureRoot(); root.classList.add('lb-host'); el.append(root); },

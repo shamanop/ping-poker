@@ -2,11 +2,11 @@
 // Append-only bank ledger, kept in its own file. Never touches bank.json or chip math.
 const fs = require('fs');
 
-function createLedger({ file, onWrite }) {
+function createLedger({ file, onWrite, keyOf, displayOf }) {
   let entries = [];
   try { const j = JSON.parse(fs.readFileSync(file, 'utf8')); if (Array.isArray(j)) entries = j; } catch { entries = []; }
 
-  const key = n => String(n).toLowerCase().trim();
+  const key = n => { const k = String(n).toLowerCase().trim(); return keyOf ? keyOf(k) : k; };
   const handStart = new Map();   // roomId -> { name: chips at deal }
   const cashedDuring = new Map(); // roomId -> { name: amount cashed out mid-hand }
 
@@ -166,6 +166,7 @@ function createLedger({ file, onWrite }) {
       if (l.status !== 'offline') p.lastSeen = Date.now();
     }
     for (const p of P.values()) {
+      if (!p.isBot && displayOf) { const d = displayOf(key(p.name)); if (d) p.name = d; }
       if (p.startBank === null && starts.has(key(p.name))) p.startBank = starts.get(key(p.name));
       p.net = p.cashedOut + p.atTable - p.totalBuyIns + (p.legacyNet || 0);
       p.netTonight = nightId ? p.net : null;

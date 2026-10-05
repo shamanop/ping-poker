@@ -61,12 +61,15 @@ try {
   fs.writeFileSync(BANK_FILE, JSON.stringify(bank));
 } catch {}
 
-function bankKey(name) { return String(name).toLowerCase().trim(); }
+let nameResolver = null; // set once accounts exist: maps a current display name to its account key
+function bankKey(name) { const k = String(name).toLowerCase().trim(); return nameResolver ? nameResolver(k) : k; }
 
 // Ledger lives in its own file (LEDGER_FILE); bank.json format is unchanged.
 let bankPushTimer = null;
 const ledger = createLedger({
   file: LEDGER_FILE,
+  keyOf: k => (nameResolver ? nameResolver(k) : k),
+  displayOf: k => (accounts && accounts.get(k) ? accounts.get(k).display : null),
   onWrite: () => {
     if (bankPushTimer) return;
     bankPushTimer = setTimeout(() => {
@@ -100,6 +103,7 @@ if (!fs.existsSync(ACCOUNTS_FILE)) {
   for (const f of [BANK_FILE, LEDGER_FILE]) { try { if (fs.existsSync(f) && !fs.existsSync(`${f}.bak-${stamp}`)) fs.copyFileSync(f, `${f}.bak-${stamp}`); } catch {} }
 }
 const accounts = createAccounts({ file: ACCOUNTS_FILE, roomPassword: ROOM_PASSWORD });
+nameResolver = accounts.keyForName;
 accounts.migrateLegacy({ bank, ledgerEntries: ledger.entries() });
 
 function getBalance(name) {
@@ -177,7 +181,7 @@ function getLeaderboard(myKey) {
   const rows = [];
   for (const [k, net] of ledger.accountNets({ mode: 'cents' })) {
     const a = accounts.get(k);
-    if (a) rows.push({ key: k, display: a.display, avatar: a.avatar, netCents: net });
+    if (a) rows.push({ key: k, display: a.display, avatar: a.avatar, pic: accounts.picUrl(a), netCents: net });
   }
   rows.sort((x, y) => y.netCents - x.netCents || x.display.localeCompare(y.display));
   const entries = rows.slice(0, 10).map((r, i) => ({ ...r, rank: i + 1 }));
@@ -193,6 +197,15 @@ const server = http.createServer(app);
 const io     = new Server(server, { cors: { origin: '*' } });
 
 app.use(express.static(path.join(__dirname, 'public')));
+
+app.get('/apic/:key/:ver', (req, res) => {
+  const a = accounts.get(String(req.params.key).toLowerCase());
+  const m = a && a.avatarPic && /^data:(image\/(?:jpeg|png|webp));base64,(.+)$/.exec(a.avatarPic);
+  if (!m) { res.status(404).end(); return; }
+  const current = accounts.picUrl(a).split('/').pop() === req.params.ver;
+  res.set({ 'Content-Type': m[1], 'Cache-Control': current ? 'public, max-age=31536000, immutable' : 'no-cache', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'" });
+  res.send(Buffer.from(m[2], 'base64'));
+});
 
 app.get('/api/bank-summary', (req, res) => {
   if (req.query.password !== ROOM_PASSWORD) return res.status(403).json({ error: 'Incorrect password' });
@@ -1079,9 +1092,22 @@ function generateRoomId() {
 
 // ─── Socket Events ────────────────────────────────────────────────────────────
 
+// Tell every client about a display/avatar change and refresh the live seat at any table.
+function announceAccount(key) {
+  const a = accounts.get(key);
+  if (!a) return;
+  const view = { key, display: a.display, avatar: a.avatar, pic: accounts.picUrl(a) };
+  for (const s of io.sockets.sockets.values()) {
+    if (!s.data || !s.data.acct) continue;
+    if (s.data.acct === key) s.emit('self_changed', { ...view, account: accounts.publicAccount(a) });
+  }
+  tables.syncAccount(key);
+  io.emit('account_changed', view);
+}
+
 function profileOf(a, self) {
   return {
-    key: a.key, display: a.display, avatar: a.avatar, stats: a.stats,
+    key: a.key, display: a.display, avatar: a.avatar, pic: accounts.picUrl(a), stats: a.stats,
     netCents: ledger.accountNet(a.key, { mode: 'cents' }), netChips: ledger.accountNet(a.key, { mode: 'chips' }),
     recent: ledger.nightsFor(a.key, 20), prefs: self ? a.prefs : undefined, isAdmin: !!a.isAdmin,
   };
@@ -1125,9 +1151,23 @@ io.on('connection', socket => {
     if (!a) { socket.emit('error', { message: 'No such player' }); return; }
     socket.emit('profile', profileOf(a, k === me));
   });
-  on('profile_update', ({ avatar, prefs } = {}) => {
+  on('profile_update', ({ avatar, prefs, display, avatarPic } = {}) => {
     const me = authed(); if (!me) return;
-    socket.emit('profile', profileOf(accounts.updateProfile(me, { avatar, prefs }), true));
+    const fail = (field, message) => socket.emit('profile_error', { field, message });
+    let changed = false;
+    if (display !== undefined) {
+      const r = accounts.rename(me, display);
+      if (!r.ok) fail('display', r.message); else if (r.changed) changed = true;
+    }
+    if (avatarPic !== undefined) {
+      if (avatarPic && !accounts.validAvatarPic(avatarPic)) fail('avatarPic', 'That picture is not allowed. Use a JPEG, PNG or WebP under 40 KB.');
+      else { accounts.setAvatarPic(me, avatarPic || null); changed = true; }
+    }
+    const before = accounts.get(me) && accounts.get(me).avatar;
+    const a = accounts.updateProfile(me, { avatar, prefs });
+    if (a.avatar !== before) changed = true;
+    socket.emit('profile', profileOf(a, true));
+    if (changed) announceAccount(me);
   });
   on('pin_change', ({ oldPin, newPin } = {}) => {
     const me = authed(); if (!me) return;

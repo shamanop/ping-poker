@@ -61,13 +61,13 @@ function createSocial({ io, accounts, now = Date.now, file = null } = {}) {
       lastFeedBy.set(gk, t);
       if (lastFeedBy.size > 500) for (const [k, v] of lastFeedBy) if (t - v > gapMs) lastFeedBy.delete(k);
     }
-    const ev = { id: ++feedSeq, kind, name: accounts.displayOf(key), ts: t, ...data };
+    const ev = { id: ++feedSeq, kind, key, name: accounts.displayOf(key), ts: t, ...data };
     feed.unshift(ev);
     if (feed.length > FEED_MAX) feed.length = FEED_MAX;
     for (const s of sockets()) s.emit('social:feed', { event: ev, now: t });
     return true;
   }
-  const feedView = () => feed.map((e) => ({ ...e }));
+  const feedView = () => feed.map((e) => ({ ...e, ...(e.key ? { name: accounts.displayOf(e.key) } : {}) }));
 
   function broadcastBigWin(game, key, amountCents, tier, extra) {
     try { recordBigWin(key, game, amountCents, tier, extra && extra.unit); } catch (e) { /* best effort */ }
@@ -110,12 +110,12 @@ function createSocial({ io, accounts, now = Date.now, file = null } = {}) {
     pruneWins();
     let best = null;
     for (const w of bigwins) if (!best || w.amountCents > best.amountCents || (w.amountCents === best.amountCents && w.ts > best.ts)) best = w;
-    return { win: best ? { name: best.name, game: best.game, amountCents: best.amountCents, tier: best.tier, ts: best.ts } : null, now: now() };
+    return { win: best ? { name: best.key ? accounts.displayOf(best.key) : best.name, game: best.game, amountCents: best.amountCents, tier: best.tier, ts: best.ts } : null, now: now() };
   }
   function recordBigWin(key, game, amountCents, tier, unit) {
     if (unit === 'chips' || !(amountCents > 0)) return;
     const before = biggestView().win;
-    bigwins.push({ name: accounts.displayOf(key), game, amountCents, tier: tier || null, ts: now() });
+    bigwins.push({ key, name: accounts.displayOf(key), game, amountCents, tier: tier || null, ts: now() });
     saveWins();
     const after = biggestView();
     if (!before || (after.win && (after.win.amountCents !== before.amountCents || after.win.ts !== before.ts))) for (const s of sockets()) s.emit('social:biggest', after);

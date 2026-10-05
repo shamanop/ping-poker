@@ -268,3 +268,13 @@
 .lb-achdot { display: inline-grid; place-items: center; min-width: var(--p16); height: var(--p16); padding: 0 var(--p4); margin-left: var(--p8); border-radius: var(--p8); background: var(--gold); color: #1A0F06; font-size: var(--p11); font-weight: 800; line-height: 1; vertical-align: middle; animation: lb-achpulse 2s ease-in-out infinite; }
 @keyframes lb-achpulse { 50% { box-shadow: 0 0 0 var(--p4) rgba(245, 185, 66, .25); } }
 @media (prefers-reduced-motion: reduce) { .lb-achdot { animation: none; } }
+
+/* profile: header, rename, photo */
+.lb-prof-hd { display: flex; gap: var(--p16); align-items: center; min-width: 0; }
+.lb-prof-av { width: var(--p64); height: var(--p64); flex: none; border-radius: 50%; border: 1px solid var(--brass); object-fit: cover; background: #100A06; }
+.lb-prof-id { min-width: 0; }
+.lb-prof-id h3 { overflow-wrap: anywhere; }
+.lb-inline { display: flex; gap: var(--p10); align-items: center; flex-wrap: wrap; min-width: 0; }
+.lb-inline .text-input { flex: 1 1 calc(160 * var(--px)); min-width: 0; width: auto; }
+.lb-inline .lb-btn, .lb-inline .lb-ghost { flex: none; }
+.lb-err.ok { color: var(--gold); }

@@ -175,7 +175,27 @@ function createTables(E) {
     return { ...t, sb: room ? room.sb : t.blinds.sb, bb: room ? room.bb : t.blinds.bb, host: { key: t.hostKey, display: dispOf(t.hostKey) }, moneyMode: t.mode === 'friends' ? 'ledger' : t.mode };
   }
   function seatedList(t) {
-    return humans(roomOf(t)).filter(p => p.connected).map(p => ({ key: p.acct || E.bankKey(p.name), display: p.name, avatar: p.avatarId || null, stack: p.chips }));
+    return humans(roomOf(t)).filter(p => p.connected).map(p => ({ key: p.acct || E.bankKey(p.name), display: p.name, avatar: p.avatarId || null, pic: p.acct ? accounts.picUrl(accounts.get(p.acct)) : null, stack: p.chips }));
+  }
+
+  // Name, preset and picture on a seat always mirror the account (rename / avatar change / re-seat).
+  function applySeat(player, acct) {
+    player.name = acct.display;
+    player.avatar = E.AV_EMOJI[Number(String(acct.avatar).slice(1)) - 1] || '🃏';
+    player.avatarId = acct.avatar;
+    player.profilePic = accounts.picUrl(acct);
+  }
+  function syncAccount(key) {
+    const acct = accounts.get(key);
+    if (!acct) return;
+    for (const t of tables.values()) {
+      const room = roomOf(t);
+      const p = room && room.players.find(x => !x.isBot && x.acct === key);
+      if (!p) continue;
+      applySeat(p, acct);
+      E.broadcastRoomUpdate(room); E.broadcastGameState(room);
+    }
+    pushLobby();
   }
 
   // ── nights ────────────────────────────────────────────────────────────────
@@ -190,7 +210,7 @@ function createTables(E) {
   function nightPayload(t) {
     const n = nightOf(t);
     const payments = t.mode === 'friends' ? n.payments : [];
-    const players = n.players.map(p => ({ key: p.key, display: accounts.get(p.key) ? dispOf(p.key) : p.display, avatar: accounts.get(p.key) ? accounts.get(p.key).avatar : null, buyIns: p.buyIns, rebuys: p.rebuys, cashedOut: p.cashedOut, net: p.net }));
+    const players = n.players.map(p => ({ key: p.key, display: accounts.get(p.key) ? dispOf(p.key) : p.display, avatar: accounts.get(p.key) ? accounts.get(p.key).avatar : null, pic: accounts.get(p.key) ? accounts.picUrl(accounts.get(p.key)) : null, buyIns: p.buyIns, rebuys: p.rebuys, cashedOut: p.cashedOut, net: p.net }));
     const nameOf = k => (accounts.get(k) ? dispOf(k) : k);
     const pays = payments.map(p => ({ ...p, fromName: nameOf(p.from), toName: nameOf(p.to) }));
     const d = new Date(n.endedAt || Date.now());
@@ -363,6 +383,7 @@ function createTables(E) {
         const wasHost = room.hostSocketId === existing.socketId;
         existing.socketId = socket.id;
         existing.acct = key;
+        applySeat(existing, acct);
         if (wasHost || t.hostKey === key) room.hostSocketId = socket.id;
         socket.join(t.id);
         socket.emit('table_joined', { tableId: t.id, playerIdx: room.players.indexOf(existing), stack: existing.chips, table: publicTable(t), you: { key, display: acct.display } });
@@ -383,12 +404,13 @@ function createTables(E) {
       if (player) {
         E.payIn(room, player.name, amount, 'buyin', { key });
         delete room.lastStacks[key];
+        applySeat(player, acct);
         player.chips = amount; player.chipsBought = amount; player.connected = true; player.socketId = socket.id;
         if (room.status === 'playing') player.sittingOut = true;
         E.roomLog(room, `${player.name} rejoined`);
       } else {
         player = E.makePlayer(socket.id, acct.display, E.AV_EMOJI[Number(String(acct.avatar).slice(1)) - 1] || '🃏', amount);
-        player.acct = key; player.avatarId = acct.avatar;
+        player.acct = key; applySeat(player, acct);
         E.payIn(room, acct.display, amount, 'buyin', { key });
         delete room.lastStacks[key];
         if (room.status === 'playing' || room.status === 'waiting_next') player.sittingOut = true;
@@ -568,7 +590,7 @@ function createTables(E) {
   }, Math.min(60000, EMPTY_MS));
   sweep.unref();
 
-  return { register, load, flush, attachLegacy, afterDrop, onRoomEmptied, finishNight, noteRow, card, publicTable, tables, lookup, genSchedule, setHostSocket, pushLobby, LEGACY_ID };
+  return { syncAccount, register, load, flush, attachLegacy, afterDrop, onRoomEmptied, finishNight, noteRow, card, publicTable, tables, lookup, genSchedule, setHostSocket, pushLobby, LEGACY_ID };
 }
 
 module.exports = { createTables, validateSettings, genSchedule, fmtUnits, MAX_SEATS };
