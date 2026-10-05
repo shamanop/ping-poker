@@ -61,13 +61,14 @@ function createSocial({ io, accounts, now = Date.now, file = null } = {}) {
       lastFeedBy.set(gk, t);
       if (lastFeedBy.size > 500) for (const [k, v] of lastFeedBy) if (t - v > gapMs) lastFeedBy.delete(k);
     }
-    const ev = { id: ++feedSeq, kind, key, name: accounts.displayOf(key), ts: t, ...data };
+    const ev = { id: ++feedSeq, kind, _key: key, name: accounts.displayOf(key), ts: t, ...data };
     feed.unshift(ev);
     if (feed.length > FEED_MAX) feed.length = FEED_MAX;
-    for (const s of sockets()) s.emit('social:feed', { event: ev, now: t });
+    for (const s of sockets()) s.emit('social:feed', { event: pubEv(ev), now: t });
     return true;
   }
-  const feedView = () => feed.map((e) => ({ ...e, ...(e.key ? { name: accounts.displayOf(e.key) } : {}) }));
+  const pubEv = (e) => { const { _key, ...r } = e; if (_key) r.name = accounts.displayOf(_key); return r; };
+  const feedView = () => feed.map(pubEv);
 
   function broadcastBigWin(game, key, amountCents, tier, extra) {
     try { recordBigWin(key, game, amountCents, tier, extra && extra.unit); } catch (e) { /* best effort */ }
