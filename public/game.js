@@ -1447,7 +1447,7 @@ function renderShowdown(winners, pot) {
   if (state.gameState) renderSeats(state.gameState);
 
   const myName = gs?.players[state.myIdx]?.name;
-  if (myName && winners.some(w => w.name === myName)) spawnConfetti();
+  if (myName && winners.some(w => w.name === myName)) spawnConfetti(state.myIdx);
 
   clearInterval(sdTimer);
   let secs = 5;
@@ -1468,18 +1468,19 @@ function hideShowdown() {
   state.winners = null;
 }
 
-function spawnConfetti() {
+function spawnConfetti(winnerIdx) {
   const g = state.geo, st = $('stage');
   if (!g || !st) return;
   const r = st.getBoundingClientRect();
   const x = r.left + g.cx, y = r.top + g.cy;
-  const rays = fxImg('win-burst', x, y, 520, 8);
+  const rays = fxImg('win-burst', x, y, 340, 8);
   rays.animate([
     { opacity: 0, transform: 'translate(-50%,-50%) scale(0.3) rotate(0deg)' },
-    { opacity: 0.8, transform: 'translate(-50%,-50%) scale(1) rotate(25deg)', offset: 0.25 },
-    { opacity: 0, transform: 'translate(-50%,-50%) scale(1.25) rotate(70deg)', offset: 1 },
+    { opacity: 0.4, transform: 'translate(-50%,-50%) scale(1) rotate(25deg)', offset: 0.25 },
+    { opacity: 0, transform: 'translate(-50%,-50%) scale(1.2) rotate(70deg)', offset: 1 },
   ], { duration: 2200, easing: 'ease-out' }).onfinish = () => rays.remove();
-  const pop = fxImg('party-popper-burst', x, y - 30 * state.u, 300, 73);
+  const [px, py] = winnerIdx >= 0 ? seatClientPos(winnerIdx) : [x, y];
+  const pop = fxImg('party-popper-burst', px, py, 200, 73);
   pop.animate([
     { opacity: 0, transform: 'translate(-50%,-50%) scale(0.2)' },
     { opacity: 1, transform: 'translate(-50%,-50%) scale(1)', offset: 0.2 },
