@@ -353,6 +353,20 @@ html.art-back .card.back { background: url(images/card-back.png) center / 100% 1
 .landing-stats { display: flex; align-items: center; gap: var(--p16); font-size: var(--p13); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-dim); }
 .landing-stats i { width: var(--p4); height: var(--p4); border-radius: 50%; background: var(--brass); }
 .landing-right { display: flex; align-items: center; }
+/* Login painting (public/art/login-bg.jpg, right side pre-darkened). Class art-login is set by the probe <img> onload;
+   if the file is missing, the standard backdrop and CSS table stay. */
+html.art-login #landing-screen .scr-backdrop {
+  background:
+    linear-gradient(90deg, rgba(10, 6, 3, 0) 0%, rgba(10, 6, 3, 0) 66%, rgba(10, 6, 3, .55) 100%),
+    url(/art/login-bg.jpg) left center / cover no-repeat,
+    #0B0705;
+}
+html.art-login .landing-left { justify-content: space-between; align-self: stretch; padding: var(--p8) 0; }
+html.art-login .landing-table { display: none; }
+html.art-login .brand-lockup { align-self: flex-start; padding: var(--p12) var(--p20); margin-left: calc(-1 * var(--p20)); border-radius: var(--p14); background: radial-gradient(ellipse at 40% 50%, rgba(8, 5, 3, .78), rgba(8, 5, 3, .5) 65%, transparent 100%); filter: drop-shadow(0 var(--p2) var(--p8) rgba(0, 0, 0, .85)); }
+html.art-login .landing-stats { align-self: flex-start; padding: var(--p8) var(--p16); margin-left: calc(-1 * var(--p16)); border-radius: var(--p10); background: linear-gradient(90deg, rgba(8, 5, 3, .72), rgba(8, 5, 3, .35) 80%, transparent); }
+html.art-login .landing-stats { text-shadow: 0 var(--p1) var(--p6) rgba(0, 0, 0, .95); color: #D9C7A4; }
+html.art-login .setup-card { background: linear-gradient(180deg, rgba(34, 22, 14, .93), rgba(20, 12, 7, .95)); backdrop-filter: blur(var(--p4)); }
 .setup-card {
   width: 100%; padding: var(--p32); border-radius: var(--p10); display: flex; flex-direction: column; gap: var(--p20);
   background: linear-gradient(180deg, rgba(38, 25, 17, .96), rgba(24, 15, 9, .97)); border: 1px solid var(--line-lt);
