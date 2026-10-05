@@ -123,7 +123,8 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/api/bank-summary', (req, res) => {
   if (req.query.password !== ROOM_PASSWORD) return res.status(403).json({ error: 'Incorrect password' });
-  const roomId = String(req.query.room || ROOM_ID);
+  const roomId = typeof req.query.room === 'string' && req.query.room ? req.query.room : ROOM_ID;
+  if (!rooms.has(roomId)) return res.status(404).json({ error: 'Unknown room' });
   res.json(bankSummary(roomId));
 });
 
@@ -1043,3 +1044,15 @@ if (require.main === module) {
 }
 
 module.exports = { evaluate5, compareHands, bestHand, showdown, makeRoom, makePlayer, io, server };
+
+// Return seated human stacks to the bank on deploy/shutdown so they are not lost
+function shutdownCashOut() {
+  for (const room of rooms.values()) {
+    for (const p of room.players) {
+      if (!p.isBot && p.chips > 0) { const c = p.chips; p.chips = 0; adjustBank(p.name, c, 'cashout', room, 0); }
+    }
+  }
+  process.exit(0);
+}
+process.on('SIGTERM', shutdownCashOut);
+process.on('SIGINT', shutdownCashOut);

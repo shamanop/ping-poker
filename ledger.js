@@ -82,18 +82,18 @@ function createLedger({ file, onWrite }) {
       return P.get(k);
     };
     const events = [];
-    const hands = new Map(); // handNum -> { handNum, t, chips: {key: n} }
+    const handList = []; // snapshots in order; x-axis is sequential so restarts (handNum reset) don't overwrite
     for (const e of entries) {
       if (e.type === 'snapshot') {
         if (e.room !== roomId) continue;
-        const h = { handNum: e.handNum, t: e.t, chips: {} };
+        const h = { handNum: handList.length + 1, t: e.t, chips: {} };
         for (const sp of e.players) {
           const p = ensure(sp.name, sp.isBot);
           if (sp.played) p.handsPlayed++;
           h.chips[key(sp.name)] = sp.chips;
           p.lastSeen = Math.max(p.lastSeen || 0, e.t);
         }
-        hands.set(e.handNum, h);
+        handList.push(h);
         continue;
       }
       if (!e.name || e.type === 'bank-start') continue;
@@ -113,8 +113,7 @@ function createLedger({ file, onWrite }) {
     }
     for (const p of P.values()) p.net = p.cashedOut + p.atTable - p.totalBuyIns;
     const series = {};
-    const handList = [...hands.values()].sort((a, b) => a.handNum - b.handNum);
-    for (const [k, p] of P) {
+        for (const [k, p] of P) {
       const pts = [];
       for (const h of handList) if (k in h.chips) pts.push([h.handNum, h.chips[k]]);
       if (pts.length) series[p.name] = pts;
