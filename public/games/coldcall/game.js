@@ -66,7 +66,7 @@
     const t0 = performance.now(), dur = Math.max(1, ms * speed());
     return new Promise((res) => Tick.add((now) => {
       if (tok !== setWin.tok) { res(); return false; }
-      const k = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - k, 3);
+      const k = Math.max(0, Math.min(1, (now - t0) / dur)), e = 1 - Math.pow(1 - k, 3);   // rAF timestamps can precede t0 inside the same frame: clamp so the total never dips
       st.winShown = Math.round(from + (cents - from) * e); w.textContent = dollars(st.winShown);
       if (k >= 1) { st.winShown = cents; w.textContent = dollars(cents); res(); return false; } return true;
     }));
@@ -77,7 +77,7 @@
     const f = (n) => (st.live && st.mode === 'ledger' && n > 0 ? '+' : '') + dollars(n);
     if (!animate || from === v) { st.balShown = v; el.textContent = f(v); return; }
     const t0 = performance.now(), dur = 600 * speed();
-    Tick.add((now) => { if (tok !== setBal.tok) return false; const k = Math.min(1, (now - t0) / dur); st.balShown = Math.round(from + (v - from) * (1 - Math.pow(1 - k, 3))); el.textContent = f(st.balShown); return k < 1; });
+    Tick.add((now) => { if (tok !== setBal.tok) return false; const k = Math.max(0, Math.min(1, (now - t0) / dur)); st.balShown = Math.round(from + (v - from) * (1 - Math.pow(1 - k, 3))); el.textContent = f(st.balShown); return k < 1; });
   }
   function drawBet() {
     $('bet').textContent = dollars(bet()); $('betDn').disabled = st.busy || st.betIdx === 0; $('betUp').disabled = st.busy || st.betIdx === st.bets.length - 1;
@@ -89,8 +89,8 @@
     const f = document.createElement('div'); f.className = 'float ' + (cls || ''); f.innerHTML = html; f.style.left = x + 'px'; f.style.top = y + 'px'; floatsEl.appendChild(f);
     anim(f, [{ transform: 'translate(-50%,-50%) scale(.3)', opacity: 0 }, { transform: 'translate(-50%,-50%) scale(1.2)', opacity: 1, offset: 0.2 }, { transform: 'translate(-50%,-80%) scale(1)', opacity: 1, offset: 0.7 }, { transform: 'translate(-50%,-140%) scale(1)', opacity: 0 }], { duration: 1100, easing: 'ease-out' }).then(() => f.remove());
   }
-  function stamp(text, sub, ms = 1500, parent) {
-    const d = document.createElement('div'); d.className = 'stamp'; d.appendChild(document.createTextNode(text));
+  function stamp(text, sub, ms = 1500, parent, cls) {
+    const d = document.createElement('div'); d.className = 'stamp' + (cls ? ' ' + cls : ''); d.appendChild(document.createTextNode(text));
     if (sub) { const i = document.createElement('i'); i.textContent = sub; d.appendChild(i); }
     (parent || board).appendChild(d);
     anim(d, [{ transform: 'translate(-50%,-50%) scale(2) rotate(-8deg)', opacity: 0 }, { transform: 'translate(-50%,-50%) scale(.95) rotate(-4deg)', opacity: 1, offset: 0.2 }, { transform: 'translate(-50%,-50%) scale(1) rotate(-4deg)', opacity: 1, offset: 0.8 }, { transform: 'translate(-50%,-60%) scale(1) rotate(-4deg)', opacity: 0 }], { duration: ms, easing: 'ease-out' }).then(() => d.remove());
@@ -174,7 +174,7 @@
     const D = Math.min(7000, 1800 + lvl * 1200) * speed(), t0 = performance.now(), tap0 = st.tap;
     let tk = 0; const iv = setInterval(() => SFX_.tick(tk++), 55);
     const skipped = await new Promise((res) => Tick.add((now) => {
-      const sk = st.tap !== tap0 && now - t0 > 300, k = sk ? 1 : Math.min(1, (now - t0) / D), e = k < 0.85 ? (k / 0.85) * 0.8 : 0.8 + 0.2 * (1 - Math.pow(1 - (k - 0.85) / 0.15, 3));
+      const sk = st.tap !== tap0 && now - t0 > 300, k = sk ? 1 : Math.max(0, Math.min(1, (now - t0) / D)), e = k < 0.85 ? (k / 0.85) * 0.8 : 0.8 + 0.2 * (1 - Math.pow(1 - (k - 0.85) / 0.15, 3));
       a.textContent = dollars(amtCents * (k >= 1 ? 1 : e)); if (k >= 1) { res(sk); return false; } return true;
     }));
     clearInterval(iv); SFX_.coin(); CC.fx.burst(270, 430, { n: 30, speed: 420, size: 9 }); CC.fx.coins(20);

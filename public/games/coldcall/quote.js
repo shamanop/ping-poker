@@ -38,7 +38,7 @@
       const a = document.createElement('span'); a.className = 'amt'; a.textContent = ctx.boxFmt(ctx.cents(s.amt)); el.appendChild(a); el.classList.add('pulse');
       setTimeout(() => ctx.SFX.pop(), k * 90 * (ctx.st.skip ? 0.3 : 1)); ctx.anim(a, [{ transform: 'translate(-50%,-50%) scale(0)' }, { transform: 'translate(-50%,-50%) scale(1.3)', offset: 0.6 }, { transform: 'translate(-50%,-50%) scale(1)' }], { duration: 300, delay: k * 90 });
     });
-    ctx.stamp('QUOTE ACCEPTED!', f.startCount + ' quotes', 1500); ctx.FX.shake(6, 350); await ctx.wait(1400 + f.start.length * 40);
+    ctx.stamp('QUOTE ACCEPTED!', f.startCount + ' quotes', 1500, document.getElementById('head')); ctx.FX.shake(6, 350); await ctx.wait(1400 + f.start.length * 40);
     // 2. the form (invisible until the bubbles lift off), then the flight
     const form = buildForm(ctx, f); ctx.sceneEl.replaceChildren(form.scn); setDots(form, E.CFG.respins);
     const state = { up: [] }, [bx, by] = ctx.stagePt(ctx.board);

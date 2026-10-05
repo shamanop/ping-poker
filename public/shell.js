@@ -7,7 +7,7 @@
   const games = new Map();   // id -> {def, el, di, mounted}
   const screens = new Map(); // id -> {mountFn, el, mounted}
   const ui = {};
-  const cfg = { benderUrl: '/games/bender/index.html?bridge=1' };
+  const cfg = { benderUrl: '/games/bender/index.html?bridge=1', coldcallUrl: '/games/coldcall/index.html?bridge=1' };
   let L = { games: {} };
   let signedIn = false, focusId = 'poker', zTop = 20, inResize = false;
   const wallet = { play: null, ledgerNet: null, ledgerLimit: -50000 };
@@ -26,6 +26,7 @@
   const IC = {
     spade: '<svg viewBox="0 0 24 24"><path d="M12 2C9 7 4 9.6 4 13.6a4 4 0 0 0 6.4 3.2c-.2 1.6-.9 3-2.4 4.2h8c-1.5-1.2-2.200-2.600-2.400-4.200A4 4 0 0 0 20 13.600C20 9.600 15 7 12 2z"/></svg>',
     box: '<svg viewBox="0 0 24 24"><path d="M3 9h18v11H3zM6 9V6h12v3zM8 13h8v2H8z" fill-rule="evenodd"/><path d="M9 3h6l1 3H8z"/></svg>',
+    phone: '<svg viewBox="0 0 24 24"><path d="M6.600 10.800a15 15 0 0 0 6.600 6.600l2.200-2.200a1 1 0 0 1 1-.25 11.400 11.400 0 0 0 3.600.6 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.500a1 1 0 0 1 1 1c0 1.250.2 2.450.6 3.600a1 1 0 0 1-.25 1z"/></svg>',
     soon: '<svg viewBox="0 0 24 24"><path d="M7 10V7a5 5 0 0 1 10 0v3h2v11H5V10zm2 0h6V7a3 3 0 0 0-6 0z" fill-rule="evenodd"/></svg>'
   };
   const WB = {
@@ -336,7 +337,13 @@
       toBender({ type: 'result', reqId, payload: p }); refreshDock();
     });
     s.on('g:bender:error', (e) => benderErr(e));
-    s.on('error', (e) => { if (spinQ.length) benderErr(e); });
+    s.on('g:coldcall:state', (st) => { ccReady = true; if (st && st.balances) setWallet(st.balances); toCC({ type: 'init', wallet: Object.assign({}, wallet), mode: wmode, bets: (st && (st.bets || st.betLevels)) || undefined, state: st }); });
+    s.on('g:coldcall:result', (p) => {
+      const reqId = ccQ.shift(); if (p && typeof p.totalWin === 'number' && typeof p.cost === 'number') ccNet += p.totalWin - p.cost;
+      if (p && p.balances) setWallet(p.balances);
+      toCC({ type: 'result', reqId, payload: p }); refreshDock();
+    });
+    s.on('error', (e) => { if (e && e.game === 'coldcall') return ccErr(e); if (spinQ.length) benderErr(e); });
     if (user()) { setSignedIn(true); s.emit('wallet_get'); s.emit('account:stats'); bonusShown = false; s.emit('bonus:status'); }
     return true;
   }
@@ -397,7 +404,7 @@
     if (typeof w.play === 'number') wallet.play = w.play;
     if (typeof w.ledgerNet === 'number') wallet.ledgerNet = w.ledgerNet;
     if (typeof w.ledgerLimit === 'number') wallet.ledgerLimit = w.ledgerLimit;
-    refreshTop(); if (benderReady) toBender({ type: 'wallet', wallet: Object.assign({}, wallet) });
+    refreshTop(); if (benderReady) toBender({ type: 'wallet', wallet: Object.assign({}, wallet) }); if (ccReady) toCC({ type: 'wallet', wallet: Object.assign({}, wallet) });
   }
   const benderFrame = () => { const g = games.get('bender'); return g && g.el ? g.el.querySelector('iframe') : null; };
   function toBender(m) { const f = benderFrame(); if (f && f.contentWindow) f.contentWindow.postMessage(m, '*'); }
@@ -420,6 +427,23 @@
     else if (m.type === 'esc') focus('poker');
   });
 
+  // ---------- Cold Call bridge (same protocol as Bender, own queue) ----------
+  let ccReady = false, ccNet = 0; const ccQ = [];
+  const ccFrame = () => { const g = games.get('coldcall'); return g && g.el ? g.el.querySelector('iframe') : null; };
+  function toCC(m) { const f = ccFrame(); if (f && f.contentWindow) f.contentWindow.postMessage(m, '*'); }
+  function ccErr(e) { toCC({ type: 'error', reqId: ccQ.shift(), message: (e && e.message) || 'Spin refused.' }); }
+  window.addEventListener('message', (ev) => {
+    const f = ccFrame(); if (!f || ev.source !== f.contentWindow) return;
+    const m = ev.data || {}, s = sock();
+    if (m.type === 'hello') { if (!s || !signedIn) return; ccReady = false; s.emit('g:coldcall:state', {}); }
+    else if (m.type === 'spin') {
+      if (!s) return toCC({ type: 'error', reqId: m.reqId, message: 'Not connected.' });
+      ccQ.push(m.reqId); const p = { bet: m.bet, mode: m.mode }; if (m.buy) p.buyBonus = m.buy; s.emit('g:coldcall:spin', p);
+    } else if (m.type === 'mode') { wmode = m.mode === 'ledger' ? 'ledger' : 'play'; }
+    else if (m.type === 'round') refreshDock();
+    else if (m.type === 'esc') focus('poker');
+  });
+
   // ---------- built-in games ----------
   function registerBuiltins() {
     registerGame({ id: 'poker', name: 'Poker', kind: 'stage', icon: IC.spade });
@@ -427,6 +451,11 @@
       id: 'bender', name: 'Ballot Bender', icon: IC.box,
       mount(el) { const f = document.createElement('iframe'); f.src = cfg.benderUrl; f.title = 'Ballot Bender'; f.setAttribute('allow', 'autoplay'); el.appendChild(f); benderReady = false; },
       badge() { return sessNet > 0 ? '+' + dollars2(sessNet) : sessNet < 0 ? '-' + dollars2(-sessNet) : ''; }
+    });
+    registerGame({
+      id: 'coldcall', name: 'Cold Call', icon: IC.phone,
+      mount(el) { const f = document.createElement('iframe'); f.src = cfg.coldcallUrl; f.title = 'Cold Call'; f.setAttribute('allow', 'autoplay'); el.appendChild(f); ccReady = false; },
+      badge() { return ccNet > 0 ? '+' + dollars2(ccNet) : ccNet < 0 ? '-' + dollars2(-ccNet) : ''; }
     });
     ui.dock.appendChild(Object.assign(document.createElement('i'), { className: 'sh-sep' }));
     for (const n of ['Blackjack', 'Roulette']) {

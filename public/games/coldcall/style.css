@@ -65,6 +65,7 @@ button[disabled]{opacity:.4;pointer-events:none}
 .float{position:absolute;transform:translate(-50%,-50%);font-family:var(--display);font-size:26px;color:var(--ink);text-shadow:0 2px 0 #000,0 0 6px #000;white-space:nowrap;display:flex;gap:6px;align-items:baseline}
 .float b{font-weight:400;color:var(--gold)}
 .stamp{position:absolute;left:50%;top:50%;z-index:6;padding:8px 20px;border:4px solid var(--gold);border-radius:10px;background:rgba(10,14,24,.9);color:var(--gold);font-family:var(--display);font-size:38px;letter-spacing:.05em;text-align:center;white-space:nowrap;pointer-events:none}
+.stamp.hi{top:21%}
 .stamp i{display:block;font-style:normal;font-family:var(--font);font-weight:800;font-size:16px;letter-spacing:.1em;color:var(--ink)}
 
 /* ---- scene layer (bonus screens sit over head + ribbon + board) ---- */
@@ -94,18 +95,19 @@ button[disabled]{opacity:.4;pointer-events:none}
 @keyframes dialhint{from{box-shadow:0 8px 24px rgba(0,0,0,.6),0 0 0 0 rgba(242,193,78,0)}to{box-shadow:0 8px 24px rgba(0,0,0,.6),0 0 0 8px rgba(242,193,78,.45)}}
 
 /* ---- checkout form ---- */
-.form{display:grid;gap:7px;width:100%}
-.frow{display:grid;grid-template-columns:70px 1fr 74px;align-items:center;gap:6px;padding:5px 6px;background:var(--panel2);border:2px solid var(--line);border-radius:10px;transition:border-color .2s,opacity .3s}
+.form{display:grid;gap:14px;width:100%}
+.frow{display:grid;grid-template-columns:72px 1fr 76px;align-items:center;gap:6px;padding:5px 6px;background:var(--panel2);border:2px solid var(--line);border-radius:10px;transition:border-color .2s,opacity .3s}
 .frow.done{border-color:var(--gold)}.frow.dim{opacity:.4}
 .frow .fl{font-family:var(--display);font-size:17px;letter-spacing:.06em;color:var(--ink);display:grid;gap:1px;line-height:1}
 .frow .fl em{font-style:normal;font-family:var(--font);font-weight:800;font-size:11px;letter-spacing:.1em;color:var(--dim)}
-.frow .fb{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:4px}
+.frow .fb{display:grid;grid-auto-flow:column;grid-auto-columns:48px;gap:4px;justify-content:start}
 .frow .fp{display:grid;justify-items:center;line-height:1}
 .frow .fp b{font-family:var(--display);font-size:17px;color:var(--c)}.frow .fp small{font-weight:800;font-size:10px;letter-spacing:.1em;color:var(--dim)}
-.frow{position:relative}
+.frow{position:relative;padding:8px 6px}
+.scn.quote{align-content:center;gap:16px}
 .frow .mult{position:absolute;right:8px;top:-9px;font-weight:800;font-size:12px;color:#fff;background:var(--upsell);border-radius:8px;padding:0 7px;z-index:2}
 .frow .mult:empty{display:none}
-.fbox{position:relative;aspect-ratio:1;background:var(--box);border:2px solid var(--line);border-radius:8px;display:grid;place-items:center;overflow:hidden}
+.fbox{position:relative;width:48px;height:48px;background:var(--box);border:2px solid var(--line);border-radius:8px;display:grid;place-items:center;overflow:hidden}
 .fbox.full{background:var(--box-full);border-color:var(--good)}
 .fbox.spinning::after{content:"";position:absolute;inset:0;background:linear-gradient(110deg,transparent 30%,rgba(255,255,255,.18) 50%,transparent 70%);background-size:200% 100%;animation:shim .5s linear infinite}
 @keyframes shim{from{background-position:200% 0}to{background-position:-100% 0}}
@@ -120,8 +122,8 @@ button[disabled]{opacity:.4;pointer-events:none}
 .fly span{position:absolute;bottom:-6px;padding:0 5px;background:var(--ink);color:#12192a;border-radius:7px;font-weight:800;font-size:12px;white-space:nowrap}
 
 /* ---- accepted banner ---- */
-.banner{position:absolute;left:50%;top:44%;z-index:35;transform:translate(-50%,-50%);padding:14px 22px;border:5px solid var(--gold);border-radius:14px;background:rgba(8,12,22,.94);text-align:center;pointer-events:none;white-space:nowrap}
-.banner b{display:block;font-family:var(--display);font-size:50px;letter-spacing:.05em;color:var(--gold);line-height:1}
+.banner{position:absolute;left:50%;top:44%;z-index:35;transform:translate(-50%,-50%);width:480px;max-width:94%;padding:14px 16px;border:5px solid var(--gold);border-radius:14px;background:rgba(8,12,22,.94);text-align:center;pointer-events:none}
+.banner b{display:block;font-family:var(--display);font-size:36px;letter-spacing:.05em;color:var(--gold);line-height:1}
 .banner i{display:block;font-style:normal;font-weight:800;font-size:24px;color:var(--ink);margin-top:6px}
 
 /* ---- win box + hud ---- */
