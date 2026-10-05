@@ -30,7 +30,7 @@ async function startServer(seed = {}) {
   fs.symlinkSync(fs.realpathSync(path.join(ROOT, 'node_modules')), path.join(dir, 'node_modules'));
   fs.mkdirSync(path.join(dir, 'public'));
   fs.writeFileSync(path.join(dir, 'bank.json'), JSON.stringify(seed));
-  const proc = spawn('node', ['server.js'], { cwd: dir, env: { ...process.env, PORT: String(port) } });
+  const proc = spawn('node', ['server.js'], { cwd: dir, env: { ...process.env, PORT: String(port), AUTO_START_MS: '600000' } });
   const srv = { port, dir, proc, seed: { ...seed }, out: '', exited: false, clients: [] };
   proc.stdout.on('data', d => { srv.out += d; });
   proc.stderr.on('data', d => { srv.out += d; });

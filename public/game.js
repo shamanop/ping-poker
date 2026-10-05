@@ -396,7 +396,7 @@ function renderWaitPanel(gs) {
   const isHost = !!state.myName && gs.hostName === state.myName;
   const canStart = gs.players.filter(p => p.connected && p.chips > 0).length >= 2;
   $('wp-count').textContent = seated;
-  $('wp-text').textContent = !canStart ? 'Waiting for players' : isHost ? 'Ready when you are' : 'Waiting for the host to start';
+  $('wp-text').textContent = canStart ? 'Starting...' : 'Waiting for players';
   $('btn-start').classList.toggle('hidden', !isHost);
   $('btn-start').disabled = !canStart;
   $('btn-start').textContent = canStart ? 'Start game' : 'Need 2 players';

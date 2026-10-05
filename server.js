@@ -12,6 +12,7 @@ const { createLedger } = require('./ledger');
 const STARTING_CHIPS  = 1500;
 const BANK_DEFAULT    = 10000;
 const BANK_FILE       = process.env.BANK_FILE || path.join(__dirname, 'bank.json');
+const AUTO_START_MS  = Number(process.env.AUTO_START_MS) || 2000;
 const LEDGER_FILE     = process.env.LEDGER_FILE || path.join(__dirname, 'ledger.json');
 const TURN_MS         = 30000;
 const SMALL_BLIND     = 10;
@@ -392,6 +393,32 @@ function buildActionQueue(room, startIdx) {
 }
 
 // ─── Start Hand ───────────────────────────────────────────────────────────────
+
+function beginGame(room, blindInterval) {
+  room.status = 'playing';
+  if (Number.isFinite(blindInterval) && blindInterval > 0) {
+    room.blindsEnabled    = true;
+    room.blindIntervalMs  = Math.min(6 * 3600000, Math.max(60000, blindInterval)); // 1 minute .. 6 hours
+    room.blindLevelStartAt = Date.now();
+    scheduleBlindIncrease(room);
+  }
+  startHand(room);
+  broadcastGameState(room);
+  emitPrivateCards(room);
+  scheduleBotActionsIfNeeded(room);
+  scheduleTurnTimeout(room);
+}
+
+// The persistent table starts by itself once two players with chips are seated.
+function maybeAutoStart(room) {
+  if (room.id !== ROOM_ID || room.status !== 'waiting' || room.autoStartTimer) return;
+  const ready = () => room.status === 'waiting' && room.players.filter(p => p.connected && p.chips > 0 && !p.sitOutRequest).length >= 2;
+  if (!ready()) return;
+  room.autoStartTimer = setTimeout(() => {
+    room.autoStartTimer = null;
+    if (ready()) beginGame(room);
+  }, AUTO_START_MS);
+}
 
 function startHand(room) {
   const players = room.players;
@@ -799,6 +826,26 @@ io.on('connection', socket => {
     socket.emit('bank_summary', bankSummary(roomId));
   });
 
+  // Only the seated player named "chris" can edit banks.
+  on('bank_set', ({ name, balance } = {}) => {
+    const room = rooms.get(ROOM_ID);
+    const me = room && room.players.find(p => !p.isBot && p.socketId === socket.id);
+    if (!me || bankKey(me.name) !== 'chris') { socket.emit('error', { message: 'Only Chris can edit the bank' }); return; }
+    const target = cleanNameOf(name);
+    const amount = Math.round(Number(balance));
+    if (!target || bank[bankKey(target)] === undefined) { socket.emit('error', { message: 'Unknown player' }); return; }
+    if (!Number.isFinite(amount) || amount < 0 || amount > 100000000) { socket.emit('error', { message: 'Enter a bank amount from 0 to 100,000,000' }); return; }
+    const k = bankKey(target);
+    const delta = amount - bank[k];
+    bank[k] = amount;
+    saveBank();
+    ledger.log('adjust', target, Math.abs(delta), amount, null, room.handNum, room.id);
+    roomLog(room, `${me.name} set ${target}'s bank to ${amount}`);
+    const seat = room.players.find(p => !p.isBot && bankKey(p.name) === k);
+    if (seat && seat.connected) io.to(seat.socketId).emit('balance_data', { balance: amount });
+    io.to(room.id).emit('bank_summary', bankSummary(room.id));
+  });
+
   on('get_leaderboard', () => {
     socket.emit('leaderboard_data', { entries: getLeaderboard() });
   });
@@ -846,6 +893,7 @@ io.on('connection', socket => {
       broadcastRoomUpdate(room);
       broadcastGameState(room);
       emitPrivateCards(room);
+      maybeAutoStart(room);
       return;
     }
 
@@ -869,6 +917,7 @@ io.on('connection', socket => {
     socket.emit('room_joined', { roomId: ROOM_ID, playerIdx, balance: getBalance(cleanName) });
     broadcastRoomUpdate(room);
     broadcastGameState(room);
+    maybeAutoStart(room);
   });
 
   // ── start_game ────────────────────────────────────────────────────────────
@@ -882,20 +931,7 @@ io.on('connection', socket => {
       socket.emit('error', { message: 'Need 2+ players with chips to start' }); return;
     }
 
-    room.status = 'playing';
-
-    if (Number.isFinite(blindInterval) && blindInterval > 0) {
-      room.blindsEnabled    = true;
-      room.blindIntervalMs  = Math.min(6 * 3600000, Math.max(60000, blindInterval)); // 1 minute .. 6 hours
-      room.blindLevelStartAt = Date.now();
-      scheduleBlindIncrease(room);
-    }
-
-    startHand(room);
-    broadcastGameState(room);
-    emitPrivateCards(room);
-    scheduleBotActionsIfNeeded(room);
-    scheduleTurnTimeout(room);
+    beginGame(room, blindInterval);
   });
 
   // ── create_demo ───────────────────────────────────────────────────────────

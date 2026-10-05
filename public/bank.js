@@ -106,6 +106,8 @@
   function renderPlayers() {
     const me = state.gameState && state.gameState.players[state.myIdx];
     const meName = me ? me.name.toLowerCase() : '';
+    const canEdit = meName === 'chris';
+    if (document.querySelector('#bank-players .bp-edit')) return;
     $('bank-pcount').textContent = data.players.length ? data.players.length + ' players' : '';
     if (!data.players.length) {
       $('bank-players').innerHTML = '<div class="bank-card-body"><div class="bank-empty"><b>No players yet</b>Join the table to open a bank account.</div></div>';
@@ -120,7 +122,7 @@
         <div class="bp-avw"><div class="bp-av">${avatarFor(p.name)}</div><span class="bp-dot ${p.status}" title="${STATUS[p.status] || ''}"></span></div>
         <div class="bp-who">${E(p.name)}${tag}</div>
         <div class="bp-sub">${E(sub.join(' · '))}</div>
-        <div class="bp-bal"><b>${p.isBot ? '&mdash;' : fmt(p.bank || 0)}</b><span>Bank</span></div>
+        <div class="bp-bal"><b${canEdit && !p.isBot ? ` class="editable" data-name="${E(p.name)}" data-bank="${p.bank || 0}" title="Click to edit this bank"` : ''}>${p.isBot ? '&mdash;' : fmt(p.bank || 0)}</b><span>Bank</span></div>
         <div class="bp-stats">
           <div><label>At table</label><b>${fmt(p.atTable)}</b></div>
           <div><label>Net P&amp;L</label><b class="${netCls}">${p.isBot ? '&mdash;' : signed(p.net)}</b></div>
@@ -129,6 +131,23 @@
         </div>
       </div>`;
     }).join('');
+    $('bank-players').querySelectorAll('.bp-bal b.editable').forEach(b => b.addEventListener('click', () => editBank(b)));
+  }
+
+  function editBank(b) {
+    const name = b.dataset.name;
+    const input = document.createElement('input');
+    input.type = 'number'; input.min = '0'; input.step = '1'; input.value = b.dataset.bank; input.className = 'bp-edit';
+    input.setAttribute('aria-label', 'New bank amount for ' + name);
+    b.replaceWith(input); input.focus(); input.select();
+    let done = false;
+    const finish = save => {
+      if (done) return; done = true;
+      if (save && input.value !== '' && state.socket) state.socket.emit('bank_set', { name, balance: Number(input.value) });
+      input.remove(); request(); render();
+    };
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') finish(true); else if (e.key === 'Escape') { e.stopPropagation(); finish(false); } e.stopPropagation(); });
+    input.addEventListener('blur', () => finish(false));
   }
 
   function niceMax(v) {
