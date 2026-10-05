@@ -2,7 +2,7 @@
   "name": "ping-poker",
   "version": "1.0.0",
   "main": "server.js",
-  "scripts": { "start": "node server.js", "test": "node tests/preselect.js && node tests/allin.js && node tests/mp.js && node tests/rejoin.js && node tests/bankfix.js && node tests/bankedit.js && node tests/pause.js && node tests/persist.js && node tests/reset.js && node tests/migrate.js && node tests/labels.test.js && node tests/clientlabels.test.js && node tests/accounts.js && node tests/tables.js && node tests/social.js" },
+  "scripts": { "start": "node server.js", "test": "node tests/preselect.js && node tests/allin.js && node tests/mp.js && node tests/rejoin.js && node tests/bankfix.js && node tests/bankedit.js && node tests/pause.js && node tests/persist.js && node tests/reset.js && node tests/migrate.js && node tests/labels.test.js && node tests/clientlabels.test.js && node tests/accounts.js && node tests/tables.js && node tests/profile.js && node tests/social.js" },
   "dependencies": {
     "express": "^4.18.2",
     "socket.io": "^4.7.2"
