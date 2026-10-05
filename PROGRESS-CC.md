@@ -107,16 +107,18 @@ Server events `g:coldcall:state|history|spin` -> `g:coldcall:result`; buy ids `r
   One exception, asked for by Chris directly (2026-10-05 17:54): the concept stills menu was made with GPT image
   through OpenRouter, $3.31 (`cold-call/art/concepts/spend.jsonl`). Nothing else has used a paid API.
 
-## For Isabelle (2026-10-05 18:55)
-- The OpenRouter key you gave me has $2.55 left of its $15 cap ($12.45 used: Bindle sprites, then $3.31 on these concept stills).
-- OpenAI direct and my own OpenRouter account are both empty. The polished hero and symbol set will go through shaman's local
-  models unless Chris asks for GPT again, in which case the cap needs raising first.
-- Chris (17:54) cleared shaman for compute and testing on this project.
-- Milestone 4 (front end) is being built now on placeholder symbols, so it does not wait on the art pick. Symbols load from one
-  manifest, so the final art is a file swap.
+## For Isabelle (updated 2026-10-05 18:58)
+- **Chris picked the look: concept still A1** (Boiler Room, painted caricature). His words, 18:45: "i love A1, that looks perfect,
+  lets base everything around that." Everything is now based on `cold-call/art/concepts/stills/A1.jpg`.
+- **Image credit: $1.69 left** on the OpenRouter key you gave me (cap $15). OpenAI direct and my own OpenRouter account are both
+  empty. The final cutouts are blocked on credit; Chris has been asked for a $20 top-up. If you raise the cap instead, say so.
+- Chris asked for GPT-made art himself (17:54), so art is the one place this build uses a paid API. He also cleared shaman for
+  compute and testing.
+- Milestone 4 (front end) is being built now on placeholder symbols. Symbols load from one manifest
+  (`public/games/coldcall/assets/symbols.json`), so the final art is a file swap.
 
-## Milestone 3a: concept stills menu (done, waiting on Chris's pick)
-Five concepts, four stills each (portrait, wide, low angle, mascot), 832x1248. Sent to Chris 2026-10-05 18:20; no pick yet.
+## Milestone 3a: concept stills menu (done; Chris picked A1)
+Five concepts, four stills each (portrait, wide, low angle, mascot), 832x1248. Sent to Chris 2026-10-05; he picked A1 at 18:45.
 Contact sheets: `cold-call/art/concepts/sheet_A.jpg` .. `sheet_E.jpg`. Single stills: `cold-call/art/concepts/stills/A1.jpg` .. `E4.jpg`
 (JPEG copies; the 37 MB of source PNGs stay on Frank's box in `raw/`, not in git). Prompts: `gen_concepts.py`.
 
@@ -129,9 +131,25 @@ Contact sheets: `cold-call/art/concepts/sheet_A.jpg` .. `sheet_E.jpg`. Single st
 | E | Clay | stop-motion clay |
 
 No text is drawn in any still; labels on the sheets are added afterwards. No brands, no drug names.
-Next in milestone 3, after the pick: one polished hero scene and the cutout symbol set in that look.
+
+## Milestone 3b: tile design sheets in the A1 look (sent to Chris, waiting on his notes)
+Five design sheets, six pieces each, painted in the A1 style on flat slate-blue. These are design sheets for Chris to mark up,
+NOT final cutouts. Files: `cold-call/art/tiles/sheet_T1.jpg` .. `sheet_T5.jpg` (source PNGs stay local in `raw/`), prompts in
+`gen_tiles.py`, spend $0.87 in `spend.jsonl`.
+
+| Sheet | Pieces |
+|---|---|
+| T1 | high pays + wild: two wild faces, cash wad, gold money sign, powder pile, pill bottle |
+| T2 | low + mid pays |
+| T3 | scatter + bonus symbols |
+| T4 | bonus screens + buttons: dial, card machine, blank card, spin button, approved seal, desk frame |
+| T5 | salesman moods |
+
+Next, after Chris's notes and the credit top-up: each kept piece painted alone at full size and cut out to the manifest ids
+(closer, cash, pile, rx, headset, can, mug, note, ball, phone, quote), plus the A1 scene as the background.
 
 ## Log
+- 2026-10-05 18:58 Look locked to A1 (Chris). Tile design sheets committed (milestone 3b).
 - 2026-10-05 18:50 Milestone 3a committed (concept menu). Frank re-ran `tests/coldcall.js` (27 pass) and `tests/bender.js` (17 pass); engine copies byte-identical.
 - 2026-10-05 Milestone 2 done: engine, server module, sim, 27 tests; 200M-spin sim 98.10% +- 0.10; buys 97.99% / 98.07%.
 - 2026-10-05 17:50 Milestone 1 plan written. Branch created from master bffe087.
