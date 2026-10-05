@@ -40,6 +40,7 @@ async function startServer(seed = {}) {
   if (!srv.out.includes('running')) throw new Error('server did not start: ' + srv.out);
   srv.bank = () => JSON.parse(fs.readFileSync(path.join(dir, 'bank.json'), 'utf8'));
   srv.stop = () => {
+    srv.stopped = true;
     for (const c of srv.clients) try { c.sock.close(); } catch {}
     try { proc.kill(); } catch {}
     try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
@@ -246,6 +247,7 @@ async function soak() {
       prevEnd = isFold ? 'fold-out' : 'showdown';
       const snap = JSON.parse(JSON.stringify(gs));
       setTimeout(() => {
+        if (srv.stopped) return;
         checkConservation(scn, srv, obs, `end of hand ${snap.handNum}`);
         if (sd && !isFold) {
           sdChecked++;
@@ -439,10 +441,11 @@ async function timeoutAutoFold() {
   const dt = Date.now() - t0;
   log(`timeout autofold after ${dt}ms (startRemaining ${startRemaining})`);
   if (!ok || dt < 28000 || dt > 33000) rec(scn, 'high', 'AFK player not auto-folded at ~30s', 'fold at 30000ms', `folded=${ok} after ${dt}ms`, 'server.js:273-291');
+  await waitFor(() => cs[0].gs.players[idx].sitOutRequest, 150000);
   await sleep(300);
   const me = cs[0].gs.players[idx];
   if (me.sittingOut || me.sitOutRequest === false) log('afk player state after timeout: sittingOut', me.sittingOut);
-  rec(scn, 'low', 'AFK player auto-folded but never sat out: stays in every hand and stalls the table 30s each time', 'auto sit-out after N consecutive timeouts', `after timeout player ${cur.name} connected=${me.connected} sittingOut=${me.sittingOut} sitOutRequest=${me.sitOutRequest}`, 'server.js:281-290');
+  if (!me.sitOutRequest) rec(scn, 'low', 'AFK player auto-folded but never sat out: stays in every hand and stalls the table 30s each time', 'auto sit-out after N consecutive timeouts', `after timeout player ${cur.name} connected=${me.connected} sittingOut=${me.sittingOut} sitOutRequest=${me.sitOutRequest}`, 'server.js:281-290');
   checkConservation(scn, srv, cs[0], 'after timeout');
   srv.stop();
 }
@@ -675,24 +678,16 @@ async function sitOutEndsGame() {
   const bank = srv.bank();
   log('bank:', JSON.stringify(bank));
   checkConservation(scn, srv, cs[0], 'after sit-out ends game');
-  if (gs.status === 'waiting') {
-    rec(scn, 'high', 'One player sitting out at a 2-player table ends the game and cashes out BOTH players, leaving them seated with 0 chips',
-      'sitter simply skips hands; other player waits (or game pauses) without losing the table', `status=waiting; stacks ${gs.players.map(p => p.name + '=' + p.chips)}; bank returned`, 'server.js:553-569 (willPlay<2 branch cashes out everyone, then clears sitOutRequest only after chips already zeroed)');
-    // try restart
-    const n = cs[0].errors.length;
-    cs[0].emit('start_game', { roomId: ROOM });
-    await sleep(800);
-    const g2 = cs[0].gs;
-    log('restart ->', g2.status, 'curIdx', g2.currentPlayerIdx, 'errors', cs[0].errors.slice(n));
-    cs.forEach(c => c.emit('rebuy', { roomId: ROOM }));
-    await sleep(500);
-    const g3 = cs[0].gs;
-    if (g2.status === 'playing' && g2.currentPlayerIdx === null)
-      rec(scn, 'critical', 'Room deadlocks: start_game with two 0-chip seated players sets status=playing with empty action queue, nobody can act, no timer, no way out',
-        'start_game rejected (need 2 players with chips) or rebuy offered', `status=playing currentPlayerIdx=null cards=${JSON.stringify(g2.players.map(p => p.cardCount))}; rebuy ignored: chips ${g3.players.map(p => p.chips)}`,
-        'server.js:715-736 start_game (no chips check), 349-361 startHand with all sitting out; rebuy gate at 794');
-    else if (g2.status === 'waiting' || g2.status === 'playing') log('restart status', g2.status);
+  const zeroed = gs.players.some(p => p.chips === 0);
+  const sitter = gs.players.find(p => p.name === 'sg2');
+  if (gs.status !== 'waiting' || zeroed || !sitter || !sitter.sitOutRequest) {
+    rec(scn, 'high', 'One player sitting out at a 2-player table must pause the table without cashing anyone out or clearing the sit-out',
+      'status=waiting, stacks intact, sit-out kept', `status=${gs.status}; stacks ${gs.players.map(p => p.name + '=' + p.chips)}; sitOutRequest=${sitter && sitter.sitOutRequest}`, 'server.js scheduleNextHand');
   }
+  cs[1].emit('sit_out', { roomId: ROOM });
+  const resumed = await waitFor(() => cs[0].gs.status === 'playing', 9000);
+  if (!resumed) rec(scn, 'high', 'Table does not resume after the sitter sits back in', 'status=playing', `status=${cs[0].gs.status}`, 'server.js sit_out');
+  checkConservation(scn, srv, cs[0], 'after sit back in');
   srv.stop();
 }
 

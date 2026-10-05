@@ -238,6 +238,7 @@ function makePlayer(socketId, name, avatar, chips) {
     allIn:      false,
     sittingOut: false,
     sitOutRequest: false,
+    timeouts: 0,
     connected:  true,
   };
 }
@@ -465,7 +466,12 @@ function scheduleTurnTimeout(room) {
     if (room.handNum !== handNum) return;
     if (room.actionQueue[0] !== idx) return;
     if (room.status !== 'playing') return;
+    const afk = room.players[idx];
     processAction(room, idx, 'fold', 0);
+    if (afk && ++afk.timeouts >= 2 && !afk.sitOutRequest) {
+      afk.sitOutRequest = true;
+      roomLog(room, `${afk.name} timed out twice and is sitting out`);
+    }
     broadcastGameState(room);
     emitPrivateCards(room);
     scheduleBotActionsIfNeeded(room);
@@ -846,10 +852,13 @@ function scheduleNextHand(room, delayMs = 5000) {
       }
       if (room.blindTimer) { clearTimeout(room.blindTimer); room.blindTimer = null; }
       room.status = 'waiting';
-      if (active.length >= 2 && willPlay.length < 2) {
+      if (active.length >= 2 && willPlay.length === 0) {
         // Everyone sat out — bring them back automatically
         for (const p of room.players) p.sitOutRequest = false;
         roomLog(room, 'All players sat out. Sit-out requests cleared.');
+      } else if (active.length >= 2) {
+        room.sitterWait = true;
+        roomLog(room, 'Waiting for players (only one player is sitting in)');
       } else {
         roomLog(room, 'Not enough players. Waiting...');
       }
@@ -1249,6 +1258,7 @@ io.on('connection', socket => {
     if (room.actionQueue[0] !== playerIdx) { socket.emit('error', { message: "Not your turn" }); return; }
 
     const ok = processAction(room, playerIdx, action, amount);
+    if (ok) { const hp = room.players[playerIdx]; if (hp) hp.timeouts = 0; }
     if (!ok) socket.emit('error', { message: room.lastReject || 'Invalid action' });
     if (ok) {
       broadcastGameState(room);
@@ -1351,10 +1361,17 @@ io.on('connection', socket => {
     const player = room.players.find(p => p.socketId === socket.id);
     if (!player || player.chips === 0) return;
     player.sitOutRequest = !player.sitOutRequest;
+    player.timeouts = 0;
     roomLog(room, player.sitOutRequest
       ? `${player.name} sitting out next hand`
       : `${player.name} is back in`);
     broadcastGameState(room);
+    if (!player.sitOutRequest && room.sitterWait) {
+      room.sitterWait = false;
+      const ready = room.status === 'waiting' && !room.paused && !room.endNightPending
+        && room.players.filter(p => p.connected && p.chips > 0 && !p.sitOutRequest).length >= 2;
+      if (ready) beginGame(room, room.blindsEnabled ? room.blindIntervalMs : undefined);
+    }
   });
 
   // ── disconnect ────────────────────────────────────────────────────────────
