@@ -18,20 +18,20 @@
     guaranteeP: 0.083, maxSticky: 3, growCap: 6,   // a guaranteed sticky wild on ~1 in 12 bonus spins, at most 3 on the board; sticky wilds double 2>4>6 (maxSticky 4 made 10,000x too common and RTP lumpy)
     // payout x bet by cluster size bucket: 5,6,7,8,9,10-11,12-14,15-19,20+
     pay: {
-      pen : [0.19, 0.29, 0.49, 0.77, 1.16, 1.94, 3.87, 13.4, 52.2],
-      stk : [0.23, 0.35, 0.58, 0.96, 1.55, 2.32, 4.84, 18.2, 65.6],
-      bal : [0.29, 0.42, 0.77, 1.26, 1.94, 3.10, 6.77, 26.7, 91.1],
-      yrd : [0.39, 0.58, 1.06, 1.75, 2.71, 4.64, 9.90, 38.9, 131],
-      meg : [0.58, 0.96, 1.75, 2.90, 4.84, 7.74, 17.1, 77.8, 261],
-      cap : [0.87, 1.55, 2.90, 4.84, 7.74, 13.5, 30.6, 131, 470],
-      phn : [1.35, 2.32, 4.84, 8.70, 13.5, 23.4, 57.6, 261, 914],
-      seal: [2.32, 4.64, 9.90, 17.1, 28.8, 57.6, 145, 654, 2612],
+      pen : [0.197, 0.301, 0.509, 0.8, 1.21, 2.02, 4.02, 13.9, 54.2],
+      stk : [0.239, 0.364, 0.603, 0.997, 1.61, 2.41, 5.03, 18.9, 68.1],
+      bal : [0.301, 0.436, 0.8, 1.31, 2.02, 3.22, 7.03, 27.7, 94.6],
+      yrd : [0.405, 0.603, 1.1, 1.82, 2.82, 4.82, 10.3, 40.4, 136],
+      meg : [0.603, 0.997, 1.82, 3.01, 5.03, 8.04, 17.8, 80.8, 271],
+      cap : [0.904, 1.61, 3.01, 5.03, 8.04, 14, 31.8, 136, 488],
+      phn : [1.4, 2.41, 5.03, 9.04, 14, 24.3, 59.8, 271, 949],
+      seal: [2.41, 4.82, 10.3, 17.8, 29.9, 59.8, 151, 679, 2710],
     },
-    scatterPay: { 3: 3, 4: 10, 5: 50, 6: 200 },
+    scatterPay: { 3: 3.12, 4: 10.4, 5: 51.9, 6: 208 },
     spinsFor: { 3: 6, 4: 8, 5: 12, 6: 20 },
     retrigger: { 3: 3, 4: 5, 5: 8 }, maxSpins: 40,
     landslideStart: [[2]],   // pre-placed sticky wilds in LANDSLIDE (UI copy: starts with 1 wild planted)
-    buyCost: { election: 5.5, landslide: 40 },   // 'election' = RECOUNT in the UI
+    buyCost: { election: 5.4, landslide: 39.5 },   // 'election' = RECOUNT in the UI
     maxTumbles: 14,   // hard tumble cap per spin: sticky wilds wall the board and would otherwise chain 40 tumbles (tail variance)
   };
   const TIERS = [[100, 'worldisyours'], [50, 'megalandslide'], [25, 'ballotbender'], [10, 'closeenough'], [5, 'tasty'], [2, 'nice']];

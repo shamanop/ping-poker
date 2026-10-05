@@ -6,7 +6,7 @@ const Eng = require('./bender-engine.js');
 const BET_LEVELS = Eng.BET_LEVELS;
 const RATE_MS = 150;
 const HISTORY_MAX = 20;
-const RTP_LABEL = '95.8% (long-run, 12M spin sim)';
+const RTP_LABEL = '100% (long-run, 21M spin stratified sim, +-0.3)';
 
 function cryptoRng() {
   return () => crypto.randomBytes(6).readUIntBE(0, 6) / 281474976710656; // 48-bit uniform in [0,1)
