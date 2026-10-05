@@ -1462,42 +1462,56 @@ function spawnConfetti(container) {
 
 // ─── Hand labels ──────────────────────────────────────────────────
 const RNKS = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
-const HAND_NAMES = ['High Card', 'Pair', 'Two Pair', 'Three of a Kind', 'Straight', 'Flush', 'Full House', 'Four of a Kind', 'Straight Flush'];
+const HAND_NAMES = ['High Card', 'Pair', 'Two Pair', 'Three of a Kind', 'Straight', 'Flush', 'Full House', 'Four of a Kind', 'Straight Flush', 'Royal Flush'];
+const MADE_LEN = [0, 1, 2, 1, 1, 5, 2, 1, 1, 1];
 
-function handCat(cards) {
-  const vals  = cards.map(c => RNKS.indexOf(c.rank) + 2).sort((a, b) => b - a);
-  const suits = cards.map(c => c.suit);
-  const freq  = {};
-  for (const v of vals) freq[v] = (freq[v] || 0) + 1;
-  const counts = Object.values(freq).sort((a, b) => b - a);
-  const flushSuit = ['♠', '♥', '♦', '♣'].find(s => suits.filter(x => x === s).length >= 5);
-  const run = list => {
-    const uv = [...new Set(list)].sort((a, b) => b - a);
-    for (let i = 0; i <= uv.length - 5; i++) if (uv[i] - uv[i + 4] === 4) return true;
-    return false;
+// Best-hand evaluation over any number of cards: { cat, tb } where tb is the tiebreak vector (made ranks first, then kickers)
+function handEval(cards) {
+  const v = c => RNKS.indexOf(c.rank) + 2;
+  const byRank = {}, bySuit = {};
+  for (const c of cards) { byRank[v(c)] = (byRank[v(c)] || 0) + 1; (bySuit[c.suit] = bySuit[c.suit] || []).push(v(c)); }
+  const desc = a => [...a].sort((x, y) => y - x);
+  const straightHigh = list => {
+    const set = new Set(list);
+    for (let h = 14; h >= 5; h--) {
+      let ok = true;
+      for (let k = 0; k < 5; k++) if (!set.has(h - k === 1 ? 14 : h - k)) { ok = false; break; }
+      if (ok) return h;
+    }
+    return 0;
   };
-  const straight = run(vals) || (vals.includes(14) && run(vals.map(v => v === 14 ? 1 : v)));
-  let sf = false;
-  if (flushSuit) {
-    const fv = cards.filter(c => c.suit === flushSuit).map(c => RNKS.indexOf(c.rank) + 2);
-    sf = run(fv) || (fv.includes(14) && run(fv.map(v => v === 14 ? 1 : v)));
+  const flushVals = Object.values(bySuit).find(a => a.length >= 5);
+  if (flushVals) {
+    const h = straightHigh(flushVals);
+    if (h) return { cat: h === 14 ? 9 : 8, tb: [h] };
   }
-  if (sf) return 8;
-  if (counts[0] === 4) return 7;
-  if (counts[0] === 3 && (counts[1] || 0) >= 2) return 6;
-  if (flushSuit) return 5;
-  if (straight) return 4;
-  if (counts[0] === 3) return 3;
-  if (counts[0] === 2 && (counts[1] || 0) === 2) return 2;
-  if (counts[0] === 2) return 1;
-  return 0;
+  const groups = Object.entries(byRank).map(([r, n]) => ({ r: +r, n })).sort((a, b) => b.n - a.n || b.r - a.r);
+  const ofN = n => groups.filter(g => g.n === n).map(g => g.r);
+  const quads = ofN(4), trips = ofN(3), pairs = ofN(2);
+  const singles = desc(groups.map(g => g.r));
+  if (quads.length) return { cat: 7, tb: [quads[0], desc(singles.filter(x => x !== quads[0]))[0]] };
+  if (trips.length && (trips.length > 1 || pairs.length)) return { cat: 6, tb: [trips[0], desc([...trips.slice(1), ...pairs])[0]] };
+  if (flushVals) return { cat: 5, tb: desc(flushVals).slice(0, 5) };
+  const sh = straightHigh(Object.keys(byRank).map(Number));
+  if (sh) return { cat: 4, tb: [sh] };
+  if (trips.length) return { cat: 3, tb: [trips[0], ...singles.filter(x => x !== trips[0]).slice(0, 2)] };
+  if (pairs.length >= 2) {
+    const pp = desc(pairs).slice(0, 2);
+    return { cat: 2, tb: [...pp, singles.filter(x => !pp.includes(x))[0]] };
+  }
+  if (pairs.length === 1) return { cat: 1, tb: [pairs[0], ...singles.filter(x => x !== pairs[0]).slice(0, 3)] };
+  return { cat: 0, tb: singles.slice(0, 5) };
 }
 
 function evalHandLabel(hole, community) {
-  const all = handCat([...hole, ...community]);
-  const board = community.length >= 3 ? handCat(community) : -1;
-  if (all > 0 && all === board) return `Board ${HAND_NAMES[all].toLowerCase()}`;
-  return HAND_NAMES[all];
+  const me = handEval([...hole, ...community]);
+  const bd = handEval(community);
+  if (community.length >= 5 && me.cat === bd.cat && me.tb.every((x, i) => x === bd.tb[i])) return 'Board plays';
+  if (me.cat > 0 && me.cat === bd.cat) {
+    const n = MADE_LEN[me.cat];
+    if (me.tb.slice(0, n).every((x, i) => x === bd.tb[i])) return `Board ${HAND_NAMES[me.cat].toLowerCase()}`;
+  }
+  return HAND_NAMES[me.cat];
 }
 
 function evalPreflopLabel(hole) {
