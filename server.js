@@ -293,7 +293,7 @@ function decideBotAction(player, toCall, room) {
 }
 
 function clearHandTimers(room) {
-  for (const k of ['turnTimeout', 'botTimer', 'streetTimer', 'nextHandTimer']) {
+  for (const k of ['turnTimeout', 'botTimer', 'streetTimer', 'nextHandTimer', 'preTimer']) {
     if (room[k]) { clearTimeout(room[k]); room[k] = null; }
   }
   room.turnStartedAt = null;
@@ -324,6 +324,65 @@ function scheduleBotActionsIfNeeded(room) {
   }, 900 + Math.random() * 600);
 }
 
+
+// ─── Pre-select ──────────────────────────────────────────────────────────────
+// A player who is not on turn can queue "check/fold" or "call N". It is bound to the
+// hand, street and bet it was made against, fires once, and drops itself the moment any of
+// those change (a raise, a new street, a new hand) so it can never act for a different amount.
+
+function preStillValid(room, p) {
+  const pre = p.pre;
+  return !!pre && pre.handNum === room.handNum && pre.street === room.street && pre.bet === room.currentBet
+    && !p.folded && !p.allIn && !p.sittingOut && p.connected && room.status === 'playing';
+}
+
+function clearStalePre(room) {
+  for (const p of room.players) if (p.pre && !preStillValid(room, p)) p.pre = null;
+}
+
+function setPreselect(room, playerIdx, kind, amount) {
+  const p = room.players[playerIdx];
+  if (!p) return false;
+  if (kind === null || kind === 'none') { p.pre = null; return true; }
+  if (room.status !== 'playing' || p.folded || p.allIn || p.sittingOut || p.cards.length === 0) return false;
+  if (!room.actionQueue.includes(playerIdx) || room.actionQueue[0] === playerIdx) return false; // only while waiting
+  const toCall = Math.max(0, room.currentBet - p.roundBet);
+  if (kind === 'checkfold') {
+    p.pre = { kind, amount: 0, bet: room.currentBet, handNum: room.handNum, street: room.street };
+    return true;
+  }
+  if (kind === 'call') {
+    if (toCall <= 0 || amount !== toCall) return false; // must match what is owed right now
+    p.pre = { kind, amount: toCall, bet: room.currentBet, handNum: room.handNum, street: room.street };
+    return true;
+  }
+  return false;
+}
+
+function armPreselect(room) {
+  if (room.preTimer) { clearTimeout(room.preTimer); room.preTimer = null; }
+  if (room.status !== 'playing') return;
+  const idx = room.actionQueue[0];
+  const p = idx === undefined ? null : room.players[idx];
+  if (!p || p.isBot || !p.pre) return;
+  const handNum = room.handNum;
+  room.preTimer = setTimeout(() => {
+    room.preTimer = null;
+    if (!rooms.has(room.id) || room.handNum !== handNum || room.status !== 'playing' || room.actionQueue[0] !== idx) return;
+    const pre = p.pre;
+    if (!preStillValid(room, p)) { p.pre = null; broadcastGameState(room); emitPrivateCards(room); return; }
+    const toCall = Math.max(0, room.currentBet - p.roundBet);
+    p.pre = null; // fires once
+    let ok = false;
+    if (pre.kind === 'checkfold') ok = processAction(room, idx, toCall === 0 ? 'check' : 'fold', 0);
+    else if (pre.kind === 'call' && toCall === pre.amount) ok = processAction(room, idx, 'call', 0);
+    broadcastGameState(room);
+    emitPrivateCards(room);
+    scheduleBotActionsIfNeeded(room);
+    scheduleTurnTimeout(room);
+  }, 450);
+}
+
 // ─── Turn Timer ──────────────────────────────────────────────────────────────
 
 function clearTurnTimeout(room) {
@@ -351,6 +410,7 @@ function scheduleTurnTimeout(room) {
     scheduleBotActionsIfNeeded(room);
     scheduleTurnTimeout(room);
   }, TURN_MS);
+  armPreselect(room);
 }
 
 // ─── Blind Escalation ─────────────────────────────────────────────────────────
@@ -438,6 +498,7 @@ function startHand(room) {
     p.folded   = false;
     p.allIn    = false;
     p.lastAction = null;
+    p.pre = null;
     if (p.chips === 0)  p.sittingOut = true;
     else                p.sittingOut = p.sitOutRequest;
   }
@@ -545,6 +606,8 @@ function processAction(room, playerIdx, action, amount) {
     default: room.lastReject = 'Unknown action'; return false;
   }
   clearTurnTimeout(room); // only an accepted action cancels the pending auto-fold
+  room.players[playerIdx].pre = null;
+  clearStalePre(room);
 
   const remaining = room.players.filter(p => !p.folded && !p.sittingOut && p.connected);
   if (remaining.length === 1) { instantWin(room, remaining[0]); return true; }
@@ -576,7 +639,7 @@ function instantWin(room, winner) {
 // ─── Advance Street ───────────────────────────────────────────────────────────
 
 function advanceStreet(room) {
-  for (const p of room.players) { p.roundBet = 0; }
+  for (const p of room.players) { p.roundBet = 0; p.pre = null; }
   room.currentBet = 0;
 
   switch (room.street) {
@@ -789,10 +852,11 @@ function publicGameState(room) {
 function broadcastGameState(room) { io.to(room.id).emit('game_state', publicGameState(room)); }
 
 function emitPrivateCards(room) {
+  clearStalePre(room);
   for (let i = 0; i < room.players.length; i++) {
     const p = room.players[i];
     if (!p.isBot && p.connected && p.socketId) {
-      io.to(p.socketId).emit('your_cards', { cards: p.cards, myIdx: i });
+      io.to(p.socketId).emit('your_cards', { cards: p.cards, myIdx: i, preselect: p.pre ? { mode: p.pre.kind, amount: p.pre.amount } : null });
     }
   }
 }
@@ -1029,6 +1093,20 @@ io.on('connection', socket => {
       scheduleBotActionsIfNeeded(room);
       scheduleTurnTimeout(room);
     }
+  });
+
+  // ── preselect ─────────────────────────────────────────────────────────────
+  on('preselect', ({ roomId, mode, kind, amount } = {}) => {
+    const room = rooms.get(roomId);
+    if (!room) return;
+    const playerIdx = room.players.findIndex(p => p.socketId === socket.id);
+    if (playerIdx === -1) return;
+    const m = mode === undefined ? kind : mode; // `kind` accepted as an alias
+    let ok = false;
+    if (m === null || m === 'none') ok = setPreselect(room, playerIdx, null, 0);
+    else if (m === 'checkfold' || m === 'call') ok = setPreselect(room, playerIdx, m, typeof amount === 'number' ? amount : NaN);
+    if (!ok) socket.emit('error', { message: 'Pre-select not available' });
+    emitPrivateCards(room);
   });
 
   // ── rebuy ─────────────────────────────────────────────────────────────────

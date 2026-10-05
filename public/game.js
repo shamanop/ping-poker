@@ -133,8 +133,10 @@ document.addEventListener('DOMContentLoaded', () => {
   bindSocket();
   bindRail();
   document.querySelectorAll('#sticker-grid .sticker-item').forEach(b => { b.innerHTML = art('stickers', b.dataset.emoji); });
+  document.querySelectorAll('#throw-grid .throw-item').forEach(b => { b.innerHTML = art('throws', b.dataset.item); });
   initSoundToggle();
   initChat();
+  initPanelSide();
   initBust();
   bindCopy($('room-code-btn'));
   placeStaticSockets();
@@ -144,6 +146,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!seat) return;
     const playerIdx = parseInt(seat.dataset.playerIdx);
     if (playerIdx === state.myIdx) return;
+    if (state.armedThrow) {
+      state.socket.emit('throw_item', { roomId: state.roomId, targetIdx: playerIdx, item: state.armedThrow });
+      setArmedThrow(null);
+      return;
+    }
     showThrowTray(playerIdx, seat.querySelector('.seat-pill') || seat);
   });
 
@@ -467,9 +474,10 @@ function bindSocket() {
     renderGame();
   });
 
-  s.on('your_cards', ({ cards, myIdx }) => {
+  s.on('your_cards', ({ cards, myIdx, preselect }) => {
     state.myIdx   = myIdx;
     state.myCards = cards;
+    state.pre     = preselect || null;
     if (state.gameState) renderGame();
   });
 
@@ -532,41 +540,49 @@ function initSoundToggle() {
   });
 }
 
-// ─── Rail: tabs, stickers, sit out ────────────────────────────────
-function setTab(tab) {
-  state.tab = tab;
-  document.querySelectorAll('.rail-tab').forEach(t => t.classList.toggle('on', t.dataset.tab === tab));
-  document.querySelectorAll('.rail-panel').forEach(p => p.classList.toggle('on', p.id === 'tab-' + tab));
-  if (tab === 'chat') {
-    state.unread = 0;
-    $('chat-unread').hidden = true;
-    const el = $('chat-messages'); el.scrollTop = el.scrollHeight;
-    setTimeout(() => $('chat-input').focus(), 30);
-  }
-  if (tab === 'rank') state.socket.emit('get_leaderboard');
-  if (tab === 'log') { const el = $('log-entries'); el.scrollTop = el.scrollHeight; state.logPinned = true; }
-}
-
+// ─── Left panel: stickers, throws, pause ──────────────────────────
 function bindRail() {
-  $('rail-tabs').addEventListener('click', e => {
-    const t = e.target.closest('.rail-tab'); if (t) setTab(t.dataset.tab);
-  });
   $('sticker-grid').addEventListener('click', e => {
     const item = e.target.closest('.sticker-item');
     if (!item || !state.roomId) return;
     state.socket.emit('drop_sticker', { roomId: state.roomId, emoji: item.dataset.emoji });
   });
+  $('throw-grid').addEventListener('click', e => {
+    const item = e.target.closest('.throw-item');
+    if (!item) return;
+    const on = state.armedThrow === item.dataset.item;
+    setArmedThrow(on ? null : item.dataset.item);
+  });
   $('btn-sit-out').addEventListener('click', () => {
     if (!state.roomId) return;
     state.socket.emit('sit_out', { roomId: state.roomId });
   });
-  $('log-entries').addEventListener('scroll', () => {
-    const el = $('log-entries');
-    state.logPinned = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
-  });
+}
+
+function setArmedThrow(item) {
+  state.armedThrow = item;
+  document.querySelectorAll('#throw-grid .throw-item').forEach(b => b.classList.toggle('armed', b.dataset.item === item));
+  $('throw-hint').textContent = item ? 'Now click a player' : 'Pick one, then click a player';
 }
 
 // ─── Chat ─────────────────────────────────────────────────────────
+function initPanelSide() {
+  const scr = $('game-screen'), btn = $('btn-panel-side');
+  const apply = side => {
+    scr.classList.toggle('panel-right', side === 'right');
+    btn.textContent = side === 'right' ? '\u2039' : '\u203A';
+    btn.setAttribute('aria-label', side === 'right' ? 'Move panel to the left' : 'Move panel to the right');
+  };
+  let side = 'left';
+  try { if (localStorage.getItem('ping.panelSide') === 'right') side = 'right'; } catch (e) {}
+  apply(side);
+  btn.addEventListener('click', () => {
+    side = side === 'right' ? 'left' : 'right';
+    try { localStorage.setItem('ping.panelSide', side); } catch (e) {}
+    apply(side);
+  });
+}
+
 function initChat() {
   const input = $('chat-input');
   const send = () => {
@@ -581,18 +597,11 @@ function initChat() {
 
 function appendChatMsg(name, text) {
   const el = $('chat-messages');
-  el.querySelector('.empty-note')?.remove();
   const msg = document.createElement('div');
   msg.className = 'chat-msg';
-  msg.innerHTML = `<span class="chat-name">${esc(name)}</span><span class="chat-text">${esc(text)}</span>`;
+  msg.innerHTML = `<span class="chat-name" style="color:${nameColor(name)}">${esc(name)}</span><span class="chat-text">${esc(text)}</span>`;
   el.appendChild(msg);
   el.scrollTop = el.scrollHeight;
-  if (state.tab !== 'chat') {
-    state.unread++;
-    const u = $('chat-unread');
-    u.textContent = state.unread > 9 ? '9+' : state.unread;
-    u.hidden = false;
-  }
 }
 
 // ─── Bust (rail side panel) ───────────────────────────────────────
@@ -703,30 +712,34 @@ function layoutTable() {
   const stage = $('stage');
   const u  = state.u;
   const sw = stage.clientWidth, sh = stage.clientHeight;
-  const seatW = 176 * u, seatH = 58 * u;
-  const Wt = sw - seatW - 24 * u;
-  const topNeed = seatH / 2 + 30 * u;
-  const botNeed = seatH / 2 + 10 * u;
-  const H = Math.max(200, Math.min(Wt / 1.55, sh - topNeed - botNeed));
-  const W = Math.min(Wt, H * 1.75);
-  const cx = sw / 2, cy = topNeed + H / 2;
+  const seatW = 168 * u, seatH = 56 * u;
+  const AR = 1152 / 535;
+  const H = Math.max(200, Math.min(sw * 0.9 / AR, (sh - 107 * u) / 0.8284));
+  const W = H * AR;
+  const spare = Math.max(0, (sh - 45 * u) - (62 * u + 0.8284 * H));
+  const tbTop = 34 * u - 0.0256 * H + spare * 0.5;
+  const tbLeft = sw / 2 - W / 2;
+  const cx = sw / 2, cy = tbTop + 0.44 * H;
   const tb = $('table-box');
-  tb.style.left   = (cx - W / 2) + 'px';
-  tb.style.top    = (cy - H / 2) + 'px';
+  tb.style.left   = tbLeft + 'px';
+  tb.style.top    = tbTop + 'px';
   tb.style.width  = W + 'px';
   tb.style.height = H + 'px';
-  state.geo = { sw, sh, u, seatW, seatH, W, H, cx, cy, seats: {} };
+  state.geo = { sw, sh, u, seatW, seatH, W, H, cx, cy, tbTop, seats: {}, scales: {} };
   return state.geo;
 }
 
+// Seats sit on the slanted table's rim ellipse; theta is degrees clockwise from straight up.
+const ELL_ANGLES = { ...SEAT_ANGLES, 5: [180, 230, 310, 50, 130], 6: [180, 225, 315, 0, 45, 135] };
 function seatCenter(angle) {
   const g = state.geo;
-  const [ex, ey] = stadiumEdge(g.W, g.H, angle);
-  const mx = g.seatW / 2 + 8 * g.u, my = g.seatH / 2 + 8 * g.u;
-  return [
-    Math.min(Math.max(g.cx + ex, mx), g.sw - mx),
-    Math.min(Math.max(g.cy + ey, my), g.sh - my),
-  ];
+  const a = angle * Math.PI / 180;
+  const rx = g.W * 0.47 * 1.0, ry = g.H * 0.37 * 1.12;
+  const x = g.cx + rx * Math.sin(a), y = g.cy - ry * Math.cos(a);
+  const yTop = g.cy - g.H * 0.37, yBot = g.cy + ry;
+  const sc = 0.85 + 0.15 * Math.min(1, Math.max(0, (y - yTop) / (yBot - yTop)));
+  const mx = g.seatW / 2 + 6 * g.u;
+  return [Math.min(Math.max(x, mx), g.sw - mx), y, sc];
 }
 
 function seatClientPos(idx) {
@@ -756,13 +769,10 @@ function renderGame() {
 
   const me = gs.players[state.myIdx];
   const so = $('btn-sit-out');
-  if (me && gs.status === 'playing' && !(me.sittingOut && !me.sitOutRequest && !me.cardCount)) {
-    so.hidden = false;
-    so.textContent = me.sitOutRequest ? "I'm back" : 'Sit out next hand';
-    so.classList.toggle('on', !!me.sitOutRequest);
-  } else {
-    so.hidden = true;
-  }
+  const canSit = !!(me && gs.status === 'playing' && !(me.sittingOut && !me.sitOutRequest && !me.cardCount));
+  so.disabled = !canSit;
+  so.textContent = canSit && me.sitOutRequest ? 'Resume' : 'Pause';
+  so.classList.toggle('on', canSit && !!me.sitOutRequest);
 }
 
 function nextActiveSeat(fromIdx, players) {
@@ -891,7 +901,7 @@ function renderSeats(gs) {
   const el  = $('player-seats');
   const n   = gs.players.length;
   const myIdx = state.myIdx ?? 0;
-  const angles = anglesFor(n);
+  const angles = ELL_ANGLES[Math.max(2, Math.min(8, n))];
   const sbIdx = gs.status === 'playing' ? nextActiveSeat(gs.dealerIdx, gs.players) : -1;
   const bbIdx = gs.status === 'playing' ? nextActiveSeat(sbIdx, gs.players) : -1;
   noteActions(state.prevForBubbles, gs);
@@ -899,8 +909,9 @@ function renderSeats(gs) {
 
   const html = gs.players.map((p, i) => {
     const off = (i - myIdx + n) % n;
-    const [x, y] = seatCenter(angles[off]);
+    const [x, y, sc] = seatCenter(angles[off]);
     g.seats[i] = [x, y];
+    g.scales[i] = sc;
     const hero = i === myIdx;
     const peekUp = y > g.cy + 10 * g.u;
     const [stText, stCls] = seatStatus(p);
@@ -924,7 +935,7 @@ function renderSeats(gs) {
     }
 
     const cls = ['seat', hero ? 'hero' : '', p.isActive ? 'active' : '', p.folded ? 'folded' : '', p.sittingOut ? 'away' : '', state.winners?.has(p.name) ? 'winner' : ''].filter(Boolean).join(' ');
-    return `<div class="${cls}" data-player-idx="${i}" style="left:${x.toFixed(1)}px;top:${y.toFixed(1)}px">
+    return `<div class="${cls}" data-player-idx="${i}" style="left:${x.toFixed(1)}px;top:${y.toFixed(1)}px;--ss:${sc.toFixed(3)}">
       ${peek}
       <div class="seat-pill">
         <div class="seat-av">${avatarInner(p.avatar, p.profilePic)}</div>
@@ -966,7 +977,7 @@ function betSpot(i, gs) {
   const g = state.geo;
   const n = gs.players.length;
   const myIdx = state.myIdx ?? 0;
-  if (i === myIdx) return { x: g.cx, y: g.cy + g.H * 0.205, ux: 0, uy: -1 };
+  if (i === myIdx) return { x: g.cx, y: g.cy + g.H * 0.1, ux: 0, uy: -1 };
   const [sx, sy] = g.seats[i];
   let dx = g.cx - sx, dy = g.cy - sy;
   const len = Math.hypot(dx, dy) || 1;
@@ -1049,7 +1060,8 @@ function renderHero(gs) {
   if (!show) { $('hole-cards').innerHTML = ''; $('my-hand-label').innerHTML = ''; state.heroKey = ''; return; }
   wrap.style.position = 'absolute';
   wrap.style.left = (g.W / 2) + 'px';
-  wrap.style.top  = (g.H - 180 * g.u) + 'px';
+  const hs = g.seats[state.myIdx] || [g.cx, g.cy + g.H * 0.4];
+  wrap.style.top  = (hs[1] - g.tbTop - 152 * g.u) + 'px';
 
   const cards = state.myCards;
   const key = `${gs.handNum}|${cards.map(c => c.rank + c.suit).join('')}`;
@@ -1108,9 +1120,10 @@ function renderControls(gs) {
   const canAct = !!me && isMyTurn && !me.folded && !me.allIn && gs.status === 'playing';
   const toCall = me ? Math.max(0, gs.currentBet - (me.roundBet || 0)) : 0;
   const allInCall = !!me && toCall >= me.chips;
+  const callAmt = me ? Math.min(toCall, me.chips) : 0;
 
-  call.querySelector('.act-main').textContent = toCall === 0 ? 'Check' : (allInCall ? 'Call all-in' : 'Call');
-  call.querySelector('.act-sub').innerHTML = toCall === 0 ? '&nbsp;' : (allInCall ? me.chips : toCall).toLocaleString();
+  call.querySelector('.act-main').textContent = toCall === 0 ? 'Check' : (allInCall ? 'All-in' : 'Call');
+  call.querySelector('.act-sub').innerHTML = toCall === 0 ? '&nbsp;' : callAmt.toLocaleString();
 
   const minRaise = gs.currentBet + bb;
   const maxRaise = me ? me.chips + (me.roundBet || 0) : 0;
@@ -1118,7 +1131,14 @@ function renderControls(gs) {
   const canRaise = canAct && othersCanRespond && me.chips > toCall && maxRaise >= minRaise;
   rbtn.querySelector('.act-main').textContent = gs.currentBet === 0 ? 'Bet' : 'Raise';
 
-  // Status text
+  // Pre-select applies while waiting on someone else with a live hand
+  const live = !!me && gs.status === 'playing' && !me.folded && !me.allIn && !me.sittingOut && me.cardCount > 0;
+  const showPre = live && !isMyTurn;
+  state.preCtx = { toCall, callAmt };
+  renderPreselect(showPre, toCall, callAmt);
+
+  // Status / helper line
+  state.helper = null;
   if (!me) setBar('idle', 'Spectating', '');
   else if (me.chips === 0 && !me.allIn && gs.status === 'playing' && !me.cardCount) setBar('idle', state.spectating ? 'Spectating' : 'Out of chips', '');
   else if (gs.status === 'waiting') setBar('idle', 'Waiting for players', 'Betting opens when the hand is dealt');
@@ -1127,7 +1147,9 @@ function renderControls(gs) {
   else if (me.folded) setBar('idle', 'You folded', 'Next hand soon');
   else if (me.allIn) setBar('idle', "You're all-in", 'Good luck');
   else if (canAct) {
-    setBar('turn', 'Your turn', toCall ? `${(allInCall ? me.chips : toCall).toLocaleString()} to call · pot ${gs.pot.toLocaleString()}` : `Check or bet · pot ${gs.pot.toLocaleString()}`);
+    state.helper = { toCall, callAmt, allInCall, pot: gs.pot, chips: me.chips, roundBet: me.roundBet || 0, canRaise };
+    setBar('turn', toCall ? `${allInCall ? 'All-in' : 'Call'} ${callAmt.toLocaleString()} to win ${(gs.pot + callAmt).toLocaleString()}` : `Check, or bet to win ${gs.pot.toLocaleString()}`, '');
+    updateHelper();
   } else {
     const who = gs.players[gs.currentPlayerIdx];
     if (who) setBar('wait', `Waiting for ${who.name}`, '', who.name);
@@ -1143,15 +1165,19 @@ function renderControls(gs) {
 
   // Raise box
   const key = `${gs.handNum}|${gs.street}|${gs.currentBet}|${me?.chips}|${canAct}`;
-  const presetDefs = [['Min', null], ['½ pot', 0.5], ['¾ pot', 0.75], ['Pot', 1], ['All-in', 'max']];
+  const preflop = gs.street === 'preflop';
+  const base = gs.currentBet > bb ? gs.currentBet : bb;
   const clampV = v => Math.max(minRaise, Math.min(maxRaise, Math.round(v)));
   const potRaise = f => gs.currentBet + f * (gs.pot + toCall);
-  const presetVals = presetDefs.map(([, f]) => f === null ? minRaise : f === 'max' ? maxRaise : clampV(potRaise(f)));
+  const presetDefs = preflop
+    ? [['2.5x', clampV(2.5 * base)], ['3x', clampV(3 * base)], ['4x', clampV(4 * base)], ['All-in', maxRaise]]
+    : [['Min', minRaise], ['½ Pot', clampV(potRaise(0.5))], ['Pot', clampV(potRaise(1))], ['All-in', maxRaise]];
 
   box.classList.toggle('off', !canRaise);
   slider.disabled = input.disabled = !canRaise;
-  $('raise-presets').innerHTML = presetDefs.map(([label], i) =>
-    `<button type="button" class="pre" data-v="${presetVals[i]}"${canRaise ? '' : ' disabled'}><span>${label}</span><b>${canRaise ? presetVals[i].toLocaleString() : '—'}</b></button>`).join('');
+  $('raise-minus').disabled = $('raise-plus').disabled = !canRaise;
+  $('raise-presets').innerHTML = presetDefs.map(([label, v]) =>
+    `<button type="button" class="pre" data-v="${v}"${canRaise ? '' : ' disabled'}><span>${label}</span><b>${canRaise ? v.toLocaleString() : '—'}</b></button>`).join('');
 
   if (canRaise) {
     slider.min = minRaise; slider.max = maxRaise;
@@ -1169,6 +1195,51 @@ function renderControls(gs) {
   }
 }
 
+// Helper line above the bar on the player's turn: stack left after calling / after the dialled raise
+function updateHelper() {
+  const h = state.helper;
+  if (!h) return;
+  const afterCall = (h.chips - h.callAmt).toLocaleString();
+  let sub = `${afterCall} behind after ${h.toCall ? 'calling' : 'checking'}`;
+  if (h.canRaise && state.raiseVal) {
+    const put = state.raiseVal - h.roundBet;
+    sub += ` · ${(h.chips - put).toLocaleString()} after ${state.raiseVal >= state.raiseMax ? 'all-in' : 'raising to ' + state.raiseVal.toLocaleString()}`;
+  }
+  $('bar-status-sub').textContent = sub;
+}
+
+function renderPreselect(show, toCall, callAmt) {
+  $('bar-acts').classList.toggle('hidden', show);
+  $('bar-pre').classList.toggle('hidden', !show);
+  $('action-bar').classList.toggle('preselect', show);
+  if (!show) { state.pre = null; return; }
+  let pre = state.pre;
+  if (pre && pre.mode === 'call' && pre.amount !== toCall) pre = state.pre = null;
+  const cf = $('pre-checkfold'), cl = $('pre-call');
+  cl.disabled = toCall <= 0;
+  $('pre-call-sub').innerHTML = toCall > 0 ? callAmt.toLocaleString() : '&nbsp;';
+  cf.classList.toggle('on', !!pre && pre.mode === 'checkfold');
+  cl.classList.toggle('on', !!pre && pre.mode === 'call' && toCall > 0);
+  cf.setAttribute('aria-pressed', cf.classList.contains('on'));
+  cl.setAttribute('aria-pressed', cl.classList.contains('on'));
+}
+
+function sendPreselect(mode) {
+  const ctx = state.preCtx || {};
+  const cur = state.pre && state.pre.mode;
+  if (cur === mode) {
+    state.pre = null;
+    state.socket.emit('preselect', { roomId: state.roomId, mode: null });
+  } else if (mode === 'checkfold') {
+    state.pre = { mode, amount: 0 };
+    state.socket.emit('preselect', { roomId: state.roomId, mode });
+  } else if (mode === 'call' && ctx.toCall > 0) {
+    state.pre = { mode, amount: ctx.toCall };
+    state.socket.emit('preselect', { roomId: state.roomId, mode, amount: ctx.toCall });
+  }
+  if (state.gameState) renderPreselect(true, ctx.toCall || 0, ctx.callAmt || 0);
+}
+
 function setRaiseValue(v) {
   const lo = state.raiseMin, hi = state.raiseMax;
   v = Math.max(lo, Math.min(hi, Math.round(v) || lo));
@@ -1177,8 +1248,9 @@ function setRaiseValue(v) {
   slider.value = v;
   slider.style.setProperty('--fill', hi > lo ? ((v - lo) / (hi - lo) * 100).toFixed(1) + '%' : '100%');
   $('raise-input').value = v;
-  $('raise-sub').textContent = v >= hi ? `to ${v.toLocaleString()} · all-in` : `to ${v.toLocaleString()}`;
+  $('raise-sub').textContent = v.toLocaleString();
   document.querySelectorAll('#raise-presets .pre').forEach(b => b.classList.toggle('on', parseInt(b.dataset.v) === v));
+  updateHelper();
 }
 
 // ─── Action sends ─────────────────────────────────────────────────
@@ -1196,9 +1268,15 @@ function bindActions() {
       slider.value = state.raiseVal;
       const lo = state.raiseMin, hi = state.raiseMax;
       slider.style.setProperty('--fill', hi > lo ? ((state.raiseVal - lo) / (hi - lo) * 100).toFixed(1) + '%' : '100%');
-      $('raise-sub').textContent = state.raiseVal >= hi ? `to ${state.raiseVal.toLocaleString()} · all-in` : `to ${state.raiseVal.toLocaleString()}`;
+      $('raise-sub').textContent = state.raiseVal.toLocaleString();
+      updateHelper();
     }
   });
+  const stepBy = d => { if (!$('btn-raise').disabled) setRaiseValue(state.raiseVal + d * (state.gameState?.bb || BIG_BLIND)); };
+  $('raise-minus').addEventListener('click', () => stepBy(-1));
+  $('raise-plus').addEventListener('click', () => stepBy(1));
+  $('pre-checkfold').addEventListener('click', () => sendPreselect('checkfold'));
+  $('pre-call').addEventListener('click', () => sendPreselect('call'));
   $('raise-input').addEventListener('blur', () => setRaiseValue(state.raiseVal));
   $('raise-presets').addEventListener('click', e => {
     const b = e.target.closest('.pre');

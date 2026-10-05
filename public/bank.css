@@ -13,12 +13,15 @@
 
 .g-grid { --bank-gap: var(--p14); }
 .bank-panel {
-  position: absolute; z-index: 9; left: 0; right: var(--rail-w); top: var(--head-h); bottom: var(--bar-h);
+  position: absolute; z-index: 9; left: var(--rail-w); right: 0; top: var(--head-h); bottom: var(--bar-row);
   display: flex; flex-direction: column; min-height: 0;
   background: linear-gradient(180deg, #1D130C, #120C08);
   border-right: 1px solid var(--line-lt); box-shadow: var(--p8) 0 var(--p24) rgba(0, 0, 0, .55);
-  transform: translateX(-102%); visibility: hidden; transition: transform .28s cubic-bezier(.2, .7, .2, 1), visibility 0s .28s;
+  transform: translateX(-105%); visibility: hidden; transition: transform .28s cubic-bezier(.2, .7, .2, 1), visibility 0s .28s;
 }
+.panel-right .bank-panel { left: 0; right: var(--rail-w); border-right: 0; border-left: 1px solid var(--line-lt); box-shadow: calc(-1 * var(--p8)) 0 var(--p24) rgba(0, 0, 0, .55); }
+#game-screen:not(.panel-right) .bank-panel { transform: translateX(105%); }
+#game-screen:not(.panel-right) .bank-panel.open, .panel-right .bank-panel.open { transform: none; }
 .bank-panel.open { transform: none; visibility: visible; transition: transform .28s cubic-bezier(.2, .7, .2, 1), visibility 0s; }
 
 .bank-head {

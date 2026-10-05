@@ -7,8 +7,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Bitter:wght@400;500;600;700&family=Libre+Baskerville:wght@700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=23">
-  <link rel="stylesheet" href="bank.css?v=1">
+  <link rel="stylesheet" href="style.css?v=24">
+  <link rel="stylesheet" href="bank.css?v=2">
 </head>
 <body>
 
@@ -98,31 +98,63 @@
     <div class="g-grid">
 
       <header class="g-head">
-        <button type="button" class="g-brand" id="btn-home" title="Back to home" aria-label="PokerPing home">
-          <span class="lockup-fallback sm"><img class="lockup-vp" src="/images/vp-logo.png" alt=""><span class="wordmark sm">Poker<em>Ping</em></span></span>
-        </button>
-        <button type="button" class="room-chip" id="room-code-btn" title="Copy invite link">
-          <span>Room</span><b id="room-code">&mdash;</b>
-          <svg class="ico"><use href="#i-copy"/></svg>
-          <span class="copy-flash">Copied</span>
-        </button>
-        <div class="g-plaque" id="g-plaque">
-          <div class="pl"><label>Blinds</label><b id="pl-blinds">10 / 20</b></div>
+        <div class="hd-left">
+          <span id="bank-slot"></span>
+          <button type="button" class="plate-btn" id="btn-sit-out" title="Sit out the next hand">Pause</button>
+        </div>
+        <div class="hd-mid">
           <div class="pl" id="pl-level-wrap"><label>Level</label><b id="pl-level">1</b></div>
-          <div class="pl" id="pl-next-wrap"><label>Next</label><b id="pl-next">&mdash;</b></div>
+          <div class="pl" id="pl-next-wrap"><label>Next level</label><b id="pl-next">&mdash;</b></div>
           <div class="pl"><label>Street</label><b id="pl-street">&mdash;</b></div>
-          <span class="pl-sep"></span>
-          <div class="pl"><label>To call</label><b id="pl-tocall">&mdash;</b></div>
-          <div class="pl"><label>Min raise</label><b id="pl-minraise">&mdash;</b></div>
+          <span class="pl-hidden"><b id="pl-tocall"></b><b id="pl-minraise"></b></span>
+        </div>
+        <div class="hd-right">
+          <button type="button" class="room-chip" id="room-code-btn" title="Copy invite link">
+            <span>Room</span><b id="room-code">&mdash;</b>
+            <svg class="ico"><use href="#i-copy"/></svg>
+            <span class="copy-flash">Copied</span>
+          </button>
+          <button id="sound-toggle" class="icon-btn" title="Toggle sound" aria-label="Toggle sound"><svg class="ico"><use href="#i-sound"/></svg></button>
+          <button type="button" class="g-brand" id="btn-home" title="Back to home" aria-label="Leave table"><img class="lockup-vp" src="/images/vp-logo.png" alt=""></button>
+          <div class="blinds-plate"><label>Blinds</label><b id="pl-blinds">10 / 20</b></div>
         </div>
       </header>
+
+      <aside class="g-rail" id="rail">
+        <div class="rail-sec rail-chat">
+          <div class="rail-h">Chat<button type="button" class="rail-flip" id="btn-panel-side" aria-label="Move panel to the right"></button></div>
+          <div id="chat-messages" class="chat-messages"></div>
+        </div>
+        <div class="rail-sec">
+          <div class="rail-h">Stickers</div>
+          <div class="sticker-grid" id="sticker-grid">
+            <button class="sticker-item" data-emoji="🔥">🔥</button><button class="sticker-item" data-emoji="💎">💎</button>
+            <button class="sticker-item" data-emoji="🤑">🤑</button><button class="sticker-item" data-emoji="💀">💀</button>
+            <button class="sticker-item" data-emoji="🍀">🍀</button><button class="sticker-item" data-emoji="👑">👑</button>
+            <button class="sticker-item" data-emoji="🎰">🎰</button><button class="sticker-item" data-emoji="🎯">🎯</button>
+            <button class="sticker-item" data-emoji="🃏">🃏</button><button class="sticker-item" data-emoji="🎲">🎲</button>
+            <button class="sticker-item" data-emoji="🏆">🏆</button><button class="sticker-item" data-emoji="😤">😤</button>
+          </div>
+        </div>
+        <div class="rail-sec">
+          <div class="rail-h">Throws</div>
+          <div class="throw-grid" id="throw-grid">
+            <button class="throw-item" data-item="💣" title="Bomb">💣</button><button class="throw-item" data-item="🍅" title="Tomato">🍅</button>
+            <button class="throw-item" data-item="💦" title="Splash">💦</button><button class="throw-item" data-item="🎉" title="Popper">🎉</button>
+          </div>
+          <div class="throw-hint" id="throw-hint">Pick one, then click a player</div>
+        </div>
+        <div class="chat-input-row">
+          <input type="text" class="chat-input" id="chat-input" placeholder="Type your message..." maxlength="120" autocomplete="off">
+          <button class="chat-send" id="chat-send" aria-label="Send message">&#x21B5;</button>
+        </div>
+        <div id="log-entries" class="log-entries" hidden></div>
+        <div id="leaderboard-entries" hidden></div>
+      </aside>
 
       <main class="g-stage" id="stage">
         <div class="stage-backdrop"></div>
         <div id="table-box" class="table-box">
-          <div class="t-rail"></div><div class="t-felt"></div><div class="t-inlay"></div>
-          <svg class="t-ping" viewBox="-160 -160 320 320" aria-hidden="true"></svg>
-          <div class="t-lamp" id="t-lamp"></div>
           <div class="t-center" id="t-center">
             <div id="pot-row" class="pot-row"></div>
             <div id="community-cards" class="community"></div>
@@ -131,6 +163,17 @@
             <div id="my-hand-label" class="hero-label"></div>
             <div id="hole-cards" class="hero-cards"></div>
           </div>
+          <div class="t-lamp" id="t-lamp"></div>
+        </div>
+        <div id="bust-panel" class="bust-panel hidden">
+          <div class="bust-title">Out of chips</div>
+          <div id="bust-balance" class="bust-balance">Bank 0</div>
+          <div class="bust-actions">
+            <button id="btn-rebuy" class="btn btn-brass sm">Rebuy 1,500</button>
+            <button id="btn-spectate" class="btn btn-ghost sm">Spectate</button>
+            <button id="btn-leave" class="btn btn-ghost sm">Leave</button>
+          </div>
+          <div id="bust-broke-msg" class="bust-broke hidden">Your bank is empty. GG.</div>
         </div>
         <div id="wait-panel" class="wait-panel hidden">
           <div class="wp-msg" id="wp-msg"><span class="pulse-dot"></span><span id="wp-text">Waiting for a second player</span></div>
@@ -168,87 +211,38 @@
       </main>
 
       <footer class="g-bar" id="action-bar">
-        <div class="bar-status" id="bar-status">
+        <div class="bar-help" id="bar-status" data-mode="idle">
           <div class="turn-ring" id="turn-ring">
             <svg viewBox="0 0 40 40"><circle class="trk" cx="20" cy="20" r="17" pathLength="100"/><circle class="val" id="my-turn-ring" cx="20" cy="20" r="17" pathLength="100"/></svg>
             <span id="my-turn-timer">&nbsp;</span>
           </div>
-          <div class="bar-status-text">
-            <b id="bar-status-main">Waiting</b>
-            <span id="bar-status-sub"></span>
-          </div>
+          <b id="bar-status-main">Waiting</b>
+          <span id="bar-status-sub"></span>
         </div>
 
-        <button id="btn-fold" class="act act-fold" disabled><span class="act-main">Fold</span><span class="act-sub">&nbsp;</span><kbd>F</kbd></button>
-        <button id="btn-check-call" class="act act-call" disabled><span class="act-main">Check</span><span class="act-sub">&nbsp;</span><kbd>C</kbd></button>
+        <div class="bar-acts" id="bar-acts">
+          <button id="btn-fold" class="act act-fold" disabled><span class="act-main">Fold</span><span class="act-sub">&nbsp;</span></button>
+          <button id="btn-check-call" class="act act-call" disabled><span class="act-main">Check</span><span class="act-sub">&nbsp;</span></button>
+          <button id="btn-raise" class="act act-raise" disabled><span class="act-main">Raise</span><span class="act-sub" id="raise-sub">&nbsp;</span></button>
+        </div>
+        <div class="bar-pre hidden" id="bar-pre">
+          <button type="button" class="act act-pre" id="pre-checkfold" aria-pressed="false"><span class="act-main">Check/Fold</span><span class="act-sub">&nbsp;</span></button>
+          <button type="button" class="act act-pre" id="pre-call" aria-pressed="false"><span class="act-main">Call</span><span class="act-sub" id="pre-call-sub">&nbsp;</span></button>
+        </div>
 
         <div class="raise-box" id="raise-box">
           <div class="raise-presets" id="raise-presets"></div>
           <div class="raise-slide">
+            <button type="button" class="step" id="raise-minus" aria-label="Decrease">&minus;</button>
             <div class="slider-wrap">
               <input id="raise-slider" type="range" class="raise-slider" min="0" max="100" value="0" disabled>
-              <div class="slider-ticks"><span id="tick-min"></span><span id="tick-max"></span></div>
             </div>
+            <button type="button" class="step" id="raise-plus" aria-label="Increase">+</button>
             <input id="raise-input" class="raise-input" type="number" inputmode="numeric" disabled aria-label="Raise to">
           </div>
+          <span class="slider-ticks"><span id="tick-min"></span><span id="tick-max"></span></span>
         </div>
-
-        <button id="btn-raise" class="act act-raise" disabled><span class="act-main">Raise</span><span class="act-sub" id="raise-sub">&nbsp;</span><kbd>R</kbd></button>
       </footer>
-
-      <aside class="g-rail" id="rail">
-        <nav class="rail-tabs" id="rail-tabs">
-          <button type="button" class="rail-tab on" data-tab="log">Log</button>
-          <button type="button" class="rail-tab" data-tab="chat">Chat<i id="chat-unread" class="unread" hidden>0</i></button>
-          <button type="button" class="rail-tab" data-tab="rank">Rank</button>
-          <button type="button" class="rail-tab" data-tab="stk">Stickers</button>
-        </nav>
-
-        <div id="bust-panel" class="bust-panel hidden">
-          <div class="bust-title">Out of chips</div>
-          <div id="bust-balance" class="bust-balance">Bank 0</div>
-          <div class="bust-actions">
-            <button id="btn-rebuy" class="btn btn-brass sm">Rebuy 1,500</button>
-            <button id="btn-spectate" class="btn btn-ghost sm">Spectate</button>
-            <button id="btn-leave" class="btn btn-ghost sm">Leave</button>
-          </div>
-          <div id="bust-broke-msg" class="bust-broke hidden">Your bank is empty. GG.</div>
-        </div>
-
-        <div class="rail-panels">
-          <section class="rail-panel on" id="tab-log">
-            <div id="log-entries" class="log-entries"></div>
-          </section>
-          <section class="rail-panel" id="tab-chat">
-            <div id="chat-messages" class="chat-messages"><div class="empty-note">No chatter yet. Say something.</div></div>
-            <div class="chat-input-row">
-              <input type="text" class="chat-input" id="chat-input" placeholder="Say something" maxlength="120" autocomplete="off">
-              <button class="btn btn-brass sm" id="chat-send">Send</button>
-            </div>
-          </section>
-          <section class="rail-panel" id="tab-rank">
-            <div id="leaderboard-entries" class="leaderboard-entries"><div class="empty-note">Loading standings</div></div>
-          </section>
-          <section class="rail-panel" id="tab-stk">
-            <div class="panel-label">Drop a sticker</div>
-            <div class="sticker-grid" id="sticker-grid">
-              <button class="sticker-item" data-emoji="🔥">🔥</button><button class="sticker-item" data-emoji="💎">💎</button>
-              <button class="sticker-item" data-emoji="🤑">🤑</button><button class="sticker-item" data-emoji="💀">💀</button>
-              <button class="sticker-item" data-emoji="🍀">🍀</button><button class="sticker-item" data-emoji="👑">👑</button>
-              <button class="sticker-item" data-emoji="🎰">🎰</button><button class="sticker-item" data-emoji="🎯">🎯</button>
-              <button class="sticker-item" data-emoji="🃏">🃏</button><button class="sticker-item" data-emoji="🎲">🎲</button>
-              <button class="sticker-item" data-emoji="🏆">🏆</button><button class="sticker-item" data-emoji="😤">😤</button>
-            </div>
-            <div class="panel-label">Throw at a player</div>
-            <p class="panel-note">Click any opponent's seat on the table, then pick something to throw.</p>
-          </section>
-        </div>
-
-        <div class="rail-foot">
-          <button id="btn-sit-out" class="btn btn-ghost sm" hidden>Sit out next hand</button>
-          <button id="sound-toggle" class="icon-btn" title="Toggle sound" aria-label="Toggle sound"><svg class="ico"><use href="#i-sound"/></svg></button>
-        </div>
-      </aside>
     </div>
 
     <div id="toasts" class="toasts"></div>
@@ -257,7 +251,7 @@
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="sound.js?v=1"></script>
-  <script src="game.js?v=23"></script>
+  <script src="game.js?v=24"></script>
   <script src="bank.js?v=2"></script>
 </body>
 </html>

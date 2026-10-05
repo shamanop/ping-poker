@@ -26,8 +26,9 @@
     const btn = document.createElement('button');
     btn.type = 'button'; btn.id = 'bank-btn'; btn.className = 'bank-chip'; btn.textContent = 'Bank';
     btn.title = 'Bank dashboard (B)';
-    const chip = $('room-code-btn');
-    head.insertBefore(btn, chip ? chip.nextSibling : head.children[1]);
+    const slot = $('bank-slot');
+    if (slot) slot.replaceWith(btn);
+    else { const chip = $('room-code-btn'); head.insertBefore(btn, chip ? chip.nextSibling : head.children[1]); }
 
     const panel = document.createElement('section');
     panel.id = 'bank-panel'; panel.className = 'bank-panel'; panel.setAttribute('aria-label', 'Bank');

@@ -1,0 +1,10 @@
+plate-rect
+room-a
+room-b
+persp-A
+persp-B
+persp-C
+bg-V3
+bg-V1
+bg-V2
+bg-V4
