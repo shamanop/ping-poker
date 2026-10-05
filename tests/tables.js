@@ -34,7 +34,8 @@ function client(label) {
 }
 function drive(c) {
   const g = c.gs;
-  if (!c.auto || !g || g.status !== 'playing' || g.currentPlayerIdx === null || !c.tid) return;
+  if (g && g.paused) c.lastSig = '';
+  if (!c.auto || !g || g.status !== 'playing' || g.paused || g.currentPlayerIdx === null || !c.tid) return;
   const me = g.players.findIndex(p => p.name === c.display);
   if (me !== g.currentPlayerIdx) return;
   const sig = `${g.handNum}:${g.street}:${g.currentBet}:${g.pot}:${me}`;
@@ -132,7 +133,7 @@ const ledgerRows = () => JSON.parse(fs.readFileSync(F.ledger, 'utf8'));
     // pause: finish hand, then hold
     [e, d] = await A.call('table_pause', { tableId: T, paused: true }, 'table_event', 'error');
     ok(e === 'table_event' && d.kind === 'paused', 'host pauses');
-    ok(await waitFor(() => A.gs.status === 'waiting' && A.gs.paused === true), 'table holds after current hand when paused');
+    ok(await waitFor(() => A.gs.paused === true), 'table holds (betting and dealing frozen) when paused');
     const hn = A.gs.handNum; await sleep(900);
     ok(A.gs.handNum === hn, 'no new hand while paused');
     await A.call('table_pause', { tableId: T, paused: false }, 'table_event', 'error');

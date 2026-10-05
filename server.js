@@ -79,6 +79,21 @@ const ledger = createLedger({
 });
 ledger.seedBank(bank);
 
+// One-time carry-over of the pre-redesign chips history (see qa/chip-snapshot/MIGRATION.md).
+// Runs only when LEGACY_IMPORT_FILE is set, or when BANK_FILE is not overridden (production); a player who already has any chips history is never touched.
+try {
+  const impFile = process.env.LEGACY_IMPORT_FILE || (process.env.BANK_FILE ? null : path.join(__dirname, 'legacy-import.json'));
+  if (impFile && fs.existsSync(impFile)) {
+    const hist = new Set(['buyin', 'rebuy', 'cashout', 'legacy-import']);
+    const have = new Set(ledger.entries().filter(e => hist.has(e.type) && e.name).map(e => bankKey(e.name)));
+    for (const r of JSON.parse(fs.readFileSync(impFile, 'utf8'))) {
+      const k = bankKey(r.name);
+      if (!k || have.has(k) || bank[k] === undefined) continue;
+      ledger.log('legacy-import', r.name, r.net, bank[k], null, null, null, { key: k, hands: r.hands || 0, biggestWin: r.biggestWin || 0, note: 'Carried over from the original chips bank' });
+    }
+  }
+} catch (e) { console.error('legacy import failed:', e.message); }
+
 // One-time safety copies before the first run that creates accounts.json
 if (!fs.existsSync(ACCOUNTS_FILE)) {
   const stamp = Date.now();
@@ -204,9 +219,9 @@ function payIn(room, name, amount, type, opts = {}) {
   return adjustBank(name, -amount, type, room, amount, meta);
 }
 function payOut(room, name, amount, opts = {}) {
-  const meta = moneyMeta(room, name, opts.key);
+  let meta = moneyMeta(room, name, opts.key);
   if (meta && opts.reason) meta.reason = opts.reason;
-  if (meta && opts.park && room.mode === 'chips') meta.park = true;
+  if (opts.park && room.mode === 'chips') meta = { ...(meta || {}), park: true };
   if (room.mode === 'play') { tables.noteRow(room, { name, type: 'cashout', amount, key: (meta && meta.key) }); return null; }
   if (room.mode === 'friends') { ledger.log('cashout', name, amount, null, 0, room.handNum, room.id, meta); return null; }
   return adjustBank(name, amount, 'cashout', room, 0, meta);
@@ -587,7 +602,7 @@ function setRoomPaused(room, next, by) {
   if (t && t.state !== 'ended') { t.state = next ? 'paused' : 'open'; t.pausedBy = next ? by : null; }
   roomLog(room, next ? `Table paused by ${by}` : 'Table resumed');
   if (next) clearTurnTimeout(room);
-  else { scheduleBotActionsIfNeeded(room); scheduleTurnTimeout(room); maybeAutoStart(room, true); }
+  else { scheduleBotActionsIfNeeded(room); scheduleTurnTimeout(room); if (!room.nextHandTimer) maybeAutoStart(room, true); }
   tables.pushLobby();
   return true;
 }
