@@ -242,6 +242,13 @@ function decideBotAction(player, toCall, room) {
   return { action: 'raise', amount: room.currentBet + room.bb * 2 };
 }
 
+function clearHandTimers(room) {
+  for (const k of ['turnTimeout', 'botTimer', 'streetTimer', 'nextHandTimer']) {
+    if (room[k]) { clearTimeout(room[k]); room[k] = null; }
+  }
+  room.turnStartedAt = null;
+}
+
 function scheduleBotActionsIfNeeded(room) {
   if (!room || room.status !== 'playing') return;
   const idx = room.actionQueue[0];
@@ -249,8 +256,12 @@ function scheduleBotActionsIfNeeded(room) {
   const player = room.players[idx];
   if (!player || !player.isBot) return;
 
-  setTimeout(() => {
+  const handNum = room.handNum;
+  if (room.botTimer) clearTimeout(room.botTimer);
+  room.botTimer = setTimeout(() => {
+    room.botTimer = null;
     if (!rooms.has(room.id)) return;
+    if (room.handNum !== handNum) return;
     if (room.actionQueue[0] !== idx) return;
     if (room.status !== 'playing') return;
     const toCall = room.currentBet - player.roundBet;
@@ -277,9 +288,11 @@ function scheduleTurnTimeout(room) {
   if (idx === undefined) return;
   if (room.players[idx]?.isBot) return; // bots self-manage
 
+  const handNum = room.handNum;
   room.turnStartedAt = Date.now();
   room.turnTimeout   = setTimeout(() => {
     if (!rooms.has(room.id)) return;
+    if (room.handNum !== handNum) return;
     if (room.actionQueue[0] !== idx) return;
     if (room.status !== 'playing') return;
     processAction(room, idx, 'fold', 0);
@@ -390,10 +403,10 @@ function postBlind(room, playerIdx, amount, label) {
 // ─── Process Action ───────────────────────────────────────────────────────────
 
 function processAction(room, playerIdx, action, amount) {
-  clearTurnTimeout(room); // always cancel pending auto-fold first
   const p = room.players[playerIdx];
   const name = p.name;
-  const toCall = room.currentBet - p.roundBet;
+  const toCall = Math.max(0, room.currentBet - p.roundBet);
+  room.lastReject = null;
 
   switch (action) {
     case 'fold': {
@@ -404,7 +417,7 @@ function processAction(room, playerIdx, action, amount) {
       break;
     }
     case 'check': {
-      if (p.roundBet !== room.currentBet) { roomLog(room, `${name} cannot check`); return false; }
+      if (p.roundBet !== room.currentBet) { roomLog(room, `${name} cannot check`); room.lastReject = 'Cannot check: call, raise or fold'; return false; }
       p.lastAction = 'CHECK';
       room.actionQueue.shift();
       roomLog(room, `${name} checks`);
@@ -420,11 +433,19 @@ function processAction(room, playerIdx, action, amount) {
       break;
     }
     case 'raise': {
+      if (!Number.isSafeInteger(amount)) { room.lastReject = 'Raise amount must be a whole number'; return false; }
       const minRaise = room.currentBet + room.bb;
-      const raiseTo  = Math.max(amount || 0, minRaise);
+      const raiseTo  = Math.max(amount, minRaise);
       const addAmt   = Math.min(raiseTo - p.roundBet, p.chips);
+      const prevBet  = room.currentBet;
       p.chips -= addAmt; p.roundBet += addAmt; p.handBet = (p.handBet || 0) + addAmt; room.pot += addAmt;
       if (p.chips === 0) p.allIn = true;
+      if (p.roundBet <= prevBet) { // short all-in that does not reach the current bet is just a call
+        p.lastAction = 'CALL';
+        room.actionQueue = room.actionQueue.filter(i => i !== playerIdx);
+        roomLog(room, `${name} calls ${addAmt} (all-in)`);
+        break;
+      }
       room.currentBet = p.roundBet;
       p.lastAction = 'RAISE';
       roomLog(room, `${name} raises to ${p.roundBet}`);
@@ -432,8 +453,9 @@ function processAction(room, playerIdx, action, amount) {
       room.actionQueue = buildActionQueue(room, nextIdx).filter(i => i !== playerIdx);
       break;
     }
-    default: return false;
+    default: room.lastReject = 'Unknown action'; return false;
   }
+  clearTurnTimeout(room); // only an accepted action cancels the pending auto-fold
 
   const remaining = room.players.filter(p => !p.folded && !p.sittingOut && p.connected);
   if (remaining.length === 1) { instantWin(room, remaining[0]); return true; }
@@ -444,9 +466,9 @@ function processAction(room, playerIdx, action, amount) {
 // ─── Instant Win ──────────────────────────────────────────────────────────────
 
 function instantWin(room, winner) {
+  if (room.nextHandTimer) return; // hand already ended
   winner.chips += room.pot;
   roomLog(room, `${winner.name} wins ${room.pot} (all others folded)`);
-  const winnerIdx = room.players.indexOf(winner);
   room.handHistory.unshift({
     handNum:  room.handNum,
     winners:  [winner.name],
@@ -459,7 +481,7 @@ function instantWin(room, winner) {
     pot: room.pot,
   });
   room.pot = 0;
-  scheduleNextHand(room, winnerIdx);
+  scheduleNextHand(room);
 }
 
 // ─── Advance Street ───────────────────────────────────────────────────────────
@@ -494,13 +516,19 @@ function advanceStreet(room) {
   room.actionQueue = buildActionQueue(room, firstIdx);
   if (room.actionQueue.length === 0) {
     broadcastGameState(room);
-    setTimeout(() => advanceStreet(room), 1500);
+    const handNum = room.handNum;
+    if (room.streetTimer) clearTimeout(room.streetTimer);
+    room.streetTimer = setTimeout(() => {
+      room.streetTimer = null;
+      if (room.status === 'playing' && room.handNum === handNum) advanceStreet(room);
+    }, 1500);
   }
 }
 
 // ─── Showdown ─────────────────────────────────────────────────────────────────
 
 function showdown(room) {
+  if (room.nextHandTimer) return; // hand already ended
   const contenders = room.players.filter(p => !p.folded && !p.sittingOut && p.connected);
   roomLog(room, '--- Showdown ---');
 
@@ -550,18 +578,27 @@ function showdown(room) {
   if (room.handHistory.length > 10) room.handHistory.pop();
   io.to(room.id).emit('showdown_result', { winners: winnerList, pot: room.pot });
   room.pot = 0;
-  scheduleNextHand(room, nextActiveIdx(room, room.dealerIdx, 1));
+  scheduleNextHand(room);
 }
 
 // ─── Schedule Next Hand ───────────────────────────────────────────────────────
 
-function scheduleNextHand(room, nextDealerIdx) {
-  clearTurnTimeout(room);
+function scheduleNextHand(room) {
+  clearHandTimers(room);
   room.status = 'waiting_next';
   broadcastGameState(room);
 
-  setTimeout(() => {
+  room.nextHandTimer = setTimeout(() => {
+    room.nextHandTimer = null;
     if (!rooms.has(room.id)) return;
+
+    // Dealer button moves clockwise to the next seat that is not busted or sitting out
+    const n0 = room.players.length;
+    let nextDealer = null;
+    for (let o = 1; o <= n0 && !nextDealer; o++) {
+      const c = room.players[(room.dealerIdx + o) % n0];
+      if (c.connected && c.chips > 0 && !c.sitOutRequest) nextDealer = c;
+    }
 
     // Remove disconnected players and busted bots; keep busted humans (rebuy option)
     room.players = room.players.filter(p => {
@@ -573,8 +610,8 @@ function scheduleNextHand(room, nextDealerIdx) {
     const active = room.players.filter(p => p.connected && p.chips > 0);
     const willPlay = active.filter(p => !p.sitOutRequest);
     if (active.length < 2 || willPlay.length < 2) {
-      // Award remaining chips back to bank
-      for (const p of room.players) {
+      // Lone player left: award remaining chips back to bank (sit-outs keep their stacks)
+      if (active.length < 2) for (const p of room.players) {
         if (!p.isBot && p.chips > 0) { adjustBank(p.name, p.chips); p.chips = 0; }
       }
       if (room.blindTimer) { clearTimeout(room.blindTimer); room.blindTimer = null; }
@@ -597,7 +634,7 @@ function scheduleNextHand(room, nextDealerIdx) {
       }
     }
 
-    room.dealerIdx = nextDealerIdx % room.players.length;
+    room.dealerIdx = Math.max(0, room.players.indexOf(nextDealer));
     room.status    = 'playing';
     startHand(room);
     broadcastGameState(room);
@@ -693,18 +730,25 @@ function generateRoomId() {
 io.on('connection', socket => {
   console.log(`Socket connected: ${socket.id}`);
 
+  // Handlers always get an object payload and can never take the process down.
+  const on = (ev, fn) => socket.on(ev, (payload, ...rest) => {
+    try { fn(payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : {}, ...rest); }
+    catch (err) { console.error(`handler ${ev} failed:`, err); socket.emit('error', { message: 'Server error' }); }
+  });
+  const cleanNameOf = v => (typeof v === 'string' ? v.trim().slice(0, 24) : '');
+
   // ── Bank queries ──────────────────────────────────────────────────────────
-  socket.on('check_balance', ({ name } = {}) => {
-    if (!name || typeof name !== 'string') return;
-    socket.emit('balance_data', { balance: getBalance(name.trim()) });
+  on('check_balance', ({ name } = {}) => {
+    if (!cleanNameOf(name)) return;
+    socket.emit('balance_data', { balance: getBalance(cleanNameOf(name)) });
   });
 
-  socket.on('get_leaderboard', () => {
+  on('get_leaderboard', () => {
     socket.emit('leaderboard_data', { entries: getLeaderboard() });
   });
 
   // ── join_game ─────────────────────────────────────────────────────────────
-  socket.on('join_game', ({ name, avatar, profilePic, password } = {}) => {
+  on('join_game', ({ name, avatar, profilePic, password } = {}) => {
     if (password !== ROOM_PASSWORD) {
       socket.emit('error', { message: 'Incorrect password' }); return;
     }
@@ -717,7 +761,7 @@ io.on('connection', socket => {
       socket.emit('error', { message: 'Table is full (max 8 players)' }); return;
     }
 
-    const cleanName = (name || `Player ${room.players.length + 1}`).trim();
+    const cleanName = cleanNameOf(name) || `Player ${room.players.length + 1}`;
     const buyIn = Math.min(STARTING_CHIPS, getBalance(cleanName));
     if (buyIn < BIG_BLIND) { socket.emit('error', { message: 'Insufficient bank balance.' }); return; }
 
@@ -734,18 +778,21 @@ io.on('connection', socket => {
   });
 
   // ── start_game ────────────────────────────────────────────────────────────
-  socket.on('start_game', ({ roomId, blindInterval } = {}) => {
+  on('start_game', ({ roomId, blindInterval } = {}) => {
     const room = rooms.get(roomId);
     if (!room)                               { socket.emit('error', { message: 'Room not found' }); return; }
     if (room.hostSocketId !== socket.id)     { socket.emit('error', { message: 'Only host can start' }); return; }
     if (room.players.length < 2)             { socket.emit('error', { message: 'Need 2+ players' }); return; }
-    if (room.status === 'playing')           { socket.emit('error', { message: 'Game already started' }); return; }
+    if (room.status === 'playing' || room.status === 'waiting_next') { socket.emit('error', { message: 'Game already started' }); return; }
+    if (room.players.filter(p => p.connected && p.chips > 0 && !p.sitOutRequest).length < 2) {
+      socket.emit('error', { message: 'Need 2+ players with chips to start' }); return;
+    }
 
     room.status = 'playing';
 
-    if (blindInterval && blindInterval > 0) {
+    if (Number.isFinite(blindInterval) && blindInterval > 0) {
       room.blindsEnabled    = true;
-      room.blindIntervalMs  = Math.max(60000, Number(blindInterval)); // min 1 minute
+      room.blindIntervalMs  = Math.min(6 * 3600000, Math.max(60000, blindInterval)); // 1 minute .. 6 hours
       room.blindLevelStartAt = Date.now();
       scheduleBlindIncrease(room);
     }
@@ -758,11 +805,11 @@ io.on('connection', socket => {
   });
 
   // ── create_demo ───────────────────────────────────────────────────────────
-  socket.on('create_demo', ({ name, avatar, profilePic } = {}) => {
+  on('create_demo', ({ name, avatar, profilePic } = {}) => {
     let roomId;
     do { roomId = generateRoomId(); } while (rooms.has(roomId));
 
-    const cleanName = (name || 'You').trim();
+    const cleanName = cleanNameOf(name) || 'You';
     const buyIn  = Math.min(STARTING_CHIPS, getBalance(cleanName));
     if (buyIn < BIG_BLIND) { socket.emit('error', { message: 'Insufficient bank balance.' }); return; }
     const room  = makeRoom(roomId, socket.id);
@@ -790,14 +837,16 @@ io.on('connection', socket => {
   });
 
   // ── player_action ─────────────────────────────────────────────────────────
-  socket.on('player_action', ({ roomId, action, amount } = {}) => {
+  on('player_action', ({ roomId, action, amount } = {}) => {
     const room = rooms.get(roomId);
-    if (!room || room.status !== 'playing') return;
+    if (!room) { socket.emit('error', { message: 'Room not found' }); return; }
+    if (room.status !== 'playing') { socket.emit('error', { message: 'No hand in progress' }); return; }
     const playerIdx = room.players.findIndex(p => p.socketId === socket.id);
     if (playerIdx === -1) return;
     if (room.actionQueue[0] !== playerIdx) { socket.emit('error', { message: "Not your turn" }); return; }
 
     const ok = processAction(room, playerIdx, action, amount);
+    if (!ok) socket.emit('error', { message: room.lastReject || 'Invalid action' });
     if (ok) {
       broadcastGameState(room);
       emitPrivateCards(room);
@@ -807,13 +856,17 @@ io.on('connection', socket => {
   });
 
   // ── rebuy ─────────────────────────────────────────────────────────────────
-  socket.on('rebuy', ({ roomId } = {}) => {
+  on('rebuy', ({ roomId } = {}) => {
     const room = rooms.get(roomId);
     if (!room) return;
     const playerIdx = room.players.findIndex(p => p.socketId === socket.id);
     if (playerIdx === -1) return;
     const player = room.players[playerIdx];
-    if (!player.sittingOut || player.chips > 0) return;
+    if (player.chips > 0) { socket.emit('error', { message: 'You still have chips' }); return; }
+    // all-in players of the live hand still hold cards and cannot rebuy yet
+    if (room.status === 'playing' && player.cards.length > 0 && !player.sittingOut) {
+      socket.emit('error', { message: 'Wait for the hand to finish' }); return;
+    }
 
     const balance = getBalance(player.name);
     const buyIn   = Math.min(STARTING_CHIPS, balance);
@@ -822,13 +875,14 @@ io.on('connection', socket => {
     const newBalance = adjustBank(player.name, -buyIn);
     player.chips     = buyIn;
     player.chipsBought = (player.chipsBought || 0) + buyIn;
-    player.sittingOut = false;
+    // no cards this hand: stay out until the next deal (startHand clears this)
+    if (room.status === 'playing') player.sittingOut = true;
     socket.emit('balance_update', { balance: newBalance });
     broadcastGameState(room);
   });
 
   // ── drop_sticker ──────────────────────────────────────────────────────────
-  socket.on('drop_sticker', ({ roomId, emoji } = {}) => {
+  on('drop_sticker', ({ roomId, emoji } = {}) => {
     const room = rooms.get(roomId);
     if (!room) return;
     const sender = room.players.find(p => p.socketId === socket.id);
@@ -837,7 +891,7 @@ io.on('connection', socket => {
   });
 
   // ── throw_item ────────────────────────────────────────────────────────────
-  socket.on('throw_item', ({ roomId, targetIdx, item } = {}) => {
+  on('throw_item', ({ roomId, targetIdx, item } = {}) => {
     const room = rooms.get(roomId);
     if (!room) return;
     const fromIdx = room.players.findIndex(p => p.socketId === socket.id);
@@ -849,7 +903,7 @@ io.on('connection', socket => {
   });
 
   // ── chat_message ──────────────────────────────────────────────────────────
-  socket.on('chat_message', ({ roomId, text } = {}) => {
+  on('chat_message', ({ roomId, text } = {}) => {
     const room = rooms.get(roomId);
     if (!room) return;
     const sender = room.players.find(p => p.socketId === socket.id);
@@ -860,7 +914,7 @@ io.on('connection', socket => {
   });
 
   // ── sit_out ────────────────────────────────────────────────────────────────
-  socket.on('sit_out', ({ roomId } = {}) => {
+  on('sit_out', ({ roomId } = {}) => {
     const room = rooms.get(roomId);
     if (!room) return;
     const player = room.players.find(p => p.socketId === socket.id);
@@ -889,6 +943,9 @@ io.on('connection', socket => {
 
       player.connected = false;
       roomLog(room, `${player.name} disconnected`);
+      if (room.hostSocketId === socket.id) {
+        room.hostSocketId = room.players.find(p => p !== player && p.connected && !p.isBot)?.socketId || null;
+      }
 
       if (room.status === 'playing') {
         if (room.actionQueue[0] === playerIdx) {
@@ -898,14 +955,16 @@ io.on('connection', socket => {
           room.actionQueue = room.actionQueue.filter(i => i !== playerIdx);
           const remaining = room.players.filter(p => !p.folded && !p.sittingOut && p.connected);
           if (remaining.length === 1) instantWin(room, remaining[0]);
-          else if (remaining.length === 0) room.status = 'waiting';
+          else if (remaining.length === 0) { clearHandTimers(room); room.status = 'waiting'; }
         }
+        broadcastRoomUpdate(room);
         broadcastGameState(room);
         scheduleBotActionsIfNeeded(room);
         scheduleTurnTimeout(room);
       } else {
         room.players.splice(playerIdx, 1);
         if (room.players.length === 0) {
+          clearHandTimers(room);
           if (roomId === ROOM_ID) {
             if (room.blindTimer) clearTimeout(room.blindTimer);
             rooms.set(ROOM_ID, makeRoom(ROOM_ID, null));
@@ -913,7 +972,6 @@ io.on('connection', socket => {
             rooms.delete(roomId);
           }
         } else {
-          if (room.hostSocketId === socket.id) room.hostSocketId = room.players[0]?.socketId || null;
           broadcastRoomUpdate(room);
         }
       }
