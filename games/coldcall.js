@@ -9,6 +9,20 @@ const RATE_MS = 150;
 const HISTORY_MAX = 20;
 const RTP_LABEL = '98% (long-run, 200M spin sim, +-0.1)';
 
+// QA hook: forces a bonus or a big win so the front end can be driven by a test. It runs ONLY when the server process was started
+// with COLDCALL_TEST=1 (and NODE_ENV is not 'production'); otherwise `force` in a spin payload is ignored. Forced rounds are paid and
+// charged through the normal wallet path, with real engine rounds (the engine's own reroll-until-trigger, no hand-made scripts).
+const FORCES = ['rotary', 'quote', 'big'];   // ('both' is not offered: a natural double trigger is 1 in ~157,000 spins, too slow to reroll)
+const BIG_FORCE_X = 25;           // 'big' = reroll plain spins until the round wins at least this many x bet (the 'huge' tier)
+const BIG_FORCE_TRIES = 400000;
+const testHookOn = () => process.env.COLDCALL_TEST === '1' && process.env.NODE_ENV !== 'production';
+function resolveForced(rng, force) {
+  if (force !== 'big') return Eng.resolveRound(rng, null, { force });
+  let r;
+  for (let i = 0; i < BIG_FORCE_TRIES; i++) { r = Eng.resolveRound(rng, null); if (r.winX >= BIG_FORCE_X) break; }
+  return r;
+}
+
 function cryptoRng() {
   return () => crypto.randomBytes(6).readUIntBE(0, 6) / 281474976710656; // 48-bit uniform in [0,1)
 }
@@ -39,6 +53,7 @@ module.exports = {
         betLevels: BET_LEVELS, modes: ['play', 'ledger'], rtp: RTP_LABEL, maxWinX: Eng.MAX_WIN_X,
         buyCostX: { rotary: Eng.CFG.buyCost.rotary / 10, quote: Eng.CFG.buyCost.quote / 10 },
         wallet: w, balances: w, bets: BET_LEVELS,
+        ...(testHookOn() ? { qaHook: true } : {}),
       });
     },
     history(socket) {
@@ -57,7 +72,8 @@ module.exports = {
       const key = keyOf(socket);
       const rng = module.exports.rng || cryptoRng();
       const roundId = crypto.randomBytes(6).toString('hex');
-      const r = Eng.resolveRound(rng, buy);                // pure; nothing touched yet
+      const force = testHookOn() && buy === null && FORCES.includes(p.force) ? p.force : null;
+      const r = force ? resolveForced(rng, force) : Eng.resolveRound(rng, buy);   // pure; nothing touched yet
       let cost, totalWin;
       try { cost = Eng.cents(r.costTenths, p.bet); totalWin = Eng.cents(r.winTenths, p.bet); } catch (e) { return err(socket, 'bad_request', 'Could not place that bet'); }
       const ref = { game: 'coldcall', round: roundId };
@@ -74,6 +90,7 @@ module.exports = {
         roundId, bet: p.bet, cost, mode: p.mode, buyBonus: buy,
         script: r.script, costTenths: r.costTenths, totalWinTenths: r.winTenths, totalWinMult: r.winX, totalWin, tier: r.tier, maxed: r.capped,
         wallet: w, balances: w,
+        ...(force ? { forced: force } : {}),
       });
     },
   },

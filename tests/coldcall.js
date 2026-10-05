@@ -406,6 +406,73 @@ const PAY = payOf(E.CFG);
     a.send('wallet_get'); assert.strictEqual(last(a, 'wallet').play, s.wallet.get('ann').play);
   });
 
+  // ---------------------------------------------------------------- QA hook (COLDCALL_TEST)
+  const withEnv = async (vars, fn) => {
+    const old = {}; for (const k of Object.keys(vars)) { old[k] = process.env[k]; if (vars[k] == null) delete process.env[k]; else process.env[k] = vars[k]; }
+    try { await fn(); } finally { for (const k of Object.keys(old)) { if (old[k] === undefined) delete process.env[k]; else process.env[k] = old[k]; } }
+  };
+  const FORCE_CASES = ['rotary', 'quote', 'big'];
+
+  await test('coldcall QA hook: without COLDCALL_TEST the force field is ignored (same rounds as an unforced mirror, no qaHook, no forced flag)', async () => {
+    await withEnv({ COLDCALL_TEST: null, NODE_ENV: null }, async () => {
+      const s = setup({ rng: E.rngFrom(77) }); const a = s.sock('ann'); const mirror = E.rngFrom(77);
+      a.send('g:coldcall:state'); assert.strictEqual(last(a, 'g:coldcall:state').qaHook, undefined);
+      for (let i = 0; i < 24; i++) {
+        s.clock.advance(200); a.send('g:coldcall:spin', { bet: 100, mode: 'play', force: FORCE_CASES[i % 3]  });
+        const r = last(a, 'g:coldcall:result'), m = E.resolveRound(mirror, null);
+        assert.strictEqual(r.forced, undefined); assert.strictEqual(r.totalWin, m.winTenths * 10);
+        assert.deepStrictEqual(r.script, m.script);
+      }
+    });
+  });
+
+  await test('coldcall QA hook: COLDCALL_TEST=1 is not enough in production (NODE_ENV=production keeps it off), and COLDCALL_TEST=0/true/yes do nothing', async () => {
+    for (const vars of [{ COLDCALL_TEST: '1', NODE_ENV: 'production' }, { COLDCALL_TEST: '0', NODE_ENV: null }, { COLDCALL_TEST: 'true', NODE_ENV: null }, { COLDCALL_TEST: 'yes', NODE_ENV: null }]) {
+      await withEnv(vars, async () => {
+        const s = setup({ rng: E.rngFrom(78) }); const a = s.sock('ann'); const mirror = E.rngFrom(78);
+        a.send('g:coldcall:state'); assert.strictEqual(last(a, 'g:coldcall:state').qaHook, undefined, JSON.stringify(vars));
+        for (const f of FORCE_CASES) {
+          s.clock.advance(200); a.send('g:coldcall:spin', { bet: 100, mode: 'play', force: f });
+          const r = last(a, 'g:coldcall:result'), m = E.resolveRound(mirror, null);
+          assert.strictEqual(r.forced, undefined, JSON.stringify(vars)); assert.deepStrictEqual(r.script, m.script);
+        }
+      });
+    }
+  });
+
+  await test('coldcall QA hook: with COLDCALL_TEST=1 each force plays that feature or a big win, through the normal spend/credit path', async () => {
+    await withEnv({ COLDCALL_TEST: '1', NODE_ENV: null }, async () => {
+      const s = setup({ rng: E.rngFrom(79) }); const a = s.sock('ann'); let bal = 1000000;
+      a.send('g:coldcall:state'); assert.strictEqual(last(a, 'g:coldcall:state').qaHook, true);
+      for (const f of FORCE_CASES) for (const mode of ['play', 'ledger']) {
+        s.clock.advance(200); a.send('g:coldcall:spin', { bet: 200, mode, force: f });
+        const r = last(a, 'g:coldcall:result'); assert.strictEqual(r.forced, f); assert.strictEqual(r.buyBonus, null);
+        const kinds = r.script.features.map((x) => x.kind);
+        if (f === 'rotary') assert.ok(kinds.includes('rotary'));
+        if (f === 'quote') assert.ok(kinds.includes('quote'));
+        if (f === 'big') assert.ok(r.totalWinMult >= 25, 'big win ' + r.totalWinMult);
+        assert.strictEqual(r.cost, 200); assert.strictEqual(r.totalWin, r.totalWinTenths * 200 / 10);
+        const w = s.wallet.get('ann');
+        if (mode === 'play') { bal += -r.cost + r.totalWin; assert.strictEqual(w.play, bal); assert.strictEqual(r.wallet.play, bal); }
+        else assert.strictEqual(w.ledgerNet, r.wallet.ledgerNet);
+      }
+      assert.strictEqual(s.wallet.stats('ann').coldcall.play.rounds, 3);
+    });
+  });
+
+  await test('coldcall QA hook: a force is dropped when the spin is a buy, and a refused spin (no funds) still moves nothing', async () => {
+    await withEnv({ COLDCALL_TEST: '1', NODE_ENV: null }, async () => {
+      const s = setup({ rng: E.rngFrom(80) }); const a = s.sock('ann');
+      s.clock.advance(200); a.send('g:coldcall:spin', { bet: 100, mode: 'play', buyBonus: 'quote', force: 'rotary' });
+      const r = last(a, 'g:coldcall:result'); assert.strictEqual(r.forced, undefined); assert.strictEqual(r.script.features[0].kind, 'quote'); assert.strictEqual(r.cost, E.CFG.buyCost.quote * 10);
+      const b = s.sock('bo'); s.wallet.spend('bo', 'play', 999990, { game: 'coldcall' });
+      s.clock.advance(200); b.send('g:coldcall:spin', { bet: 100, mode: 'play', force: 'big' });
+      assert.strictEqual(last(b, 'error').code, 'funds'); assert.strictEqual(s.wallet.get('bo').play, 10);
+      s.clock.advance(200); b.send('g:coldcall:spin', { bet: 100, mode: 'play', force: 'bogus' }); // unknown force: normal paid spin path (here: funds)
+      assert.strictEqual(last(b, 'error').code, 'funds');
+    });
+  });
+
   console.log(pass + ' passed' + (process.exitCode ? ', with failures' : ''));
   fs.rmSync(tmp, { recursive: true, force: true });
 })();

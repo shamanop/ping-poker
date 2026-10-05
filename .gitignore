@@ -10,3 +10,4 @@ ledger.json.tmp
 qa/bank/*-tmp-*.json
 qa/bank/capture.log
 stacks.json
+_scratch/

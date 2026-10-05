@@ -1,0 +1,19 @@
+{
+  "_note": "ONE swap point for art. Replace files (same names) or edit paths here; no code change. Paths are relative to this file. Never put text in an image.",
+  "symbols": {
+    "cash": "img/cash.svg",
+    "pile": "img/pile.svg",
+    "rx": "img/rx.svg",
+    "headset": "img/headset.svg",
+    "can": "img/can.svg",
+    "mug": "img/mug.svg",
+    "note": "img/note.svg",
+    "ball": "img/ball.svg",
+    "closer": "img/closer.svg",
+    "phone": "img/phone.svg",
+    "quote": "img/quote.svg",
+    "upsell": "img/upsell.svg"
+  },
+  "hero": { "file": "img/hero.svg", "mouth": { "x": 0.5, "y": 0.3 } },
+  "background": { "file": "img/bg.svg" }
+}
