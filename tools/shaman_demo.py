@@ -85,7 +85,7 @@ def main():
                     except Exception:
                         end = False
                     strip(f'round {rnd}')
-                    pg.screenshot(path=f'{OUT}/r{rnd}-{n:03d}.png'); n += 1; shots += 1
+                    pg.screenshot(path=f'{OUT}/r{rnd}-{n:03d}.png'); n += 1; shots += 1; print('saved', shots, flush=True)
                     if end:
                         pg.wait_for_timeout(600); strip(f'round {rnd} FINAL'); pg.screenshot(path=f'{OUT}/r{rnd}-final.png')
                         f.evaluate("(() => { const sc = document.querySelector('#ov .scrim'); sc && sc._done && sc._done('x'); })()")

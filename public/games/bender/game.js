@@ -94,7 +94,22 @@
     const el = document.createElement('div'); el.className = 'cell'; el.dataset.id = cell.id;
     const img = document.createElement('img'); img.src = `assets/img/${cell.s}.webp`; img.alt = ''; el.appendChild(img);
     setMult(el, cell); el.classList.toggle('stick', !!cell.stick);
-    el.style.transform = tf(c, r); cellsEl.appendChild(el); els.set(cell.id, el); return el;
+    el.style.transform = tf(c, r); cellsEl.appendChild(el); els.set(cell.id, el);
+    if (cell.stick && stage.classList.contains('bonus')) lockIn(el, c, r);
+    return el;
+  }
+  function lockIn(el, c, r) {
+    setTimeout(() => {
+      if (!el.isConnected) return;
+      el.classList.add('lockin'); setTimeout(() => el.classList.remove('lockin'), 700);
+      FX.ring(...cellPt(c, r), { n: 2, r1: 190 }); FX.burst(...cellPt(c, r), { n: 10, speed: 420, size: 12, cols: SYMCOL.W, g: 300 });
+      FX.shake(7, 220);
+    }, 520);
+  }
+  function votedStamp() {
+    const d = document.createElement('div'); d.className = 'votedstamp'; d.innerHTML = '<b>COUNTED</b><i>100% LEGIT</i>'; stage.appendChild(d);
+    anim(d, [{ transform: 'translate(-50%,-50%) scale(3) rotate(-18deg)', opacity: 0 }, { transform: 'translate(-50%,-50%) scale(.9) rotate(-9deg)', opacity: 1, offset: .22 }, { transform: 'translate(-50%,-50%) scale(1) rotate(-9deg)', opacity: 1, offset: .3 }, { transform: 'translate(-50%,-50%) scale(1) rotate(-9deg)', opacity: 1, offset: .85 }, { transform: 'translate(-50%,-50%) scale(1.1) rotate(-9deg)', opacity: 0 }], { duration: 2400, easing: 'ease-out' }).then(() => d.remove());
+    setTimeout(() => FX.shake(16, 380), 480);
   }
   function reconcile(grid) {
     const keep = new Set();
@@ -268,6 +283,13 @@
       const el = els.get(cur[g.c][g.r].id); if (!el) continue;
       const m = el.querySelector('.mult'); if (m) m.textContent = g.to + 'x'; el.classList.toggle('big', g.to >= 10);
       SFX.grow(); FX.burst(...cellPt(g.c, g.r), { n: 14, speed: 640, size: 16, cols: SYMCOL.W });
+      if (isBonus) {
+        FX.ring(...cellPt(g.c, g.r), { n: 3, r1: 260, w: 18 });
+        const k = step.clusters.find((q) => q.cells.some(([cc, rr]) => cc === g.c && rr === g.r));
+        if (k) for (const [cc, rr] of k.cells.filter(([cc, rr]) => cc !== g.c || rr !== g.r).slice(0, 7)) FX.lightning([cellPt(g.c, g.r), cellPt(cc, rr)], { w: 6, jit: 12 });
+        floatAt(Math.min(HOLE.w - 100, Math.max(100, (g.c + .5) * PX)), (g.r + .5) * PY - 40, `<b>${g.from}x \u2192 ${g.to}x</b>`);
+        FX.flash(90, '#FFE9A8', 0.35);
+      }
       anim(el.querySelector('img'), [{ transform: 'scale(1)' }, { transform: 'scale(1.5)', offset: .35 }, { transform: 'scale(1)' }], { duration: 480, easing: 'ease-out' });
       anim(m, [{ transform: 'translate(-50%,-50%) scale(1)' }, { transform: 'translate(-50%,-50%) scale(1.7)', offset: .35 }, { transform: 'translate(-50%,-50%) scale(1)' }], { duration: 480 });
     }
@@ -318,7 +340,7 @@
 
   async function bonusIntro(kind, spins) {
     const Ls = kind === 'landslide';
-    SFX.sting(); FX.confetti(70); FX.cannon(-1, 40); FX.cannon(1, 40); pose('shock', 3000); say('bonusStart');
+    SFX.sting(); FX.ballots(90); FX.ring(540, 760, { n: 3, r1: 520, w: 22 }); pose('shock', 3000); say('bonusStart');
     const p = modal(`<div class="scene"><img class="ttl" src="assets/img/title_stack.webp" alt="">
       <h2 ${Ls ? 'class="sm"' : ''}>${Ls ? 'Landslide' : 'Recount'}</h2><h3><b class="n">${spins}</b> free spins</h3>
       <p>${Ls ? 'A wild is already planted. Wilds stick and double every time they win.' : 'Wilds stick to the board and double every time they win. Dump & Count boxes add spins.'}</p>
@@ -522,16 +544,16 @@
       if (sp.retrigger) {
         totalSpins += sp.retrigger; rib();
         for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) if (sp.final[c][r].s === 'S') els.get(sp.final[c][r].id)?.classList.add('tease');
-        SFX.scatter(sp.scatters); SFX.fanfare(); SFX.slideWhistle(true, 0.2); FX.confetti(90); FX.shake(20, 600); FX.flash(120, '#FFE9A8', 0.6); pose('cheer', 1800);
+        SFX.scatter(sp.scatters); SFX.fanfare(); SFX.slideWhistle(true, 0.2); FX.ballots(60); for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) if (sp.final[c][r].s === 'S') FX.ring(...cellPt(c, r), { n: 2, r1: 200 }); FX.shake(20, 600); FX.flash(120, '#FFE9A8', 0.6); pose('cheer', 1800);
         stamp(`+${sp.retrigger} SPINS`, 'retrig', 1500);
         await wait(1500); clearFx();
       }
       await wait(160);
     }
     const t = tierOf(res.win);
-    SFX.fanfare(); SFX.cheer(t ? t.lvl : 2); SFX.clink(2); FX.confetti(90); FX.rain(40); FX.cannon(-1, 40); FX.cannon(1, 40); pose('cheer', 5000, { erupt: true }); say('bonusEnd');
+    SFX.fanfare(); SFX.cheer(t ? t.lvl : 2); SFX.clink(2); FX.ballots(120); FX.ring(540, 800, { n: 3, r1: 600, w: 26 }); pose('cheer', 5000, { erupt: true }); say('bonusEnd'); votedStamp();
     const amt = Math.round(res.win * b);
-    if (!juiceWin(res.win, amt, !!res.maxed) && PJ && amt > 0) setTimeout(() => PJ.winCelebration('nice', $('board'), amt), 250);
+    { const jt = juiceTier(res.win, !!res.maxed); if (PJ && (jt === 'big' || jt === 'mega' || jt === 'jackpot')) PJ.screenShake(jt === 'big' ? 0.7 : 1.2, 450); }
     const p = modal(`<div class="scene out"><img class="ttl" src="assets/img/title_stack.webp" alt="">
       ${t ? `<img class="banner" src="assets/img/banner_${t.img}.webp" alt="${t.n}">` : `<h2 class="sm">${name} done</h2>`}
       <div class="big" id="sumAmt">0</div><p>${xFmt(res.win)}x your bet${res.maxed ? ' (max win)' : ''}</p>

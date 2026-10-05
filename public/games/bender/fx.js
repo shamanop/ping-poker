@@ -16,11 +16,12 @@ const FX = (() => {
     let ps = [], raf = 0, last = 0;
     cv.style.display = 'none'; // idle canvases are expensive to composite under the shell
     function frame(now) {
-      const dt = Math.min((now - last) / 1000, 0.05); last = now;
+      const dt = Math.max(0, Math.min((now - last) / 1000, 0.05)); last = now;
       g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, cv.width, cv.height); g.setTransform(0.5, 0, 0, 0.5, 0, 0);
       ps = ps.filter((p) => (p.life -= dt) > 0 && p.y < cv.height * 2 + 180);
       for (const p of ps) {
         if (p.shape === 'bolt') { drawBolt(g, p); continue; }
+        if (p.shape === 'ring') { const t = Math.min(1, Math.max(0, 1 - p.life / p.dur)); g.save(); g.globalAlpha = Math.max(0, 1 - t); g.strokeStyle = p.c; g.lineWidth = p.w * (1 - t) + 2; g.beginPath(); g.arc(p.x, p.y, p.r0 + (p.r1 - p.r0) * (1 - Math.pow(1 - t, 3)), 0, 7); g.stroke(); g.restore(); continue; }
         p.vy += p.g * dt; p.vx *= 1 - p.drag * dt; p.vy *= 1 - p.drag * dt * 0.5;
         p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vr * dt;
         g.save(); g.translate(p.x, p.y); g.rotate(p.rot);
@@ -115,5 +116,16 @@ const FX = (() => {
     d.className = 'flash'; d.style.background = color; stage.appendChild(d);
     d.animate([{ opacity: peak }, { opacity: 0 }], { duration: ms, easing: 'ease-out' }).finished.then(() => d.remove(), () => d.remove());
   }
-  return { burst, radial, foam, ember, lightning, confetti, cannon, shake, rain, eruption, flash };
+  // expanding gold shockwave rings (bonus lock-in, wild growth, retrigger)
+  function ring(x, y, o = {}) {
+    if (reduce) return;
+    const n = o.n || 2;
+    for (let i = 0; i < n; i++) front.add({ shape: 'ring', x, y, r0: o.r0 || 20, r1: (o.r1 || 170) * (1 + i * 0.45), w: o.w || 14, c: o.c || (i % 2 ? '#FFF4CF' : '#F5B942'), life: (o.dur || 0.55) + i * 0.12, dur: (o.dur || 0.55) + i * 0.12, vx: 0, vy: 0, g: 0, drag: 0, rot: 0, vr: 0, size: 0 });
+  }
+  // ballot-only downpour with paper flutter: the bonus's own confetti (no coins, no foil)
+  function ballots(n) {
+    n = cap(back, Math.round(n * (reduce ? 0.35 : 1)));
+    for (let i = 0; i < n; i++) back.add({ x: rnd(0, 1080), y: rnd(-700, -20), vx: rnd(-90, 90), vy: rnd(120, 360), g: 240, drag: 0.8, life: rnd(3, 5), size: rnd(16, 28), rot: rnd(0, 6), vr: rnd(-3, 3), c: '#FDFBF7', shape: 'ballot' });
+  }
+  return { burst, radial, foam, ember, lightning, confetti, cannon, shake, rain, eruption, flash, ring, ballots };
 })();
