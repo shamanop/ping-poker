@@ -31,7 +31,7 @@ function createSocial({ io, accounts, now = Date.now } = {}) {
     const ev = { id: ++feedSeq, kind, name: accounts.displayOf(key), ts: t, ...data };
     feed.unshift(ev);
     if (feed.length > FEED_MAX) feed.length = FEED_MAX;
-    for (const s of sockets()) s.emit('social:feed', { event: ev });
+    for (const s of sockets()) s.emit('social:feed', { event: ev, now: t });
     return true;
   }
   const feedView = () => feed.map((e) => ({ ...e }));
@@ -138,10 +138,10 @@ function createSocial({ io, accounts, now = Date.now } = {}) {
       socket.emit('bonus:claimed', r.ok ? { ok: true, amountCents: r.amountCents, streak: r.streak, day: r.day, wallet: wallet.get(key) } : { ok: false, code: r.code });
       socket.emit('bonus:status', bonusView(r));
     }));
-    socket.on('social:feed', () => socket.emit('social:feed', { list: feedView() }));
+    socket.on('social:feed', () => socket.emit('social:feed', { list: feedView(), now: now() }));
     socket.on('account:stats', guard((key) => socket.emit('account:stats', statsView(key))));
   }
-  if (io && typeof io.on === 'function') io.on('connection', (s) => { onConnection(s); try { s.emit('social:feed', { list: feedView() }); } catch (e) { /* best effort */ } });
+  if (io && typeof io.on === 'function') io.on('connection', (s) => { onConnection(s); try { s.emit('social:feed', { list: feedView(), now: now() }); } catch (e) { /* best effort */ } });
 
   return { setWallet: (w) => { wallet = w; }, onSpin, onHandEnd, onConnection, onJoin, feedView, BONUS_DAYS, bonusInfo, claimBonus, statsView, broadcastBigWin, levelOf };
 }

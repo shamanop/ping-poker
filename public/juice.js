@@ -461,6 +461,65 @@
     return promise;
   };
 
+
+  // 7-day streak calendar. info = { day 1..7, streak, available, schedule:[cents x7] }
+  var calOpen = null;
+  PJ.streakCalendar = function (info, o) {
+    o = o || {}; info = info || {};
+    if (calOpen) return calOpen.promise;
+    var sched = Array.isArray(info.schedule) && info.schedule.length === 7 ? info.schedule : [10000, 12500, 15000, 20000, 25000, 35000, 100000];
+    var day = Math.min(7, Math.max(1, info.day | 0 || 1)), streak = Math.max(1, info.streak | 0 || day), avail = !!info.available;
+    var m = document.createElement('div');
+    m.className = 'pj-modal'; m.setAttribute('role', 'dialog'); m.setAttribute('aria-modal', 'true'); m.setAttribute('aria-label', 'Daily streak calendar');
+    var tiles = '';
+    for (var i = 1; i <= 7; i++) {
+      var st = i < day || (i === day && !avail) ? 'done' : (i === day ? 'today' : 'future');
+      tiles += '<div class="pj-day ' + st + (i === 7 ? ' jackpot' : '') + '" data-day="' + i + '">' +
+        '<div class="dn">DAY ' + i + '</div>' +
+        (i === 7 ? '<img class="art" alt="" src="' + stickerUrl('vp-charm') + '"><div class="jp">JACKPOT</div>' : '') +
+        '<div class="da">' + money(sched[i - 1]) + '</div>' +
+        '<div class="stamp">CLAIMED</div></div>';
+    }
+    m.innerHTML = '<div class="pj-card pj-cal"><div class="kick">DAY <b class="cn">' + day + '</b> OF 7</div>' +
+      '<div class="pj-cal-streak"><span class="flame"></span></div>' +
+      '<div class="pj-days">' + tiles + '</div>' +
+      '<p class="pj-note">' + (avail ? 'Claim today to keep the streak alive. Miss a day and it resets to Day 1.' : 'Claimed. Come back tomorrow for Day ' + (day === 7 ? 1 : day + 1) + '.') + '</p>' +
+      '<button type="button" class="claim">' + (avail ? 'CLAIM ' + esc(money(sched[day - 1])) : 'CLOSE') + '</button></div>';
+    document.body.appendChild(m);
+    var btn = m.querySelector('.claim'), todayEl = m.querySelector('.pj-day[data-day="' + day + '"]'), done;
+    var flame = m.querySelector('.flame'); try { PJ.streakFlame(flame, streak); } catch (e) { /* optional */ }
+    var promise = new Promise(function (r) { done = r; });
+    calOpen = { promise: promise };
+    requestAnimationFrame(function () { m.classList.add('open'); });
+    PJ.sfx('toast');
+    var closing = false;
+    function close(claimed) {
+      if (closing) return; closing = true;
+      document.removeEventListener('keydown', onKey, true);
+      m.classList.remove('open');
+      setTimeout(function () { m.remove(); calOpen = null; }, reduced() ? 0 : 220);
+      done(claimed);
+    }
+    function onKey(e) { if (e.key === 'Escape') { e.stopPropagation(); close(false); } }
+    document.addEventListener('keydown', onKey, true);
+    m.addEventListener('mousedown', function (e) { if (e.target === m && !btn.disabled) close(false); });
+    btn.addEventListener('click', function () {
+      if (!avail) { close(false); return; }
+      btn.disabled = true;
+      var cents = sched[day - 1], tier = day === 7 ? 'jackpot' : day >= 4 ? 'big' : 'nice';
+      m.classList.add('fx');
+      todayEl.classList.remove('today'); todayEl.classList.add('done', 'just');
+      btn.textContent = 'CLAIMED';
+      if (typeof o.onClaim === 'function') { try { o.onClaim(cents, day); } catch (e) { console.error(e); } }
+      PJ.sfx('claim');
+      PJ.winCelebration(tier, todayEl, cents);
+      PJ.chipShower(todayEl, o.targetEl || null, day === 7 ? 24 : 12);
+      setTimeout(function () { close(true); }, reduced() ? 300 : (day === 7 ? 3200 : 2400));
+    });
+    setTimeout(function () { btn.focus(); }, 60);
+    return promise;
+  };
+
   PJ.clear = function () {
     Object.keys(layers).forEach(function (k) { layers[k].textContent = ''; });
     toastQ.length = 0;

@@ -59,7 +59,6 @@
     $('sh-lvl').addEventListener('click', () => { if (window.Lobby && window.Lobby.show) window.Lobby.show('profile'); });
     $('sh-bonus').addEventListener('click', () => {
       const s = sock(); if (!s) return;
-      if (bonusSt && !bonusSt.available) { if (window.PingJuice) PingJuice.toast('Daily bonus **claimed**. Next one in **' + untilReset() + '**.', { sticker: 'vp-chip' }); return; }
       reopenBonus = true; s.emit('bonus:status');
     });
     $('sh-acct').addEventListener('click', () => { if (window.Lobby && window.Lobby.show) window.Lobby.show('profile'); });
@@ -323,12 +322,11 @@
     s.on('bonus:status', (b) => {
       if (!b) return;
       bonusSt = b; renderBonusBtn();
-      if (!b.available || !window.PingJuice) { reopenBonus = false; return; }
-      if (bonusShown && !reopenBonus) return;
+      if (!window.PingJuice || (!reopenBonus && (!b.available || bonusShown))) { reopenBonus = false; return; }
       bonusShown = true; reopenBonus = false;
-      PingJuice.dailyBonus(b.amountCents, { kicker: 'DAILY BONUS' + (b.streak > 1 ? ' - DAY ' + b.streak : ''), note: 'Free Play $. Come back tomorrow to build your streak.', onClaim: () => s.emit('bonus:claim') });
+      PingJuice.streakCalendar(b, { targetEl: $('sh-wallet'), onClaim: () => s.emit('bonus:claim') });
     });
-    s.on('bonus:claimed', (r) => { if (r && r.ok && r.wallet) setWallet(r.wallet); if (r && r.ok && window.PingJuice) PingJuice.toast('Daily bonus **' + dollars(r.amountCents) + '** claimed' + (r.streak > 1 ? ', day **' + r.streak + '**' : ''), { sticker: 'vp-chip' }); });
+    s.on('bonus:claimed', (r) => { if (r && r.ok && r.wallet) setWallet(r.wallet); if (r && r.ok && window.PingJuice) PingJuice.toast('Day **' + (r.day || r.streak) + '** bonus **' + dollars(r.amountCents) + '** claimed. Streak **' + r.streak + '**', { sticker: 'vp-chip' }); });
     s.on('g:bender:state', (st) => { benderReady = true; if (st && st.balances) setWallet(st.balances); toBender({ type: 'init', wallet: Object.assign({}, wallet), mode: wmode, bets: (st && (st.bets || st.betLevels)) || undefined }); });
     s.on('g:bender:result', (p) => {
       const reqId = spinQ.shift(); lastWin = p && typeof p.totalWin === 'number' ? p.totalWin : lastWin;
@@ -352,7 +350,9 @@
     const b = $('sh-bonus'); if (!b) return;
     const av = !!(bonusSt && bonusSt.available);
     b.classList.toggle('ready', av);
-    b.innerHTML = bonusSt ? (av ? 'Bonus <em>' + dollars(bonusSt.amountCents) + '</em>' : 'Claimed <em>' + untilReset() + '</em>') : '';
+    const dn = bonusSt ? (bonusSt.day || bonusSt.streak || 1) : 1;
+    b.title = 'Daily streak calendar';
+    b.innerHTML = bonusSt ? (av ? 'Day ' + dn + ' <em>' + dollars(bonusSt.amountCents) + '</em>' : 'Day ' + dn + ' <em>' + untilReset() + '</em>') : '';
     b.hidden = !bonusSt;
   }
   setInterval(renderBonusBtn, 30000);

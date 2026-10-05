@@ -222,9 +222,53 @@ function viewLobby() {
     h('div', { class: 'lb-stack' },
       h('button', { class: 'lb-btn big', id: 'lb-create-btn', onclick: () => show('create') }, 'Create table'),
       h('section', { class: 'lb-card' }, h('h2', null, 'Join by code'), h('div', { class: 'lb-stack', style: 'gap:var(--p12)' }, codeIn, h('button', { class: 'lb-btn blue full', id: 'lb-join-btn', onclick: go }, 'Join'), jerr)),
-      h('section', { class: 'lb-card' }, h('h2', null, 'Leaderboard', h('small', null, 'Lifetime net')), h('div', { id: 'lb-board' })))))));
-  drawLists();
+      h('section', { class: 'lb-card' }, h('h2', null, 'Leaderboard', h('small', null, 'Lifetime net')), h('div', { id: 'lb-board' })),
+      h('section', { class: 'lb-card lb-feed-card' }, h('h2', null, 'Around the table', h('small', null, 'Live')), h('div', { id: 'lb-feed', class: 'lb-feed' })))))));
+  drawLists(); drawFeed(); emit('social:feed');
 }
+// ── activity feed ─────────────────────────────────────────────────
+const FEED_ICON = { bigwin: 'vp-chip', bonus: 'ballot-cherry', levelup: 'vp-horseshoe', join: 'ping-hand', feature: 'i-pinged' };
+let feedSkew = 0;
+function feedBold(t) { return h('b', null, String(t == null ? '' : t).replace(/\*/g, '')); }
+function feedText(e) {
+  const nm = feedBold(e.name || 'Someone');
+  if (e.kind === 'bigwin') {
+    const amt = typeof e.amountCents === 'number' ? (e.unit === 'chips' ? e.amountCents.toLocaleString('en-US') + ' chips' : fm(e.amountCents, 'cents')) : '';
+    return e.game === 'bender' ? [nm, ' hit ', feedBold(amt), ' on Ballot Bender'] : [nm, ' took a ', feedBold(amt), ' pot'];
+  }
+  if (e.kind === 'bonus') return [nm, ' claimed the ', feedBold('Day ' + (e.day || 1)), ' bonus'];
+  if (e.kind === 'levelup') return [nm, ' reached ', feedBold('level ' + e.level)];
+  if (e.kind === 'join') return [nm, ' joined a table'];
+  if (e.kind === 'feature') return [nm, ' hit ', feedBold(e.feature || 'a feature'), ' on Ballot Bender'];
+  return [nm];
+}
+function feedAgo(ts) {
+  const s = Math.max(0, Math.round((Date.now() - feedSkew - ts) / 1000));
+  if (s < 45) return 'just now';
+  const m = Math.round(s / 60); if (m < 60) return m + 'm ago';
+  const hr = Math.round(m / 60); return hr < 24 ? hr + 'h ago' : Math.round(hr / 24) + 'd ago';
+}
+function drawFeed() {
+  const el = $('lb-feed'); if (!el) return;
+  const list = S.feed || [];
+  if (!list.length) {
+    el.replaceChildren(h('div', { class: 'lb-feed-empty' }, h('img', { src: 'images/fx2/sticker-vp-charm.png', alt: '' }), h('span', null, 'Quiet in here, deal the first hand')));
+    return;
+  }
+  el.replaceChildren(...list.map((e) => h('div', { class: 'lb-feed-row k-' + e.kind, 'data-id': e.id },
+    h('img', { src: 'images/fx2/sticker-' + (FEED_ICON[e.kind] || 'vp-chip') + '.png', alt: '' }),
+    h('span', { class: 'tx' }, ...feedText(e)), h('time', { 'data-ts': e.ts }, feedAgo(e.ts)))));
+}
+setInterval(() => { document.querySelectorAll('#lb-feed time[data-ts]').forEach((t) => { t.textContent = feedAgo(+t.dataset.ts); }); }, 30000);
+function onFeed(p) {
+  if (!p) return;
+  if (typeof p.now === 'number') feedSkew = Date.now() - p.now;
+  if (Array.isArray(p.list)) S.feed = p.list.slice(0, 8);
+  else if (p.event && p.event.id != null) { if (!(S.feed || []).some((x) => x.id === p.event.id)) S.feed = [p.event, ...(S.feed || [])].slice(0, 8); }
+  else return;
+  if (S.view === 'lobby') drawFeed();
+}
+
 function drawLists() {
   const mine = $('lb-mine'), open = $('lb-open'), board = $('lb-board');
   if (mine) {
@@ -603,6 +647,7 @@ function bind() {
   s.on('account:stats', (st) => { S.acctStats = st; const x = $('lb-profxp'); if (x) { x.querySelector('b').textContent = 'LV ' + st.level; x.querySelector('i').style.width = Math.max(2, st.xpPct) + '%'; x.querySelector('small').textContent = st.xp + ' / ' + st.nextXp + ' XP'; } });
   s.on('profile', (p) => { S.profile = p; if (S.user && p.display) S.user.display = p.display; renderTop(); });
   s.on('wallet', (w) => { S.wallet = w; renderTop(); });
+  s.on('social:feed', onFeed);
   s.on('lobby_tables', ({ tables }) => { S.tables = tables || []; if (S.view === 'lobby') drawLists(); });
   s.on('tables_mine', ({ tables, nightNet }) => { S.mine = tables || []; S.net = nightNet || {}; if (S.view === 'lobby') drawLists(); });
   s.on('leaderboard_data', ({ entries, me }) => { S.board = entries || []; S.boardMe = me || null; if (S.view === 'lobby') drawLists(); });

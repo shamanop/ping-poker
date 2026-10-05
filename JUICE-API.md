@@ -17,6 +17,7 @@ Anchors (`anchorEl`, `targetEl`) are DOM elements; pass `null` to center on the 
 - `charm(targetEl, {side:'left'|'right', size, dx, dy})` persistent hanging VP charm on a seat; `uncharm(targetEl)`.
 - `streakFlame(el, n)` streak badge, 0 hides flame. `xpBar(el, pct, level)` fills bar, level-up flash when level rises.
 - `dailyBonus(amount, {kicker, note, onClaim(amount)})` modal with Claim button; Esc dismisses without claim.
+- `streakCalendar({day, streak, available, schedule:[cents x7]}, {onClaim(cents, day), targetEl})` 7-day calendar modal (Day N of 7, past days stamped, day 7 jackpot tile). Claim fires winCelebration (nice/big/jackpot by day) + chipShower to targetEl. Esc/backdrop dismiss without claim. Replaces `dailyBonus` in the shell.
 - `sfx(name, {minGap})` WebAudio only, no files; `PJ.sfxNames` = chipClink chipShower coinTick whoosh thud nice big mega jackpot nearMiss bombBoom sticker toast claim ping. Muted by `localStorage ping.sfx='0'` (or pp_sound_muted=1); `PJ.setSfx(bool)`.
 - `preload()` warm images; `clear()` wipes all effects and the toast queue (call on table leave).
 
