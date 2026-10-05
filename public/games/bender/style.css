@@ -42,7 +42,7 @@ img{-webkit-user-drag:none}
 @keyframes jolt{0%{transform:translateX(-7px)}50%{transform:translateX(7px)}100%{transform:translateX(-7px)}}
 @keyframes slump{0%,100%{transform:rotate(1deg) translateY(4px)}50%{transform:rotate(-1deg) translateY(10px)}}
 
-#bubble{position:absolute;left:452px;top:2px;width:290px;aspect-ratio:834/600;z-index:4;transform-origin:92% 100%;transition:opacity .2s}
+#bubble{position:absolute;left:452px;top:64px;width:290px;aspect-ratio:834/600;z-index:4;transform-origin:92% 100%;transition:opacity .2s}
 #bubble>img{position:absolute;inset:0;width:100%;height:100%;transform:scaleX(-1)}
 #bubble p{position:absolute;left:11%;right:11%;top:11%;bottom:27%;display:grid;place-items:center;text-align:center;font-weight:800;font-size:27px;line-height:1.08;color:var(--navy);letter-spacing:-.005em}
 #bubble p.sm{font-size:23px}
@@ -99,9 +99,9 @@ img.frame{left:0;top:0;width:1000px;height:833px;pointer-events:none;z-index:2}
 .meter .lbl{font-weight:800;font-size:26px;letter-spacing:.14em;color:var(--gold)}
 .meter .val{font-family:var(--slab);font-size:60px;line-height:1;font-variant-numeric:tabular-nums;color:var(--cream);text-shadow:0 4px 0 var(--navy)}
 #balM{grid-column:1;grid-row:1;padding-left:6px}
-#betM{grid-column:3;grid-row:1;justify-items:end;padding-right:6px}
-#betM .row{display:grid;grid-template-columns:76px auto 76px;align-items:center;gap:10px}
-#betM .val{font-size:56px;min-width:128px;text-align:center}
+#betM{grid-column:3;grid-row:1;justify-items:end;padding-right:30px}
+#betM .row{display:grid;grid-template-columns:76px auto 76px;align-items:center;gap:6px}
+#betM .val{font-size:44px;min-width:120px;text-align:center;white-space:nowrap}
 .sq{width:76px;height:76px;border:5px solid var(--cream);background:var(--navy);color:var(--cream);font-family:var(--slab);font-size:48px;line-height:1;border-radius:8px;box-shadow:0 5px 0 rgba(0,0,0,.6);transition:transform .1s,background .15s}
 .sq:hover{background:var(--navy2)}
 .sq:active{transform:translateY(4px);box-shadow:0 1px 0 rgba(0,0,0,.6)}

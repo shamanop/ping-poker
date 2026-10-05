@@ -14,6 +14,7 @@ const FX = (() => {
   function layer(id) {
     const cv = document.getElementById(id), g = cv.getContext('2d');
     let ps = [], raf = 0, last = 0;
+    cv.style.display = 'none'; // idle canvases are expensive to composite under the shell
     function frame(now) {
       const dt = Math.min((now - last) / 1000, 0.05); last = now;
       g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, cv.width, cv.height); g.setTransform(0.5, 0, 0, 0.5, 0, 0);
@@ -33,9 +34,9 @@ const FX = (() => {
         else { const sc = Math.abs(Math.cos(p.rot * 1.7)); g.fillRect(-p.size / 2, -p.size * sc / 2, p.size, p.size * sc * 0.8 + 2); }
         g.restore();
       }
-      if (ps.length) raf = requestAnimationFrame(frame); else { raf = 0; g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, cv.width, cv.height); }
+      if (ps.length) raf = requestAnimationFrame(frame); else { raf = 0; g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, cv.width, cv.height); cv.style.display = 'none'; }
     }
-    return { cv, add(p) { ps.push(p); if (!raf) { last = performance.now(); raf = requestAnimationFrame(frame); } }, count: () => ps.length };
+    return { cv, add(p) { cv.style.display = ''; ps.push(p); if (!raf) { last = performance.now(); raf = requestAnimationFrame(frame); } }, count: () => ps.length };
   }
   function drawBolt(g, p) {
     g.save(); g.globalAlpha = Math.min(1, p.life / 0.06); g.lineJoin = 'round'; g.lineCap = 'round';

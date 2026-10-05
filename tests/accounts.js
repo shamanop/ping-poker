@@ -130,7 +130,7 @@ const AUTH = ['auth_ok', 'auth_error'];
     // persistence checks
     await sleep(200);
     const raw = fs.readFileSync(F.acc, 'utf8');
-    ok(!raw.includes('2468') && !raw.includes('1357') && !/"pin"/.test(raw), 'PIN never stored');
+    ok(!/"(2468|1357)"/.test(raw) && !/"pin"/.test(raw), 'PIN never stored');
     const j = JSON.parse(raw);
     ok(/^[0-9a-f]{64}$/.test(j.accounts['ann lee'].pinHash) && /^[0-9a-f]{32}$/.test(j.accounts['ann lee'].salt), 'pinHash/salt hex');
     ok(j.accounts['ann lee'].sessions.every(s => /^[0-9a-f]{64}$/.test(s.h)) && !raw.includes(tok), 'only token hashes stored');

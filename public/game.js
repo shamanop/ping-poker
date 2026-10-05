@@ -107,8 +107,13 @@ function avatarInner(avatar, pic) {
 }
 
 // ─── Scale unit: every size in the CSS is N * --u ─────────────────
+let stageRO = null;
 function setScale() {
-  const u = Math.max(0.8, Math.min(1.35, Math.min(window.innerHeight / 900, window.innerWidth / 1440)));
+  const host = document.querySelector('.sh-stage');
+  if (host && !stageRO && window.ResizeObserver) { stageRO = new ResizeObserver(() => onResize()); stageRO.observe(host); }
+  const w = host && host.clientWidth ? host.clientWidth : window.innerWidth;
+  const h = host && host.clientHeight ? host.clientHeight : window.innerHeight;
+  const u = Math.max(0.8, Math.min(1.35, Math.min(h / 900, w / 1440)));
   document.documentElement.style.setProperty('--u', u.toFixed(4));
   state.u = u;
   return u;

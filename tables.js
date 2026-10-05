@@ -298,7 +298,7 @@ function createTables(E) {
   function afterDrop(room, player) {
     const t = room.settings;
     if (!t) return;
-    if (player.acct && player.acct === t.hostKey) transferHost(t);
+    if (player.acct && player.acct === t.hostKey) { const tm = setTimeout(() => transferHost(t), Number(process.env.HOST_GRACE_MS) || 20000); if (tm.unref) tm.unref(); }
     if (!humans(room).some(p => p.connected)) t.emptySince = Date.now();
     pushLobby();
   }

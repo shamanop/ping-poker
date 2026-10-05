@@ -435,7 +435,7 @@ html.art-login .setup-card { background: linear-gradient(180deg, rgba(34, 22, 14
 }
 .panel-right .g-grid { grid-template-columns: 1fr var(--rail-w); grid-template-areas: "head head" "stage rail" "bar rail"; }
 .panel-right .g-rail { margin: var(--gut) var(--gut) var(--gut) 0; }
-.panel-right .toasts { left: calc((100vw - var(--rail-w)) / 2); }
+.panel-right .toasts { left: calc(var(--stg-l, 0px) + (100vw - var(--stg-l, 0px) - var(--stg-r, 0px) - var(--rail-w)) / 2); }
 .rail-h { position: relative; }
 .rail-flip { position: absolute; right: var(--p2); top: 50%; transform: translateY(-50%); width: var(--p20); height: var(--p20); padding: 0; display: grid; place-items: center; font: 700 var(--p16)/1 var(--f-card); color: var(--brass-lt); background: linear-gradient(180deg, #2A1B10, #160E09); border: 1px solid var(--brass); border-radius: var(--p3); cursor: pointer; box-shadow: inset 0 1px 0 rgba(240, 213, 142, .18); }
 .rail-flip:hover { filter: brightness(1.12); }
@@ -598,7 +598,7 @@ html.art-login .setup-card { background: linear-gradient(180deg, rgba(34, 22, 14
 .bust-broke { font-size: var(--p13); color: #F2C9B4; }
 
 /* ── Toasts (the only fixed layer) ─────────────────────────────── */
-.toasts { position: fixed; z-index: 50; top: calc(var(--head-h) + var(--p14)); left: calc((100vw + var(--rail-w)) / 2); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: var(--p8); pointer-events: none; }
+.toasts { position: fixed; z-index: 50; top: calc(var(--head-h) + var(--p14)); left: calc(var(--stg-l, 0px) + (100vw - var(--stg-l, 0px) - var(--stg-r, 0px) + var(--rail-w)) / 2); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: var(--p8); pointer-events: none; }
 .toast { min-width: calc(260 * var(--px)); max-width: calc(460 * var(--px)); padding: var(--p10) var(--p18); border-radius: var(--p8); background: rgba(24, 15, 9, .96); border: 1px solid var(--brass); box-shadow: 0 var(--p8) var(--p24) rgba(0, 0, 0, .6); text-align: center; animation: toastIn .3s ease-out, toastOut .4s ease-in forwards var(--ms, 3.2s); }
 .toast b { display: block; font-family: var(--f-display); font-weight: 400; font-size: var(--p22); letter-spacing: .1em; color: var(--gold); line-height: 1.1; }
 .toast span { font-size: var(--p13); color: var(--ink); }

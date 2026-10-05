@@ -36,7 +36,7 @@ module.exports = {
       socket.emit('g:bender:state', {
         betLevels: BET_LEVELS, modes: ['play', 'ledger'], rtp: RTP_LABEL,
         buyCostX: { election: Eng.CFG.buyCost.election, landslide: Eng.CFG.buyCost.landslide },
-        wallet: ctx.wallet.get(keyOf(socket)),
+        wallet: ctx.wallet.get(keyOf(socket)), balances: ctx.wallet.get(keyOf(socket)), bets: BET_LEVELS,
       });
     },
     history(socket) {
@@ -72,7 +72,7 @@ module.exports = {
         roundId, bet: p.bet, cost, mode: p.mode, buyBonus: buy,
         grid: r.grid, cascades: r.cascades, finalGrid: r.finalGrid, scatters: r.scatters, scatterPay: r.scatterPay,
         bonus: r.bonus, totalWinMult: r.totalWinMult, totalWin, tier: r.tier, maxed: r.maxed, steps: r.steps,
-        wallet: w,
+        wallet: w, balances: w, round: r.round,
       });
     },
   },

@@ -600,7 +600,8 @@
     bar.querySelectorAll('button').forEach((b) => b.classList.toggle('on', money.live && b.dataset.m === money.mode));
     $('modenote').textContent = !money.live ? 'Practice (no wallet)' : money.mode === 'ledger' ? 'Ledger $ is a friendly tally. Settle up yourselves.' : 'Play $ is pretend money.';
     $('balM').querySelector('.lbl').innerHTML = '&#9733; ' + (!money.live ? 'VOTES' : money.mode === 'ledger' ? 'LEDGER $' : 'PLAY $');
-    $('fine').textContent = $('dis').textContent = !money.live ? 'Practice (no wallet). Free play only.' : (window.BENDER_FOOTER || 'No deposits, no payouts. Ledger $ is a friendly tally.');
+    const fineTxt = !money.live ? 'Practice (no wallet). Free play only.' : (window.BENDER_FOOTER || 'No deposits, no payouts. Ledger $ is a friendly tally.');
+    [$('fine'), $('dis')].forEach((el) => { if (el) el.textContent = fineTxt; });
   }
   function setBets(list) {
     BETS.length = 0; list.forEach((x) => BETS.push(x));

@@ -11,7 +11,7 @@
   let L = { games: {} };
   let signedIn = false, focusId = 'poker', zTop = 20, inResize = false;
   const wallet = { play: null, ledgerNet: null, ledgerLimit: -50000 };
-  let wmode = 'play', lastWin = 0;
+  let wmode = 'play', lastWin = 0, sessNet = 0;
   const $ = (id) => document.getElementById(id);
   const sock = () => window.PingSocket || null;
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -278,8 +278,8 @@
   function needsAction() {
     try {
       if (window.PingGame && typeof window.PingGame.needsAction === 'function') return !!window.PingGame.needsAction();
-      const ring = $('my-turn-ring'), gsn = $('game-screen');
-      return !!(gsn && gsn.classList.contains('active') && ring && ring.offsetParent !== null);
+      const cc = $('btn-check-call'), gsn = $('game-screen');
+      return !!(gsn && gsn.classList.contains('active') && cc && !cc.disabled);
     } catch (e) { return false; }
   }
   function refreshDock() {
@@ -309,11 +309,12 @@
     const s = sock(); if (!s || bound.has(s)) return !!s;
     bound.add(s);
     s.on('wallet', (w) => { setWallet(w); });
-    s.on('auth_ok', () => { setSignedIn(true); refreshTop(); });
+    s.on('auth_ok', () => { setSignedIn(true); refreshTop(); s.emit('wallet_get'); });
     s.on('auth_out', () => setSignedIn(false));
     s.on('g:bender:state', (st) => { benderReady = true; if (st && st.balances) setWallet(st.balances); toBender({ type: 'init', wallet: Object.assign({}, wallet), mode: wmode, bets: (st && (st.bets || st.betLevels)) || undefined }); });
     s.on('g:bender:result', (p) => {
       const reqId = spinQ.shift(); lastWin = p && typeof p.totalWin === 'number' ? p.totalWin : lastWin;
+      if (p && typeof p.totalWin === 'number' && typeof p.cost === 'number') sessNet += p.totalWin - p.cost;
       if (p && p.balances) setWallet(p.balances);
       toBender({ type: 'result', reqId, payload: p }); refreshDock();
     });
@@ -353,7 +354,7 @@
     registerGame({
       id: 'bender', name: 'Ballot Bender', icon: IC.box,
       mount(el) { const f = document.createElement('iframe'); f.src = cfg.benderUrl; f.title = 'Ballot Bender'; f.setAttribute('allow', 'autoplay'); el.appendChild(f); benderReady = false; },
-      badge() { return lastWin > 0 ? '+' + dollars2(lastWin) : ''; }
+      badge() { return sessNet > 0 ? '+' + dollars2(sessNet) : sessNet < 0 ? '-' + dollars2(-sessNet) : ''; }
     });
     ui.dock.appendChild(Object.assign(document.createElement('i'), { className: 'sh-sep' }));
     for (const n of ['Blackjack', 'Roulette']) {

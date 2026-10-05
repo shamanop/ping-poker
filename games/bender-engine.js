@@ -221,7 +221,7 @@ if (typeof module === 'object' && module.exports) {
     const r = engine.round(rng, mode);
     const base = r.base;
     return {
-      mode, costMult: r.cost, totalWinMult: r.win, maxed: !!r.maxed, scatterPay: r.scatterPay,
+      round: r, mode, costMult: r.cost, totalWinMult: r.win, maxed: !!r.maxed, scatterPay: r.scatterPay,
       grid: base ? base.initial : null,
       cascades: base ? base.steps : [],
       finalGrid: base ? base.final : null,
