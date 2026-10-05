@@ -343,6 +343,7 @@ function startHand(room) {
   for (const p of players) {
     p.cards    = [];
     p.roundBet = 0;
+    p.handBet  = 0;
     p.folded   = false;
     p.allIn    = false;
     p.lastAction = null;
@@ -382,7 +383,7 @@ function nextActiveIdx(room, fromIdx, steps) {
 function postBlind(room, playerIdx, amount, label) {
   const p = room.players[playerIdx];
   const bet = Math.min(amount, p.chips);
-  p.chips -= bet; p.roundBet += bet; room.pot += bet;
+  p.chips -= bet; p.roundBet += bet; p.handBet = (p.handBet || 0) + bet; room.pot += bet;
   if (p.chips === 0) p.allIn = true;
 }
 
@@ -411,7 +412,7 @@ function processAction(room, playerIdx, action, amount) {
     }
     case 'call': {
       const callAmt = Math.min(toCall, p.chips);
-      p.chips -= callAmt; p.roundBet += callAmt; room.pot += callAmt;
+      p.chips -= callAmt; p.roundBet += callAmt; p.handBet = (p.handBet || 0) + callAmt; room.pot += callAmt;
       if (p.chips === 0) p.allIn = true;
       p.lastAction = 'CALL';
       room.actionQueue.shift();
@@ -422,7 +423,7 @@ function processAction(room, playerIdx, action, amount) {
       const minRaise = room.currentBet + room.bb;
       const raiseTo  = Math.max(amount || 0, minRaise);
       const addAmt   = Math.min(raiseTo - p.roundBet, p.chips);
-      p.chips -= addAmt; p.roundBet += addAmt; room.pot += addAmt;
+      p.chips -= addAmt; p.roundBet += addAmt; p.handBet = (p.handBet || 0) + addAmt; room.pot += addAmt;
       if (p.chips === 0) p.allIn = true;
       room.currentBet = p.roundBet;
       p.lastAction = 'RAISE';
@@ -508,16 +509,37 @@ function showdown(room) {
   }));
   results.sort((a, b) => compareHands(b.hand, a.hand));
 
-  const best    = results[0].hand;
-  const winners = results.filter(r => compareHands(r.hand, best) === 0);
-  const share   = Math.floor(room.pot / winners.length);
-  const rem     = room.pot - share * winners.length;
-
-  winners.sort((a, b) => a.idx - b.idx);
-  for (let i = 0; i < winners.length; i++) winners[i].player.chips += share + (i === 0 ? rem : 0);
+  // Split the pot in layers by total contribution so short all-ins only win what they covered.
+  const paid = new Map();
+  const levels = [...new Set(room.players.map(p => p.handBet || 0).filter(b => b > 0))].sort((a, b) => a - b);
+  let prev = 0, awarded = 0;
+  for (const level of levels) {
+    const layer = room.players.reduce((sum, p) => sum + Math.max(0, Math.min(p.handBet || 0, level) - prev), 0);
+    prev = level;
+    if (layer === 0) continue;
+    let pool = results.filter(r => (r.player.handBet || 0) >= level);
+    if (pool.length === 0) pool = results;
+    const top = pool.reduce((b, r) => (compareHands(r.hand, b) > 0 ? r.hand : b), pool[0].hand);
+    const layerWinners = pool.filter(r => compareHands(r.hand, top) === 0).sort((a, b) => a.idx - b.idx);
+    const share = Math.floor(layer / layerWinners.length);
+    const rem = layer - share * layerWinners.length;
+    layerWinners.forEach((w, i) => {
+      const amt = share + (i === 0 ? rem : 0);
+      w.player.chips += amt;
+      paid.set(w, (paid.get(w) || 0) + amt);
+    });
+    awarded += layer;
+  }
+  if (awarded < room.pot) { // contributions untracked: fall back to a single pot
+    const top = results[0].hand;
+    const ws = results.filter(r => compareHands(r.hand, top) === 0).sort((a, b) => a.idx - b.idx);
+    const extra = room.pot - awarded, share = Math.floor(extra / ws.length), rem = extra - share * ws.length;
+    ws.forEach((w, i) => { const amt = share + (i === 0 ? rem : 0); w.player.chips += amt; paid.set(w, (paid.get(w) || 0) + amt); });
+  }
+  const winners = [...paid.keys()].sort((a, b) => a.idx - b.idx);
 
   const winnerList = winners.map(w => ({ name: w.player.name, handName: w.hand.name, cards: w.player.cards }));
-  for (const w of winners) roomLog(room, `${w.player.name} wins ${share + (w.idx === winners[0].idx ? rem : 0)} with ${w.hand.name}`);
+  for (const w of winners) roomLog(room, `${w.player.name} wins ${paid.get(w)} with ${w.hand.name}`);
 
   room.handHistory.unshift({
     handNum:  room.handNum,
@@ -903,4 +925,8 @@ io.on('connection', socket => {
 // ─── Start Server ─────────────────────────────────────────────────────────────
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Ping Poker server running on port ${PORT}`));
+if (require.main === module) {
+  server.listen(PORT, () => console.log(`Ping Poker server running on port ${PORT}`));
+}
+
+module.exports = { evaluate5, compareHands, bestHand, showdown, makeRoom, makePlayer, io, server };
