@@ -28,6 +28,9 @@ const state = {
   actSeen:        {},
   connKey:        {},
   dealt:          {},
+  dealPend:       {},
+  dealTimers:     [],
+  noDealHand:     null,
   firstState:     false,
   heroKey:        '',
   raiseKey:       '',
@@ -448,7 +451,8 @@ function bindSocket() {
   s.on('game_state', gs => {
     const prev = state.gameState;
     state.gameState = gs;
-    if (!prev || prev.handNum !== gs.handNum) { state.dealt = {}; state.heroKey = ''; state.reveal = null; hideShowdown(); }
+    if (!prev || prev.handNum !== gs.handNum) { resetDeal(); state.dealt = {}; state.heroKey = ''; state.reveal = null; hideShowdown(); }
+    if (!prev && gs.street && gs.street !== 'preflop') state.noDealHand = gs.handNum;
     noteTable(prev, gs);
 
     const cur = gs.currentPlayerIdx;
@@ -469,7 +473,7 @@ function bindSocket() {
   s.on('your_cards', ({ cards, myIdx }) => {
     state.myIdx   = myIdx;
     state.myCards = cards;
-    if (state.gameState) { renderGame(); playSound('deal'); }
+    if (state.gameState) renderGame();
   });
 
   s.on('showdown_result', ({ winners, pot }) => {
@@ -731,6 +735,7 @@ function renderGame() {
   const gs = state.gameState;
   if (!gs || !$('game-screen').classList.contains('active')) return;
   layoutTable();
+  planHoleDeal(gs);
   renderSeats(gs);
   renderBets(gs);
   renderPot(gs);
@@ -786,6 +791,81 @@ function noteActions(prev, gs) {
   });
 }
 
+// ─── Deal animation (deck -> seats / board) ─────────────────────
+const DEAL_GAP = 90, DEAL_FLY = 380, DEAL_FLY_BOARD = 320;
+
+function resetDeal() {
+  state.dealTimers.forEach(clearTimeout);
+  state.dealTimers = [];
+  state.dealPend = {};
+  const l = $('deal-layer');
+  if (l) l.innerHTML = '';
+}
+
+function dealLand(key, flip) {
+  delete state.dealPend[key];
+  const el = document.querySelector(`[data-dk="${key}"]`);
+  if (!el) return;
+  el.classList.remove('dealwait');
+  if (flip) { void el.offsetWidth; el.classList.add('flip-land'); }
+}
+
+function dealQueue(key, delay, flip, dur) {
+  const reduced = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduced) return;
+  state.dealPend[key] = 1;
+  state.dealTimers.push(setTimeout(() => {
+    const target = document.querySelector(`[data-dk="${key}"]`);
+    const deck = document.querySelector('#puck-layer .deck');
+    if (!target || !deck || !target.offsetWidth) { dealLand(key, false); return; }
+    const t = target.getBoundingClientRect(), d = deck.getBoundingClientRect();
+    const w = target.offsetWidth, h = target.offsetHeight;
+    const cx = t.left + t.width / 2, cy = t.top + t.height / 2;
+    const dx = d.left + d.width / 2 - cx, dy = d.top + d.height / 2 - cy;
+    const rt = parseFloat(getComputedStyle(target).rotate) || 0;
+    const r0 = rt + (Math.random() * 30 - 15);
+    const s0 = d.width / w;
+    let layer = $('deal-layer');
+    if (!layer) { layer = document.createElement('div'); layer.id = 'deal-layer'; layer.className = 'deal-layer'; document.body.appendChild(layer); }
+    const fl = document.createElement('div');
+    fl.className = 'card back ' + (target.classList.contains('card-sm') ? 'card-sm' : 'card-xl');
+    fl.style.cssText = `left:${(cx - w / 2).toFixed(1)}px;top:${(cy - h / 2).toFixed(1)}px;width:${w}px;height:${h}px`;
+    layer.appendChild(fl);
+    const tf = (x, y, s, r, sx) => `translate(${x}px,${y}px) scale(${s}) rotate(${r}deg) scaleX(${sx})`;
+    const frames = [
+      { transform: tf(dx, dy, s0, r0, 1), offset: 0 },
+      { transform: tf(0, 0, 1, rt, 1), offset: flip ? 0.78 : 1 },
+    ];
+    if (flip) frames.push({ transform: tf(0, 0, 1, rt, 0.04), offset: 1 });
+    const done = () => { fl.remove(); dealLand(key, flip); };
+    const a = fl.animate(frames, { duration: dur, easing: 'cubic-bezier(.22,.8,.25,1)', fill: 'both' });
+    a.onfinish = done;
+    playSound('slide');
+  }, delay));
+}
+
+function planHoleDeal(gs) {
+  if (gs.status !== 'playing') return;
+  const pk = `${gs.handNum}:plan`;
+  if (state.dealt[pk]) return;
+  const n = gs.players.length, myIdx = state.myIdx ?? 0;
+  const seats = [];
+  for (let j = 1; j <= n; j++) {
+    const i = (gs.dealerIdx + j) % n;
+    if (gs.players[i].cardCount > 0) seats.push(i);
+  }
+  if (!seats.length) return;
+  state.dealt[pk] = 1;
+  if (state.noDealHand === gs.handNum) return;
+  let c = 0;
+  for (let r = 0; r < 2; r++) {
+    seats.forEach(i => {
+      const hero = i === myIdx;
+      dealQueue(hero ? `${gs.handNum}:h:${r}` : `${gs.handNum}:s${i}:${r}`, 120 + c++ * DEAL_GAP, hero, DEAL_FLY);
+    });
+  }
+}
+
 // ─── Seats ────────────────────────────────────────────────────────
 function seatStatus(p) {
   if (p.connected === false && !p.isBot) return ['Offline', 'offline'];
@@ -816,9 +896,6 @@ function renderSeats(gs) {
     const peekUp = y > g.cy + 10 * g.u;
     const [stText, stCls] = seatStatus(p);
     const tag = i === sbIdx ? 'SB' : i === bbIdx ? 'BB' : '';
-    const dealKey = `${gs.handNum}:${i}`;
-    const dealAnim = !state.dealt[dealKey] && p.cardCount > 0;
-    if (dealAnim) state.dealt[dealKey] = 1;
 
     let peek = '';
     const rev = state.reveal && state.reveal.handNum === gs.handNum && state.reveal.cards[p.name];
@@ -826,7 +903,7 @@ function renderSeats(gs) {
       peek = `<div class="seat-peek reveal ${peekUp ? 'up' : 'down'}">${rev.map(c => faceCardHtml(c, 'md', 0, '', 'flip-in')).join('')}</div>`;
     } else if (!hero && p.cardCount > 0 && !p.folded) {
       peek = `<div class="seat-peek ${peekUp ? 'up' : 'down'}">${Array.from({ length: p.cardCount }, (_, k) =>
-        `<div class="card back card-sm${dealAnim ? ' deal' : ''}" style="animation-delay:${k * 0.06}s"></div>`).join('')}</div>`;
+        `<div class="card back card-sm${state.dealPend[`${gs.handNum}:s${i}:${k}`] ? ' dealwait' : ''}" data-dk="${gs.handNum}:s${i}:${k}"></div>`).join('')}</div>`;
     }
 
     const b = bubbles[i];
@@ -913,7 +990,10 @@ function renderBets(gs) {
     let px = -s.uy, py = s.ux;
     if (px < -1e-3 || (Math.abs(px) <= 1e-3 && py < 0)) { px = -px; py = -py; }
     const off = (gs.dealerIdx === myIdx ? 138 : 68) * g.u;
-    pucks.innerHTML = `<div class="puck" style="left:${(s.x + px * off).toFixed(1)}px;top:${(s.y + py * off).toFixed(1)}px">D</div>`;
+    const pxp = s.x + px * off, pyp = s.y + py * off;
+    const dk = 34 * g.u;
+    pucks.innerHTML = `<div class="puck" style="left:${pxp.toFixed(1)}px;top:${pyp.toFixed(1)}px">D</div>
+      <div class="deck" style="left:${(pxp + px * dk).toFixed(1)}px;top:${(pyp + py * dk).toFixed(1)}px"><div class="card back card-sm"></div><div class="card back card-sm"></div><div class="card back card-sm"></div></div>`;
   } else {
     pucks.innerHTML = '';
   }
@@ -935,11 +1015,16 @@ function renderPot(gs) {
 function renderCommunity(gs) {
   const el = $('community-cards');
   const cards = gs.community || [];
-  const prevCount = (state.commHand === gs.handNum) ? (state.commCount || 0) : 0;
-  el.innerHTML = cards.map((c, i) =>
-    faceCardHtml(c, 'xl', 0, `--i:${i};--n:${cards.length};${i >= prevCount ? `animation-delay:${(i - prevCount) * 0.12}s` : ''}`, i >= prevCount ? 'deal reveal-flash' : '')
-  ).join('');
-  if (cards.length > prevCount) playSound('deal');
+  let prevCount = (state.commHand === gs.handNum) ? (state.commCount || 0) : 0;
+  if (state.commHand !== gs.handNum && state.noDealHand === gs.handNum) prevCount = cards.length;
+  for (let i = prevCount; i < cards.length; i++) {
+    const key = `${gs.handNum}:c:${i}`;
+    if (!state.dealt[key]) { state.dealt[key] = 1; dealQueue(key, 120 + (i - prevCount) * DEAL_GAP, true, DEAL_FLY_BOARD); }
+  }
+  el.innerHTML = cards.map((c, i) => {
+    const key = `${gs.handNum}:c:${i}`;
+    return faceCardHtml(c, 'xl', 0, `--i:${i};--n:${cards.length}`, state.dealPend[key] ? 'dealwait' : '').replace('<div class="card', `<div data-dk="${key}" class="card`);
+  }).join('');
   state.commHand  = gs.handNum;
   state.commCount = cards.length;
 }
@@ -960,7 +1045,11 @@ function renderHero(gs) {
   const key = `${gs.handNum}|${cards.map(c => c.rank + c.suit).join('')}`;
   if (state.heroKey !== key) {
     state.heroKey = key;
-    $('hole-cards').innerHTML = cards.map((c, i) => faceCardHtml(c, 'xl', 0, `animation-delay:${i * 0.08}s`, 'flip-in')).join('');
+    $('hole-cards').innerHTML = cards.map((c, i) => {
+      const key = `${gs.handNum}:h:${i}`;
+      const wait = state.dealPend[key];
+      return faceCardHtml(c, 'xl', 0, wait ? '' : `animation-delay:${i * 0.08}s`, wait ? 'dealwait' : 'flip-in').replace('<div class="card', `<div data-dk="${key}" class="card`);
+    }).join('');
   }
 
   const comm = gs.community || [];

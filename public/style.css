@@ -342,6 +342,15 @@ html.art-puck .puck { background: url(images/dealer-button.png) center / contain
 html.art-back .card.back { background: url(images/card-back.png) center / 100% 100% no-repeat; box-shadow: 0 var(--p3) var(--p6) rgba(0, 0, 0, .55); }
 .card.deal { animation: dealIn .35s ease-out backwards; }
 @keyframes dealIn { from { opacity: 0; translate: 0 calc(-18 * var(--px)); scale: .92; } }
+.card.dealwait { visibility: hidden; }
+.card.flip-land { animation: flipLand .24s ease-out backwards; }
+@keyframes flipLand { from { transform: scaleX(.04); } }
+.deck { position: absolute; width: calc(38 * var(--px)); height: calc(54 * var(--px)); transform: translate(-50%, -50%); pointer-events: none; }
+.deck .card { position: absolute; left: 0; top: 0; }
+.deck .card:nth-child(1) { translate: calc(-3 * var(--px)) calc(3 * var(--px)); }
+.deck .card:nth-child(2) { translate: calc(-1.5 * var(--px)) calc(1.5 * var(--px)); }
+.deal-layer { position: fixed; inset: 0; z-index: 60; pointer-events: none; overflow: hidden; }
+.deal-layer .card { position: fixed; margin: 0; will-change: transform; }
 .card.flip-in { animation: flipIn .45s ease-out backwards; }
 @keyframes flipIn { from { opacity: 0; translate: 0 calc(24 * var(--px)); scale: .9; } }
 

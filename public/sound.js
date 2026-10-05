@@ -87,6 +87,10 @@
       noise(c, nb, out, t, { f: 2600, f2: 6500, q: 0.9, vol: 0.32, attack: 0.006, dur: 0.07, offset: 0.2 });
       noise(c, nb, out, t + 0.05, { f: 5200, q: 1.2, vol: 0.12, attack: 0.001, dur: 0.025, offset: 0.35 });
     },
+    slide: function (c, nb, out, t) {
+      noise(c, nb, out, t, { f: 1500, f2: 4600, q: 0.8, vol: 0.2, attack: 0.008, dur: 0.075, offset: 0.12 });
+      noise(c, nb, out, t + 0.07, { f: 4800, q: 1.4, vol: 0.09, attack: 0.001, dur: 0.02, offset: 0.4 });
+    },
     chip: function (c, nb, out, t) {
       clack(c, nb, out, t, 1, 0.32);
       clack(c, nb, out, t + 0.055, 1.18, 0.24);
