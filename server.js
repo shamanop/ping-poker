@@ -762,8 +762,7 @@ function broadcastRoomUpdate(room) {
 
 function validatePic(pic) {
   if (typeof pic !== 'string') return null;
-  if (!pic.startsWith('data:image/')) return null;
-  if (pic.length > 150000) return null;
+  if (pic.length > 150000 || !/^data:image\/(jpeg|png|webp|gif);base64,[A-Za-z0-9+\/=]+$/.test(pic)) return null;
   return pic;
 }
 
@@ -808,6 +807,7 @@ io.on('connection', socket => {
     }
     const room = rooms.get(ROOM_ID);
     if (!room) { socket.emit('error', { message: 'Server error' }); return; }
+    if (room.players.some(p => p.socketId === socket.id)) return;
     if (room.status === 'playing' || room.status === 'waiting_next') {
       socket.emit('error', { message: 'Game in progress — wait for next round' }); return;
     }

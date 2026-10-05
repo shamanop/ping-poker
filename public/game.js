@@ -411,7 +411,10 @@ function renderLobbyPlayers(players, hostName) {
   state.lobbyHost    = hostName;
   renderLobbySockets();
 
-  const isHost   = state.myIdx === 0;
+  if (!state.myName && players[state.myIdx]) state.myName = players[state.myIdx].name;
+  const idxNow = players.findIndex(p => p.name === state.myName);
+  if (idxNow >= 0) state.myIdx = idxNow;
+  const isHost   = !!state.myName && hostName === state.myName;
   const btnStart = $('btn-start');
   const waitMsg  = $('waiting-msg');
   if (isHost) {
@@ -1659,6 +1662,6 @@ function esc(s) {
 }
 function safePic(pic) {
   if (typeof pic !== 'string') return null;
-  if (!pic.startsWith('data:image/')) return null;
+  if (!/^data:image\/(jpeg|png|webp|gif);base64,[A-Za-z0-9+\/=]+$/.test(pic)) return null;
   return pic;
 }
