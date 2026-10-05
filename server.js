@@ -118,9 +118,11 @@ function saveStacks() {
     const stacks = {};
     for (const room of rooms.values()) {
       for (const p of room.players) {
-        if (p.isBot || !(p.chips > 0)) continue;
+        if (p.isBot) continue;
+        const inPot = room.status === 'playing' && room.pot > 0 ? (p.handBet || 0) : 0;
+        if (!(p.chips + inPot > 0)) continue;
         const k = bankKey(p.name);
-        stacks[k] = (stacks[k] || 0) + p.chips;
+        stacks[k] = (stacks[k] || 0) + p.chips + inPot;
       }
     }
     const tmp = STACKS_FILE + '.tmp';
