@@ -79,3 +79,6 @@ body.sh-on { --sh-top: 48px; --sh-dock: 64px; }
 .sh-split::after { content: ''; position: absolute; left: 3px; top: 0; bottom: 0; width: 2px; background: var(--brass, #B8893A); opacity: .6; }
 .sh-split:hover::after { opacity: 1; }
 .sh-split.show { display: block; }
+
+.sh-lvl { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.sh-lvl .pj-xp { min-width: 130px; font-size: 14px; }
