@@ -1099,7 +1099,7 @@ io.on('connection', socket => {
 
   // ── Accounts / auth ───────────────────────────────────────────────────────
   const ctxOf = () => ({ ip: String(socket.handshake.headers['x-forwarded-for'] || socket.handshake.address || '?').split(',')[0].trim(), ua: socket.handshake.headers['user-agent'] });
-  const authFail = r => socket.emit('auth_error', { code: r.code, message: r.message, ...(r.retryMs ? { retryMs: r.retryMs } : {}) });
+  const authFail = r => { console.log(`auth fail ${r.code} ip=${ctxOf().ip} ua=${String(ctxOf().ua || '').slice(0, 50)}`); socket.emit('auth_error', { code: r.code, message: r.message, ...(r.retryMs ? { retryMs: r.retryMs } : {}) }); };
   const authOk = (r, withToken) => {
     const a = r.account;
     socket.data.acct = a.key;

@@ -168,6 +168,7 @@ function viewSignin() {
         ev.preventDefault(); if (Date.now() < S.lockUntil) return;
         const n = name.value.trim(), p = pin.value;
         if (n.length < 2) return showErr('Enter your name (2 to 16 characters).');
+        if (!/^[A-Za-z0-9 _.\-']+$/.test(n)) return showErr('Names can only use letters, numbers, spaces and . _ - \' (no emoji or other symbols).');
         if (!/^\d{4,6}$/.test(p)) return showErr('PIN must be 4 to 6 digits.');
         LS.set('ping.name', n); showErr(''); submit.disabled = true;
         S.onError = () => { submit.disabled = false; };
@@ -190,7 +191,7 @@ function viewSignin() {
       submit.disabled = false;
       if (code === 'claim_required') { tab = 'up'; claim = true; const n = name.value, p = pin.value; draw(); $('lb-name').value = n; $('lb-pin').value = p; return; }
       if (code === 'rate_limited') { S.lockUntil = Date.now() + (retryMs || 30000); tickLock(); return; }
-      const m = { name_taken: 'That name is taken. Pick another, or sign in.', bad_name: 'Names are 2 to 16 characters.', bad_pin: tab === 'in' ? 'Wrong name or PIN.' : 'PIN must be 4 to 6 digits.',
+      const m = { name_taken: 'That name already has an account. Tap Sign in and use its PIN, or pick a different name.', bad_name: msg || 'Names are 2 to 16 letters, numbers, spaces, . _ - \'', bad_pin: tab === 'in' ? 'Wrong name or PIN.' : 'PIN must be 4 to 6 digits.',
         bad_credentials: 'Wrong name or PIN.', bad_room_password: 'That room password is not right.', bad_session: 'Your session expired. Sign in again.' }[code];
       showErr(m || msg || 'Could not sign in.');
     };
