@@ -241,3 +241,30 @@
 .lb-feed-empty img { width: var(--p56, 56px); height: var(--p56, 56px); object-fit: contain; opacity: .9; }
 @keyframes lb-feedin { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .lb-feed-row:first-child { animation: none; } }
+
+/* biggest win today band */
+.lb-best { display: grid; grid-template-columns: var(--p36) 1fr auto; align-items: center; gap: var(--p12); padding: var(--p10) var(--p16); border: 1px solid var(--brass); border-radius: var(--p8);
+  background: linear-gradient(180deg, rgba(60, 41, 20, .9), rgba(30, 20, 11, .96)); box-shadow: 0 var(--p4) var(--p16) rgba(0, 0, 0, .4); min-height: var(--p56, 56px); }
+.lb-best img { width: var(--p36); height: var(--p36); object-fit: contain; filter: drop-shadow(0 1px 3px rgba(0, 0, 0, .6)); }
+.lb-best .tx { display: grid; gap: var(--p2); min-width: 0; line-height: 1.15; }
+.lb-best small { font-size: var(--p11); letter-spacing: .12em; text-transform: uppercase; color: var(--brass-lt); font-weight: 600; }
+.lb-best .tx b { font-family: var(--f-display); font-weight: 400; font-size: var(--p24); letter-spacing: .06em; color: var(--gold); }
+.lb-best.empty .tx b { font-family: var(--f-text); font-size: var(--p15, 15px); letter-spacing: 0; color: var(--ink); font-weight: 600; }
+.lb-best .tx span { font-size: var(--p13); color: var(--ink-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lb-best time { font-size: var(--p12); letter-spacing: .04em; color: var(--ink-dim); white-space: nowrap; align-self: start; }
+/* achievements */
+.lb-achgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--p120, 120px), 1fr)); gap: var(--p8); max-height: 38vh; overflow-y: auto; padding-right: var(--p4); }
+.lb-achv { --tc: var(--brass); display: grid; justify-items: center; align-content: start; gap: var(--p2); padding: var(--p10) var(--p6); text-align: center; border: 1px solid var(--tc); border-radius: var(--p6); background: rgba(255, 255, 255, .03); }
+.lb-achv.t-bronze { --tc: #C98A4B; } .lb-achv.t-silver { --tc: #C5CBD3; } .lb-achv.t-gold { --tc: var(--gold); }
+.lb-achv img { width: var(--p36); height: var(--p36); object-fit: contain; }
+.lb-achv b { font-size: var(--p13); line-height: 1.15; color: var(--ink); }
+.lb-achv small { font-size: var(--p11); line-height: 1.25; color: var(--ink-dim); letter-spacing: 0; text-transform: none; }
+.lb-achv i { font-style: normal; font-size: var(--p12); font-weight: 700; color: var(--tc); letter-spacing: .04em; }
+.lb-achv.done { background: linear-gradient(180deg, rgba(255, 255, 255, .07), rgba(255, 255, 255, .02)); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .04), 0 0 var(--p12) -4px var(--tc); }
+.lb-achv.locked { border-color: var(--line); }
+.lb-achv.locked img { filter: grayscale(1) brightness(.55); opacity: .7; }
+.lb-achv.locked b { color: var(--ink-dim); }
+.lb-achv.locked i { color: var(--ink-dim); font-weight: 600; }
+.lb-achdot { display: inline-grid; place-items: center; min-width: var(--p16); height: var(--p16); padding: 0 var(--p4); margin-left: var(--p8); border-radius: var(--p8); background: var(--gold); color: #1A0F06; font-size: var(--p11); font-weight: 800; line-height: 1; vertical-align: middle; animation: lb-achpulse 2s ease-in-out infinite; }
+@keyframes lb-achpulse { 50% { box-shadow: 0 0 0 var(--p4) rgba(245, 185, 66, .25); } }
+@media (prefers-reduced-motion: reduce) { .lb-achdot { animation: none; } }

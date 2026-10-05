@@ -132,7 +132,7 @@ function createSocial({ io, accounts, now = Date.now, file = null } = {}) {
     const rec = accounts.social(key);
     if (!rec) return null;
     const u = (rec.achv && rec.achv.u) || {};
-    const list = ACHIEVEMENTS.map((a) => ({ id: a.id, name: a.name, desc: a.desc, tier: a.tier, target: a.t, progress: u[a.id] ? a.t : progressOf(rec, a), done: !!u[a.id], ts: u[a.id] || 0, rewardCents: TIER_REWARD[a.tier], xp: TIER_XP[a.tier] }));
+    const list = ACHIEVEMENTS.map((a) => ({ id: a.id, name: a.name, desc: a.desc, tier: a.tier, target: a.t, progress: u[a.id] ? a.t : progressOf(rec, a), done: !!u[a.id], ts: u[a.id] || 0, rewardCents: TIER_REWARD[a.tier], xp: TIER_XP[a.tier], ...(a.s === 'biggestPotCents' ? { unit: 'cents' } : {}) }));
     return { list, unlocked: list.filter((x) => x.done).length, total: list.length, unseen: (rec.achv && rec.achv.unseen) || 0 };
   }
   const pushAchv = (key) => { const v = achvView(key); if (!v) return; for (const s of sockets()) if (acctKey(s) === key) s.emit('achv:state', v); };

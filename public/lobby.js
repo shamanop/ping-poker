@@ -116,6 +116,7 @@ function renderTop() {
       h('div', null, h('div', { class: 'nm' }, u.display || u.key), h('div', { class: 'nt' }, h('span', { class: cls }, net), net && play ? '  /  ' : '', play))),
     h('button', { class: 'lb-link', id: 'lb-signout', onclick: signOut }, 'Sign out'));
   mountToggles();
+  renderAchHint();
 }
 function mountToggles() {
   if (!window.Money || !window.Money.toggleEl) return;
@@ -220,11 +221,12 @@ function viewLobby() {
       h('section', { class: 'lb-card' }, h('h2', null, 'Your tables'), h('div', { id: 'lb-mine', class: 'lb-rows' })),
       h('section', { class: 'lb-card' }, h('h2', null, 'Open tables', h('small', null, 'Listed by their hosts')), h('div', { id: 'lb-open', class: 'lb-rows' }))),
     h('div', { class: 'lb-stack' },
+      h('section', { class: 'lb-best', id: 'lb-best', 'aria-label': 'Biggest win today' }),
       h('button', { class: 'lb-btn big', id: 'lb-create-btn', onclick: () => show('create') }, 'Create table'),
       h('section', { class: 'lb-card' }, h('h2', null, 'Join by code'), h('div', { class: 'lb-stack', style: 'gap:var(--p12)' }, codeIn, h('button', { class: 'lb-btn blue full', id: 'lb-join-btn', onclick: go }, 'Join'), jerr)),
       h('section', { class: 'lb-card' }, h('h2', null, 'Leaderboard', h('small', null, 'Lifetime net')), h('div', { id: 'lb-board' })),
       h('section', { class: 'lb-card lb-feed-card' }, h('h2', null, 'Around the table', h('small', null, 'Live')), h('div', { id: 'lb-feed', class: 'lb-feed' })))))));
-  drawLists(); drawFeed(); emit('social:feed');
+  drawLists(); drawFeed(); drawBest(); emit('social:feed'); emit('social:biggest');
 }
 // ── activity feed ─────────────────────────────────────────────────
 const FEED_ICON = { bigwin: 'vp-chip', bonus: 'ballot-cherry', levelup: 'vp-horseshoe', join: 'ping-hand', feature: 'i-pinged' };
@@ -526,9 +528,54 @@ function drawShare() {
       right));
 }
 
+// ── achievements + biggest win band ───────────────────────────────
+const ACH_ICON = { bronze: 'vp-chip', silver: 'vp-horseshoe', gold: 'boba-crown' };
+const ACH_TIER_LABEL = { bronze: 'Bronze', silver: 'Silver', gold: 'Gold' };
+function achTile(a) {
+  return h('div', { class: 'lb-achv t-' + a.tier + (a.done ? ' done' : ' locked'), title: a.desc + (a.done ? '' : ' (' + (a.unit === 'cents' ? fm(a.progress || 0, 'cents') + ' / ' + fm(a.target, 'cents') : a.progress + '/' + a.target) + ')') },
+    h('img', { src: 'images/fx2/sticker-' + ACH_ICON[a.tier] + '.png', alt: '' }),
+    h('b', null, a.name),
+    h('small', null, a.done ? ACH_TIER_LABEL[a.tier] : a.desc),
+    h('i', null, a.done ? '+' + fm(a.rewardCents, 'cents') : (a.unit === 'cents' ? fm(a.progress || 0, 'cents') + ' / ' + fm(a.target, 'cents') : (a.progress || 0).toLocaleString('en-US') + '/' + a.target.toLocaleString('en-US'))));
+}
+function drawAch() {
+  const el = $('lb-ach'); if (!el) return;
+  const v = S.achv;
+  if (!v) { el.replaceChildren(h('div', { class: 'lb-muted' }, 'Loading trophies')); return; }
+  const rank = { true: 0, false: 1 };
+  const list = v.list.slice().sort((a, b) => rank[a.done] - rank[b.done] || (a.done ? b.ts - a.ts : (b.progress / b.target) - (a.progress / a.target)));
+  el.replaceChildren(...list.map(achTile));
+  const c = $('lb-ach-count'); if (c) c.textContent = v.unlocked + ' of ' + v.total;
+}
+function achSection() {
+  return h('div', { class: 'lb-field' }, h('label', null, 'Achievements ', h('small', { id: 'lb-ach-count', class: 'lb-muted' }, S.achv ? S.achv.unlocked + ' of ' + S.achv.total : '')), h('div', { class: 'lb-achgrid', id: 'lb-ach' }));
+}
+function renderAchHint() {
+  const n = (S.achv && S.achv.unseen) || 0;
+  document.querySelectorAll('.lb-achdot').forEach((d) => d.remove());
+  if (!n) return;
+  const mk = () => h('span', { class: 'lb-achdot', title: n + ' new achievement' + (n > 1 ? 's' : '') + ', open your profile' }, String(n));
+  const acct = $('lb-acct'); if (acct) acct.appendChild(mk());
+  const lvl = $('sh-lvl'); if (lvl) lvl.appendChild(mk());
+}
+function drawBest() {
+  const el = $('lb-best'); if (!el) return;
+  const w = S.best && S.best.win;
+  if (w && Date.now() - feedSkew - w.ts > 86400000) S.best = null;
+  const win = S.best && S.best.win;
+  if (!win) { el.replaceChildren(h('img', { src: 'images/fx2/sticker-vp-charm.png', alt: '' }), h('div', { class: 'tx' }, h('small', null, 'Biggest win today'), h('b', null, 'No big win yet. Be first.'))); el.classList.add('empty'); return; }
+  el.classList.remove('empty');
+  el.replaceChildren(h('img', { src: 'images/fx2/sticker-vp-charm.png', alt: '' }),
+    h('div', { class: 'tx' }, h('small', null, 'Biggest win today'), h('b', null, fm(win.amountCents, 'cents')), h('span', null, win.name + ' on ' + (win.game === 'bender' ? 'Ballot Bender' : 'Poker'))),
+    h('time', { 'data-ts': win.ts }, feedAgo(win.ts)));
+}
+function onBest(p) { if (!p) return; if (typeof p.now === 'number') feedSkew = Date.now() - p.now; S.best = p; drawBest(); }
+setInterval(() => { if (S.user && S.view === 'lobby') emit('social:biggest'); }, 300000);
+setInterval(drawBest, 60000);
 // ── profile ───────────────────────────────────────────────────────
 function openProfile() {
-  emit('profile_get', {}); emit('account:stats', {});
+  emit('profile_get', {}); emit('account:stats', {}); emit('achv:state', {});
+  if (S.achv && S.achv.unseen) setTimeout(() => { if ($('lb-ach')) { emit('achv:seen', {}); } }, 1200);
   const p = S.profile || {}, u = S.user, st = p.stats || {};
   let av = u.avatar;
   const net = p.netCents ?? 0, msg = h('div', { class: 'lb-err', id: 'lb-profmsg' });
@@ -541,11 +588,13 @@ function openProfile() {
     h('div', { class: 'lb-stats' }, h('div', null, h('b', { class: net > 0 ? 'up' : net < 0 ? 'down' : '' }, fm(net, 'cents', { signed: true })), h('small', null, 'Ledger net')),
       h('div', null, h('b', null, st.nights ?? st.nightsPlayed ?? (p.recent || []).length), h('small', null, 'Nights')), h('div', null, h('b', null, st.hands ?? st.handsPlayed ?? 0), h('small', null, 'Hands'))),
     recent.length ? h('div', { class: 'lb-rows' }, recent.map((r) => h('div', { class: 'lb-row' }, h('div', null, h('div', { class: 't' }, r.name || r.tableName || r.nightId), h('div', { class: 's' }, r.date || '')), h('b', { class: r.net > 0 ? 'up' : 'down' }, fm(r.net, r.unit || 'cents', { signed: true }))))) : null,
+    achSection(),
     h('div', { class: 'lb-field' }, h('label', null, 'Avatar'), h('div', { class: 'lb-avatars' }, Array.from({ length: 12 }, (_, i) => { const id = 'a' + String(i + 1).padStart(2, '0');
       return h('button', { type: 'button', class: id === String(av).replace(/\.png$/, '') ? 'on' : '', onclick: (e) => { av = id; emit('profile_update', { avatar: id }); $('lb-profav').src = avUrl(id); e.currentTarget.parentNode.querySelectorAll('button').forEach((b) => b.classList.remove('on')); e.currentTarget.classList.add('on'); S.user.avatar = id; renderTop(); } }, h('img', { src: avUrl(id), alt: id })); }))),
     h('div', { class: 'lb-field' }, h('label', null, 'Sound'), (() => { const on = () => !(window.PPSound && window.PPSound.muted); const b = h('button', { type: 'button', class: 'lb-btn blue', id: 'lb-sound', onclick: () => { const t = document.getElementById('sound-toggle'); if (t) t.click(); else if (window.PPSound) window.PPSound.setMuted(on()); b.textContent = on() ? 'Sound: on' : 'Sound: off'; } }, on() ? 'Sound: on' : 'Sound: off'); return b; })()),
     h('div', { class: 'lb-field' }, h('label', null, 'Change PIN'), h('div', { class: 'lb-two' }, oldPin, newPin)), msg,
     h('div', { class: 'acts' }, h('button', { class: 'lb-btn blue', onclick: () => { if (!/^\d{4,6}$/.test(newPin.value)) { msg.textContent = 'New PIN must be 4 to 6 digits.'; return; } S.onError = (m) => { msg.textContent = m; }; emit('pin_change', { oldPin: oldPin.value, newPin: newPin.value }); } }, 'Save PIN'), h('button', { class: 'lb-btn', onclick: closeModal }, 'Done')));
+  drawAch(); renderAchHint();
 }
 
 // ── settle-up ─────────────────────────────────────────────────────
@@ -648,6 +697,9 @@ function bind() {
   s.on('profile', (p) => { S.profile = p; if (S.user && p.display) S.user.display = p.display; renderTop(); });
   s.on('wallet', (w) => { S.wallet = w; renderTop(); });
   s.on('social:feed', onFeed);
+  s.on('social:biggest', onBest);
+  s.on('achv:state', (v) => { S.achv = v; drawAch(); renderAchHint(); });
+  s.on('achv:unlocked', () => { if (S.achv) { S.achv.unseen = (S.achv.unseen || 0) + 1; } renderAchHint(); if ($('lb-ach')) emit('achv:state', {}); });
   s.on('lobby_tables', ({ tables }) => { S.tables = tables || []; if (S.view === 'lobby') drawLists(); });
   s.on('tables_mine', ({ tables, nightNet }) => { S.mine = tables || []; S.net = nightNet || {}; if (S.view === 'lobby') drawLists(); });
   s.on('leaderboard_data', ({ entries, me }) => { S.board = entries || []; S.boardMe = me || null; if (S.view === 'lobby') drawLists(); });

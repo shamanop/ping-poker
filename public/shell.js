@@ -319,6 +319,7 @@
     s.on('auth_out', () => { setSignedIn(false); bonusShown = false; if (window.PingJuice) { PingJuice.streakFlame($('sh-flame'), 0); } const x = $('sh-xp'); if (x) x.textContent = ''; lastXp = null; lastStats = null; bonusSt = null; renderBonusBtn(); });
     s.on('social:event', onSocialEvent);
     s.on('account:stats', onStats);
+    s.on('achv:unlocked', onAchv);
     s.on('bonus:status', (b) => {
       if (!b) return;
       bonusSt = b; renderBonusBtn();
@@ -362,6 +363,14 @@
     const amt = typeof e.amountCents === 'number' ? (e.unit === 'chips' ? e.amountCents.toLocaleString('en-US') + ' chips' : dollars(e.amountCents)) : '';
     if (e.game === 'bender') PingJuice.toast(`**${nm}** hit **${amt}** on Ballot Bender`, { sticker: 'vp-chip' });
     else PingJuice.toast(`**${nm}** took a **${amt}** pot`, { sticker: 'ping-hand' });
+  }
+  const ACH_STICKER = { bronze: 'vp-chip', silver: 'vp-horseshoe', gold: 'boba-crown' };
+  function onAchv(a) {
+    if (!a || !window.PingJuice) return;
+    const tier = String(a.tier || 'bronze'), nm = String(a.name || '').replace(/\*/g, '');
+    PingJuice.toast(`Achievement: **${nm}** (${tier[0].toUpperCase() + tier.slice(1)}) **+${dollars(a.rewardCents || 0)}**`, { sticker: ACH_STICKER[tier] || 'vp-chip', ms: 3800 });
+    try { PingJuice.sfx(tier === 'gold' ? 'big' : 'claim'); } catch (e) { /* sound is optional */ }
+    if (tier === 'gold') { try { PingJuice.stickerPop('boba-crown', $('sh-lvl') || null, { dy: 40, hold: 1800 }); } catch (e) { /* optional */ } }
   }
   let lastXp = null, lastStats = null;
   function xpFloaty(n) {
