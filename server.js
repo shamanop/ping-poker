@@ -805,6 +805,7 @@ function showdown(room) {
 function scheduleNextHand(room, delayMs = 5000) {
   if (process.env.HAND_DELAY_MS) delayMs = Number(process.env.HAND_DELAY_MS) || delayMs;
   clearHandTimers(room);
+  try { if (typeof social !== 'undefined') social.onHandEnd(room); } catch {}
   if (room.nightId && room.mode !== 'play') {
     const pot = room.players.reduce((sum, p) => sum + (p.handBet || 0), 0);
     for (const p of room.players) if (!p.isBot && p.acct && p.handStartChips > 0) accounts.recordHand(p.acct, { won: p.chips > p.handStartChips, pot });
@@ -1018,6 +1019,7 @@ io.on('connection', socket => {
     socket.data.sessionH = r.sessionH || crypto.createHash('sha256').update(r.token).digest('hex');
     socket.emit('auth_ok', withToken ? { account: accounts.publicAccount(a), token: r.token } : { account: accounts.publicAccount(a) });
     accounts.emit('auth', socket, a.key);
+    try { socket.emit('account:stats', social.statsView(a.key)); } catch {}
   };
   const authed = () => { if (!socket.data.acct) { socket.emit('error', { message: 'Sign in first', code: 'auth' }); return null; } return socket.data.acct; };
   on('auth_signup', ({ name, pin, avatar } = {}) => { const r = accounts.signup(name, pin, avatar, ctxOf()); r.ok ? authOk(r, true) : authFail(r); });
@@ -1420,7 +1422,8 @@ function dropSeat(room, player, opts = {}) {
 
 // ─── Start Server ─────────────────────────────────────────────────────────────
 
-try{ require('./games')({io, rooms, ledger, accounts, tables, now:()=>Date.now()}); }catch(e){ if(e.code!=='MODULE_NOT_FOUND') throw e; }
+const social = require('./social.js').createSocial({ io, accounts, now: () => Date.now() });
+try{ const g = require('./games')({io, rooms, ledger, accounts, tables, social, now:()=>Date.now()}); social.setWallet(g.wallet); }catch(e){ if(e.code!=='MODULE_NOT_FOUND') throw e; }
 
 const PORT = process.env.PORT || 3000;
 if (require.main === module) {

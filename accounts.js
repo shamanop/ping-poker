@@ -240,6 +240,13 @@ function createAccounts({ file, roomPassword = 'ping' }) {
     if (Number.isFinite(pot) && pot > a.stats.biggestPot) a.stats.biggestPot = pot;
     save();
   }
+  function social(key, mutate) {
+    const a = db.accounts[key];
+    if (!a) return null;
+    if (!a.social || typeof a.social !== 'object') a.social = {};
+    if (mutate) { mutate(a.social); save(); }
+    return a.social;
+  }
   function recordNight(key, { mode, net } = {}) {
     const a = db.accounts[key];
     if (!a || !Number.isSafeInteger(net)) return;
@@ -294,7 +301,7 @@ function createAccounts({ file, roomPassword = 'ping' }) {
 
   return {
     signup, claim, login, resume, logout, logoutHash, get, isAdmin, displayOf, publicAccount, updateProfile,
-    pinChange, resetPin, recordHand, recordNight, rebuildStats, migrateLegacy, flush, on, emit,
+    pinChange, resetPin, recordHand, recordNight, social, rebuildStats, migrateLegacy, flush, on, emit,
     setSkew: ms => { skew = Number(ms) || 0; }, keyOf, cleanName, fileExisted, all: () => db.accounts,
   };
 }
