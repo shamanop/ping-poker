@@ -177,10 +177,10 @@
 .lb-set b { font-size: var(--p16); font-weight: 600; }
 
 /* modal */
-.lb-scrim { position: absolute; inset: 0; z-index: 5; display: grid; place-items: center; background: rgba(5, 3, 2, .72); padding: var(--p24); }
-.lb-modal { width: calc(560 * var(--px)); max-height: 100%; overflow-y: auto; display: grid; gap: var(--p16); }
+.lb-scrim { position: absolute; inset: 0; z-index: 5; display: grid; grid-template-rows: minmax(0, 1fr); grid-template-columns: minmax(0, auto); justify-content: center; align-items: center; background: rgba(5, 3, 2, .72); padding: var(--p24); }
+.lb-modal { width: min(calc(560 * var(--px)), 100%); max-height: 100%; min-height: 0; overflow-y: auto; overflow-x: hidden; display: grid; gap: var(--p16); }
 .lb-modal h3 { font-family: var(--f-display); font-weight: 400; font-size: var(--p32); letter-spacing: .1em; line-height: 1; }
-.lb-modal .acts { display: flex; gap: var(--p12); justify-content: flex-end; }
+.lb-modal .acts { display: flex; gap: var(--p12); justify-content: flex-end; position: sticky; bottom: calc(-1 * var(--p12)); padding: var(--p8) 0 var(--p4); background: #17100B; z-index: 1; }
 .lb-modal .acts .lb-btn { flex: 1; }
 .lb-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--p12); }
 .lb-stats div { padding: var(--p12); border: 1px solid var(--line); border-radius: var(--p6); text-align: center; }

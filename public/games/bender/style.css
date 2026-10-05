@@ -27,7 +27,7 @@ img{-webkit-user-drag:none}
 #shake>*{position:relative}
 
 #head{z-index:1;grid-row:1}
-.logo{position:absolute;left:-10px;top:30px;width:420px;transform-origin:30% 50%;z-index:3;animation:logo 5s ease-in-out infinite}
+.logo{position:absolute;left:-10px;top:48px;width:420px;transform-origin:30% 50%;z-index:3;animation:logo 5s ease-in-out infinite}
 @keyframes logo{0%,100%{transform:rotate(-1.5deg)}50%{transform:rotate(1deg) scale(1.02)}}
 #dump{position:absolute;right:200px;bottom:-30px;width:540px;z-index:0;transform-origin:50% 100%}
 #dump.erupt{animation:eruptpop .5s cubic-bezier(.2,1.5,.4,1)}
