@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>shell test</title>
+<link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/shell.css"></head>
+<body>
+<div id="shell-root"></div>
+<div id="lobby-root" class="lb-root" style="display:none"></div>
+<div id="game-screen" class="screen active" style="background:#1F4D36 url(/images/table-felt.jpg) center/cover">
+  <div id="dummy-poker" style="position:absolute;inset:0;display:grid;place-items:center;font:700 calc(40*var(--px))/1.2 Georgia;color:#E8D9B5;text-align:center">POKER TABLE<br><small id="dp-u" style="font-size:.4em"></small></div>
+  <i id="my-turn-ring" style="position:absolute;right:10px;bottom:10px;width:10px;height:10px"></i>
+</div>
+<script src="/shell.js"></script>
+<script>
+  Shell.setSignedIn(true);
+  Shell.setWallet({ play: 982000, ledgerNet: 8500 });
+  const q = new URLSearchParams(location.search);
+  const st = q.get('state') || 'docked';
+  if (st === 'docked') Shell.openGame('bender', { mode: 'dock', side: 'right' });
+  if (st === 'floating') Shell.openGame('bender', { mode: 'float' });
+  if (st === 'min') { Shell.openGame('bender', { mode: 'dock' }); Shell.minimize('bender'); }
+  setInterval(() => { document.getElementById('dp-u').textContent = 'stage --u=' + getComputedStyle(document.getElementById('sh-stage')).getPropertyValue('--u'); }, 300);
+</script></body></html>

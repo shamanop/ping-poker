@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>BALLOT BENDER by VoterPing</title>
+<link rel="preload" as="image" href="assets/img/bg.jpg">
+<link rel="icon" href="assets/img/W.webp">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="vp">
+  <div id="sides" aria-hidden="true">
+    <div class="side l">
+      <div class="rays"></div>
+      <img class="a dump" src="assets/img/dumpster_back.webp" alt="">
+      <img class="a b1" src="assets/img/bal.webp" alt=""><img class="a b2" src="assets/img/bal.webp" alt=""><img class="a b3" src="assets/img/bal.webp" alt="">
+      <img class="a pen" src="assets/img/pen.webp" alt=""><img class="a phn" src="assets/img/phn.webp" alt=""><img class="a stk" src="assets/img/stk.webp" alt="">
+      <img class="a coin" src="assets/img/S.webp" alt="">
+      <img class="a van" src="assets/img/van.webp" alt="">
+    </div>
+    <div class="side r">
+      <div class="rays"></div>
+      <img class="a wild" src="assets/img/W.webp" alt="">
+      <img class="a coin" src="assets/img/S.webp" alt="">
+      <img class="a seal" src="assets/img/seal.webp" alt=""><img class="a meg" src="assets/img/meg.webp" alt=""><img class="a cap" src="assets/img/cap.webp" alt=""><img class="a yrd" src="assets/img/yrd.webp" alt="">
+      <img class="a pig" src="assets/img/pigeon_honk.webp" alt="">
+    </div>
+  </div>
+  <div id="stage">
+    <img class="bg" src="assets/img/bg.jpg" alt="">
+    <div class="tint"></div>
+    <div id="shake">
+      <section id="head">
+        <img class="logo" src="assets/img/title_wide.webp" alt="Ballot Bender by VoterPing">
+        <img id="dump" src="assets/img/dumpster_back.webp" alt="">
+        <div id="mascot"><img id="mimg" src="assets/img/mascot_idle.webp" alt=""></div>
+        <div id="bubble"><img src="assets/img/bubble_blank.webp" alt=""><p id="bubbleT"></p></div>
+      </section>
+      <div id="ribbon"><span id="ribL">5+ matching = win. Wilds multiply.</span><span class="r" id="ribR"></span></div>
+      <div id="board">
+        <div class="panel"></div>
+        <div class="slots" id="slots"></div>
+        <div id="cells"></div>
+        <img class="frame" src="assets/img/ui_gridframe.webp" alt="">
+        <div id="floats"></div>
+      </div>
+      <div id="winbox"><span class="lbl">WIN</span><span class="star">&#9733;</span><span id="win">0</span><span class="star">&#9733;</span></div>
+      <div id="hud">
+        <div class="meter" id="balM"><span class="lbl">&#9733; VOTES</span><span class="val" id="bal">0</span></div>
+        <button id="spin" class="idle" aria-label="Spin"><img src="assets/img/ui_spin.webp" alt=""></button>
+        <div class="meter" id="betM"><span class="lbl">&#9733; BET</span><div class="row"><button class="sq" id="betDn" aria-label="Lower bet">-</button><span class="val" id="bet">0</span><button class="sq" id="betUp" aria-label="Raise bet">+</button></div></div>
+        <div class="row2">
+          <div class="props l"><img class="van" src="assets/img/van.webp" alt=""><button id="buy" aria-label="Buy bonus"><img src="assets/img/ui_buy.webp" alt="Buy Bonus"></button></div>
+          <div class="btns">
+            <button id="turbo">Turbo</button>
+            <button id="auto">Auto</button>
+            <button id="info" aria-label="Pay table">i</button>
+            <button id="snd" aria-label="Sound"><svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 4V5L7 9H3z"/><path id="sndw" d="M15 8.5a5 5 0 0 1 0 7M17.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+          </div>
+          <div class="props r"><img class="pigeon" id="pigeon" src="assets/img/pigeon_honk.webp" alt=""></div>
+        </div>
+        <div class="fine" id="fine"></div>
+      </div>
+    </div>
+    <canvas id="fxb" width="540" height="960"></canvas>
+    <canvas id="fx" width="540" height="960"></canvas>
+    <div id="ov"></div>
+    <div id="splash">
+      <div class="in">
+        <img class="t" src="assets/img/title_stack.webp" alt="Ballot Bender by VoterPing">
+        <img class="m" src="assets/img/mascot_idle.webp" alt="">
+        <button class="btn go" id="go">Belly up</button>
+        <div class="dis" id="dis"></div>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="engine.js"></script>
+<script src="audio.js"></script>
+<script src="captions.js"></script>
+<script src="fx.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
