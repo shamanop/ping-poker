@@ -123,6 +123,7 @@ function relayout() {
 document.addEventListener('DOMContentLoaded', () => {
   setScale();
   state.socket = io();
+  window.PingSocket = state.socket;
   probeArt();
   document.querySelectorAll('svg.t-ping').forEach(fillPing);
   renderAvatarGrid();
@@ -158,8 +159,8 @@ document.addEventListener('DOMContentLoaded', () => {
   setInterval(tickTimer, 200);
 
   const savedName = localStorage.getItem('ppName');
-  if (savedName) {
-    const nameInput = $('player-name');
+  const nameInput = $('player-name');
+  if (savedName && nameInput) {
     nameInput.value = savedName;
     nameInput.dispatchEvent(new Event('input'));
   }
@@ -168,7 +169,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // ─── Screen ────────────────────────────────────────────────────────
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-  $(id).classList.add('active');
+  $(id)?.classList.add('active');
   setScale();
   placeStaticSockets();
 }
@@ -307,6 +308,7 @@ function renderLandingTable() {
 
 // ─── Landing ──────────────────────────────────────────────────────
 function bindLanding() {
+  if (!$('btn-join') || !$('player-name')) return;
   const photoInput = $('photo-input');
   const photoArea  = $('photo-upload-area');
   photoArea.addEventListener('click', () => photoInput.click());
@@ -368,16 +370,18 @@ function processPhotoUpload(file) {
 }
 
 function getPlayerName() {
-  const name = $('player-name').value.trim();
+  const name = lobbyName() || ($('player-name')?.value || '').trim();
   if (!name) { showError('Enter your name first'); return null; }
   return name;
 }
 
 function showError(msg) {
   const el = $('landing-error');
-  el.textContent = msg; el.classList.add('show');
-  clearTimeout(showError.t);
-  showError.t = setTimeout(() => { el.classList.remove('show'); }, 3000);
+  if (el) {
+    el.textContent = msg; el.classList.add('show');
+    clearTimeout(showError.t);
+    showError.t = setTimeout(() => { el.classList.remove('show'); }, 3000);
+  }
   if (!$('landing-screen')?.classList.contains('active')) toast(msg, '', 'warn');
 }
 
@@ -430,6 +434,41 @@ function renderWaitPanel(gs) {
   $('btn-start').classList.toggle('hidden', !(isHost && canStart));
   $('blind-settings').classList.toggle('hidden', !isHost);
 }
+
+// ─── Platform adapter (lobby/shell call these) ────────────────────
+function lobbyUser() { try { return window.Lobby?.user?.() || null; } catch (e) { return null; } }
+function lobbyName() { const u = lobbyUser(); return u ? (u.display || u.key || '') : ''; }
+
+function leaveToLobby() {
+  const id = state.roomId;
+  if (id && state.socket) state.socket.emit('table_leave', { tableId: id });
+  window.PingGame.leave();
+}
+
+window.PingGame = {
+  enter({ tableId, playerIdx, stack, table, you } = {}) {
+    resetDeal();
+    state.dealt = {}; state.heroKey = ''; state.reveal = null; state.gameState = null;
+    state.myCards = []; state.spectating = false;
+    state.roomId = tableId;
+    state.myIdx  = playerIdx;
+    state.myName = (you && (you.display || you.name)) || lobbyName() || state.myName || null;
+    if (stack !== undefined) state.myBalance = stack;
+    if (table && window.Money) window.Money.setUnit(table.unit === 'chips' ? 'chips' : 'cents');
+    const rc = $('room-code'); if (rc) rc.textContent = (table && (table.code || table.name)) || tableId;
+    $('bust-panel')?.classList.add('hidden');
+    showScreen('game-screen');
+  },
+  leave() {
+    resetDeal();
+    state.roomId = null; state.myIdx = null; state.gameState = null; state.myCards = [];
+    state.dealt = {}; state.heroKey = ''; state.reveal = null; state.spectating = false;
+    state.turnEndAt = null; state.turnKey = '';
+    $('game-screen')?.classList.remove('active');
+    if (window.Lobby?.show) window.Lobby.show('lobby');
+  },
+  isIn() { return !!state.roomId && !!$('game-screen')?.classList.contains('active'); },
+};
 
 // ─── Socket ────────────────────────────────────────────────────────
 function bindSocket() {
@@ -615,9 +654,12 @@ function initBust() {
     state.spectating = true;
     $('bust-panel').classList.add('hidden');
   });
-  $('btn-leave').addEventListener('click', () => { location.reload(); });
+  $('btn-leave').addEventListener('click', () => {
+    if (window.PingGame.isIn() && window.Lobby) leaveToLobby(); else location.reload();
+  });
   $('btn-home').addEventListener('click', () => {
-    if (confirm('Leave the table and go back to the home screen?')) location.href = location.pathname;
+    if (!confirm('Leave the table and go back to the home screen?')) return;
+    if (window.PingGame.isIn() && window.Lobby) leaveToLobby(); else location.href = location.pathname;
   });
 }
 
