@@ -115,7 +115,6 @@
       const off = p.status === 'offline';
       const netCls = p.isBot ? '' : p.net > 0 ? 'pos' : p.net < 0 ? 'neg' : '';
       const sub = [STATUS[p.status] || p.status, p.handsPlayed + ' hand' + (p.handsPlayed === 1 ? '' : 's')];
-      if (p.cashedOut) sub.push('cashed out ' + fmt(p.cashedOut));
       const tag = p.isBot ? '<i>House</i>' : (p.name.toLowerCase() === meName ? '<i>You</i>' : '');
       return `<div class="bp${p.name.toLowerCase() === meName ? ' me' : ''}${off ? ' off' : ''}" style="--pc:${colorOf(p.name)}">
         <div class="bp-avw"><div class="bp-av">${avatarFor(p.name)}</div><span class="bp-dot ${p.status}" title="${STATUS[p.status] || ''}"></span></div>
@@ -155,15 +154,16 @@
     const span = Math.max(1, x1 - x0);
     let ymax = 1500;
     names.forEach(n => data.series[n].forEach(pt => { ymax = Math.max(ymax, pt[1]); }));
-    ymax = niceMax(ymax * 1.04);
+    const step = [250, 500, 1000, 2000, 2500, 5000, 10000, 20000, 25000, 50000].find(s => ymax * 1.03 / s <= 5) || 100000;
+    const yt = Math.ceil(ymax * 1.03 / step);
+    ymax = yt * step;
     const X = h => m.l + (hs.length === 1 ? (W - m.l - m.r) / 2 : (h - x0) / span * (W - m.l - m.r));
     const Y = v => m.t + (1 - v / ymax) * (H - m.t - m.b);
     lineGeo = { m, W, H, hs, X, names };
 
     let g = '';
-    const yt = 4;
     for (let i = 0; i <= yt; i++) {
-      const v = ymax / yt * i, y = Y(v);
+      const v = step * i, y = Y(v);
       g += `<line class="${i ? 'grid' : 'ax'}" x1="${m.l}" x2="${W - m.r}" y1="${y}" y2="${y}"/>`;
       g += `<text x="${m.l - 8 * u}" y="${y + 4 * u}" text-anchor="end">${short(v)}</text>`;
     }

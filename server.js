@@ -82,9 +82,10 @@ function bankSummary(roomId) {
   const live = [];
   for (const room of rooms.values()) {
     for (const p of room.players) {
+      if (p.isBot && room.id !== roomId) continue;
       let status;
       if (!p.connected && !p.isBot) status = 'away';
-      else if (p.sittingOut || p.sitOutRequest) status = 'sitting-out';
+      else if (p.sittingOut || p.sitOutRequest || p.chips === 0) status = 'sitting-out';
       else status = 'seated';
       live.push({ name: p.name, isBot: !!p.isBot, chips: p.chips, status });
     }

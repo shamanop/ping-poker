@@ -123,7 +123,7 @@ function createLedger({ file, onWrite }) {
       t: Date.now(),
       players: [...P.values()].sort((a, b) => (b.bank ?? -1) + b.atTable - ((a.bank ?? -1) + a.atTable)),
       series,
-      events: events.slice(-60).reverse(),
+      events: events.sort((x, y) => y.t - x.t).slice(0, 60),
       maxHand: handList.length ? handList[handList.length - 1].handNum : 0,
     };
   }

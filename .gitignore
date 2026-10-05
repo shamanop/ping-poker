@@ -7,3 +7,5 @@ audit/
 qa/_parts/
 ledger.json
 ledger.json.tmp
+qa/bank/*-tmp-*.json
+qa/bank/capture.log
