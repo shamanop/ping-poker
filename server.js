@@ -74,8 +74,8 @@ function getBalance(name) {
   return bank[k];
 }
 
-// type/room/tableChips are optional ledger metadata only; they do not affect the balance math.
-function adjustBank(name, delta, type, room, tableChips) {
+// type/room/tableChips/extra are optional ledger metadata only; they do not affect the balance math.
+function adjustBank(name, delta, type, room, tableChips, extra) {
   const k = bankKey(name);
   if (bank[k] === undefined) {
     bank[k] = BANK_DEFAULT;
@@ -83,7 +83,7 @@ function adjustBank(name, delta, type, room, tableChips) {
   }
   bank[k] = Math.max(0, bank[k] + delta);
   saveBank();
-  if (type) ledger.log(type, name, Math.abs(delta), bank[k], tableChips, room ? room.handNum : null, room ? room.id : null);
+  if (type) ledger.log(type, name, Math.abs(delta), bank[k], tableChips, room ? room.handNum : null, room ? room.id : null, extra);
   return bank[k];
 }
 
@@ -96,7 +96,7 @@ function bankSummary(roomId) {
       if (!p.connected && !p.isBot) status = 'away';
       else if (p.sittingOut || p.sitOutRequest || p.chips === 0) status = 'sitting-out';
       else status = 'seated';
-      live.push({ name: p.name, isBot: !!p.isBot, chips: p.chips, status });
+      live.push({ name: p.name, isBot: !!p.isBot, chips: p.chips, inPot: room.status === 'playing' && room.pot > 0 ? (p.handBet || 0) : 0, status });
     }
   }
   return ledger.summary(roomId, bank, live);
@@ -748,7 +748,7 @@ function scheduleNextHand(room, delayMs = 5000) {
     if (active.length < 2 || willPlay.length < 2) {
       // Lone player left: award remaining chips back to bank (sit-outs keep their stacks)
       if (active.length < 2) for (const p of room.players) {
-        if (!p.isBot && p.chips > 0) { const c = p.chips; p.chips = 0; adjustBank(p.name, c, 'cashout', room, 0); }
+        if (!p.isBot && p.chips > 0) { const c = p.chips; p.chips = 0; adjustBank(p.name, c, 'cashout', room, 0, { park: true }); }
       }
       if (room.blindTimer) { clearTimeout(room.blindTimer); room.blindTimer = null; }
       room.status = 'waiting';
@@ -904,15 +904,18 @@ io.on('connection', socket => {
       if (room.status === 'playing' && seat.cards.length && !seat.folded) { socket.emit('error', { message: `${target} is in a hand. Lower their money after it ends.` }); return; }
       newStack = total;
     }
-    const before = bank[k] + stack;
-    bank[k] = total - newStack;
+    const inPot = seat && room.status === 'playing' && room.pot > 0 ? (seat.handBet || 0) : 0;
+    const before = bank[k] + stack + inPot;
+    bank[k] = Math.max(0, total - newStack - inPot);
     saveBank();
     if (seat && newStack !== stack) {
       seat.chips = newStack;
       if (newStack === 0 && !seat.allIn) seat.sittingOut = true;
     }
-    ledger.log('adjust', target, Math.abs(total - before), bank[k], newStack, room.handNum, room.id);
-    roomLog(room, `${me.name} set ${target}'s money to ${total.toLocaleString()}`);
+    if (total !== before) {
+      ledger.log('adjust', target, Math.abs(total - before), bank[k], newStack, room.handNum, room.id, { delta: total - before });
+      roomLog(room, `${me.name} set ${target}'s money to ${total.toLocaleString()}`);
+    }
     if (seat && seat.connected) {
       io.to(seat.socketId).emit('balance_data', { balance: bank[k] });
       if (seat.chips === 0) io.to(seat.socketId).emit('bust_out', { balance: bank[k] });
@@ -977,7 +980,7 @@ io.on('connection', socket => {
       if (!seat.connected) {
         const buyIn = buyInFor();
         if (buyIn < BIG_BLIND) { socket.emit('error', { message: 'Insufficient bank balance.' }); return; }
-        adjustBank(cleanName, -buyIn, 'buyin', room, buyIn);
+        adjustBank(seat.name, -buyIn, 'buyin', room, buyIn);
         delete room.lastStacks[key];
         seat.chips = buyIn;
         seat.connected = true;
@@ -1173,7 +1176,7 @@ io.on('connection', socket => {
       if (!player.isBot && player.chips > 0) {
         const c = player.chips;
         player.chips = 0;
-        adjustBank(player.name, c, 'cashout', room, 0);
+        adjustBank(player.name, c, 'cashout', room, 0, { park: true });
         room.lastStacks[bankKey(player.name)] = c;
       }
 
@@ -1231,7 +1234,9 @@ module.exports = { evaluate5, compareHands, bestHand, showdown, makeRoom, makePl
 function shutdownCashOut() {
   for (const room of rooms.values()) {
     for (const p of room.players) {
-      if (!p.isBot && p.chips > 0) { const c = p.chips; p.chips = 0; adjustBank(p.name, c, 'cashout', room, 0); }
+      // an interrupted hand is void: chips already bet this hand go back too, so nothing vanishes with the pot
+      const c = p.chips + (room.status === 'playing' && room.pot > 0 ? (p.handBet || 0) : 0);
+      if (!p.isBot && c > 0) { p.chips = 0; adjustBank(p.name, c, 'cashout', room, 0, { park: true }); }
     }
   }
   process.exit(0);

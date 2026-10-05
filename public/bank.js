@@ -14,9 +14,20 @@
   const U = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--u')) || 1;
   const E = s => (typeof esc === 'function' ? esc(s) : String(s));
   const colorOf = name => {
-    if (!colorMap.has(name)) colorMap.set(name, COLORS[colorMap.size % COLORS.length]);
-    return colorMap.get(name);
+    const k = String(name).toLowerCase();
+    if (!colorMap.has(k)) colorMap.set(k, COLORS[colorMap.size % COLORS.length]);
+    return colorMap.get(k);
   };
+  // Only touch the DOM when the markup actually changed (no flicker, hover/tooltip and scroll survive the 4s refresh).
+  const lastHtml = new WeakMap();
+  function setHTML(host, html) {
+    if (lastHtml.get(host) === html) return false;
+    const top = host.scrollTop;
+    host.innerHTML = html;
+    lastHtml.set(host, html);
+    if (top) host.scrollTop = top;
+    return true;
+  }
   const STATUS = { seated: 'At the table', 'sitting-out': 'Sitting out', away: 'Away', offline: 'Offline' };
 
   function build() {
@@ -104,12 +115,12 @@
     const bankSum = humans.reduce((s, p) => s + (p.bank || 0), 0);
     const onTable = humans.reduce((s, p) => s + (p.status === 'offline' ? 0 : p.atTable), 0);
     const buy = humans.reduce((s, p) => s + p.totalBuyIns, 0);
-    $('bank-total').innerHTML =
+    setHTML($('bank-total'),
       `<div class="pl"><label>Total money</label><b>${fmt(bankSum + onTable)}</b></div>` +
       `<div class="pl"><label>In bank</label><b>${fmt(bankSum)}</b></div>` +
       `<div class="pl"><label>On the table</label><b>${fmt(onTable)}</b></div>` +
       `<div class="pl"><label>Bought in</label><b>${fmt(buy)}</b></div>` +
-      `<div class="pl"><label>Hands</label><b>${data.maxHand || 0}</b></div>`;
+      `<div class="pl"><label>Hands</label><b>${data.maxHand || 0}</b></div>`);
   }
 
   const totalOf = p => (p.bank || 0) + (p.status === 'offline' ? 0 : p.atTable);
@@ -121,10 +132,10 @@
     if (document.querySelector('#bank-players .bp-edit')) return;
     $('bank-pcount').textContent = data.players.length ? data.players.length + ' players' : '';
     if (!data.players.length) {
-      $('bank-players').innerHTML = '<div class="bank-card-body"><div class="bank-empty"><b>No players yet</b>Join the table to open a bank account.</div></div>';
+      setHTML($('bank-players'), '<div class="bank-card-body"><div class="bank-empty"><b>No players yet</b>Join the table to open a bank account.</div></div>');
       return;
     }
-    $('bank-players').innerHTML = data.players.map(p => {
+    const changed = setHTML($('bank-players'), data.players.map(p => {
       const off = p.status === 'offline';
       const netCls = p.isBot ? '' : p.net > 0 ? 'pos' : p.net < 0 ? 'neg' : '';
       const sub = [STATUS[p.status] || p.status, p.handsPlayed + ' hand' + (p.handsPlayed === 1 ? '' : 's')];
@@ -141,8 +152,8 @@
           <div><label>Best win</label><b>${p.isBot ? '&mdash;' : (p.biggestWin ? fmt(p.biggestWin) : '&ndash;')}</b></div>
         </div>
       </div>`;
-    }).join('');
-    $('bank-players').querySelectorAll('.bp-bal b.editable').forEach(b => b.addEventListener('click', () => editBank(b)));
+    }).join(''));
+    if (changed) $('bank-players').querySelectorAll('.bp-bal b.editable').forEach(b => b.addEventListener('click', () => editBank(b)));
   }
 
   function editBank(b) {
@@ -154,8 +165,13 @@
     let done = false;
     const finish = save => {
       if (done) return; done = true;
-      if (save && input.value !== '' && state.socket) state.socket.emit('bank_set', { name, balance: Number(input.value) });
-      input.remove(); request(); render();
+      if (save && input.value !== '' && state.socket) {
+        const amount = Math.round(Number(input.value));
+        state.socket.emit('bank_set', { name, balance: amount });
+        const row = data && data.players.find(p => p.name.toLowerCase() === name.toLowerCase());
+        if (row && Number.isFinite(amount) && amount >= 0) row.bank = amount;
+      }
+      input.remove(); lastHtml.delete($('bank-players')); request(); render();
     };
     input.addEventListener('keydown', e => { if (e.key === 'Enter') finish(true); else if (e.key === 'Escape') { e.stopPropagation(); finish(false); } e.stopPropagation(); });
     input.addEventListener('blur', () => finish(false));
@@ -175,7 +191,7 @@
     const hands = new Set();
     names.forEach(n => data.series[n].forEach(pt => hands.add(pt[0])));
     $('bank-hcount').textContent = hands.size ? 'Dashed line = 1,500 starting stack \u00b7 ' + hands.size + ' hand' + (hands.size === 1 ? '' : 's') : '';
-    if (!hands.size) { lineGeo = null; host.innerHTML = emptyNote('Nothing to plot yet', 'Chips are recorded at the end of every hand. Play one and the lines appear.'); return; }
+    if (!hands.size) { lineGeo = null; setHTML(host, emptyNote('Nothing to plot yet', 'Chips are recorded at the end of every hand. Play one and the lines appear.')); return; }
     const W = host.clientWidth, H = host.clientHeight; if (!W || !H) return;
     const u = U();
     const m = { l: 52 * u, r: 92 * u, t: 16 * u, b: 28 * u };
@@ -223,7 +239,7 @@
       g += `<text class="lab" x="${e.x + 8 * u}" y="${ly + 4 * u}" style="fill:${e.c}">${E(e.n.length > 9 ? e.n.slice(0, 8) + '…' : e.n)} ${short(e.v)}</text>`;
     });
     g += `<line class="cross" id="bank-cross" x1="0" x2="0" y1="${m.t}" y2="${H - m.b}" style="display:none"/>`;
-    host.innerHTML = `<svg class="bank-chart" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Chips over hands per player">${g}</svg><div class="bank-tip" id="bank-tip" style="display:none"></div>`;
+    setHTML(host, `<svg class="bank-chart" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Chips over hands per player">${g}</svg><div class="bank-tip" id="bank-tip" style="display:none"></div>`);
   }
 
   function bindTip() {
@@ -253,7 +269,7 @@
   function renderBars() {
     const host = $('bank-bars');
     const list = data.players.filter(p => !p.isBot && p.totalBuyIns > 0).sort((a, b) => b.totalBuyIns - a.totalBuyIns).slice(0, 8);
-    if (!list.length) { host.innerHTML = emptyNote('No buy-ins yet', 'Every buy-in and rebuy stacks up here.'); return; }
+    if (!list.length) { setHTML(host, emptyNote('No buy-ins yet', 'Every buy-in and rebuy stacks up here.')); return; }
     const W = host.clientWidth, H = host.clientHeight; if (!W || !H) return;
     const u = U();
     const m = { l: 84 * u, r: 58 * u, t: 12 * u, b: 12 * u };
@@ -270,19 +286,20 @@
       g += `<text class="bar-val" x="${m.l + sx(p.totalBuyIns) + 8 * u}" y="${y + bh / 2 + 5 * u}">${fmt(p.totalBuyIns)}</text>`;
     });
     g += `<line class="ax" x1="${m.l}" x2="${m.l}" y1="${m.t}" y2="${H - m.b}"/>`;
-    host.innerHTML = `<svg class="bank-chart" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Total buy-ins per player">${g}</svg>`;
+    setHTML(host, `<svg class="bank-chart" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Total buy-ins per player">${g}</svg>`);
   }
 
   function renderFeed() {
     const host = $('bank-feed');
     const ev = data.events || [];
     $('bank-ecount').textContent = ev.length ? ev.length + ' recent' : '';
-    if (!ev.length) { host.innerHTML = '<div class="bank-card-body" style="min-height:100%">' + emptyNote('Quiet so far', 'Buy-ins, rebuys and cash-outs show up here live.') + '</div>'; return; }
-    const lab = { buyin: 'Buy-in', rebuy: 'Rebuy', cashout: 'Cash out' };
-    host.innerHTML = ev.map(e => {
+    if (!ev.length) { setHTML(host, '<div class="bank-card-body" style="min-height:100%">' + emptyNote('Quiet so far', 'Buy-ins, rebuys and cash-outs show up here live.') + '</div>'); return; }
+    const lab = { buyin: 'Buy-in', rebuy: 'Rebuy', cashout: 'Cash out', adjust: 'Adjusted' };
+    setHTML(host, ev.map(e => {
       const t = new Date(e.t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-      return `<div class="fe"><time>${E(t)}</time><span><span class="who">${E(e.name)}</span> <span class="k ${e.type}">${lab[e.type] || e.type}</span></span><span class="amt">${e.type === 'cashout' ? '+' : '−'}${fmt(e.amount)}</span></div>`;
-    }).join('');
+      const amt = e.type === 'adjust' ? (typeof e.delta === 'number' ? signed(e.delta) : '= ' + fmt(e.balanceAfter || 0)) : (e.type === 'cashout' ? '+' : '−') + fmt(e.amount);
+      return `<div class="fe"><time>${E(t)}</time><span><span class="who">${E(e.name)}</span> <span class="k ${e.type}">${lab[e.type] || e.type}</span></span><span class="amt">${amt}</span></div>`;
+    }).join(''));
   }
 
   function attach() {
