@@ -43,7 +43,7 @@
     const pz = document.createElement('button');
     pz.type = 'button'; pz.id = 'pause-btn'; pz.className = 'bank-chip pause-chip hidden'; pz.textContent = 'Pause';
     pz.addEventListener('click', () => { if (state.socket) state.socket.emit('set_pause', { paused: !(state.gameState && state.gameState.paused) }); });
-    head.insertBefore(pz, btn.nextSibling);
+    if (btn.parentNode === head) head.insertBefore(pz, btn.nextSibling); else (btn.parentNode || head).appendChild(pz);
     const pb = document.createElement('div');
     pb.id = 'pause-banner'; pb.className = 'pause-banner hidden';
     pb.innerHTML = '<b>Paused</b><span>The table is on hold</span><button type="button" id="reset-btn" class="pause-reset hidden">Reset table</button>';
