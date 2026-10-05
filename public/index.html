@@ -3,12 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PokerPing</title>
+  <title>The Ping</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Bitter:wght@400;500;600;700&family=Libre+Baskerville:wght@700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css?v=24">
   <link rel="stylesheet" href="bank.css?v=2">
+  <link rel="stylesheet" href="shell.css?v=1">
+  <link rel="stylesheet" href="lobby.css?v=1">
 </head>
 <body>
 
@@ -26,72 +28,9 @@
     </defs>
   </svg>
 
-  <!-- ── LANDING ────────────────────────────────────────────────── -->
-  <div id="landing-screen" class="screen active">
-    <div class="scr-backdrop"></div>
-    <img class="login-bg-probe" src="/art/login-bg.jpg" alt="" hidden onload="document.documentElement.classList.add('art-login')">
-    <div class="landing-grid">
-      <section class="landing-left">
-        <div class="brand-lockup">
-          <div class="lockup-fallback">
-            <img class="lockup-vp" src="/images/vp-logo.png" alt="VoterPing">
-            <div>
-              <div class="wordmark">Poker<em>Ping</em></div>
-              <div class="lockup-sub">Texas Hold'em &middot; Private tables &middot; VoterPing</div>
-            </div>
-          </div>
-        </div>
-        <div class="landing-table">
-          <div class="table-box tb-static" id="landing-tb">
-            <div class="t-rail"></div><div class="t-felt"></div><div class="t-inlay"></div>
-            <svg class="t-ping" viewBox="-160 -160 320 320" aria-hidden="true"></svg>
-            <div class="t-lamp"></div>
-            <div class="t-center">
-              <div class="pot-row" id="landing-pot"></div>
-              <div class="community" id="landing-community"></div>
-            </div>
-            <div id="landing-sockets"></div>
-          </div>
-        </div>
-        <div class="landing-stats"><span>2&ndash;8 players</span><i></i><span>Blinds 10 / 20</span><i></i><span>1,500 buy-in</span></div>
-      </section>
-
-      <section class="landing-right">
-        <div class="setup-card">
-          <div class="setup-eyebrow">Take a seat</div>
-          <div class="setup-field">
-            <label class="field-label" for="player-name">Your name</label>
-            <input id="player-name" type="text" class="text-input" placeholder="Name at the table" maxlength="16" autocomplete="off">
-            <div id="bank-display" class="bank-display">Bank <b id="bank-amount">0</b></div>
-          </div>
-
-          <div class="setup-field">
-            <span class="field-label">Avatar</span>
-            <div class="avatar-section">
-              <div class="photo-upload-area" id="photo-upload-area" title="Upload a profile photo">
-                <input type="file" id="photo-input" accept="image/*" hidden>
-                <div class="photo-preview-circle" id="photo-preview-circle"><span class="photo-plus">+</span></div>
-                <div class="photo-upload-hint">Photo</div>
-              </div>
-              <div class="avatar-grid" id="avatar-grid"></div>
-            </div>
-          </div>
-
-          <div class="setup-field">
-            <label class="field-label" for="password-input">Table password <span class="field-hint">ask the host</span></label>
-            <input id="password-input" type="password" class="text-input" placeholder="Password" autocomplete="off">
-          </div>
-
-          <div id="landing-error" class="error-msg" role="alert"></div>
-
-          <div class="setup-actions">
-            <button id="btn-join" class="btn btn-brass">Join table</button>
-            <button id="btn-demo" class="btn btn-ghost">Play vs CPU</button>
-          </div>
-        </div>
-      </section>
-    </div>
-  </div>
+  <!-- ── SHELL + LOBBY MOUNTS ───────────────────────────────────── -->
+  <div id="shell-root"></div>
+  <div id="lobby-root" class="lb-root"></div>
 
   <!-- ── GAME ───────────────────────────────────────────────────── -->
   <div id="game-screen" class="screen">
@@ -100,6 +39,7 @@
       <header class="g-head">
         <div class="hd-left">
           <span id="bank-slot"></span>
+          <span id="host-slot"></span>
           <button type="button" class="plate-btn" id="btn-sit-out" title="Sit out the next hand">Pause</button>
         </div>
         <div class="hd-mid">
@@ -251,8 +191,11 @@
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
+  <script src="money.js?v=1"></script>
   <script src="sound.js?v=1"></script>
   <script src="game.js?v=24"></script>
   <script src="bank.js?v=2"></script>
+  <script src="shell.js?v=1"></script>
+  <script src="lobby.js?v=1"></script>
 </body>
 </html>

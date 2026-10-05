@@ -76,7 +76,7 @@
   }
 
   function rememberAvatars() {
-    for (const p of (state.gameState && state.gameState.players) || []) avCache.set(p.name.toLowerCase(), { avatar: p.avatar, pic: p.profilePic });
+    for (const p of (state.gameState && state.gameState.players) || []) if (p && p.name) avCache.set(p.name.toLowerCase(), { avatar: p.avatar, pic: p.profilePic });
   }
 
   function avatarFor(name) {
@@ -109,7 +109,7 @@
 
   function renderPlayers() {
     const me = state.gameState && state.gameState.players[state.myIdx];
-    const meName = me ? me.name.toLowerCase() : '';
+    const meName = me && me.name ? me.name.toLowerCase() : '';
     const canEdit = meName === 'chris';
     if (document.querySelector('#bank-players .bp-edit')) return;
     $('bank-pcount').textContent = data.players.length ? data.players.length + ' players' : '';
