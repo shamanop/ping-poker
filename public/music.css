@@ -46,7 +46,7 @@ body.sh-on .sh-top { grid-template-columns: auto auto auto minmax(0, 1fr) auto a
 .mu-item .np i { color: var(--ink-dim, #B7A486); }
 .mu-empty { padding: 14px 12px; font-size: 13px; color: var(--ink-dim, #B7A486); }
 
-@media (max-width: 1280px) { .mu-vol { display: none; } }
-@media (max-width: 1060px) { .mu-txt { width: 96px; } }
-@media (max-width: 900px) { .mu-txt .mu-tr { display: none; } .mu-txt { width: auto; } }
+@media (max-width: 1280px) { .mu-vol { display: none; } body.sh-on .sh-brand { display: none; } .sh-top { column-gap: 12px; } }
+@media (max-width: 1060px) { .mu-txt { width: 100px; } .mu-ic { display: none; } }
+@media (max-width: 900px) { .mu-mute { display: none; } .mu-txt .mu-tr { display: none; } .mu-txt { width: auto; max-width: 110px; } }
 @media (prefers-reduced-motion: reduce) { .mu-bar.blocked .mu-play { animation: none; } }

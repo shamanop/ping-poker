@@ -1,0 +1,72 @@
+[
+ {
+  "name": "stations delivered",
+  "ok": true,
+  "detail": "['placeholder-a', 'placeholder-b', 'placeholder-c']"
+ },
+ {
+  "name": "same station: same track + offset after join",
+  "ok": true,
+  "detail": "worst delta 27 ms (st=placeholder-a/placeholder-a idx=0/0 off=8.24/8.22)"
+ },
+ {
+  "name": "after station switch",
+  "ok": true,
+  "detail": "worst delta 14 ms (st=placeholder-b/placeholder-b idx=1/1 off=16.55/16.56)"
+ },
+ {
+  "name": "different station = different stream",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "B hops away and back",
+  "ok": true,
+  "detail": "worst delta 5 ms (st=placeholder-b/placeholder-b idx=2/2 off=0.09/0.10)"
+ },
+ {
+  "name": "after reload of B (session restored, station persisted)",
+  "ok": true,
+  "detail": "worst delta 18 ms (st=placeholder-b/placeholder-b idx=2/2 off=4.49/4.50)"
+ },
+ {
+  "name": "after track boundary",
+  "ok": true,
+  "detail": "worst delta 11 ms (st=placeholder-b/placeholder-b idx=0/0 off=2.31/2.33)"
+ },
+ {
+  "name": "local pause stops B only",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "after pause/resume",
+  "ok": true,
+  "detail": "worst delta 21 ms (st=placeholder-b/placeholder-b idx=0/0 off=9.09/9.11)"
+ },
+ {
+  "name": "volume persisted",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "duck lowers then restores gain",
+  "ok": true,
+  "detail": "0.122 -> 0.037 -> 0.122"
+ },
+ {
+  "name": "no page errors from music/shell",
+  "ok": true,
+  "detail": "[]"
+ },
+ {
+  "name": "autoplay-gated: blocked state + prompt shown",
+  "ok": true,
+  "detail": "blocked"
+ },
+ {
+  "name": "first gesture starts playback",
+  "ok": true,
+  "detail": ""
+ }
+]

@@ -244,7 +244,7 @@
         expectedOffsetSec: p ? p.offsetMs / 1000 : null,
         audioOffsetSec: v && !v.el.paused ? v.el.currentTime : null,
         audioTrackIndex: v && !v.el.paused ? v.idx : null,
-        driftSec: S.lastDrift, rate: v ? v.el.playbackRate : 1, rttMs: S.rtt, clockOffsetMs: S.offset,
+        gain: v ? v.el.volume : null, driftSec: S.lastDrift, rate: v ? v.el.playbackRate : 1, rttMs: S.rtt, clockOffsetMs: S.offset,
         hardSeeks: S.hardSeeks, nudges: S.nudges, serverNowMs: serverNow(),
       };
     },
