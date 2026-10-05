@@ -85,6 +85,7 @@ const SFX = (() => {
   const api = {
     init,
     get on() { return on; },
+    isOn() { return on; },
     toggle() { on = !on; if (master) master.gain.value = on ? 0.85 : 0; if (!on) api.musicStop(); else if (musicMode) { const m = musicMode; musicMode = null; api.music(m); } return on; },
     click() { tone({ f: 1400, to: 900, type: 'triangle', dur: 0.05, vol: 0.12 }); },
     spin() { noise({ f: 300, to: 2400, dur: 0.38, vol: 0.18, q: 1.2, attack: 0.08 }); tone({ f: 180, to: 520, type: 'sawtooth', dur: 0.3, vol: 0.05, lp: 900 }); },

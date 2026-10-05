@@ -135,10 +135,9 @@
     if (animate && from !== v) { const el = $('bal'); const t0 = performance.now(), ms = 700 * speed(); const tick = (now) => { const k = Math.min(1, (now - t0) / ms); el.textContent = fmtBal(from + (v - from) * (1 - Math.pow(1 - k, 3))); if (k < 1) requestAnimationFrame(tick); else el.textContent = fmtBal(v); }; requestAnimationFrame(tick); }
     else $('bal').textContent = fmtBal(v);
   }
-  function drawBet() { $('bet').textContent = fmt(bet()); $('betDn').disabled = st.busy || st.betIdx === 0; $('betUp').disabled = st.busy || st.betIdx === BETS.length - 1; $('buy').disabled = st.busy; }
+  function drawBet() { $('bet').textContent = fmt(bet()); $('betDn').disabled = st.busy || st.betIdx === 0; $('betUp').disabled = st.busy || st.betIdx === BETS.length - 1; $('buy').disabled = st.busy; $('buyFrom').textContent = 'from ' + fmt(bet() * E.CFG.buyCost.election); }
   function setBusy(b) {
     st.busy = b; $('spin').classList.toggle('run', b); $('spin').classList.toggle('idle', !b); drawBet();
-    $('buy').innerHTML = `Buy Bonus`;
   }
 
   // ---------- floats / stamps ----------
@@ -300,7 +299,7 @@
     return new Promise((res) => {
       const sc = document.createElement('div'); sc.className = 'scrim'; sc.innerHTML = html; ov.appendChild(sc);
       const done = (v) => { sc.remove(); res(v); };
-      sc.addEventListener('click', (e) => { const t = e.target.closest('[data-v]'); if (t) { SFX.click(); done(t.dataset.v); } else if (o.anywhere) done('x'); });
+      sc.addEventListener('click', (e) => { const t = e.target.closest('[data-v]'); if (t) { SFX.click(); done(t.dataset.v); } else if (o.anywhere || (o.backdrop && e.target === sc)) done('x'); });
       if (o.auto) setTimeout(() => sc.isConnected && done('x'), o.auto);
       sc._done = done;
     });
@@ -521,7 +520,7 @@
     const t = tierOf(res.win);
     SFX.fanfare(); SFX.cheer(t ? t.lvl : 2); SFX.clink(2); FX.confetti(90); FX.rain(40); FX.cannon(-1, 40); FX.cannon(1, 40); pose('cheer', 5000, { erupt: true }); say('bonusEnd');
     const amt = Math.round(res.win * b);
-    juiceWin(res.win, amt, !!res.maxed);
+    if (!juiceWin(res.win, amt, !!res.maxed) && PJ && amt > 0) setTimeout(() => PJ.winCelebration('nice', $('board'), amt), 250);
     const p = modal(`<div class="scene out"><img class="ttl" src="assets/img/title_stack.webp" alt="">
       ${t ? `<img class="banner" src="assets/img/banner_${t.img}.webp" alt="${t.n}">` : `<h2 class="sm">${name} done</h2>`}
       <div class="big" id="sumAmt">0</div><p>${xFmt(res.win)}x your bet${res.maxed ? ' (max win)' : ''}</p>
@@ -543,9 +542,12 @@
   $('betUp').addEventListener('click', () => { if (st.busy) return; st.betIdx = Math.min(BETS.length - 1, st.betIdx + 1); SFX.click(); drawBet(); });
   $('turbo').addEventListener('click', () => { st.turbo = !st.turbo; $('turbo').classList.toggle('on', st.turbo); SFX.click(); });
   $('auto').addEventListener('click', () => { SFX.init(); st.auto = !st.auto; $('auto').classList.toggle('on', st.auto); SFX.click(); if (st.auto && !st.busy) play('spin'); });
-  $('snd').addEventListener('click', () => { SFX.init(); const on = SFX.toggle(); if (PJ) PJ.setSfx(on); $('sndw').style.display = on ? '' : 'none'; $('snd').classList.toggle('on', !on); });
+  const sndUi = (on) => { $('sndw').style.display = on ? '' : 'none'; $('sndx').style.display = on ? 'none' : ''; $('snd').classList.toggle('on', on); $('snd').setAttribute('aria-pressed', on ? 'true' : 'false'); $('snd').setAttribute('aria-label', on ? 'Sound on' : 'Sound off'); $('snd').title = on ? 'Sound on' : 'Sound off'; };
+  sndUi(SFX.isOn());
+  $('snd').addEventListener('click', () => { SFX.init(); const on = SFX.toggle(); if (PJ) PJ.setSfx(on); sndUi(on); });
   $('pigeon').addEventListener('click', () => { SFX.init(); SFX.hic(); say('idle'); });
   stage.addEventListener('click', (e) => { if (e.target.closest('#tier')) st.tap++; });
+  addEventListener('keydown', (e) => { const sc = ov.querySelector('.scrim'); if (e.key === 'Escape' && sc) { e.stopImmediatePropagation(); sc._done?.('x'); } });
   addEventListener('keydown', (e) => { if (e.code === 'Space' && !e.repeat) { e.preventDefault(); if (ov.querySelector('.scrim')) { ov.querySelector('.scrim')._done?.('x'); return; } SFX.init(); st.tap++; st.busy ? (st.skip = true) : play('spin'); } });
 
   $('buy').addEventListener('click', async () => {
@@ -555,7 +557,7 @@
       <div class="buygrid">
         <button class="buyopt" data-v="buy-election" ${avail() < cE ? 'disabled' : ''}><b>Recount</b><span>${C.spinsFor[3]} free spins. Wilds stick and double.</span><em>${fmt(cE)}</em><u>${money.live ? '' : 'VOTES'}</u></button>
         <button class="buyopt" data-v="buy-landslide" ${avail() < cL ? 'disabled' : ''}><b>Landslide</b><span>${C.spinsFor[4]} free spins. Starts with a wild planted.</span><em>${fmt(cL)}</em><u>${money.live ? '' : 'VOTES'}</u></button>
-      </div><button class="btn alt" data-v="x">Not now</button></div>`);
+      </div><button class="btn alt" data-v="x">Not now</button></div>`, { backdrop: true });
     if (v === 'buy-election' || v === 'buy-landslide') play(v);
   });
 
@@ -570,7 +572,7 @@
       <p style="font-size:24px"><b>Dump &amp; Count box</b> is wild: it stands in for any symbol and carries a multiplier. Multipliers in one cluster add together.</p>
       <p style="font-size:24px"><b>VP coin</b>: 3 trigger the Recount (${C.spinsFor[3]} free spins). 4+ trigger the Landslide (${C.spinsFor[4]}+ spins, a wild planted). In free spins wilds stick and double each time they win.</p>
       <p style="font-size:24px">Big wins: ${tiers}. Max win ${fx(E.MAX_WIN_X)}x. ${window.BENDER_FOOTER || ''}</p>
-      <button class="btn" data-v="x" style="margin-top:20px">Close</button></div>`);
+      <button class="btn" data-v="x" style="margin-top:20px">Close</button></div>`, { backdrop: true });
   });
 
   // ---------- idle life: rotating lines, random drink ----------
@@ -588,7 +590,7 @@
       const id = ++reqSeq;
       const t = setTimeout(() => { pend.delete(id); reject(new Error('timeout')); }, 2000);
       pend.set(id, { ok: (p) => { clearTimeout(t); resolve(p); }, err: (e) => { clearTimeout(t); reject(e); } });
-      toParent({ type: 'spin', reqId: id, bet: b, mode: money.mode, buy: mode === 'spin' ? null : mode });
+      toParent({ type: 'spin', reqId: id, bet: b, mode: money.mode, buy: mode === 'spin' ? null : String(mode).replace(/^buy-/, '') });
     });
   }
   function onResult(m) {
@@ -611,8 +613,8 @@
     const bar = $('modebar'); if (!bar) return;
     bar.dataset.state = money.live ? money.mode : 'practice';
     bar.querySelectorAll('button').forEach((b) => b.classList.toggle('on', money.live && b.dataset.m === money.mode));
-    $('modenote').textContent = !money.live ? 'Practice (no wallet)' : money.mode === 'ledger' ? 'Ledger $ is a friendly tally. Settle up yourselves.' : 'Play $ is pretend money.';
-    $('balM').querySelector('.lbl').innerHTML = '&#9733; ' + (!money.live ? 'VOTES' : money.mode === 'ledger' ? 'LEDGER $' : 'PLAY $');
+    $('modenote').textContent = !money.live ? 'Practice (no wallet)' : money.mode === 'ledger' ? 'Ledger $ is a friendly tally. Settle up yourselves.' : 'Pretend money.';
+    $('balM').querySelector('.lbl').innerHTML = '&#9733; ' + (!money.live ? 'VOTES' : money.mode === 'ledger' ? 'NET' : 'BALANCE');
     const fineTxt = !money.live ? 'Practice (no wallet). Free play only.' : (window.BENDER_FOOTER || 'No deposits, no payouts. Ledger $ is a friendly tally.');
     [$('fine'), $('dis')].forEach((el) => { if (el) el.textContent = fineTxt; });
   }

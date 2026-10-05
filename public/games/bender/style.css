@@ -93,15 +93,16 @@ img.frame{left:0;top:0;width:1000px;height:833px;pointer-events:none;z-index:2}
 #win.pop{animation:winpop .3s ease-out}
 @keyframes winpop{0%{transform:scale(1)}40%{transform:scale(1.14)}100%{transform:scale(1)}}
 
-#hud{z-index:3;display:grid;grid-template-columns:1fr 380px 1fr;grid-template-rows:230px 130px auto;column-gap:12px;align-items:center}
+#hud{z-index:3;display:grid;grid-template-columns:minmax(0,1fr) 380px minmax(0,1fr);grid-template-rows:230px 130px auto;column-gap:12px;align-items:center}
 #hud>*{position:relative}
 .meter{display:grid;align-content:center;gap:6px}
 .meter .lbl{font-weight:800;font-size:26px;letter-spacing:.14em;color:var(--gold)}
-.meter .val{font-family:var(--slab);font-size:60px;line-height:1;font-variant-numeric:tabular-nums;color:var(--cream);text-shadow:0 4px 0 var(--navy)}
+.meter .val{font-variant-numeric:tabular-nums;font-family:var(--slab);font-size:60px;line-height:1;font-variant-numeric:tabular-nums;color:var(--cream);text-shadow:0 4px 0 var(--navy)}
 #balM{grid-column:1;grid-row:1;padding-left:6px}
-#betM{grid-column:3;grid-row:1;justify-items:end;padding-right:30px}
-#betM .row{display:grid;grid-template-columns:76px auto 76px;align-items:center;gap:6px}
-#betM .val{font-size:44px;min-width:120px;text-align:center;white-space:nowrap}
+#betM{grid-column:3;grid-row:1;justify-items:end;padding-right:34px}
+#betM .row{display:grid;grid-template-columns:70px 150px 70px;align-items:center;gap:8px}
+#betM .val{font-size:40px;width:150px;padding:0 6px;text-align:center;white-space:nowrap;overflow:hidden}
+#betM .sq{width:70px;height:70px}
 .sq{width:76px;height:76px;border:5px solid var(--cream);background:var(--navy);color:var(--cream);font-family:var(--slab);font-size:48px;line-height:1;border-radius:8px;box-shadow:0 5px 0 rgba(0,0,0,.6);transition:transform .1s,background .15s}
 .sq:hover{background:var(--navy2)}
 .sq:active{transform:translateY(4px);box-shadow:0 1px 0 rgba(0,0,0,.6)}
@@ -116,13 +117,16 @@ button[disabled]{opacity:.4;pointer-events:none}
 #spin.idle img{animation:breathe 2.4s ease-in-out infinite}
 @keyframes breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}
 
-.row2{grid-column:1/-1;grid-row:2;display:grid;grid-template-columns:1fr 380px 1fr;column-gap:12px;align-items:end;height:130px}
+.row2{grid-column:1/-1;grid-row:2;display:grid;grid-template-columns:minmax(0,1fr) 380px minmax(0,1fr);column-gap:12px;align-items:end;height:130px}
 .props{position:relative;height:130px}
 .props.l .van{position:absolute;left:0;bottom:2px;width:150px;filter:drop-shadow(0 6px 5px rgba(0,0,0,.5))}
-#buy{position:absolute;right:0;bottom:6px;width:210px;transition:transform .1s;filter:drop-shadow(0 6px 4px rgba(0,0,0,.5))}
-#buy img{display:block;width:100%}
-#buy:hover{transform:scale(1.04) rotate(-1.5deg)}
-#buy:active{transform:scale(.96)}
+#buy{position:absolute;right:0;bottom:8px;width:196px;height:88px;padding:0;display:grid;place-content:center;gap:2px;text-align:center;border:5px solid var(--navy);box-shadow:inset 0 0 0 3px var(--cream),0 6px 0 rgba(0,0,0,.6);background:linear-gradient(180deg,#FFD46B,var(--gold));color:var(--navy);border-radius:8px;transition:transform .1s,filter .15s}
+#buy b{white-space:nowrap;font-family:var(--slab);font-weight:400;font-size:24px;line-height:1;letter-spacing:0;text-transform:uppercase}
+#buy span{white-space:nowrap;font-weight:800;font-size:17px;letter-spacing:.04em;text-transform:uppercase;font-variant-numeric:tabular-nums}
+#buy:hover:not(:disabled){transform:translateY(-3px);filter:brightness(1.1);box-shadow:inset 0 0 0 3px var(--cream),0 9px 0 rgba(0,0,0,.6),0 0 22px rgba(245,185,66,.7)}
+#buy:active:not(:disabled){transform:translateY(4px);box-shadow:inset 0 0 0 3px var(--cream),0 2px 0 rgba(0,0,0,.6)}
+#buy:disabled{filter:grayscale(.6) brightness(.7)}
+#buy:focus-visible,.btns button:focus-visible{outline:4px solid #fff;outline-offset:3px}
 .props.r .pigeon{position:absolute;right:0;bottom:2px;height:176px;transform-origin:50% 100%;animation:pigeon 6s ease-in-out infinite}
 @keyframes pigeon{0%,86%,100%{transform:none}90%{transform:translateY(-14px) rotate(-3deg)}94%{transform:translateY(0) rotate(2deg)}97%{transform:translateY(-8px)}}
 .btns{display:grid;grid-template-columns:128px 112px 70px 70px;column-gap:0;justify-content:space-between;align-items:center;height:74px;align-self:center;margin-top:30px}
