@@ -526,7 +526,7 @@ function instantWin(room, winner) {
   });
   if (room.handHistory.length > 10) room.handHistory.pop();
   io.to(room.id).emit('showdown_result', {
-    winners: [{ name: winner.name, handName: 'Everyone folded', cards: winner.cards }],
+    winners: [{ name: winner.name, handName: 'Everyone folded', cards: winner.cards, amount: room.pot }],
     pot: room.pot,
   });
   room.pot = 0;
@@ -615,7 +615,7 @@ function showdown(room) {
   }
   const winners = [...paid.keys()].sort((a, b) => a.idx - b.idx);
 
-  const winnerList = winners.map(w => ({ name: w.player.name, handName: w.hand.name, cards: w.player.cards }));
+  const winnerList = winners.map(w => ({ name: w.player.name, handName: w.hand.name, cards: w.player.cards, amount: paid.get(w) }));
   for (const w of winners) roomLog(room, `${w.player.name} wins ${paid.get(w)} with ${w.hand.name}`);
 
   room.handHistory.unshift({

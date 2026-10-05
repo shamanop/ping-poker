@@ -606,9 +606,9 @@ function initBust() {
     $('bust-panel').classList.add('hidden');
   });
   $('btn-leave').addEventListener('click', () => { location.reload(); });
-  $('btn-home').addEventListener('click', () => {
+  ['btn-home', 'btn-home-lobby'].forEach(id => $(id)?.addEventListener('click', () => {
     if (confirm('Leave the table and go back to the home screen?')) location.href = location.pathname;
-  });
+  }));
 }
 
 function showBust(balance) {
@@ -1530,7 +1530,7 @@ function renderShowdown(winners, pot) {
     <div class="sd-row">
       <span class="showdown-winner-name">${esc(w.name)}</span>
       <span class="showdown-hand-name">${esc(w.handName || '')}</span>
-      <span class="showdown-pot"><strong>+${(share + (i === 0 ? pot - share * winners.length : 0)).toLocaleString()}</strong></span>
+      <span class="showdown-pot"><strong>+${(Number.isFinite(w.amount) ? w.amount : share + (i === 0 ? pot - share * winners.length : 0)).toLocaleString()}</strong></span>
     </div>`).join('');
 
   if (g) {
