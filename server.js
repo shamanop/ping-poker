@@ -511,6 +511,17 @@ function processAction(room, playerIdx, action, amount) {
     }
     case 'raise': {
       if (!Number.isSafeInteger(amount)) { room.lastReject = 'Raise amount must be a whole number'; return false; }
+      const canRespond = room.players.some((o, i) => i !== playerIdx && !o.folded && !o.allIn && !o.sittingOut && o.connected);
+      if (!canRespond) { // everyone else is all-in: only call is possible, a bet or raise has no one to answer it
+        if (toCall <= 0) { room.lastReject = 'Everyone else is all-in, nothing to bet'; return false; }
+        const callAmt = Math.min(toCall, p.chips);
+        p.chips -= callAmt; p.roundBet += callAmt; p.handBet = (p.handBet || 0) + callAmt; room.pot += callAmt;
+        if (p.chips === 0) p.allIn = true;
+        p.lastAction = 'CALL';
+        room.actionQueue = room.actionQueue.filter(i => i !== playerIdx);
+        roomLog(room, `${name} calls ${callAmt}`);
+        break;
+      }
       const minRaise = room.currentBet + room.bb;
       const raiseTo  = Math.max(amount, minRaise);
       const addAmt   = Math.min(raiseTo - p.roundBet, p.chips);
@@ -591,6 +602,8 @@ function advanceStreet(room) {
 
   const firstIdx = nextActiveIdx(room, room.dealerIdx, 1);
   room.actionQueue = buildActionQueue(room, firstIdx);
+  // One player with chips left against all-in opponents has no one to bet against: run the board out.
+  if (room.actionQueue.length === 1 && room.players.some(o => !o.folded && !o.sittingOut && o.connected && o.allIn)) room.actionQueue = [];
   if (room.actionQueue.length === 0) {
     broadcastGameState(room);
     const handNum = room.handNum;

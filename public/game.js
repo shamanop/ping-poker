@@ -1084,7 +1084,8 @@ function renderControls(gs) {
 
   const minRaise = gs.currentBet + bb;
   const maxRaise = me ? me.chips + (me.roundBet || 0) : 0;
-  const canRaise = canAct && me.chips > toCall && maxRaise >= minRaise;
+  const othersCanRespond = gs.players.some((o, i) => i !== state.myIdx && !o.folded && !o.allIn && !o.sittingOut && o.connected && o.cardCount);
+  const canRaise = canAct && othersCanRespond && me.chips > toCall && maxRaise >= minRaise;
   rbtn.querySelector('.act-main').textContent = gs.currentBet === 0 ? 'Bet' : 'Raise';
 
   // Status text
