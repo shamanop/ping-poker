@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PingJuice demo</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>
+  // Works when served from the-ping-build/ (../public/) or from public/ itself (/).
+  var PJBASE = /\/tests\//.test(location.pathname) ? '../public/' : '/';
+  document.write('<link rel="stylesheet" href="' + PJBASE + 'juice.css">');
+</script>
+<style>
+  :root { --brass: #B8893A; --brass-lt: #D9AE55; --gold: #F5B942; --ink: #F1E6CC; --ink-dim: #B7A486; --panel: #1B120C; --panel-2: #261911; --line: #4A3422; --line-lt: #6B4C2E; --f-display: 'Bebas Neue', Impact, 'Arial Narrow', sans-serif; --f-text: 'Bitter', Georgia, serif; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #0d0805; color: var(--ink); font-family: var(--f-text); }
+  body { display: grid; grid-template-columns: 330px 1fr; overflow: hidden; }
+  aside { background: var(--panel); border-right: 2px solid #000; box-shadow: inset -3px 0 0 rgba(184, 137, 58, .45); padding: 16px 16px 24px; overflow-y: auto; }
+  aside h1 { margin: 0 0 4px; font: 400 26px var(--f-display); letter-spacing: .14em; color: var(--brass-lt); }
+  aside p { margin: 0 0 12px; font-size: 12px; color: var(--ink-dim); }
+  aside h2 { margin: 16px 0 6px; padding-bottom: 4px; font: 400 15px var(--f-display); letter-spacing: .2em; color: var(--ink-dim); border-bottom: 1px solid var(--line-lt); }
+  .row { display: flex; flex-wrap: wrap; gap: 6px; }
+  button.fx { cursor: pointer; font: 400 15px var(--f-display); letter-spacing: .1em; color: var(--ink); background: var(--panel-2); border: 1px solid var(--line-lt); box-shadow: 2px 2px 0 #000; padding: 6px 11px 4px; }
+  button.fx:hover { border-color: var(--brass); color: var(--gold); }
+  button.fx:active { transform: translate(1px, 1px); box-shadow: 1px 1px 0 #000; }
+  label.chk { display: block; margin-top: 12px; font-size: 12px; color: var(--ink-dim); }
+  main { position: relative; background: #120b07 url(../public/images/hero-room.jpg) center / cover; }
+  #stage { position: absolute; inset: 0; overflow: hidden; }
+  #stage::before { content: ''; position: absolute; inset: 0; background: rgba(8, 4, 2, .62); }
+  .tag { position: absolute; display: grid; grid-template-columns: 44px auto; align-items: center; column-gap: 10px; padding: 7px 18px 7px 8px; background: var(--panel); border: 2px solid #000; box-shadow: 0 0 0 1px var(--brass), 4px 4px 0 #000; }
+  .tag .av { width: 44px; height: 44px; background: var(--panel-2) center / cover; border: 1px solid var(--line-lt); }
+  .tag b { display: block; font: 400 20px var(--f-display); letter-spacing: .08em; }
+  .tag span { font-size: 13px; color: var(--gold); font-weight: 700; }
+  #seat { left: 560px; bottom: 120px; }
+  #seat2 { left: 120px; top: 120px; }
+  #pot { position: absolute; left: 50%; top: 42%; width: 190px; height: 80px; transform: translate(-50%, -50%); display: grid; place-items: center; background: rgba(10, 6, 3, .6); border: 1px solid var(--line-lt); font: 400 22px var(--f-display); letter-spacing: .14em; color: var(--ink); }
+  #pot small { font: 400 12px var(--f-text); color: var(--ink-dim); letter-spacing: .1em; display: block; text-align: center; }
+  #stack { position: absolute; right: 150px; bottom: 150px; width: 92px; height: 110px; display: grid; place-items: end center; }
+  #stack img { grid-area: 1 / 1; width: 54px; filter: drop-shadow(0 2px 0 rgba(0, 0, 0, .55)); }
+  #stack img:nth-child(1) { transform: translateY(0); }
+  #stack img:nth-child(2) { transform: translateY(-8px); }
+  #stack img:nth-child(3) { transform: translateY(-16px); }
+  #stack img:nth-child(4) { transform: translateY(-24px); }
+  #stack em { position: absolute; bottom: -22px; font: normal 400 13px var(--f-display); letter-spacing: .14em; color: var(--ink-dim); }
+  #widgets { position: absolute; left: 24px; bottom: 24px; display: flex; flex-direction: column; gap: 14px; align-items: flex-start; }
+  #log { position: absolute; right: 16px; bottom: 12px; font-size: 11px; color: var(--ink-dim); }
+</style>
+</head>
+<body>
+<aside>
+  <h1>PINGJUICE</h1>
+  <p>Every effect has a button. Targets are the seat, pot and chip stack on the right.</p>
+
+  <h2>Win celebrations</h2>
+  <div class="row">
+    <button class="fx" data-do="win-nice">Nice</button>
+    <button class="fx" data-do="win-big">Big</button>
+    <button class="fx" data-do="win-mega">Mega</button>
+    <button class="fx" data-do="win-jackpot">Jackpot</button>
+  </div>
+
+  <h2>Bursts</h2>
+  <div class="row" id="bursts"></div>
+  <div class="row" style="margin-top:6px">
+    <button class="fx" data-do="shockwave">Shockwave</button>
+    <button class="fx" data-do="shake">Screen shake</button>
+    <button class="fx" data-do="countup">Count up</button>
+  </div>
+
+  <h2>Chips and callouts</h2>
+  <div class="row">
+    <button class="fx" data-do="chips">Chip shower pot to stack</button>
+    <button class="fx" data-do="chips-seat">Chips to seat</button>
+  </div>
+  <div class="row" style="margin-top:6px">
+    <button class="fx" data-do="call-fh">Full house</button>
+    <button class="fx" data-do="call-sf">Straight flush</button>
+    <button class="fx" data-do="call-rf">Royal flush</button>
+  </div>
+
+  <h2>Toasts</h2>
+  <div class="row">
+    <button class="fx" data-do="toast-jp">Jackpot toast</button>
+    <button class="fx" data-do="toast-streak">Streak toast</button>
+    <button class="fx" data-do="toast-spam">Queue 6</button>
+    <button class="fx" data-do="toast-plain">No sticker</button>
+  </div>
+
+  <h2>Stickers</h2>
+  <div class="row" id="stickers"></div>
+  <div class="row" style="margin-top:6px">
+    <button class="fx" data-do="charm">VP charm on seat</button>
+    <button class="fx" data-do="uncharm">Remove charm</button>
+  </div>
+
+  <h2>Widgets</h2>
+  <div class="row">
+    <button class="fx" data-do="flame">Streak +1</button>
+    <button class="fx" data-do="flame0">Streak reset</button>
+    <button class="fx" data-do="xp">XP +25%</button>
+    <button class="fx" data-do="xp-lv">XP level up</button>
+    <button class="fx" data-do="daily">Daily bonus</button>
+  </div>
+
+  <h2>Sounds</h2>
+  <div class="row" id="sounds"></div>
+  <label class="chk"><input type="checkbox" id="mute"> Mute (localStorage ping.sfx = 0)</label>
+  <label class="chk"><input type="checkbox" id="rm"> Force reduced motion</label>
+</aside>
+
+<main>
+  <div id="stage">
+    <div id="pot"><div>POT<small id="potamt">$128.00</small></div></div>
+    <div class="tag" id="seat2"><div class="av" style="background-image:url(../public/images/avatars/a01.png)"></div><div><b>ANA</b><span>$214.00</span></div></div>
+    <div class="tag" id="seat"><div class="av" id="seatav"></div><div><b>FRANK</b><span>$340.00</span></div></div>
+    <div id="stack"><img src="../public/images/chip-500.png" alt=""><img src="../public/images/chip-100.png" alt=""><img src="../public/images/chip-25.png" alt=""><img src="../public/images/chip-5.png" alt=""><em>STACK</em></div>
+    <div id="widgets"><div id="w-flame"></div><div id="w-xp"></div></div>
+    <div id="log"></div>
+  </div>
+</main>
+
+<script>
+  document.write('<script src="' + PJBASE + 'juice.js"><\/script><script src="' + PJBASE + 'sounds-juice.js"><\/script>');
+</script>
+<script>
+  (function () {
+    var $ = function (s) { return document.querySelector(s); };
+    var PJ = window.PingJuice, stage = $('#stage'), seat = $('#seat'), seat2 = $('#seat2'), pot = $('#pot'), stack = $('#stack');
+    PJ.config.stage = '#stage';
+    var av = document.querySelector('#seatav'); av.style.backgroundImage = 'url(' + PJBASE + 'images/avatars/a02.png)';
+    var streak = 0, xp = 20, lvl = 4;
+    function mk(parent, items, cls, fn) {
+      items.forEach(function (n) { var b = document.createElement('button'); b.className = 'fx'; b.textContent = n; b.onclick = function () { fn(n); }; parent.appendChild(b); });
+    }
+    mk($('#bursts'), PJ.burstNames, '', function (n) { var c = pot.getBoundingClientRect(); PJ.burst(n, c.left + c.width / 2, c.top + c.height / 2, { size: n === 'rays' ? 700 : 420, ms: 1100 }); });
+    mk($('#stickers'), PJ.stickerNames, '', function (n) { PJ.stickerPop(n, seat); });
+    mk($('#sounds'), PJ.sfxNames, '', function (n) { PJ.sfx(n); });
+    function say(t) { $('#log').textContent = t; }
+
+    var A = {
+      'win-nice': function () { PJ.winCelebration('nice', seat, 1200); },
+      'win-big': function () { PJ.winCelebration('big', pot, 8400); },
+      'win-mega': function () { PJ.winCelebration('mega', pot, 42000); },
+      'win-jackpot': function () { PJ.winCelebration('jackpot', stage, 250000); },
+      shockwave: function () { var c = pot.getBoundingClientRect(); PJ.shockwave(c.left + c.width / 2, c.top + c.height / 2); },
+      shake: function () { PJ.screenShake(1.2, 500); },
+      countup: function () { var el = $('#potamt'); PJ.countUp(el, 0, 128000, 1200); },
+      chips: function () { PJ.chipShower(pot, stack, 14); },
+      'chips-seat': function () { PJ.chipShower(pot, seat, 10); },
+      'call-fh': function () { PJ.calloutHand('Full House!', stage); },
+      'call-sf': function () { PJ.calloutHand('Straight Flush!', stage); },
+      'call-rf': function () { PJ.calloutHand('Royal Flush!', stage); },
+      'toast-jp': function () { PJ.toast('**Frank** hit the JACKPOT +$42.00', { sticker: 'ballot-cherry' }); },
+      'toast-streak': function () { PJ.toast('**Ana** is on a 4-win streak', { sticker: 'vp-horseshoe' }); },
+      'toast-spam': function () { ['vp-chip', 'ping-hand', 'boba-crown', 'skull-ace', 'i-pinged', 'vp-charm'].forEach(function (s, i) { PJ.toast('**Player ' + (i + 1) + '** did something worth a toast', { sticker: s }); }); },
+      'toast-plain': function () { PJ.toast('Blinds go up in 30 seconds'); },
+      charm: function () { PJ.charm(seat); PJ.charm(seat2, { side: 'left' }); },
+      uncharm: function () { PJ.uncharm(seat); PJ.uncharm(seat2); },
+      flame: function () { PJ.streakFlame($('#w-flame'), ++streak); },
+      flame0: function () { streak = 0; PJ.streakFlame($('#w-flame'), 0); },
+      xp: function () { xp = Math.min(95, xp + 25); PJ.xpBar($('#w-xp'), xp, lvl); },
+      'xp-lv': function () { xp = 8; lvl++; PJ.xpBar($('#w-xp'), xp, lvl); },
+      daily: function () { PJ.dailyBonus(500, { onClaim: function (a) { say('claimed ' + a); } }); }
+    };
+    document.addEventListener('click', function (e) { var d = e.target.closest('[data-do]'); if (d && A[d.getAttribute('data-do')]) A[d.getAttribute('data-do')](); });
+    $('#mute').onchange = function () { PJ.setSfx(!this.checked); };
+    $('#rm').onchange = function () { PJ.config.reduced = this.checked ? true : null; };
+    PJ.xpBar($('#w-xp'), xp, lvl); PJ.streakFlame($('#w-flame'), 2); streak = 2;
+    window.__A = A;
+  })();
+</script>
+</body>
+</html>
