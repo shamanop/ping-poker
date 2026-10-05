@@ -147,6 +147,7 @@ function makeRoom(id, hostSocketId) {
     street:       null,
     actionQueue:  [],
     handNum:      0,
+    lastStacks:   {},
     log:          [],
     turnTimeout:  null,
     turnStartedAt: null,
@@ -810,13 +811,50 @@ io.on('connection', socket => {
     const room = rooms.get(ROOM_ID);
     if (!room) { socket.emit('error', { message: 'Server error' }); return; }
     if (room.players.some(p => p.socketId === socket.id)) return;
+
+    const cleanName = cleanNameOf(name) || `Player ${room.players.length + 1}`;
+    const key = bankKey(cleanName);
+    const buyInFor = () => {
+      const prior = room.lastStacks[key] || 0;
+      return Math.min(prior >= BIG_BLIND ? prior : STARTING_CHIPS, getBalance(cleanName));
+    };
+
+    // Same name already at this table: take that seat back (refresh, dropped phone, second tab)
+    const seat = room.players.find(p => !p.isBot && bankKey(p.name) === key);
+    if (seat) {
+      const wasHost = room.hostSocketId === seat.socketId;
+      const oldSock = seat.connected ? io.sockets.sockets.get(seat.socketId) : null;
+      if (!seat.connected) {
+        const buyIn = buyInFor();
+        if (buyIn < BIG_BLIND) { socket.emit('error', { message: 'Insufficient bank balance.' }); return; }
+        adjustBank(cleanName, -buyIn, 'buyin', room, buyIn);
+        delete room.lastStacks[key];
+        seat.chips = buyIn;
+        seat.connected = true;
+        if (room.status === 'playing') seat.sittingOut = true;
+        roomLog(room, `${seat.name} rejoined`);
+      }
+      if (oldSock) {
+        oldSock.leave(ROOM_ID);
+        oldSock.emit('error', { message: 'This seat was taken over by a newer connection' });
+      }
+      seat.socketId = socket.id;
+      if (seat.profilePic === null) seat.profilePic = validatePic(profilePic);
+      if (wasHost || !room.hostSocketId) room.hostSocketId = socket.id;
+      socket.join(ROOM_ID);
+      socket.emit('room_joined', { roomId: ROOM_ID, playerIdx: room.players.indexOf(seat), balance: getBalance(cleanName) });
+      broadcastRoomUpdate(room);
+      broadcastGameState(room);
+      emitPrivateCards(room);
+      return;
+    }
+
     if (room.players.length >= 8) {
       socket.emit('error', { message: 'Table is full (max 8 players)' }); return;
     }
-
-    const cleanName = cleanNameOf(name) || `Player ${room.players.length + 1}`;
-    const buyIn = Math.min(STARTING_CHIPS, getBalance(cleanName));
+    const buyIn = buyInFor();
     if (buyIn < BIG_BLIND) { socket.emit('error', { message: 'Insufficient bank balance.' }); return; }
+    delete room.lastStacks[key];
 
     const playerIdx = room.players.length;
     const player = makePlayer(socket.id, cleanName, avatar, buyIn);
@@ -996,6 +1034,7 @@ io.on('connection', socket => {
         const c = player.chips;
         player.chips = 0;
         adjustBank(player.name, c, 'cashout', room, 0);
+        room.lastStacks[bankKey(player.name)] = c;
       }
 
       player.connected = false;
