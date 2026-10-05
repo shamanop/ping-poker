@@ -24,7 +24,7 @@
   const mkVoice = () => { const el = new Audio(); el.preload = 'auto'; return { el, url: '', idx: -1, stationId: '' }; };
   const voices = [mkVoice(), mkVoice()];
   let cur = null;
-  let boundaryTimer = 0, corrTimer = 0, tickTimer = 0;
+  let boundaryTimer = 0, corrTimer = 0, tickTimer = 0, preloadTimer = 0;
 
   const serverNow = () => Date.now() + S.offset;
   const station = () => S.stations.find(s => s.id === S.stationId) || null;
@@ -90,7 +90,7 @@
 
   // ---------- engine ----------
   function otherVoice() { return voices.find(v => v !== cur) || voices[0]; }
-  const clearTimers = () => { clearTimeout(boundaryTimer); clearTimeout(corrTimer); boundaryTimer = corrTimer = 0; };
+  const clearTimers = () => { clearTimeout(boundaryTimer); clearTimeout(corrTimer); clearTimeout(preloadTimer); boundaryTimer = corrTimer = preloadTimer = 0; };
 
   function ready(el, g) {
     return new Promise(res => {
@@ -134,11 +134,14 @@
     clearTimeout(boundaryTimer);
     const st = station(); if (!st) return;
     const p = posOf(st);
+    const left = Math.max(0, p.trackEndMs - serverNow());
     boundaryTimer = setTimeout(() => {
       if (g !== S.gen || !S.wantPlay) return;
       begin(otherVoice(), g);
-    }, Math.max(0, p.trackEndMs - serverNow()) + 5);
-    preloadNext();
+    }, left + 5);
+    // fetch the next mp3 only ~20 s before the hand-off so a quick station hop never wastes a download
+    clearTimeout(preloadTimer);
+    preloadTimer = setTimeout(() => { if (g === S.gen) preloadNext(); }, Math.max(0, left - 20000));
   }
 
   function preloadNext() {
@@ -249,6 +252,7 @@
       };
     },
   };
+  api._debug = { el: () => (cur ? cur.el : null), correct: tight => correct(!!tight) };
   window.PingMusic = api;
 
   // ---------- UI ----------

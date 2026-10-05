@@ -7,12 +7,12 @@
  {
   "name": "same station: same track + offset after join",
   "ok": true,
-  "detail": "worst delta 27 ms (st=placeholder-a/placeholder-a idx=0/0 off=8.24/8.22)"
+  "detail": "worst delta 20 ms (st=placeholder-a/placeholder-a idx=0/0 off=16.42/16.44)"
  },
  {
   "name": "after station switch",
   "ok": true,
-  "detail": "worst delta 14 ms (st=placeholder-b/placeholder-b idx=1/1 off=16.55/16.56)"
+  "detail": "worst delta 9 ms (st=placeholder-b/placeholder-b idx=2/2 off=14.63/14.62)"
  },
  {
   "name": "different station = different stream",
@@ -22,17 +22,17 @@
  {
   "name": "B hops away and back",
   "ok": true,
-  "detail": "worst delta 5 ms (st=placeholder-b/placeholder-b idx=2/2 off=0.09/0.10)"
+  "detail": "worst delta 27 ms (st=placeholder-b/placeholder-b idx=0/0 off=3.56/3.59)"
  },
  {
   "name": "after reload of B (session restored, station persisted)",
   "ok": true,
-  "detail": "worst delta 18 ms (st=placeholder-b/placeholder-b idx=2/2 off=4.49/4.50)"
+  "detail": "worst delta 38 ms (st=placeholder-b/placeholder-b idx=0/0 off=7.88/7.90)"
  },
  {
   "name": "after track boundary",
   "ok": true,
-  "detail": "worst delta 11 ms (st=placeholder-b/placeholder-b idx=0/0 off=2.31/2.33)"
+  "detail": "worst delta 13 ms (st=placeholder-b/placeholder-b idx=1/1 off=2.33/2.34)"
  },
  {
   "name": "local pause stops B only",
@@ -42,7 +42,27 @@
  {
   "name": "after pause/resume",
   "ok": true,
-  "detail": "worst delta 21 ms (st=placeholder-b/placeholder-b idx=0/0 off=9.09/9.11)"
+  "detail": "worst delta 23 ms (st=placeholder-b/placeholder-b idx=1/1 off=9.09/9.09)"
+ },
+ {
+  "name": "250 ms drift -> playbackRate nudge (no seek)",
+  "ok": true,
+  "detail": "rate=0.970 drift=0.245"
+ },
+ {
+  "name": "1.5 s drift -> hard re-seek",
+  "ok": true,
+  "detail": "hardSeeks=1"
+ },
+ {
+  "name": "A re-converges with B after forced drifts",
+  "ok": true,
+  "detail": "worst delta 20 ms (st=placeholder-b/placeholder-b idx=1/1 off=18.30/18.32)"
+ },
+ {
+  "name": "client clock +7 s skew corrected by ping offset",
+  "ok": true,
+  "detail": "delta 37 ms, clockOffsetMs=-7000"
  },
  {
   "name": "volume persisted",

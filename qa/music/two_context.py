@@ -74,6 +74,21 @@ try:
         check('local pause stops B only', b.evaluate("PingMusic.nowPlaying().status") == 'paused' and a.evaluate("PingMusic.nowPlaying().playing"))
         b.evaluate("PingMusic.play()"); playing(b); b.wait_for_timeout(2500)
         compare('after pause/resume', a, b)
+        # drift correction: small drift is nudged via playbackRate, large drift is re-seeked
+        a.evaluate("PingMusic._debug.el().currentTime += 0.25"); a.evaluate("PingMusic._debug.correct(false)")
+        r1 = a.evaluate("PingMusic.nowPlaying()"); check('250 ms drift -> playbackRate nudge (no seek)', r1['rate'] < 1 and r1['hardSeeks'] == 0, f"rate={r1['rate']:.3f} drift={r1['driftSec']:.3f}")
+        a.wait_for_timeout(6000); r1b = a.evaluate("PingMusic.nowPlaying()")
+        a.evaluate("PingMusic._debug.el().currentTime += 1.5"); a.evaluate("PingMusic._debug.correct(false)"); a.wait_for_timeout(500)
+        r2 = a.evaluate("PingMusic.nowPlaying()"); check('1.5 s drift -> hard re-seek', r2['hardSeeks'] >= 1 and abs(r2['audioOffsetSec'] - r2['expectedOffsetSec']) < 0.3, f"hardSeeks={r2['hardSeeks']}")
+        a.wait_for_timeout(1500); compare('A re-converges with B after forced drifts', a, b)
+        # a listener whose local clock is 7 s fast still lands on the same moment (server-time offset correction)
+        D = br.new_context(viewport={'width': 1440, 'height': 800})
+        D.add_init_script("(()=>{const o=Date.now.bind(Date);Date.now=()=>o()+7000})()")
+        dpg = join(D, 'MusD' + str(int(time.time()) % 1000)); dpg.evaluate(f"PingMusic.setStation('{target}')"); playing(dpg); dpg.wait_for_timeout(2500)
+        sa = a.evaluate(SAMPLE); sd = dpg.evaluate(SAMPLE); sd['t'] -= 7000
+        dd = abs(start_instant(sa) - start_instant(sd)) if sa['idx'] == sd['idx'] else 99999
+        check('client clock +7 s skew corrected by ping offset', dd <= TOL, f"delta {dd:.0f} ms, clockOffsetMs={dpg.evaluate('PingMusic.nowPlaying().clockOffsetMs'):.0f}")
+        D.close()
         # volume persistence + duck
         b.evaluate("PingMusic.volume(0.8)"); b.reload(); b.wait_for_selector('#mu-bar', timeout=15000)
         check('volume persisted', abs(b.evaluate("PingMusic.volume()") - 0.8) < 1e-6)
