@@ -1262,19 +1262,37 @@ function animateProjectile(item, fromPos, toPos) {
   };
 }
 
+const SPLAT_FX = { '💣': 'bomb-explosion', '🍅': 'tomato-splat', '💦': 'water-splash', '🎉': 'party-popper-burst' };
+
+function fxImg(name, x, y, size, z) {
+  const el = document.createElement('img');
+  el.src = `images/fx/${name}.png`;
+  el.alt = '';
+  el.style.cssText = `position:fixed;left:${x}px;top:${y}px;z-index:${z || 71};width:${size * state.u}px;height:auto;pointer-events:none;transform:translate(-50%,-50%);`;
+  document.body.appendChild(el);
+  return el;
+}
+
 function showSplat(item, x, y) {
   playSound('splat');
-  const el  = document.createElement('div');
-  el.className  = 'throw-splat';
-  el.innerHTML = art('throws', item);
-  el.style.cssText = `position:fixed;left:${x}px;top:${y}px;z-index:71;font-size:${54 * state.u}px;width:${96 * state.u}px;pointer-events:none;transform:translate(-50%,-50%);`;
-  document.body.appendChild(el);
+  const name = SPLAT_FX[item];
+  if (!name) return;
+  const el = fxImg(name, x, y, 170);
+  const settle = item === '🍅' ? 1.05 : 1.0;
   el.animate([
-    { opacity: 1, transform: 'translate(-50%,-50%) scale(0.08)' },
-    { opacity: 1, transform: 'translate(-50%,-50%) scale(2.5)', offset: 0.28 },
-    { opacity: 0.8, transform: 'translate(-50%,-50%) scale(1.9)', offset: 0.62 },
-    { opacity: 0, transform: 'translate(-50%,-50%) scale(1.5)', offset: 1 },
-  ], { duration: 950 }).onfinish = () => el.remove();
+    { opacity: 1, transform: 'translate(-50%,-50%) scale(0.1) rotate(-8deg)' },
+    { opacity: 1, transform: `translate(-50%,-50%) scale(${1.15 * settle}) rotate(2deg)`, offset: 0.22 },
+    { opacity: 1, transform: `translate(-50%,-50%) scale(${settle}) rotate(0deg)`, offset: 0.55 },
+    { opacity: 0, transform: `translate(-50%,-44%) scale(${0.95 * settle})`, offset: 1 },
+  ], { duration: item === '🍅' ? 1500 : 1100, easing: 'ease-out' }).onfinish = () => el.remove();
+  if (item === '💣') {
+    const sm = fxImg('smoke-puff', x, y - 20 * state.u, 80, 72);
+    sm.animate([
+      { opacity: 0, transform: 'translate(-50%,-30%) scale(0.5)' },
+      { opacity: 0.85, transform: 'translate(-50%,-90%) scale(1)', offset: 0.35 },
+      { opacity: 0, transform: 'translate(-50%,-190%) scale(1.5)', offset: 1 },
+    ], { duration: 1700, delay: 250, fill: 'backwards' }).onfinish = () => sm.remove();
+  }
 }
 
 function showFloatingSticker(emoji, fromName) {
@@ -1429,7 +1447,7 @@ function renderShowdown(winners, pot) {
   if (state.gameState) renderSeats(state.gameState);
 
   const myName = gs?.players[state.myIdx]?.name;
-  if (myName && winners.some(w => w.name === myName)) spawnConfetti($('stage'));
+  if (myName && winners.some(w => w.name === myName)) spawnConfetti();
 
   clearInterval(sdTimer);
   let secs = 5;
@@ -1450,18 +1468,24 @@ function hideShowdown() {
   state.winners = null;
 }
 
-function spawnConfetti(container) {
-  const colors = ['#F5B942', '#ffe066', '#fff', '#b8860b', '#ffd700'];
-  const g = state.geo;
-  for (let i = 0; i < 28; i++) {
-    const p = document.createElement('div');
-    p.className = 'confetti-particle';
-    const angle = (Math.PI * 2 * i) / 28 + (Math.random() - 0.5) * 0.4;
-    const dist  = 80 + Math.random() * 160;
-    p.style.cssText = `background:${colors[i % colors.length]};left:${g ? g.cx : 400}px;top:${g ? g.cy : 300}px;--tx:${Math.cos(angle) * dist}px;--ty:${Math.sin(angle) * dist}px;--rot:${Math.floor(Math.random() * 720 - 360)}deg;--dur:${0.7 + Math.random() * 0.6}s;--delay:${Math.random() * 0.15}s;z-index:9;`;
-    container.appendChild(p);
-    setTimeout(() => p.remove(), 1700);
-  }
+function spawnConfetti() {
+  const g = state.geo, st = $('stage');
+  if (!g || !st) return;
+  const r = st.getBoundingClientRect();
+  const x = r.left + g.cx, y = r.top + g.cy;
+  const rays = fxImg('win-burst', x, y, 520, 8);
+  rays.animate([
+    { opacity: 0, transform: 'translate(-50%,-50%) scale(0.3) rotate(0deg)' },
+    { opacity: 0.8, transform: 'translate(-50%,-50%) scale(1) rotate(25deg)', offset: 0.25 },
+    { opacity: 0, transform: 'translate(-50%,-50%) scale(1.25) rotate(70deg)', offset: 1 },
+  ], { duration: 2200, easing: 'ease-out' }).onfinish = () => rays.remove();
+  const pop = fxImg('party-popper-burst', x, y - 30 * state.u, 300, 73);
+  pop.animate([
+    { opacity: 0, transform: 'translate(-50%,-50%) scale(0.2)' },
+    { opacity: 1, transform: 'translate(-50%,-50%) scale(1)', offset: 0.2 },
+    { opacity: 1, transform: 'translate(-50%,-56%) scale(1.05)', offset: 0.7 },
+    { opacity: 0, transform: 'translate(-50%,-66%) scale(1.1)', offset: 1 },
+  ], { duration: 1800, easing: 'ease-out' }).onfinish = () => pop.remove();
 }
 
 // ─── Hand labels ──────────────────────────────────────────────────
