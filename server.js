@@ -693,18 +693,25 @@ function generateRoomId() {
 io.on('connection', socket => {
   console.log(`Socket connected: ${socket.id}`);
 
+  // Handlers always get an object payload and can never take the process down.
+  const on = (ev, fn) => socket.on(ev, (payload, ...rest) => {
+    try { fn(payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : {}, ...rest); }
+    catch (err) { console.error(`handler ${ev} failed:`, err); socket.emit('error', { message: 'Server error' }); }
+  });
+  const cleanNameOf = v => (typeof v === 'string' ? v.trim().slice(0, 24) : '');
+
   // ── Bank queries ──────────────────────────────────────────────────────────
-  socket.on('check_balance', ({ name } = {}) => {
-    if (!name || typeof name !== 'string') return;
-    socket.emit('balance_data', { balance: getBalance(name.trim()) });
+  on('check_balance', ({ name } = {}) => {
+    if (!cleanNameOf(name)) return;
+    socket.emit('balance_data', { balance: getBalance(cleanNameOf(name)) });
   });
 
-  socket.on('get_leaderboard', () => {
+  on('get_leaderboard', () => {
     socket.emit('leaderboard_data', { entries: getLeaderboard() });
   });
 
   // ── join_game ─────────────────────────────────────────────────────────────
-  socket.on('join_game', ({ name, avatar, profilePic, password } = {}) => {
+  on('join_game', ({ name, avatar, profilePic, password } = {}) => {
     if (password !== ROOM_PASSWORD) {
       socket.emit('error', { message: 'Incorrect password' }); return;
     }
@@ -717,7 +724,7 @@ io.on('connection', socket => {
       socket.emit('error', { message: 'Table is full (max 8 players)' }); return;
     }
 
-    const cleanName = (name || `Player ${room.players.length + 1}`).trim();
+    const cleanName = cleanNameOf(name) || `Player ${room.players.length + 1}`;
     const buyIn = Math.min(STARTING_CHIPS, getBalance(cleanName));
     if (buyIn < BIG_BLIND) { socket.emit('error', { message: 'Insufficient bank balance.' }); return; }
 
@@ -734,7 +741,7 @@ io.on('connection', socket => {
   });
 
   // ── start_game ────────────────────────────────────────────────────────────
-  socket.on('start_game', ({ roomId, blindInterval } = {}) => {
+  on('start_game', ({ roomId, blindInterval } = {}) => {
     const room = rooms.get(roomId);
     if (!room)                               { socket.emit('error', { message: 'Room not found' }); return; }
     if (room.hostSocketId !== socket.id)     { socket.emit('error', { message: 'Only host can start' }); return; }
@@ -758,11 +765,11 @@ io.on('connection', socket => {
   });
 
   // ── create_demo ───────────────────────────────────────────────────────────
-  socket.on('create_demo', ({ name, avatar, profilePic } = {}) => {
+  on('create_demo', ({ name, avatar, profilePic } = {}) => {
     let roomId;
     do { roomId = generateRoomId(); } while (rooms.has(roomId));
 
-    const cleanName = (name || 'You').trim();
+    const cleanName = cleanNameOf(name) || 'You';
     const buyIn  = Math.min(STARTING_CHIPS, getBalance(cleanName));
     if (buyIn < BIG_BLIND) { socket.emit('error', { message: 'Insufficient bank balance.' }); return; }
     const room  = makeRoom(roomId, socket.id);
@@ -790,7 +797,7 @@ io.on('connection', socket => {
   });
 
   // ── player_action ─────────────────────────────────────────────────────────
-  socket.on('player_action', ({ roomId, action, amount } = {}) => {
+  on('player_action', ({ roomId, action, amount } = {}) => {
     const room = rooms.get(roomId);
     if (!room || room.status !== 'playing') return;
     const playerIdx = room.players.findIndex(p => p.socketId === socket.id);
@@ -807,7 +814,7 @@ io.on('connection', socket => {
   });
 
   // ── rebuy ─────────────────────────────────────────────────────────────────
-  socket.on('rebuy', ({ roomId } = {}) => {
+  on('rebuy', ({ roomId } = {}) => {
     const room = rooms.get(roomId);
     if (!room) return;
     const playerIdx = room.players.findIndex(p => p.socketId === socket.id);
@@ -828,7 +835,7 @@ io.on('connection', socket => {
   });
 
   // ── drop_sticker ──────────────────────────────────────────────────────────
-  socket.on('drop_sticker', ({ roomId, emoji } = {}) => {
+  on('drop_sticker', ({ roomId, emoji } = {}) => {
     const room = rooms.get(roomId);
     if (!room) return;
     const sender = room.players.find(p => p.socketId === socket.id);
@@ -837,7 +844,7 @@ io.on('connection', socket => {
   });
 
   // ── throw_item ────────────────────────────────────────────────────────────
-  socket.on('throw_item', ({ roomId, targetIdx, item } = {}) => {
+  on('throw_item', ({ roomId, targetIdx, item } = {}) => {
     const room = rooms.get(roomId);
     if (!room) return;
     const fromIdx = room.players.findIndex(p => p.socketId === socket.id);
@@ -849,7 +856,7 @@ io.on('connection', socket => {
   });
 
   // ── chat_message ──────────────────────────────────────────────────────────
-  socket.on('chat_message', ({ roomId, text } = {}) => {
+  on('chat_message', ({ roomId, text } = {}) => {
     const room = rooms.get(roomId);
     if (!room) return;
     const sender = room.players.find(p => p.socketId === socket.id);
@@ -860,7 +867,7 @@ io.on('connection', socket => {
   });
 
   // ── sit_out ────────────────────────────────────────────────────────────────
-  socket.on('sit_out', ({ roomId } = {}) => {
+  on('sit_out', ({ roomId } = {}) => {
     const room = rooms.get(roomId);
     if (!room) return;
     const player = room.players.find(p => p.socketId === socket.id);
