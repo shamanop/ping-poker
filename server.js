@@ -114,21 +114,17 @@ function saveBank() {
   try { fs.writeFileSync(BANK_FILE, JSON.stringify(bank)); } catch {}
 }
 
-function getLeaderboard() {
-  const inGame = {};
-  for (const room of rooms.values()) {
-    if (room.mode !== 'chips') continue;
-    for (const p of room.players) {
-      if (!p.isBot && p.chips > 0) {
-        const k = bankKey(p.name);
-        inGame[k] = (inGame[k] || 0) + p.chips;
-      }
-    }
+function getLeaderboard(myKey) {
+  const rows = [];
+  for (const [k, net] of ledger.accountNets({ mode: 'cents' })) {
+    const a = accounts.get(k);
+    if (a) rows.push({ key: k, display: a.display, avatar: a.avatar, netCents: net });
   }
-  return Object.entries(bank)
-    .map(([name, balance]) => ({ name, balance: balance + (inGame[name] || 0) }))
-    .sort((a, b) => b.balance - a.balance)
-    .slice(0, 10);
+  rows.sort((x, y) => y.netCents - x.netCents || x.display.localeCompare(y.display));
+  const entries = rows.slice(0, 10).map((r, i) => ({ ...r, rank: i + 1 }));
+  const mi = myKey ? rows.findIndex(r => r.key === myKey) : -1;
+  const me = mi >= 0 ? { ...rows[mi], rank: mi + 1 } : null;
+  return { entries, me, total: rows.length };
 }
 
 // ─── App Setup ───────────────────────────────────────────────────────────────
@@ -1127,7 +1123,7 @@ io.on('connection', socket => {
   });
 
   on('get_leaderboard', () => {
-    socket.emit('leaderboard_data', { entries: getLeaderboard() });
+    socket.emit('leaderboard_data', getLeaderboard(socket.data.acct && (socket.data.acct.key || socket.data.acct)));
   });
 
   tables.register(socket, on, authed);

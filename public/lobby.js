@@ -210,7 +210,7 @@ function tableLine(t) {
   return [modeLabel(t.mode), fm(t.sb, unit) + '/' + fm(t.bb, unit) + ' blinds', 'buy in ' + fm(t.buyIn && t.buyIn.min, unit) + ' to ' + fm(t.buyIn && t.buyIn.max, unit), (t.seated ?? 0) + '/' + t.seats + ' seated'].join('  /  ');
 }
 function viewLobby() {
-  emit('lobby_list', {}); emit('tables_mine', {}); emit('get_leaderboard', {}); emit('profile_get', {});
+  emit('lobby_list', {}); emit('tables_mine', {}); emit('get_leaderboard', {}); emit('profile_get', {}); setTimeout(() => { if (S.view === 'lobby') emit('get_leaderboard', {}); }, 1500);
   const codeIn = h('input', { class: 'text-input code', id: 'lb-code', maxlength: 9, placeholder: 'CODE', autocomplete: 'off',
     oninput: (e) => { e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6); }, onkeydown: (e) => { if (e.key === 'Enter') go(); } });
   const jerr = h('div', { class: 'lb-err', id: 'lb-joinerr' });
@@ -246,16 +246,19 @@ function drawLists() {
       h('button', { class: 'lb-btn sm blue', onclick: () => openJoin(tId(t)) }, 'Join'))) : [h('div', { class: 'lb-empty' }, 'No open tables right now.')]));
   }
   if (board) {
-    const rows = S.board.slice(0, 5);
-    board.replaceChildren(...(rows.length ? rows.map((e, i) => {
-      const v = e.netCents ?? e.net ?? e.balance ?? e.total ?? 0;
-      return h('div', { class: 'lb-lead' }, h('span', { class: 'rk' }, i + 1), h('img', { src: avUrl(e.avatar), alt: '' }), h('span', null, e.display || e.name || e.key), h('b', { class: v > 0 ? 'up' : v < 0 ? 'down' : '' }, fm(v, 'cents', { signed: e.netCents != null || e.net != null })));
-    }) : [h('div', { class: 'lb-empty' }, 'Nobody on the board yet.')]));
+    const rows = S.board.slice(0, 5), me = S.boardMe;
+    const row = (e, i) => {
+      const v = e.netCents ?? 0, mine = S.user && e.key === S.user.key;
+      return h('div', { class: 'lb-lead' + (mine ? ' me' : '') }, h('span', { class: 'rk' }, e.rank || i + 1), h('img', { src: avUrl(e.avatar), alt: '' }), h('span', null, (e.display || e.key) + (mine ? ' (you)' : '')), h('b', { class: v > 0 ? 'up' : v < 0 ? 'down' : '' }, fm(v, 'cents', { signed: true })));
+    };
+    const out = rows.map(row);
+    if (me && !rows.some((e) => e.key === me.key)) out.push(h('div', { class: 'lb-lead-gap' }, '...'), row(me, 0));
+    board.replaceChildren(...(out.length ? out : [h('div', { class: 'lb-empty' }, 'Nobody on the board yet.')]));
   }
 }
 
 // ── modal ─────────────────────────────────────────────────────────
-function closeModal() { document.querySelectorAll('.lb-scrim').forEach((n) => n.remove()); S.modalKey && document.removeEventListener('keydown', S.modalKey); S.modalKey = null; S.onModalClose && S.onModalClose(); S.onModalClose = null; }
+function closeModal() { document.querySelectorAll('.lb-scrim').forEach((n) => n.remove()); if (root) root.classList.remove('lb-overlay'); S.modalKey && document.removeEventListener('keydown', S.modalKey); S.modalKey = null; S.onModalClose && S.onModalClose(); S.onModalClose = null; }
 function openModal(...kids) {
   closeModal(); ensureRoot();
   const sc = h('div', { class: 'lb-scrim', onmousedown: (e) => { if (e.target === sc) closeModal(); } }, h('div', { class: 'lb-modal lb-frame', role: 'dialog' }, ...kids));
@@ -346,7 +349,7 @@ function seatCells(info) {
   const t = info.table, unit = t.unit || unitOf(t.mode);
   const cells = (info.seated || []).map((p) => h('div', { class: 'lb-seat' }, h('img', { src: avUrl(p.avatar), alt: '' }), h('div', null, h('b', null, p.display || p.key), h('span', null, fm(p.stack, unit)))));
   const open = Math.max(0, (info.openSeats ?? t.seats - cells.length));
-  for (let i = 0; i < Math.min(open, Math.max(0, 6 - cells.length)); i++) cells.push(h('div', { class: 'lb-seat open' }, 'Open seat'));
+  for (let i = 0; i < open; i++) cells.push(h('div', { class: 'lb-seat open' }, 'Open seat'));
   return cells;
 }
 
@@ -481,7 +484,7 @@ function drawShare() {
 
 // ── profile ───────────────────────────────────────────────────────
 function openProfile() {
-  emit('profile_get', {});
+  emit('profile_get', {}); emit('account:stats', {});
   const p = S.profile || {}, u = S.user, st = p.stats || {};
   let av = u.avatar;
   const net = p.netCents ?? 0, msg = h('div', { class: 'lb-err', id: 'lb-profmsg' });
@@ -490,11 +493,13 @@ function openProfile() {
   const recent = (p.recent || []).slice(0, 5);
   openModal(
     h('div', { style: 'display:flex;gap:var(--p16);align-items:center' }, h('img', { id: 'lb-profav', src: avUrl(av), style: 'width:var(--p64);height:var(--p64);border-radius:50%;border:1px solid var(--brass)', alt: '' }), h('div', null, h('h3', null, u.display || u.key), h('div', { class: 'lb-muted' }, 'Signed in'))),
+    h('div', { class: 'lb-xprow', id: 'lb-profxp' }, h('b', null, 'LV ' + (S.acctStats ? S.acctStats.level : 1)), h('span', { class: 'lb-xptrack' }, h('i', { style: 'width:' + Math.max(2, S.acctStats ? S.acctStats.xpPct : 0) + '%' })), h('small', null, S.acctStats ? S.acctStats.xp + ' / ' + S.acctStats.nextXp + ' XP' : '')),
     h('div', { class: 'lb-stats' }, h('div', null, h('b', { class: net > 0 ? 'up' : net < 0 ? 'down' : '' }, fm(net, 'cents', { signed: true })), h('small', null, 'Ledger net')),
       h('div', null, h('b', null, st.nights ?? st.nightsPlayed ?? (p.recent || []).length), h('small', null, 'Nights')), h('div', null, h('b', null, st.hands ?? st.handsPlayed ?? 0), h('small', null, 'Hands'))),
     recent.length ? h('div', { class: 'lb-rows' }, recent.map((r) => h('div', { class: 'lb-row' }, h('div', null, h('div', { class: 't' }, r.name || r.tableName || r.nightId), h('div', { class: 's' }, r.date || '')), h('b', { class: r.net > 0 ? 'up' : 'down' }, fm(r.net, r.unit || 'cents', { signed: true }))))) : null,
     h('div', { class: 'lb-field' }, h('label', null, 'Avatar'), h('div', { class: 'lb-avatars' }, Array.from({ length: 12 }, (_, i) => { const id = 'a' + String(i + 1).padStart(2, '0');
       return h('button', { type: 'button', class: id === String(av).replace(/\.png$/, '') ? 'on' : '', onclick: (e) => { av = id; emit('profile_update', { avatar: id }); $('lb-profav').src = avUrl(id); e.currentTarget.parentNode.querySelectorAll('button').forEach((b) => b.classList.remove('on')); e.currentTarget.classList.add('on'); S.user.avatar = id; renderTop(); } }, h('img', { src: avUrl(id), alt: id })); }))),
+    h('div', { class: 'lb-field' }, h('label', null, 'Sound'), (() => { const on = () => !(window.PPSound && window.PPSound.muted); const b = h('button', { type: 'button', class: 'lb-btn blue', id: 'lb-sound', onclick: () => { const t = document.getElementById('sound-toggle'); if (t) t.click(); else if (window.PPSound) window.PPSound.setMuted(on()); b.textContent = on() ? 'Sound: on' : 'Sound: off'; } }, on() ? 'Sound: on' : 'Sound: off'); return b; })()),
     h('div', { class: 'lb-field' }, h('label', null, 'Change PIN'), h('div', { class: 'lb-two' }, oldPin, newPin)), msg,
     h('div', { class: 'acts' }, h('button', { class: 'lb-btn blue', onclick: () => { if (!/^\d{4,6}$/.test(newPin.value)) { msg.textContent = 'New PIN must be 4 to 6 digits.'; return; } S.onError = (m) => { msg.textContent = m; }; emit('pin_change', { oldPin: oldPin.value, newPin: newPin.value }); } }, 'Save PIN'), h('button', { class: 'lb-btn', onclick: closeModal }, 'Done')));
 }
@@ -595,11 +600,12 @@ function bind() {
     if (S.view === 'signin') S.signErr && S.signErr(code, retryMs, message); else if (S.onError) S.onError(message || 'PIN not accepted');
   });
   s.on('auth_out', () => { clearSession(); S.user = null; S.profile = null; S.cur = null; if (window.PingGame && window.PingGame.isIn && window.PingGame.isIn()) window.PingGame.leave(); show('signin'); });
+  s.on('account:stats', (st) => { S.acctStats = st; const x = $('lb-profxp'); if (x) { x.querySelector('b').textContent = 'LV ' + st.level; x.querySelector('i').style.width = Math.max(2, st.xpPct) + '%'; x.querySelector('small').textContent = st.xp + ' / ' + st.nextXp + ' XP'; } });
   s.on('profile', (p) => { S.profile = p; if (S.user && p.display) S.user.display = p.display; renderTop(); });
   s.on('wallet', (w) => { S.wallet = w; renderTop(); });
   s.on('lobby_tables', ({ tables }) => { S.tables = tables || []; if (S.view === 'lobby') drawLists(); });
   s.on('tables_mine', ({ tables, nightNet }) => { S.mine = tables || []; S.net = nightNet || {}; if (S.view === 'lobby') drawLists(); });
-  s.on('leaderboard_data', ({ entries }) => { S.board = entries || []; if (S.view === 'lobby') drawLists(); });
+  s.on('leaderboard_data', ({ entries, me }) => { S.board = entries || []; S.boardMe = me || null; if (S.view === 'lobby') drawLists(); });
   s.on('table_created', ({ table }) => { S.cur = table; S.sharePick = null; S.onError = null; S.info[tId(table)] = S.info[tId(table)] || { table, seated: [], openSeats: table.seats }; show('share', tId(table)); });
   s.on('table_info', onInfo);
   s.on('table_joined', (p) => {
@@ -638,7 +644,7 @@ function bind() {
 
 // ── public API ────────────────────────────────────────────────────
 const Lobby = {
-  show: (name, arg) => { if (name === 'profile') { if (!S.user) return; if (S.view === 'signin' || !root.classList.contains('on')) show('lobby'); return openProfile(); } if (name === 'lobby' || !name) { S.cur = null; hostUi(false); LS.del('ping.table'); } return show(name || 'lobby', arg); },
+  show: (name, arg) => { if (name === 'profile') { if (!S.user) return; if (S.view === 'signin') show('lobby'); const over = !root.classList.contains('on'); openProfile(); if (over) root.classList.add('lb-overlay'); return; } if (name === 'lobby' || !name) { S.cur = null; hostUi(false); LS.del('ping.table'); } return show(name || 'lobby', arg); },
   user: () => (S.user ? { key: S.user.key, display: S.user.display, avatar: S.user.avatar, prefs: S.user.prefs || {} } : null),
   onGameLeft: () => { S.cur = null; LS.del('ping.table'); hostUi(false); if (S.user) show('lobby'); },
   signOut,

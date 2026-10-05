@@ -217,3 +217,15 @@
 .host-drawer .lb-btns { display: grid; grid-template-columns: 1fr 1fr; }
 
 .lb-toast { position: fixed; z-index: 80; left: 50%; bottom: var(--p32); transform: translateX(-50%); padding: var(--p12) var(--p20); background: #1D130C; border: 1px solid var(--brass); border-radius: var(--p6); font-size: var(--p14); }
+
+.lb-root.lb-overlay { display: block; position: fixed; inset: 0; z-index: 9200; background: none; pointer-events: none; }
+.lb-root.lb-overlay::before, .lb-root.lb-overlay > :not(.lb-scrim) { display: none; }
+.lb-root.lb-overlay .lb-scrim { position: fixed; pointer-events: auto; z-index: 9200; }
+.lb-xprow { display: flex; align-items: center; gap: var(--p12); }
+.lb-xprow b { font-family: var(--f-display); font-weight: 400; font-size: var(--p22); letter-spacing: .08em; color: var(--gold); }
+.lb-xptrack { flex: 1; height: var(--p12); background: #0c0704; border: 1px solid var(--line); overflow: hidden; }
+.lb-xptrack i { display: block; height: 100%; background: var(--brass); border-right: 2px solid var(--gold); transition: width .7s cubic-bezier(.2,.8,.2,1); }
+.lb-xprow small { font-size: var(--p11); color: var(--ink-dim); letter-spacing: .08em; }
+
+.lb-lead.me { padding-left: var(--p6); padding-right: var(--p6); background: rgba(245, 185, 66, .14); outline: 1px solid var(--gold); }
+.lb-lead-gap { text-align: center; color: var(--ink-dim); line-height: 1; letter-spacing: .3em; }

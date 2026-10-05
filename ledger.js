@@ -210,6 +210,17 @@ function createLedger({ file, onWrite }) {
     return net;
   }
 
+  function accountNets({ mode } = {}) {
+    const m = new Map();
+    for (const e of entries) {
+      if (!e.name || !['buyin', 'rebuy', 'cashout'].includes(e.type)) continue;
+      if (mode && rowMode(e) !== mode) continue;
+      const k = rowKey(e);
+      m.set(k, (m.get(k) || 0) + signedOf(e));
+    }
+    return m;
+  }
+
   function nightsFor(k, limit = 20) {
     k = key(k);
     const ids = new Map();
@@ -224,7 +235,7 @@ function createLedger({ file, onWrite }) {
     return out.sort((a, b) => b.endedAt - a.endedAt).slice(0, limit);
   }
 
-  return { log, seedBank, startHand, endHand, summary, nightSummary, nightFromRows, accountNet, nightsFor, settlePayments, entries: () => entries };
+  return { log, seedBank, startHand, endHand, summary, nightSummary, nightFromRows, accountNet, accountNets, nightsFor, settlePayments, entries: () => entries };
 }
 
 module.exports = { createLedger };

@@ -47,6 +47,7 @@
         <span class="sh-lvl" id="sh-lvl"><span id="sh-flame"></span><span id="sh-xp"></span></span>
         <div class="sh-wallet" id="sh-wallet" title="Play $ is pretend money. Ledger $ is a friendly tally, settle up on your own."><span id="sh-play"><small>Play</small>--</span><span id="sh-ledger"><small>Ledger</small>--</span></div>
         <span data-money-toggle></span>
+        <button class="sh-bonus" id="sh-bonus" type="button" title="Daily bonus"></button>
         <button class="sh-acct" id="sh-acct" type="button"></button>
         <button class="sh-btn" id="sh-out" type="button">Sign out</button>
       </header>
@@ -55,6 +56,12 @@
     ui.root = root; ui.main = $('sh-main'); ui.stage = $('sh-stage'); ui.dock = $('sh-dock'); ui.split = $('sh-split');
     for (const id of ['lobby-root', 'game-screen']) { const n = $(id); if (n) ui.stage.appendChild(n); }
     $('sh-out').addEventListener('click', () => { if (window.Lobby && typeof window.Lobby.signOut === 'function') window.Lobby.signOut(); else if (sock()) sock().emit('auth_logout', {}); });
+    $('sh-lvl').addEventListener('click', () => { if (window.Lobby && window.Lobby.show) window.Lobby.show('profile'); });
+    $('sh-bonus').addEventListener('click', () => {
+      const s = sock(); if (!s) return;
+      if (bonusSt && !bonusSt.available) { if (window.PingJuice) PingJuice.toast('Daily bonus **claimed**. Next one in **' + untilReset() + '**.', { sticker: 'vp-chip' }); return; }
+      reopenBonus = true; s.emit('bonus:status');
+    });
     $('sh-acct').addEventListener('click', () => { if (window.Lobby && window.Lobby.show) window.Lobby.show('profile'); });
     ui.stage.addEventListener('pointerdown', () => focus('poker', { soft: true }), true);
     ui.split.addEventListener('pointerdown', splitDrag);
@@ -289,7 +296,7 @@
       b.classList.toggle('on', open && s.mode !== 'min' && focusId === id);
       let txt = '';
       if (g.def.badge && open && s.mode === 'min') { try { txt = g.def.badge() || ''; } catch (e) { txt = ''; } }
-      b.classList.toggle('has-badge', !!txt); b.querySelector('.badge').textContent = txt;
+      b.classList.toggle('has-badge', !!txt); const bd = b.querySelector('.badge'); bd.textContent = txt; bd.classList.toggle('neg', txt.charAt(0) === '-'); bd.title = txt ? 'Session net this sitting' : '';
       if (g.def.kind === 'stage') b.classList.toggle('pulse', open && focusId !== id && needsAction());
     }
   }
@@ -310,15 +317,18 @@
     bound.add(s);
     s.on('wallet', (w) => { setWallet(w); });
     s.on('auth_ok', () => { setSignedIn(true); refreshTop(); s.emit('wallet_get'); bonusShown = false; s.emit('bonus:status'); });
-    s.on('auth_out', () => { setSignedIn(false); bonusShown = false; if (window.PingJuice) { PingJuice.streakFlame($('sh-flame'), 0); } const x = $('sh-xp'); if (x) x.textContent = ''; });
+    s.on('auth_out', () => { setSignedIn(false); bonusShown = false; if (window.PingJuice) { PingJuice.streakFlame($('sh-flame'), 0); } const x = $('sh-xp'); if (x) x.textContent = ''; lastXp = null; lastStats = null; bonusSt = null; renderBonusBtn(); });
     s.on('social:event', onSocialEvent);
     s.on('account:stats', onStats);
     s.on('bonus:status', (b) => {
-      if (!b || !b.available || bonusShown || !window.PingJuice) return;
-      bonusShown = true;
+      if (!b) return;
+      bonusSt = b; renderBonusBtn();
+      if (!b.available || !window.PingJuice) { reopenBonus = false; return; }
+      if (bonusShown && !reopenBonus) return;
+      bonusShown = true; reopenBonus = false;
       PingJuice.dailyBonus(b.amountCents, { kicker: 'DAILY BONUS' + (b.streak > 1 ? ' - DAY ' + b.streak : ''), note: 'Free Play $. Come back tomorrow to build your streak.', onClaim: () => s.emit('bonus:claim') });
     });
-    s.on('bonus:claimed', (r) => { if (r && r.ok && r.wallet) setWallet(r.wallet); });
+    s.on('bonus:claimed', (r) => { if (r && r.ok && r.wallet) setWallet(r.wallet); if (r && r.ok && window.PingJuice) PingJuice.toast('Daily bonus **' + dollars(r.amountCents) + '** claimed' + (r.streak > 1 ? ', day **' + r.streak + '**' : ''), { sticker: 'vp-chip' }); });
     s.on('g:bender:state', (st) => { benderReady = true; if (st && st.balances) setWallet(st.balances); toBender({ type: 'init', wallet: Object.assign({}, wallet), mode: wmode, bets: (st && (st.bets || st.betLevels)) || undefined }); });
     s.on('g:bender:result', (p) => {
       const reqId = spinQ.shift(); lastWin = p && typeof p.totalWin === 'number' ? p.totalWin : lastWin;
@@ -331,7 +341,21 @@
     if (user()) { setSignedIn(true); s.emit('wallet_get'); s.emit('account:stats'); bonusShown = false; s.emit('bonus:status'); }
     return true;
   }
-  let bonusShown = false;
+  let bonusShown = false, bonusSt = null, reopenBonus = false;
+  function untilReset() {
+    const f = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }).formatToParts(new Date());
+    const g = (t) => +f.find((x) => x.type === t).value % 24;
+    const left = 86400 - (g('hour') * 3600 + g('minute') * 60 + g('second'));
+    return Math.floor(left / 3600) + 'h ' + String(Math.floor((left % 3600) / 60)).padStart(2, '0') + 'm';
+  }
+  function renderBonusBtn() {
+    const b = $('sh-bonus'); if (!b) return;
+    const av = !!(bonusSt && bonusSt.available);
+    b.classList.toggle('ready', av);
+    b.innerHTML = bonusSt ? (av ? 'Bonus <em>' + dollars(bonusSt.amountCents) + '</em>' : 'Claimed <em>' + untilReset() + '</em>') : '';
+    b.hidden = !bonusSt;
+  }
+  setInterval(renderBonusBtn, 30000);
   function onSocialEvent(e) {
     if (!e || e.kind !== 'bigwin' || !window.PingJuice) return;
     const nm = String(e.name || 'Someone').replace(/\*/g, '');
@@ -339,9 +363,23 @@
     if (e.game === 'bender') PingJuice.toast(`**${nm}** hit **${amt}** on Ballot Bender`, { sticker: 'vp-chip' });
     else PingJuice.toast(`**${nm}** took a **${amt}** pot`, { sticker: 'ping-hand' });
   }
+  let lastXp = null, lastStats = null;
+  function xpFloaty(n) {
+    const c = $('sh-lvl'); if (!c) return;
+    const r = c.getBoundingClientRect(), el = document.createElement('div');
+    el.className = 'sh-xpfloat'; el.textContent = '+' + n + ' XP';
+    el.style.cssText = 'left:' + (r.left + 8) + 'px;top:' + (r.bottom + 2) + 'px';
+    document.body.appendChild(el);
+    const done = () => el.remove();
+    el.animate([{ opacity: 0, transform: 'translateY(-6px)' }, { opacity: 1, transform: 'translateY(4px)', offset: 0.2 }, { opacity: 1, transform: 'translateY(14px)', offset: 0.7 }, { opacity: 0, transform: 'translateY(26px)' }], { duration: 1600, fill: 'forwards' }).onfinish = done;
+    setTimeout(done, 2100);
+  }
   function onStats(st) {
     if (!st || !window.PingJuice) return;
     PingJuice.xpBar($('sh-xp'), st.xpPct, st.level);
+    const chip = $('sh-lvl'); if (chip) chip.title = 'Level ' + st.level + ': ' + st.xp + ' of ' + st.nextXp + ' XP. Click for profile.';
+    if (lastXp != null && st.xp > lastXp) xpFloaty(st.xp - lastXp);
+    lastXp = st.xp; lastStats = st;
     PingJuice.streakFlame($('sh-flame'), st.winStreak >= 2 ? st.winStreak : 0);
   }
   function benderErr(e) { const reqId = spinQ.shift(); toBender({ type: 'error', reqId, message: (e && e.message) || 'Spin refused.' }); }

@@ -203,10 +203,15 @@ function toast(title, sub = '', kind = '', ms = 3200) {
   setTimeout(() => el.remove(), ms + 600);
 }
 
+function inviteLink() {
+  const id = state.roomId;
+  return location.origin + (id ? '/?t=' + encodeURIComponent(id) : '');
+}
+
 function bindCopy(btn) {
   if (!btn) return;
   btn.addEventListener('click', () => {
-    const text = location.origin;
+    const text = inviteLink();
     const flash = () => { btn.classList.add('copied'); setTimeout(() => btn.classList.remove('copied'), 1200); };
     const fallback = () => {
       const ta = document.createElement('textarea');
@@ -447,7 +452,7 @@ function renderWaitPanel(gs) {
   $('wp-text').textContent = canStart ? 'Dealing shortly' : 'Waiting for a second player';
   $('wp-sub').textContent = canStart ? 'Everyone is seated. The first hand starts in a moment.' : 'Deals automatically when a second player sits down.';
   $('wp-seats').innerHTML = Array.from({ length: 8 }, (_, i) => `<i class="${gs.players[i] ? 'on' : ''}"></i>`).join('') + `<span>${gs.players.length} of 8 seated</span>`;
-  $('wp-invite-link').textContent = location.host;
+  $('wp-invite-link').textContent = inviteLink().replace(/^https?:\/\//, '');
   $('wp-invite').classList.toggle('hidden', canStart);
   $('btn-start').classList.toggle('hidden', !(isHost && canStart));
   $('blind-settings').classList.toggle('hidden', !isHost);
@@ -710,10 +715,10 @@ function renderLeaderboard(entries) {
   state.lastLb = entries;
   const me = (state.gameState?.players[state.myIdx]?.name || '').toLowerCase();
   $('leaderboard-entries').innerHTML = entries.map((e, i) => `
-    <div class="lb-row ${e.name.toLowerCase() === me ? 'lb-me' : ''}">
+    <div class="lb-row ${String(e.display || e.name || '').toLowerCase() === me ? 'lb-me' : ''}">
       <span class="lb-rank">${i + 1}</span>
-      <span class="lb-name">${esc(e.name)}</span>
-      <span class="lb-balance">${Money.fmt(e.balance)}</span>
+      <span class="lb-name">${esc(e.display || e.name)}</span>
+      <span class="lb-balance">${Money.fmt(e.netCents ?? e.balance)}</span>
     </div>`).join('') || '<div class="empty-note">No standings yet</div>';
 }
 
@@ -1513,7 +1518,7 @@ function animateProjectile(item, fromPos, toPos) {
   const proj = document.createElement('div');
   proj.className = 'throw-projectile';
   proj.innerHTML = art('throws', item);
-  proj.style.cssText = `position:fixed;left:${sx}px;top:${sy}px;z-index:70;font-size:${28 * state.u}px;width:${44 * state.u}px;pointer-events:none;transform:translate(-50%,-50%);`;
+  proj.style.cssText = `position:fixed;left:${sx}px;top:${sy}px;z-index:9300;font-size:${28 * state.u}px;width:${44 * state.u}px;pointer-events:none;transform:translate(-50%,-50%);`;
   document.body.appendChild(proj);
 
   proj.animate([
@@ -1531,7 +1536,7 @@ function fxImg(name, x, y, size, z) {
   const el = document.createElement('img');
   el.src = `images/fx/${name}.png`;
   el.alt = '';
-  el.style.cssText = `position:fixed;left:${x}px;top:${y}px;z-index:${z || 71};width:${size * state.u}px;height:auto;pointer-events:none;transform:translate(-50%,-50%);`;
+  el.style.cssText = `position:fixed;left:${x}px;top:${y}px;z-index:${z || 9301};width:${size * state.u}px;height:auto;pointer-events:none;transform:translate(-50%,-50%);`;
   document.body.appendChild(el);
   return el;
 }
@@ -1556,7 +1561,7 @@ function showSplat(item, x, y) {
     { opacity: 0, transform: `translate(-50%,-44%) scale(${0.95 * settle})`, offset: 1 },
   ], { duration: item === '🍅' ? 1500 : 1100, easing: 'ease-out' }).onfinish = () => el.remove();
   if (item === '💣') {
-    const sm = fxImg('smoke-puff', x, y - 20 * state.u, 80, 72);
+    const sm = fxImg('smoke-puff', x, y - 20 * state.u, 80, 9302);
     sm.animate([
       { opacity: 0, transform: 'translate(-50%,-30%) scale(0.5)' },
       { opacity: 0.85, transform: 'translate(-50%,-90%) scale(1)', offset: 0.35 },
@@ -1566,20 +1571,21 @@ function showSplat(item, x, y) {
 }
 
 function showFloatingSticker(emoji, fromName) {
-  const g = state.geo, st = $('stage');
-  if (!g || !st) return;
-  const r = st.getBoundingClientRect();
+  const gs = state.gameState, idx = gs ? gs.players.findIndex(p => p.name === fromName) : -1;
+  const [x, y] = idx >= 0 ? seatClientPos(idx) : seatClientPos(-1);
   const el = document.createElement('div');
   el.className = 'floating-sticker';
   el.innerHTML = `<div class="float-emoji">${art('stickers', emoji)}</div><div class="float-from">${esc(fromName)}</div>`;
-  el.style.cssText = `position:fixed;left:${r.left + g.cx}px;top:${r.top + g.cy - g.H * 0.12}px;z-index:70;pointer-events:none;transform:translate(-50%,-50%);`;
+  el.style.cssText = `position:fixed;left:${x}px;top:${y - 40 * state.u}px;z-index:9300;pointer-events:none;transform:translate(-50%,-50%);`;
   document.body.appendChild(el);
+  const done = () => el.remove();
   el.animate([
     { opacity: 0, transform: 'translate(-50%,-50%) scale(0.2)' },
-    { opacity: 1, transform: 'translate(-50%,-50%) scale(1.25)', offset: 0.18 },
-    { opacity: 1, transform: 'translate(-50%,-68%) scale(1)',    offset: 0.65 },
-    { opacity: 0, transform: 'translate(-50%,-98%) scale(0.8)',  offset: 1 },
-  ], { duration: 2600 }).onfinish = () => el.remove();
+    { opacity: 1, transform: 'translate(-50%,-60%) scale(1.25)', offset: 0.2 },
+    { opacity: 1, transform: 'translate(-50%,-90%) scale(1)', offset: 0.7 },
+    { opacity: 0, transform: 'translate(-50%,-120%) scale(0.85)', offset: 1 },
+  ], { duration: 1700, fill: 'forwards' }).onfinish = done;
+  setTimeout(done, 2200);
 }
 
 function showWinFloat(amount) {
@@ -1927,6 +1933,6 @@ function juiceAllIn(prev, gs) {
 function juiceSticker(emoji, fromName) {
   const PJ = window.PingJuice, seat = juiceSeatByName(fromName);
   if (!PJ || !seat) return;
-  let h = 0; for (const c of String(emoji)) h = (h * 31 + c.codePointAt(0)) >>> 0;
-  PJ.stickerPop(PJ.stickerNames[h % PJ.stickerNames.length], seat, { size: 56 });
+  const r = seat.getBoundingClientRect();
+  PJ.burst('glitter', r.left + r.width / 2, r.top + r.height / 2, { size: 140 * state.u, ms: 700, rotate: false });
 }
