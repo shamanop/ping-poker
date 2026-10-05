@@ -486,7 +486,7 @@ function bindSocket() {
     animateProjectile(item, seatClientPos(fromIdx), seatClientPos(targetIdx));
   });
 
-  s.on('chat_message', ({ name, text }) => { appendChatMsg(name, text); });
+  s.on('chat_message', ({ name, text }) => { appendChatMsg(name, text); playSound('msg'); });
 
   s.on('blinds_up', ({ level, sb, bb }) => {
     toast(`BLINDS UP · LEVEL ${level + 1}`, `${sb} / ${bb}`, '', 4200);
@@ -515,8 +515,10 @@ function noteTable(prev, gs) {
 // ─── Sound Toggle ──────────────────────────────────────────────────
 function initSoundToggle() {
   const btn = $('sound-toggle');
+  if (window.PPSound) { state.soundOn = !PPSound.muted; btn.querySelector('use').setAttribute('href', state.soundOn ? '#i-sound' : '#i-mute'); btn.classList.toggle('muted', !state.soundOn); }
   btn.addEventListener('click', () => {
     state.soundOn = !state.soundOn;
+    if (window.PPSound) PPSound.setMuted(!state.soundOn);
     btn.querySelector('use').setAttribute('href', state.soundOn ? '#i-sound' : '#i-mute');
     btn.classList.toggle('muted', !state.soundOn);
   });
@@ -937,6 +939,7 @@ function renderCommunity(gs) {
   el.innerHTML = cards.map((c, i) =>
     faceCardHtml(c, 'xl', 0, `--i:${i};--n:${cards.length};${i >= prevCount ? `animation-delay:${(i - prevCount) * 0.12}s` : ''}`, i >= prevCount ? 'deal reveal-flash' : '')
   ).join('');
+  if (cards.length > prevCount) playSound('deal');
   state.commHand  = gs.handNum;
   state.commCount = cards.length;
 }
@@ -987,6 +990,7 @@ function renderPlaque(gs) {
 
 // ─── Action bar ───────────────────────────────────────────────────
 function setBar(mode, main, sub, name) {
+  if (mode === 'turn' && state.barMode !== 'turn') playSound('turn');
   state.barMode = mode;
   state.waitName = name || '';
   const m = $('bar-status-main');
@@ -1318,6 +1322,7 @@ function audioCtx() {
 }
 
 function playSound(type) {
+  if (window.PPSound) return PPSound.play(type); // sound.js owns audio; legacy synth below is fallback
   if (!state.soundOn) return;
   try {
     const ctx  = audioCtx();
