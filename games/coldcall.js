@@ -4,24 +4,19 @@ const crypto = require('crypto');
 const Eng = require('./coldcall-engine.js');
 
 const BET_LEVELS = Eng.BET_LEVELS;
-const BUYS = ['rotary', 'quote'];
+const BUYS = Eng.BUYS;   // call, bonus1, bonus2, hunt (prices in Eng.CFG.buyCost, tenths of the bet)
 const RATE_MS = 150;
 const HISTORY_MAX = 20;
 const RTP_LABEL = '98% (long-run, 200M spin sim, +-0.1)';
 
-// QA hook: forces a bonus or a big win so the front end can be driven by a test. It runs ONLY when the server process was started
+// QA hook: forces a feature so the front end can be driven by a test. It runs ONLY when the server process was started
 // with COLDCALL_TEST=1 (and NODE_ENV is not 'production'); otherwise `force` in a spin payload is ignored. Forced rounds are paid and
-// charged through the normal wallet path, with real engine rounds (the engine's own reroll-until-trigger, no hand-made scripts).
-const FORCES = ['rotary', 'quote', 'big'];   // ('both' is not offered: a natural double trigger is 1 in ~157,000 spins, too slow to reroll)
-const BIG_FORCE_X = 25;           // 'big' = reroll plain spins until the round wins at least this many x bet (the 'huge' tier)
-const BIG_FORCE_TRIES = 400000;
+// charged through the normal wallet path, with real engine rounds (bells placed, or whole rounds re-rolled until the condition holds; no hand-made scripts).
+//   bonus1 / bonus2 / bonus3 = 3 / 4 / 5 bells land; phone = phone feature with >= 4 hot leads; close = phone feature with a close and a second reveal round;
+//   big = round pays >= 25x; tease = exactly 2 bells, no bonus.
+const FORCES = Eng.FORCES;
 const testHookOn = () => process.env.COLDCALL_TEST === '1' && process.env.NODE_ENV !== 'production';
-function resolveForced(rng, force) {
-  if (force !== 'big') return Eng.resolveRound(rng, null, { force });
-  let r;
-  for (let i = 0; i < BIG_FORCE_TRIES; i++) { r = Eng.resolveRound(rng, null); if (r.winX >= BIG_FORCE_X) break; }
-  return r;
-}
+const resolveForced = (rng, force) => Eng.resolveRound(rng, null, { force });
 
 function cryptoRng() {
   return () => crypto.randomBytes(6).readUIntBE(0, 6) / 281474976710656; // 48-bit uniform in [0,1)
@@ -51,7 +46,7 @@ module.exports = {
       const w = ctx.wallet.get(keyOf(socket));
       socket.emit('g:coldcall:state', {
         betLevels: BET_LEVELS, modes: ['play', 'ledger'], rtp: RTP_LABEL, maxWinX: Eng.MAX_WIN_X,
-        buyCostX: { rotary: Eng.CFG.buyCost.rotary / 10, quote: Eng.CFG.buyCost.quote / 10 },
+        buyCostX: Object.fromEntries(BUYS.map((b) => [b, Eng.CFG.buyCost[b] / 10])),
         wallet: w, balances: w, bets: BET_LEVELS,
         ...(testHookOn() ? { qaHook: true } : {}),
       });
