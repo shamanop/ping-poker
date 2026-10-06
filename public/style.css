@@ -820,3 +820,20 @@ html.art-login .setup-card { background: linear-gradient(180deg, rgba(34, 22, 14
 .showdown-overlay { max-width: calc(100% - 16px); }
 .sd-row { flex-wrap: wrap; white-space: normal; }
 .showdown-winner-name, .showdown-pot { white-space: nowrap; }
+
+/* ── Raise box on AmountInput (step F): presets row, then slider + amount; message/confirm only when shown ── */
+.raise-mount { min-width: 0; }
+#raise-box .amt { display: grid; grid-template-columns: minmax(0, 1fr) calc(150 * var(--px)); grid-template-areas: "pre pre" "sl row" "msg msg" "conf conf"; gap: var(--p6); align-items: center; }
+#raise-box .amt-presets { grid-area: pre; flex-wrap: nowrap; }
+#raise-box .amt-pre { min-width: 0; padding: 0 var(--p4); min-height: 32px; flex-direction: column; justify-content: center; }
+#raise-box .amt-slider { grid-area: sl; height: calc(26 * var(--px)); }
+#raise-box .amt-row { grid-area: row; }
+#raise-box .amt-text { height: calc(30 * var(--px)); min-height: 30px; width: 100%; border-radius: var(--p3); background: #0F0A06; border: 1px solid #7B5C32; color: var(--ink); padding: 0 var(--p4); }
+#raise-box .amt-text:focus { border-color: var(--gold); outline: none; }
+#raise-box .amt-text:disabled { opacity: .45; }
+#raise-box .amt-ends { display: none; }
+#raise-box .amt-msg { grid-area: msg; min-height: 0; font-size: var(--p12); }
+#raise-box .amt-msg:empty { display: none; }
+#raise-box .amt-confirm { grid-area: conf; }
+#raise-box .amt-confirm[hidden], #raise-box .amt-confirm.hidden { display: none; }
+#raise-box.off .amt-pre, #raise-box.off .amt-slider { pointer-events: none; }

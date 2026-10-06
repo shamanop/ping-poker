@@ -49,7 +49,6 @@
           <div class="pl" id="pl-level-wrap"><label>Level</label><b id="pl-level">1</b></div>
           <div class="pl" id="pl-next-wrap"><label>Next level</label><b id="pl-next">&mdash;</b></div>
           <div class="pl"><label>Street</label><b id="pl-street">&mdash;</b></div>
-          <span class="pl-hidden"><b id="pl-tocall"></b><b id="pl-minraise"></b></span>
         </div>
         <div class="hd-right">
           <button type="button" class="room-chip" id="room-code-btn" title="Copy invite link">
@@ -167,18 +166,7 @@
           <button type="button" class="act act-pre" id="pre-call" aria-pressed="false"><span class="act-main">Call</span><span class="act-sub" id="pre-call-sub">&nbsp;</span></button>
         </div>
 
-        <div class="raise-box" id="raise-box">
-          <div class="raise-presets" id="raise-presets"></div>
-          <div class="raise-slide">
-            <button type="button" class="step" id="raise-minus" aria-label="Decrease">&minus;</button>
-            <div class="slider-wrap">
-              <input id="raise-slider" type="range" class="raise-slider" min="0" max="100" value="0" disabled>
-            </div>
-            <button type="button" class="step" id="raise-plus" aria-label="Increase">+</button>
-            <input id="raise-input" class="raise-input" type="text" inputmode="decimal" autocomplete="off" disabled aria-label="Raise to">
-          </div>
-          <span class="slider-ticks"><span id="tick-min"></span><span id="tick-max"></span></span>
-        </div>
+        <div class="raise-box" id="raise-box"><div id="raise-mount" class="raise-mount"></div></div>
       </footer>
     </div>
 
