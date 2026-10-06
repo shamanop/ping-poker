@@ -350,3 +350,47 @@ Re-tuned to **`base 0.2, perStreak 0.05, streakMax 4, stakeCap 10`** (0.2 to 0.4
 Total payback was re-centred for it: `extra.base.phone` 0.2205 -> 0.2275 (96.49 +- 0.15 at 0.2205 on 400M, 96.90 at 0.2265, **96.96 +- 0.14 at 0.2275 on 500M**; each +0.01 of phone weight is +0.85 points). The sim sessions now carry a daily of 1 claim a day; with this value it cannot move a number.
 
 N1 (the Callback bet is rounded to the nearest 10 cents, so a player who mixes two bet sizes steers it up, +6.9 points) is an engine fix assigned to the wave-2 lead. **My total does not count it** (flat bets only); once it lands I re-run the total with the mixed-bet policy of the critic's N1 repro.
+
+## 8.9 Re-run with the Callback floor (N1)
+
+Measured 2026-10-06 on shaman (24 threads, scratch `E:\bricklord-test\coldcall-n1`, nothing on C:), engine = `git show HEAD:games/coldcall-engine.js` at 12b9e1e (sha256 2df15ce8...), sim = `games/coldcall-sim.js` with the new `--bet-mix` flag. Raw output: `levers-runs/N1_*.json|txt` (what-ifs `N1w_*`). No CFG value was changed. **Result: flat play FAILS the band (96.87, not 98.0 +- 0.3); bet mixing PASSES (nobody beats flat).**
+
+**Floor check.** `cbBet` (`games/coldcall-engine.js:129`) is `min(2500, max(10, floor(avg / 10 + 1e-9) * 10))`: the floor ships. `git diff 265dd33 HEAD -- games/coldcall-engine.js` is empty: no CFG value moved, and e56db4f (the floor) is an ancestor of 265dd33, so the 97.96 was already measured on this engine. It still did not see the floor, because `tools/levers-pull.js --stream` adds a Callback's value in x-bet of the nominal bet (`a.cb += R.bonusRawTenths`), never at `r.betCents`.
+
+**Headline repro.** `levers-pull.js --stream 500000000 121 --pick best --day 1000 --bet 100`: **bit-identical to H2_best** (96.962 +- 0.137 game part, Callback 22.349; + the 1.00 pot that 8.0 quotes = 97.96). So the old number reproduces, and it is the nominal-bet number.
+
+**Real-cents re-run.** `--pull 100000 2000 121 --pickpolicy best --nowarmdiff` (200M paid spins, 400 batches, Callbacks valued at their own bet, the sim's one-bettor pot measured), table of 95% intervals:
+
+| Player (best picks) | Total | Ex-pot | Callback part | Avg Callback bet | Run |
+|---|---|---|---|---|---|
+| flat $1 (the headline player) | **96.87 +- 0.22** | 95.87 | 21.19 | **94.9c** | N1_flat100 |
+| flat $2 | 97.42 +- 0.22 | 96.42 | 21.74 | 194.6c | N1_flat200 |
+| flat 20c | **92.76 +- 0.21** | 92.43 | 17.74 | 15.9c | N1_flat20 |
+| flat 10c | 97.19 +- 0.22 | 97.02 | 22.34 | 10.0c | N1_flat10 |
+| flat $25 | 97.97 +- 0.22 | 96.97 | 22.29 | 2,494.6c | N1_flat2500 |
+| what-if daily off, flat $1 | 98.14 +- 0.22 | 97.14 | 22.40 | 100.0c | N1w_nodaily_flat100 |
+| what-if `daily.stakeCap` 2500, flat $1 | 98.02 +- 0.22 | 97.02 | 22.34 | 100.0c | N1w_cap2500_flat100 |
+| what-if `daily.stakeCap` 2500, flat 20c | 97.36 +- 0.22 | 97.02 | 22.34 | 20.0c | N1w_cap2500_flat20 |
+
+The pot column is small for small bets because the sim's pot has one bettor and pays at most `maxPayX x bet` (0.17 points at 10c, 0.33 at 20c, 1.0 from $1); a real shared pot is drained by the bigger bettors, so compare the ex-pot column across bet sizes.
+
+**Why flat is short: the floor and the daily.** The daily gift's leads are worked at `min(bet, stakeCap)` = 10c, so any list holding one has a lead-weighted average a hair under the bet (a $1 bettor: 99.96c), and the floor takes a whole 10-cent step. Measured on the engine (`playRound`, 400k spins, one daily claim per 300 spins, seed 77): flat $1 Callbacks 951 of 951 at **90c** (no daily: 950 of 950 at 100c), flat 50c 951 of 951 at 40c, flat 20c 951 of 951 at 10c, flat 10c exact, flat $25 at 2,490c; with one claim per 1,000 spins a $1 bettor gets 837 of 950 at 90c. A flat 20c bettor loses half of the Callback value, a $1 bettor 5 to 10%. A once-a-day $1 player (500 players x 15 years, a scratch copy of `tools/lv-daily.js`) is now **worse off with the daily than without it**: payback 93% vs 96%, gift -$0.029 a day.
+
+**Bet-mixing attackers** (same seed and spins; all intervals +- 0.2, inside the +-0.5 target):
+
+| Policy | Total | Ex-pot | Avg stake / Callback bet | vs the flat player it could have been |
+|---|---|---|---|---|
+| N1 attacker 10c, 20c while avg < 15.5c (`--bet-mix 10,20`) | **86.41 +- 0.21** | 86.13 | 15.50c / 10.00c | -10.8 vs flat 10c (97.19) |
+| same at $1 / $2, hi while avg < 155.5c (`--bet-mix 100,200`) | **94.50 +- 0.23** | 93.50 | 155.5c / 150.0c | -2.4 vs flat $1 (96.87), -2.9 vs flat $2 |
+| $1 / $2 aimed at a multiple of 10 (`--bet-mix 100,200,150`) | 94.37 +- 0.22 | 93.38 | 150.0c / 145.2c | -2.5 vs flat $1 |
+| existing `--bet-switch` (10c, $25 after >= 3 warm squares) | 95.64 +- 0.65 (stake mix: 8.5% of spins, 96% of stake at $25) | n/a | 214.9c Callback bet | -2.3 vs flat $25 (97.97) |
+
+The floor closes N1: with the floor `cb.bet <= avg`, so the steered Callback pays 10c on 15.5c of stake (64.5%) and the policy that gained 6.9 points before is now 10.8 below flat 10c. The mix also drops every warm square on a bet change (base phone 16.5 vs 19.5). The `--bet-switch` row: the 10c spins pay 71.8%, the $25 spins 72.6%, the 15.4M attack spins (warm squares dropped) 70.3%; this mode prints no interval, the per-spin sd of 12.7x (quoted from H2_best) gives about +-0.6 on the $25 spins.
+
+**Verdict.**
+- Flat play: FAIL. Flat $1 is 96.87 +- 0.22 against 98.0 +- 0.3 (gap -1.1, about 0.8 below the band edge); flat 20c is 92.76. The headline 97.96 stands only as a nominal-bet number.
+- Bet mixing: PASS. Every mixed policy is 2.3 to 10.8 points below its best flat alternative; none is within noise of flat.
+
+**What I would change (not done; the brief says stop).** One knob, `pull.daily.stakeCap` 10 -> 2500 (daily leads worked at the player's own bet, so a flat bettor's average stays exact and the floor never bites). Measured effect: flat $1 96.87 -> **98.02 +- 0.22**, flat 20c 92.76 -> 97.36 (ex-pot 97.02, the same as every other bet), the attackers do not move (86.55 +- 0.24 and 94.47 +- 0.24, `N1w_cap2500_mix*`), N1 stays closed. Cost, which is why I did not just do it: that is the N2 gift back at its stake-scaled size. Once-a-day $1 player, 500 x 15 years, gift vs no daily: **+$0.055 a day** (payback 102%; against -$0.029 today and the $0.008 8.8 aimed at), and it grows with the bet. So pair it with a smaller gift: `daily.base` 0.2 -> 0.1 and `perStreak` 0.05 -> 0 (the lead count is kept in tenths, 0.1 is the smallest gift), expected about +$0.014 a day at $1 (scaled from the measured +0.055, not measured). Without that second change the first reopens N2; with the daily off (`base 0, perStreak 0`) flat $1 is 98.14 +- 0.22 measured, the simplest route to the band if the appointment is only a ritual. The engine alternative (daily leads join at the current average instead of at `min(bet, stakeCap)`) has the same N2 cost per lead; the critic's floor-plus-carry-the-remainder would cover it without a knob but is an engine and state-shape change.
+
+Not run: a flat 50c run (the 50c to 40c figure is the engine micro-test above, not a payback measurement); an interval for `--bet-switch` (the mode has none).
