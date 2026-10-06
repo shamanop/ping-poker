@@ -109,7 +109,7 @@ async function scenario() {
   });
   await T.check('mixed-session-sigkill-after-showdown-keeps-every-players-holdings', ['N3', 'C4'], async () => {
     const r = need(), a = r.snaps['at-sigkill'], b = r.snaps['after-sigkill-restart'];
-    expect(r.killedAfterShowdown, 'no T1 showdown with money moved before the kill (harness could not set up the kill)');
+    expect(r.killedAfterShowdown, 'no T1 showdown with money moved before the kill (harness could not set up the kill)' + (r.errors ? ' [sit errors: ' + r.errors.join('; ') + ']' : ''));
     expect(b.total === a.total && sameHoldings(a.hold, b.hold) === '', `total ${a.total} -> ${b.total}; per player ${sameHoldings(a.hold, b.hold)}`);
   });
   await T.check('mixed-session-end-night-settle-ups-are-zero-sum', ['M6'], async () => {
