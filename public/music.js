@@ -13,8 +13,17 @@
   };
   const num = (v, d) => { const n = parseFloat(v); return isFinite(n) ? n : d; };
 
+  // The MUSIC switch (radio on/off) is shared with the Ballot Bender slot's MUSIC switch (localStorage 'ping.music').
+  // First run, before the radio has ever been toggled, it inherits the slot's saved choice.
+  const slotMusicPref = () => {
+    try {
+      const v = localStorage.getItem('ping.music');
+      if (v !== null) return !/^(0|off|false|mute|muted|no)$/i.test(v);
+      return localStorage.getItem('pp_sound_muted') !== '1';
+    } catch (e) { return true; }
+  };
   const S = {
-    stations: [], stationId: LS.get('station', ''), wantPlay: LS.get('off', '0') !== '1',
+    stations: [], stationId: LS.get('station', ''), wantPlay: LS.get('off', null) === null ? slotMusicPref() : LS.get('off', '0') !== '1',
     volume: Math.max(0, Math.min(1, num(LS.get('vol', ''), 0.35))), muted: LS.get('muted', '0') === '1',
     offset: 0, rtt: null, haveClock: false, samples: [],
     status: 'idle', // idle | loading | playing | paused | blocked | error
@@ -32,7 +41,42 @@
 
   // ---------- events ----------
   const listeners = new Set();
-  function emit() { for (const f of listeners) { try { f(api.nowPlaying()); } catch (e) { /* listener bug */ } } paintBar(); }
+  function emit() { for (const f of listeners) { try { f(api.nowPlaying()); } catch (e) { /* listener bug */ } } paintBar(); syncSlot(); }
+
+  // ---------- Ballot Bender slot bridge ----------
+  // The slot's own MUSIC switch is the same switch: flips travel both ways ('bender-music-pref' in, 'music-enabled' out).
+  // While the radio is audible the slot holds its synthesized music bed ('radio-active'), so the two never play together.
+  let sentOn = null, sentActive = null;
+  const slotFrames = () => Array.prototype.slice.call(document.querySelectorAll('iframe[src*="/games/bender/"]'));
+  function postSlot(msg) { for (const f of slotFrames()) { try { f.contentWindow.postMessage(msg, location.origin); } catch (e) { /* frame gone */ } } }
+  function syncSlot(force) {
+    const on = S.wantPlay, act = S.status === 'playing' || S.status === 'loading';
+    if (force || on !== sentOn) { sentOn = on; try { localStorage.setItem('ping.music', on ? '1' : '0'); } catch (e) { /* storage blocked */ } postSlot({ type: 'music-enabled', value: on }); }
+    if (force || act !== sentActive) { sentActive = act; postSlot({ type: 'radio-active', value: act }); }
+  }
+  window.addEventListener('message', ev => {
+    const m = ev.data;
+    if (!m || m.type !== 'bender-music-pref' || ev.origin !== location.origin) return;
+    if (!slotFrames().some(f => f.contentWindow === ev.source)) return;
+    if (!!m.value !== S.wantPlay) (m.value ? api.play() : api.pause());
+    syncSlot(true);
+  });
+
+  // ---------- per-player persistence (account prefs.radio = {on, station}; localStorage is the fallback) ----------
+  function savePrefs() {
+    const s = getSocket();
+    if (S.signedIn && s && s.connected) s.emit('profile_update', { prefs: { radio: { on: S.wantPlay, station: S.stationId } } });
+  }
+  function applyAccountPrefs(prefs) {
+    const r = prefs && prefs.radio;
+    if (!r || typeof r !== 'object') { savePrefs(); return; }
+    const prevStation = S.stationId;
+    if (typeof r.on === 'boolean') { S.wantPlay = r.on; LS.set('off', r.on ? '0' : '1'); }
+    if (typeof r.station === 'string' && r.station && (!S.stations.length || S.stations.some(x => x.id === r.station))) { S.stationId = r.station; LS.set('station', r.station); }
+    if (!S.wantPlay) { if (S.status !== 'idle' && S.status !== 'paused') { stopAll(); S.status = 'paused'; } }
+    else if (S.stationId !== prevStation && S.status === 'playing') { cur = null; start(); }
+    emit();
+  }
   function setStatus(s) { if (S.status !== s) { S.status = s; emit(); } }
 
   // ---------- volume + ducking ----------
@@ -219,16 +263,16 @@
     setStation(id) {
       if (!S.stations.some(s => s.id === id)) return false;
       if (id === S.stationId && S.status === 'playing') return true;
-      S.stationId = id; LS.set('station', id);
+      S.stationId = id; LS.set('station', id); savePrefs();
       if (S.wantPlay && S.signedIn) { cur = null; start(); } else emit();
       return true;
     },
     play() {
-      S.wantPlay = true; LS.set('off', '0');
+      S.wantPlay = true; LS.set('off', '0'); savePrefs();
       if (!S.signedIn || !S.haveClock) { emit(); return; }
       if (S.status !== 'playing') { start(); } emit();
     },
-    pause() { S.wantPlay = false; LS.set('off', '1'); stopAll(); setStatus('paused'); },
+    pause() { S.wantPlay = false; LS.set('off', '1'); savePrefs(); stopAll(); setStatus('paused'); emit(); },
     toggle() { if (S.status === 'blocked') return api.play(); (S.wantPlay && S.status !== 'paused') ? api.pause() : api.play(); },
     volume(v) { if (v === undefined) return S.volume; S.volume = Math.max(0, Math.min(1, num(v, S.volume))); LS.set('vol', S.volume); applyVolume(); paintBar(); return S.volume; },
     mute(b) { if (b === undefined) return S.muted; S.muted = !!b; LS.set('muted', S.muted ? '1' : '0'); applyVolume(); paintBar(); return S.muted; },
@@ -370,6 +414,7 @@
       setStations(m && m.stations);
     });
     s.on('connect', hello);
+    s.on('auth_ok', m => { if (m && m.account) applyAccountPrefs(m.account.prefs); });
     if (s.connected) hello();
     setInterval(() => { if (s.connected) syncClock(3); }, 30000);
     return true;
@@ -386,7 +431,12 @@
   function setSignedIn(v) {
     v = !!v; if (v === S.signedIn) return;
     S.signedIn = v;
-    if (!v) { stopAll(); setStatus('idle'); } else maybeStart();
+    if (!v) { stopAll(); setStatus('idle'); }
+    else {
+      const u = window.Lobby && window.Lobby.user && window.Lobby.user();
+      if (u) applyAccountPrefs(u.prefs);
+      maybeStart();
+    }
   }
 
   function boot() {
