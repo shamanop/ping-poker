@@ -21,7 +21,7 @@
 | 5 | registry + viewlog | done (14 + 5 tests) |
 | 6 | transport + boot | done (30_shapes 42/42, empty allowlist) |
 | 7 | harness slices | done (all slices green, fuzz 3 seeds green) |
-| 8 | whole run | done: 142/147 pass; the 5 FAIL are all check 21 and contradict contract H6 (see Harness vs contract) |
+| 8 | whole run | done: 142/147 pass; the 5 FAIL were all check 21 (contradicted H6); after v2-core 7f51a19 check 21 is 4-5/5, remaining flake is the harness bot (see Harness vs contract) |
 | 9 | old suites + cleanup | done: 13 old suites pass one at a time, 6 moved to tests/legacy-stale, root tables.js deleted, harness rerun 142/147 (same 5, check 21) |
 
 ## houseRound in the wallet adapter (lead, 03:5x; v2-core 819f9db merged into v2-tables at 61d3e3a)
@@ -46,6 +46,7 @@
 - **A disconnect keeps the seat** (contract, correct). `tests/rejoin.js` "dropped player leaves table" asserted the opposite; now asserts the seat stays, marked offline.
 
 ## Harness vs contract
+- **Check 21 after the lead's fix (v2-core 7f51a19, merged into v2-tables as b432eab): 5/5 in 2 runs (40 s), 4/5 in 3 runs.** The recurring fail is `sigkill-after-showdown` ("harness could not set up the kill", 160 s wait). Evidence from a debug copy (tables/runs/dbg21b.js, log dbg21b_1.log): T1 sits in hand 7 `playing`, pot 2150, Cat all-in 2000, Ann (to act, stack 850 + bet 150) holds `errors: ['Raising is closed']` and never acts again, for 80+ s. Cause is the harness bot `drive()` (lines 25-27): `raise` to `currentBet + 100` or to `chips + roundBet` without checking `legalActions`; when the seat cannot legally raise, v2 answers a structured error (contract, check 27) where 9440541 clamped to a call, and the bot has no retry (it only acts on the next state event, and none comes). So the turn waits forever because no turn clock runs (T1 `actionTimerSec: 0`). Not a table-layer fault; a bot fix would be: on error, or when `toCall >= me.chips`, send `call`. Not edited (tests/v2 is read-only for me).
 - **Check 21 (`tests/v2/21_money_stores.js`, 5 checks) cannot pass against the contract.** It seats the same accounts at two tables at once (Bob at the chips table and the play table, Cat likewise, Dee and Ann at POKERPING as well). The contract (V2-DESIGN one seat per account, brief hard rule, harness check 13/H6) answers the second `table_join` with `error one_seat` ("You already have a seat at a table"). `seat()` in 21 then returns null and `s2[0].emit` throws `Cannot read properties of null (reading 'emit')`, so all 5 checks fail with ERR. Reproduced with a scratch copy that logs the sit errors (tables/runs/dbg21.js, 4 errors printed, all one_seat). The baseline passed 2 of the 5 only because the old server allowed multi-seating (the bug H6 pins). Not worked around: the table layer keeps one seat per account. The lead needs to fix the harness (use distinct accounts per table, or leave before the next sit). The money invariants that 21 checks (restart conservation, settle-ups zero-sum) are exercised by 07/17/23/25, 08/09 and the fuzz 10, all green.
 
 ## Not verified
