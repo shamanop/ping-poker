@@ -510,6 +510,23 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
     assert.strictEqual(all(b, 'floor:feed').length, 0); assert.deepStrictEqual(s.store()._data().players, {}); assert.deepStrictEqual(s.store()._data().pot, {});
   });
 
+  await test('QA hook with pull on: force plays that feature as a normal paid spin (state and Callback untouched, pot fed), ignored without COLDCALL_TEST', async () => {
+    const env0 = { t: process.env.COLDCALL_TEST, n: process.env.NODE_ENV };
+    try {
+      process.env.COLDCALL_TEST = '1'; delete process.env.NODE_ENV;
+      const s = setup({ rng: E.rngFrom(75) }); const a = s.sock('ann');
+      s.store().setPlayer('ann', 'play', { ...E.newState(), cb: { bet: 100 }, lt: 100 });
+      const w0 = s.wallet.get('ann').play;
+      const r = spin(s, a, { bet: 200, mode: 'play', force: 'big' });
+      assert.strictEqual(r.status, 'done'); assert.strictEqual(r.forced, 'big'); assert.ok(r.totalWinMult >= 25); assert.strictEqual(r.cost, 200); assert.strictEqual(r.callback, false); assert.strictEqual(r.betCents, 200);
+      assert.strictEqual(r.wallet.play, w0 - 200 + r.totalWin);
+      assert.deepStrictEqual(s.store().player('ann', 'play').cb, { bet: 100 }, 'the Callback is still waiting'); assert.strictEqual(s.store().player('ann', 'play').lt, 100);
+      assert.strictEqual(s.potOf('play').fed * 10000 + s.potOf('play').rem, 200 * E.CFG.pull.pot.feedBps);
+      delete process.env.COLDCALL_TEST;
+      const q = spin(s, a, { bet: 200, mode: 'play', force: 'big' }); assert.strictEqual(q.forced, undefined); assert.strictEqual(q.callback, true, 'without the hook the Callback plays');
+    } finally { if (env0.t == null) delete process.env.COLDCALL_TEST; else process.env.COLDCALL_TEST = env0.t; if (env0.n == null) delete process.env.NODE_ENV; else process.env.NODE_ENV = env0.n; }
+  });
+
   await test('concurrency: many sockets and accounts spinning, buying and deciding in the same ticks keep exact accounting, pot invariant, nothing left open', async () => {
     const s = setup({ rng: E.rngFrom(73), potRng: E.rngFrom(9) }); E.CFG.pull.pot.oneInPerDollar = 1000;
     const names = ['ann', 'bo', 'cy', 'di']; const socks = names.flatMap((n) => [s.sock(n), s.sock(n)]);
