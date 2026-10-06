@@ -70,7 +70,7 @@
     SFX().stamp(); if (c.value >= 250) { CC.hero.mood('win', 2600); K().FX.coins(14); K().FX.ring(...K().stagePt(me.el), { n: 2, r1: 120 }); }
     await Promise.all([accept(first, ctx, c.p), lcd]);
     if (sum() !== c.run) bad({ what: 'close run', p: c.p, shown: sum(), script: c.run });
-    ctx.rib('THE CLOSE', ''); const d = c.run - paid; if (d > 0) { paid += d; await ctx.addWin(d, 520); }   // WIN counts every close as it lands
+    ctx.rib('THE CLOSE', ''); const d = Math.min(c.run, ctx.phonePay) - paid; if (d > 0) { paid += d; await ctx.addWin(d, 520); }   // WIN counts every close as it lands
   }
 
   // PAYMENT ACCEPTED: the seal piece is stamped on the corner of the card machine, the slip (CSS text) sits under the hero's chin so the board stays readable
@@ -82,7 +82,7 @@
   }
 
   async function run(spin, ctx) {
-    const ph = spin.phone, B_ = B(); S.clear(); paid = 0;
+    const ph = spin.phone, B_ = B(); S.clear(); paid = 0; ctx.phonePay = ph.pay;   // a close's running total can exceed what finally pays (later reveals re-flip leads): the meter never goes past phone.pay
     // 1. the call connects
     B_.cellsOf('phone').forEach((p) => B_.el(p).classList.add('pulse', 'ring')); SFX().phoneRing(); K().say('phone'); CC.hero.mood('hype', 1800);
     ctx.rib('CONNECTED', ph.leads.length + (ph.leads.length === 1 ? ' LEAD' : ' LEADS')); K().stamp('CALL CONNECTED', ph.leads.length + (ph.leads.length === 1 ? ' HOT LEAD' : ' HOT LEADS'), 1000, document.getElementById('head'));   // under the hero's chin: the lit squares stay in view
