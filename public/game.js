@@ -428,7 +428,7 @@ function bindWaitPanel() {
   $('show-panel').addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b || b.disabled) return;
     const w = b.dataset.w;
-    state.socket.emit('show_cards', { which: w === 'both' ? 'both' : Number(w) });
+    state.socket.emit('show_cards', { roomId: state.roomId, which: w === 'both' ? 'both' : Number(w) });
   });
   bindCopy($('wp-invite'));
   $('btn-start').addEventListener('click', () => {
