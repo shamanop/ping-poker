@@ -1,0 +1,81 @@
+/* Landscape phone layout (e.g. 844x390): a short viewport wide enough that phone.css does not apply. Linked with
+   media="(max-height: 500px) and (min-width: 601px)", so desktop sizes never load it. The chat rail becomes a drawer on the left,
+   the top bar and the table head are one thin row each, the action bar is one compact row. game.js lowers the --u floor to 0.5 for a stage under 600 px high. */
+
+/* ── Shell: thin top bar, narrow dock ─────────────────────────────────────────────────────────────── */
+body.sh-on { --sh-top: 44px; --sh-dock: 52px; }
+.sh-top { height: 44px; column-gap: 8px; padding: 0 8px; grid-template-columns: auto minmax(0, 1fr) auto auto auto auto; border-width: 6px 8px; }
+.sh-brand, .sh-lvl { display: none; }
+.sh-wallet { grid-column: 2; justify-self: end; }
+.sh-plate { min-height: 30px; padding: 0 8px; }
+.sh-plate .plate__value { font-size: 18px; }
+.sh-top .btn, .sh-top [data-money-toggle] .seg > i { min-height: 32px; }
+.sh-top .btn { padding: 0 10px; font-size: 14px; }
+.sh-dock { width: 52px; gap: 10px; padding: 8px 0; }
+.sh-di { width: 40px; height: 40px; }
+.sh-di svg { width: 22px; height: 22px; }
+.sh-di .tag--soon { bottom: -8px; }
+.lb-main { padding: 12px 16px 20px; }
+
+/* ── Table grid: head, stage, one-row action bar; no side rail ────────────────────────────────────── */
+#game-screen { --head-h: 44px; --bar-row: 98px; --rail-w: 0px; --gut: 4px; }
+.g-grid, .panel-right .g-grid { grid-template-columns: minmax(0, 1fr); grid-template-rows: var(--head-h) minmax(0, 1fr) var(--bar-row); grid-template-areas: "head" "stage" "bar"; }
+.g-head { grid-template-columns: auto minmax(0, 1fr) auto; gap: 6px; padding: 0 6px; }
+.g-head .btn { min-height: 34px; padding: 0 9px; font-size: 14px; letter-spacing: .06em; }
+.g-head .btn--icon { width: 34px; height: 34px; padding: 0; }
+.hd-left { gap: 5px; }
+.hd-mid .pl label { display: none; }
+.hd-mid .pl b { font-size: 14px; }
+.g-head .room-chip > span:first-child { display: none; }
+.blinds-plate { min-width: 70px; padding: 1px 8px; }
+.rail-toggle { display: inline-flex; }
+
+/* ── Chat rail: a drawer from the left edge, closed until the Chat button opens it ────────────────── */
+.g-rail, .panel-right .g-rail {
+  grid-area: auto; position: absolute; left: 0; top: var(--head-h); bottom: 0; width: min(300px, 46%); margin: 0; z-index: 12;   /* below the head: the Chat button stays reachable to close it */
+  visibility: hidden; transform: translateX(-105%); transition: transform .2s ease-out, visibility 0s linear .2s; overflow: hidden;
+}
+#game-screen.rail-open .g-rail { visibility: visible; transform: none; transition: transform .2s ease-out; }
+.rail-flip { display: none; }
+.g-rail { --panel-pad: 6px; overflow-y: auto; }
+.rail-h { min-height: 26px; margin-bottom: 4px; }
+.chat-messages { min-height: 48px; }
+.sticker-grid, .throw-grid { grid-template-columns: repeat(8, 1fr); gap: 3px; }
+.sticker-item, .throw-item { aspect-ratio: auto; height: 34px; min-height: 34px; padding: 1px; }
+.throw-hint { display: none; }
+.chat-input-row { margin-top: 2px; }
+.toasts, .panel-right .toasts { top: calc(var(--head-h) + 6px); }
+
+/* ── Action bar: the status line sits inside the bar, buttons beside the raise box ───────────────── */
+.g-bar {
+  width: calc(100% - 8px); height: auto; margin-bottom: 4px; padding: 6px 12px; column-gap: 6px; row-gap: 2px;
+  grid-template-columns: minmax(0, 96px) minmax(0, 118px) minmax(0, 126px) minmax(0, 1fr);
+  grid-template-rows: auto auto; grid-template-areas: "help help help raise" "acts acts acts raise";
+}
+.bar-help { position: static; grid-area: help; justify-content: flex-start; height: auto; min-height: 20px; font-size: 13px; text-shadow: none; gap: 6px; overflow: hidden; }
+.bar-help b, .bar-help b.me { font-size: 13px; }
+.bar-help span { display: none; }
+.act { height: 52px; min-height: 44px; }
+.act-main { font-size: 20px; }
+.act-sub { font-size: 14px; min-height: 12px; }
+.g-bar.preselect { grid-template-areas: "help help help help" "acts acts acts acts"; }
+.g-bar.preselect .act-pre { height: 52px; }
+#raise-box .amt { grid-template-columns: minmax(0, 1fr) 110px; gap: 4px; }
+#raise-box .amt-presets { gap: 3px; }
+#raise-box .amt-pre { min-height: 32px; padding: 0 2px; }
+#raise-box .amt-pre-l { font-size: 12px; }
+#raise-box .amt-pre-v { font-size: 13px; }
+#raise-box .amt-text { min-height: 32px; height: 32px; }
+
+/* ── Table pieces ────────────────────────────────────────────────────────────────────────────────── */
+.emote-strip { left: 4px; bottom: 6px; display: grid; grid-template-columns: repeat(2, 36px); gap: 3px; padding: 3px; }
+.emote-btn { width: 36px; height: 36px; min-width: 36px; min-height: 36px; padding: 2px; }
+.pot-row { z-index: 9; padding: 1px 8px; border-radius: var(--r-ctl); background: rgba(10, 6, 3, .8); }   /* no room above the table here: the pot reads on top of the far plate, on a dark pill */
+.seat.hero { translate: 0 8px; }
+.seat-tag { position: absolute; z-index: 5; right: -4px; top: -10px; width: 22px; height: 22px; border-width: 1px; }
+.wait-panel, .bust-panel, .show-panel { max-width: calc(100% - 16px); }
+.wait-panel { width: min(400px, 90%); gap: 8px; --panel-pad: 12px; }
+.wait-panel .wp-sub { display: none; }
+.showdown-overlay { max-width: calc(100% - 8px); }
+.host-drawer { top: calc(var(--sh-top, 0px) + var(--head-h) + 4px); }
+.bank-panel { left: 0; right: 0; }
