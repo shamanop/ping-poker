@@ -534,6 +534,12 @@
       P('rules', pl.rules || E.CFG.pull);
       if (Array.isArray(s.feed)) s.feed.forEach((ev) => onFloor('feed', ev));
     }
+    // a reconnect whose state no longer lists the round this screen is still playing (server restart: voidStored refunded it): tell the round now, instead of
+    // leaving the prompt up until its clock runs out under a "TIME'S UP: first lead picked" caption (real.js void, 26 s)
+    if (s && s.pull && st.ctx && st.ctx.p.status === 'pending') {
+      const id = st.ctx.p.roundId, box = inbox.get(id), opens = s.opens || (s.open ? [s.open] : []);
+      if (box && !opens.some((o) => o.roundId === id) && !box.q.some((x) => x._voided || x.status === 'done')) boxPush(box, { _voided: { roundId: id, reason: 'restart' } });
+    }
     if (!st.busy) syncView(); else drawBet();
     if (s && s.open && !st.busy && !st.modal) adopt(s.open);    // a decision was left open (reload, another tab): play it out
   }
