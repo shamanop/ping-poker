@@ -136,15 +136,15 @@ const NODAY = { day: null };
     assert.strictEqual(r.newState.lt, 0); assert.deepStrictEqual(r.newState.cb, { bet: 100 }); assert.ok(r.pull.armed);
   });
 
-  await test('avg and cb.bet: leads earned small cannot fire a big Callback; cb.bet = avg rounded to the nearest 10 cents, clamped to [10, 2500]', () => {
+  await test('avg and cb.bet: leads earned small cannot fire a big Callback; cb.bet = avg rounded DOWN to 10 cents (W1B N1), clamped to [10, 2500]', () => {
     const e = mkEng({ daily: { base: 0, perStreak: 0 } });
     const run = (st, bet) => spin(e, strict([...gridVals(e, 0)]), st, { bet });
-    // 490 tenths at 10 cents, then a 2500-cent dead spin (12 tenths): avg = (10*490 + 2500*12) / 502 = 69.52 -> 70 (nearest 10 cents)
+    // 490 tenths at 10 cents, then a 2500-cent dead spin (12 tenths): avg = (10*490 + 2500*12) / 502 = 69.52 -> 60 (down to 10 cents)
     let r = run(freeze(st0({ lt: 490, avg: 10, day: '2026-10-06' })), 2500);
-    assert.deepStrictEqual(r.newState.cb, { bet: 70 }); assert.ok(Math.abs(r.newState.avg - (10 * 490 + 2500 * 12) / 502) < 1e-9);
+    assert.deepStrictEqual(r.newState.cb, { bet: 60 }); assert.ok(Math.abs(r.newState.avg - (10 * 490 + 2500 * 12) / 502) < 1e-9);
     r = run(freeze(st0({ lt: 495, avg: 2500, day: '2026-10-06' })), 2500); assert.deepStrictEqual(r.newState.cb, { bet: 2500 });
     r = run(freeze(st0({ lt: 495, avg: 10, day: '2026-10-06' })), 10); assert.deepStrictEqual(r.newState.cb, { bet: 10 });
-    for (const [avg, lvl] of [[0, 10], [4.9, 10], [10, 10], [14.9, 10], [15, 20], [19.4, 20], [24.9, 20], [25, 30], [49.4, 50], [499.9, 500], [2356, 2360], [2496.4, 2500], [2499.5, 2500], [2500, 2500], [99999, 2500]]) assert.strictEqual(E.cbBet(avg), lvl, 'avg ' + avg);
+    for (const [avg, lvl] of [[0, 10], [4.9, 10], [10, 10], [14.9, 10], [15, 10], [19.4, 10], [24.9, 20], [25, 20], [49.4, 40], [499.9, 490], [2356, 2350], [2496.4, 2490], [2499.5, 2490], [2500, 2500], [99999, 2500]]) assert.strictEqual(E.cbBet(avg), lvl, 'avg ' + avg);
     // a flat bettor at every level gets exactly his level back, never rounding drift
     for (const b of E.BET_LEVELS) { let st = st0({ day: '2026-10-06' }); for (let i = 0; i < 80 && !st.cb; i++) st = spin(e, strict(gridVals(e, 0)), st, { bet: b }).newState; assert.deepStrictEqual(st.cb, { bet: b }); assert.strictEqual(st.avg, b); }
   });
@@ -556,7 +556,7 @@ const NODAY = { day: null };
     assert.ok(co.pull.armed); assert.deepStrictEqual(co.newState.warm, [0, 1, 2, 3]); assert.strictEqual(co.newState.warmBet, 100);
   });
 
-  await test('F2 Callback bet is the exact lead-weighted average to the nearest 10 cents in [10, 2500], not a bet level: flat $25 with the daily on spin 1 gets >= $24.90, flat $5 >= $4.90, flat $1 unchanged (2000-lead list)', () => {
+  await test('F2 Callback bet is the lead-weighted average rounded down to 10 cents in [10, 2500], not a bet level: flat $25 with the daily on spin 1 gets >= $24.90, flat $5 >= $4.90, flat $1 unchanged (2000-lead list)', () => {
     const e = mkEng({ list: 2000 }), DAY = '2026-10-06';
     for (const [bet, atLeast] of [[2500, 2490], [500, 490], [100, 100]]) {
       let st = E.newState(), n = 0; const rng = E.rngFrom(5 + bet);
@@ -581,6 +581,21 @@ const NODAY = { day: null };
       assert.strictEqual(r.betCents, b); assert.strictEqual(r.callback, true); assert.ok(Number.isInteger(E.cents(r.winTenths, b))); assert.ok(r.winTenths <= T);
     }
     assert.strictEqual(E.cbBet(0), 10); assert.strictEqual(E.cbBet(-5), 10); assert.strictEqual(E.cbBet(1e9), 2500);
+  });
+
+  await test('W1B N1 the Callback bet is the lead-weighted average ROUNDED DOWN to 10 cents: no bet mix arms a Callback above what its leads were worth; a flat bettor stays exact', () => {
+    for (const [a, want] of [[10, 10], [14.99, 10], [15.5, 10], [19.999, 10], [20, 20], [24.99, 20], [25, 20], [100, 100], [2499.99, 2490], [2500, 2500], [2500 - 1e-10, 2500], [9, 10], [1e9, 2500]]) assert.strictEqual(E.cbBet(a), want, 'cbBet(' + a + ')');
+    const e = mkEng({ list: 50, daily: { base: 0, perStreak: 0 } }), DAY = '2026-10-06';
+    // the steerer from the critic: 20 cents while the average is under 15.5, else 10 cents. Every arming must satisfy cb.bet <= avg, and the sum of Callback bets <= the sum of averages.
+    let st = E.newState(), n = 0, armed = 0, sumBet = 0, sumAvg = 0; const rng = E.rngFrom(77);
+    while (armed < 300 && n < 400000) {
+      if (st.cb) { st = e.playRound(rng, { bet: 10, state: freeze(st), now: 1e6 + n, day: DAY, script: false, auto: true }, []).newState; n++; continue; }
+      const bet = st.avg < 15.5 ? 20 : 10;
+      const r = e.playRound(rng, { bet, state: freeze(st), now: 1e6 + n, day: DAY, script: false, auto: true }, []); n++;
+      if (r.newState.cb && !st.cb) { armed++; assert.ok(r.newState.cb.bet <= r.newState.avg + 1e-6, 'cb.bet ' + r.newState.cb.bet + ' > avg ' + r.newState.avg); assert.strictEqual(r.newState.cb.bet % 10, 0); sumBet += r.newState.cb.bet; sumAvg += r.newState.avg; }
+      st = r.newState;
+    }
+    assert.ok(armed >= 300, 'armed ' + armed); assert.ok(sumBet <= sumAvg + 1e-6, 'steered Callback bets ' + sumBet + ' vs averages ' + sumAvg);
   });
 
   await test('F5 pot.oneInPerDollar <= 0 or not a number means a hit chance of 0 (never), not 1', () => {

@@ -29,6 +29,11 @@ const keyOf = (socket) => { const a = socket.data && socket.data.acct; return St
 const nkey = (k) => String(k).toLowerCase().trim();   // same normalisation as wallet.js
 const whoOf = (socket) => { const a = socket.data && socket.data.acct; return String((a && typeof a === 'object' ? (a.display || a.key) : a) || ''); };
 const clone = (o) => JSON.parse(JSON.stringify(o));
+// knob snapshots keep every value as it is: Infinity ("never" / "no cap") must stay Infinity, JSON would turn it into null, which every knob reads as 0 / "always" (W1B N3)
+const snap = (o) => structuredClone(o);
+// knobs outside CFG.pull that a replay reads live: frozen into the record beside CFG.pull, so an edit while a decision is open cannot change the bonus the player was shown (W1B N6)
+const SNAP_KNOBS = ['spins', 'retrigger', 'maxSpins', 'maxRevealRounds', 'maxCascades', 'buyCost'];
+const DEFAULT_TIMEOUT_MS = 20000;   // armTimer's fallback when decision.timeoutMs is missing or not a finite positive number (W1B N4)
 // names that would address Object.prototype if they ever became a plain-object key (wallet.js still keys a plain object)
 const RESERVED = new Set(['__proto__', 'constructor', 'prototype']);
 const reserved = (k) => RESERVED.has(nkey(k));
@@ -75,7 +80,7 @@ function normState(st) {
   out.warm = get('warm', [], (x) => Array.isArray(x) && x.every((q) => isInt(q) && q >= 0 && q < cells), (x) => x.slice());
   out.warmBet = get('warmBet', 0, (x) => isInt(x) && x >= 0);
   out.coldAt = get('coldAt', null, isFiniteNum);
-  out.day = get('day', null, (x) => typeof x === 'string');
+  out.day = get('day', null, (x) => typeof x === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(x) && Number.isFinite(Date.parse(x + 'T12:00:00Z')));
   out.streak = get('streak', 0, (x) => isInt(x) && x >= 0);
   out.rounds = get('rounds', 0, (x) => isInt(x) && x >= 0);
   out.callbacks = get('callbacks', 0, (x) => isInt(x) && x >= 0);
@@ -92,8 +97,9 @@ const dayAfter = (d) => chicagoDay(Date.parse(d + 'T12:00:00Z') + 86400000);
 // How many leads the next daily claim gives. One source of truth: the claim itself. The engine plays a throwaway paid spin on a copy of the state on the
 // day the claim would happen (today if unclaimed, else the next day: the streak continues) and reports what it granted; nothing is stored or charged.
 function dailyNext(st, now, day, P) {
-  const claimDay = !st.day || day > st.day ? day : dayAfter(st.day);
   const live = Eng.CFG.pull;
+  let claimDay;
+  try { claimDay = !st.day || day > st.day ? day : dayAfter(st.day); } catch (e) { return null; }   // a day the clock cannot add to: no number, never a throw
   Eng.CFG.pull = P;                          // synchronous: the probe runs under the knobs the view is for
   try {
     const r = Eng.playRound(Eng.rngFrom(1), { buy: null, bet: BET_LEVELS[0], state: { ...clone(st), cb: null }, now, day: claimDay, script: false, auto: true });
@@ -141,11 +147,15 @@ function runRound(rec, decisions, auto) {
   const base = module.exports.rng || cryptoRng();
   let i = 0;
   const rng = () => { if (i < rec.tape.length) return rec.tape[i++]; const v = base(); rec.tape.push(v); i++; return v; };
-  const len = rec.tape.length, live = Eng.CFG.pull;
+  const len = rec.tape.length, live = Eng.CFG.pull, liveX = {};
   Eng.CFG.pull = rec.cfg;                    // synchronous: nothing else runs while the snapshot is in place
+  for (const k of SNAP_KNOBS) { liveX[k] = Object.prototype.hasOwnProperty.call(Eng.CFG, k) ? { v: Eng.CFG[k] } : null; if (rec.cfgx && k in rec.cfgx) Eng.CFG[k] = rec.cfgx[k]; }
   try {
     return Eng.playRound(rng, { buy: rec.buy, bet: rec.bet, state: clone(rec.state), now: rec.now, day: rec.day, script: true, auto: !!auto, ...(rec.force ? { force: rec.force } : {}) }, decisions);
-  } catch (e) { rec.tape.length = len; throw e; } finally { Eng.CFG.pull = live; }
+  } catch (e) { rec.tape.length = len; throw e; } finally {
+    Eng.CFG.pull = live;
+    for (const k of SNAP_KNOBS) { if (liveX[k]) Eng.CFG[k] = liveX[k].v; else delete Eng.CFG[k]; }
+  }
 }
 
 function pendingView(rec) {
@@ -158,14 +168,18 @@ function pendingView(rec) {
 
 // a new decision: a full timeoutMs, and its one re-arm (`ready`) is available again
 function armTimer(rec) {
-  rec.timeoutMs = rec.cfg.decision.timeoutMs;
+  const t = rec.cfg.decision && rec.cfg.decision.timeoutMs;
+  rec.timeoutMs = Number.isFinite(t) && t > 0 ? t : DEFAULT_TIMEOUT_MS;
   rec.armedAt = C.now(); rec.readyDone = false;
   setTimer(rec, rec.timeoutMs);
 }
 function setTimer(rec, ms) {
   if (rec.timer) clearTimeout(rec.timer);
   rec.expiresAt = C.now() + ms;
-  rec.timer = setTimeout(() => { rec.timer = null; autoSettle(rec, 'timeout'); }, ms);
+  rec.timer = setTimeout(() => {
+    rec.timer = null;
+    try { autoSettle(rec, 'timeout'); } catch (e) { logf('coldcall: timeout settle threw', rec.id, e && e.message); try { voidRound(rec, 'timer_error'); } catch {} }   // never an uncaught throw in a timer (W1B N5)
+  }, ms);
   if (rec.timer.unref) rec.timer.unref();
 }
 
@@ -205,6 +219,7 @@ function settle(rec, r, autoWhy, extraSocket) {
   rec.settled = true;
   if (wasOpen) { dropOpen(rec); store.delOpen(rec.nk, mode); }
   let potWon = null, potMoved = false;
+  try {                             // the record is already gone: nothing in this block may stop the credit below (W1B N5)
   if (slice) {
     pot.rem = slice.rem; pot.bal += slice.slice; pot.fed += slice.slice; potMoved = slice.slice > 0;
     if (prize != null) {
@@ -217,6 +232,7 @@ function settle(rec, r, autoWhy, extraSocket) {
   }
   store.setPlayer(rec.nk, mode, r.newState);
   if (wasOpen || potWon) store.flush();
+  } catch (e) { logf('coldcall: settle bookkeeping failed', rec.id, e && e.message); }
 
   let w;
   try { w = C.wallet.credit(key, mode, winCents, ref); } catch (e) { logf('coldcall: win credit failed', rec.id, e && e.message); w = C.wallet.get(key); }
@@ -296,8 +312,11 @@ function pullSpin(socket, p, buy, now) {
   const rec = {
     id: crypto.randomBytes(6).toString('hex'), key, nk, mode, who: whoOf(socket), socket, buy, bet: p.bet,
     betCents: callback ? state.cb.bet : p.bet, callback, state, now, day, t: now, tape: [], decisions: [], force, forced: force,
-    cfg: clone(pullCfg()),                 // the knobs this round is played, defaulted and settled under
   };
+  try {
+    rec.cfg = snap(pullCfg());             // the knobs this round is played, defaulted and settled under (Infinity preserved)
+    rec.cfgx = {}; for (const k of SNAP_KNOBS) if (Object.prototype.hasOwnProperty.call(Eng.CFG, k)) rec.cfgx[k] = snap(Eng.CFG[k]);
+  } catch (e) { return err(socket, 'bad_request', 'Could not place that bet'); }
   const auto = p.auto === true;
   let r, cost;
   try {
@@ -310,13 +329,17 @@ function pullSpin(socket, p, buy, now) {
   if (cost > 0) { try { C.wallet.spend(key, mode, cost, { game: 'coldcall', round: rec.id }); } catch (e) { return walletErr(socket, e); } }
 
   if (r.status === 'pending') {
-    rec.pending = r.pending; rec.partial = r.partial;
-    open.set(rec.id, rec); openByKey.set(ok, rec);
-    store.putOpen({ roundId: rec.id, key: nk, mode, cost, bet: rec.betCents, buy, t: now, cfg: rec.cfg });
-    armTimer(rec);
-    if (C.wallet.flush) C.wallet.flush();
-    store.flush();
-    socket.emit('g:coldcall:result', pendingView(rec));
+    // the cost is taken: anything that throws from here on ends in one refund, never an open round without a timer (W1B N4)
+    try {
+      rec.pending = r.pending; rec.partial = r.partial;
+      open.set(rec.id, rec); openByKey.set(ok, rec);
+      store.putOpen({ roundId: rec.id, key: nk, mode, cost, bet: rec.betCents, buy, t: now, cfg: rec.cfg });
+      armTimer(rec);
+      if (C.wallet.flush) C.wallet.flush();
+      store.flush();
+      const view = pendingView(rec);
+      socket.emit('g:coldcall:result', view);
+    } catch (e) { logf('coldcall: pending path failed, voiding', rec.id, e && e.message); voidRound(rec, 'open_error'); }
     return;
   }
   const autoHit = auto && r.pull && ((r.pull.pick && r.pull.pick.auto) || (r.pull.more && r.pull.more.auto));

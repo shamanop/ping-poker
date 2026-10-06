@@ -833,6 +833,95 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
     decide(s, a, p, { k: 'more', take: false });
   });
 
+  // ---------------------------------------------------------------- wave 1B fix round (Opus re-check N3, N4, N5, N6)
+  await test('W1B N3: a knob snapshot keeps Infinity ("never"): pull.list = Infinity arms no Callback on the server, and a non-finite decision.timeoutMs gets the default timer', async () => {
+    const s = setup({ rng: E.rngFrom(91) }); const a = s.sock('ann'); rich(s, 'ann');
+    E.CFG.pull.list = Infinity;
+    let cb = 0;
+    for (let i = 0; i < 80; i++) { const r = play(s, a, { bet: 100, mode: 'play' }, i); assert.strictEqual(r.status, 'done'); if (r.callback || (r.pull && r.pull.armed)) cb++; }
+    assert.strictEqual(cb, 0, 'no Callback with list Infinity');
+    assert.strictEqual(s.store().player('ann', 'play').cb, null);
+    resetCfg(); E.CFG.pull.decision.timeoutMs = Infinity;
+    const p = toPending(s, a, 'more', 'play', 10);
+    const rec = s.open.get(p.roundId); assert.strictEqual(rec.timeoutMs, 20000, 'default timer'); assert.ok(rec.timer, 'timer armed'); assert.strictEqual(p.timeoutMs, 20000);
+    decide(s, a, p, { k: 'more', take: false });
+  });
+
+  await test('W1B N4: a throw after the spend on the pending path ends in one refund (open_error), no open round, no stuck account; a missing decision block gets the default timer', async () => {
+    const s = setup({ rng: E.rngFrom(92) }); const a = s.sock('ann'); rich(s, 'ann');
+    const st = s.store(), realPut = st.putOpen; st.putOpen = () => { throw new Error('disk gone'); };
+    let voided = 0, spins = 0;
+    try {
+      for (let i = 0; i < 400 && !voided; i++) {
+        const before = s.wallet.get('ann').play, nv = all(a, 'g:coldcall:voided').length;
+        s.clock.advance(200); const ne = all(a, 'error').length; a.send('g:coldcall:spin', { bet: 10, mode: 'play', buyBonus: i % 3 === 2 ? 'bonus2' : 'bonus1' }); spins++;
+        assert.ok(!all(a, 'error').slice(ne).some((e) => e.code === 'internal'), 'no "Server error": ' + JSON.stringify(all(a, 'error').slice(ne)));
+        if (all(a, 'g:coldcall:voided').length > nv) { voided++; const v = last(a, 'g:coldcall:voided'); assert.strictEqual(v.reason, 'open_error'); assert.strictEqual(s.wallet.get('ann').play, before, 'refunded exactly once'); }
+        assert.strictEqual(s.open.size, 0, 'no open round'); assert.strictEqual(st.allOpen().length, 0);
+      }
+    } finally { st.putOpen = realPut; }
+    assert.strictEqual(voided, 1, 'a pending round was voided within ' + spins + ' buys');
+    const r = spin(s, a, { bet: 10, mode: 'play' }); assert.ok(!r.error, 'the account can spin again: ' + JSON.stringify(r.error));
+    // decision block removed: the default timer, the pending event arrives, the round times out
+    delete E.CFG.pull.decision;
+    const p = toPending(s, a, 'pick', 'play', 10); const rec = s.open.get(p.roundId);
+    assert.strictEqual(rec.timeoutMs, 20000); assert.ok(rec.timer, 'timer armed'); assert.strictEqual(all(a, 'error').filter((e) => e.code === 'internal').length, 0);
+    decide(s, a, p, { k: 'pick', p: p.pending.choices[0] });
+  });
+
+  await test('W1B N5: day, players[key] and pot[mode] of a damaged store file reset to defaults; spins keep working in both currencies, money moves only by cost and win, no timer throw', async () => {
+    const files = [
+      { v: 1, players: { ann: 'x' }, pot: {}, open: {} }, { v: 1, players: { ann: 5 }, pot: {}, open: {} }, { v: 1, players: { ann: [1] }, pot: {}, open: {} },
+      { v: 1, players: {}, pot: { play: 5, chips: 'x' }, open: {} }, { v: 1, players: {}, pot: { play: { bal: 'a', fed: 1, seeded: 0, paid: 0, rem: 0, last: null }, chips: { bal: 1.5, fed: 1, seeded: 0, paid: 0, rem: 0, last: null } }, open: {} },
+      { v: 1, players: {}, pot: { play: { bal: 10, fed: 10, seeded: 0, paid: 0, rem: 0, last: 7 } }, open: {} },
+    ];
+    for (const f of files) {
+      const dir = fs.mkdtempSync(path.join(tmp, 'n5')); fs.writeFileSync(path.join(dir, 'coldcall-pull.json'), JSON.stringify(f));
+      const s = setup({ dir, rng: E.rngFrom(93) }); const a = s.sock('ann'); rich(s, 'ann'); rich(s, 'ann', 'chips');
+      a.send('g:coldcall:state'); assert.ok(last(a, 'g:coldcall:state'), 'state handler works: ' + JSON.stringify(f));
+      for (const mode of ['play', 'chips']) for (let i = 0; i < 6; i++) {
+        const before = s.wallet.get('ann')[mode]; const r = play(s, a, { bet: 100, mode }, i);
+        assert.strictEqual(r.status, 'done', JSON.stringify(f)); assert.strictEqual(r.wallet[mode], before - r.cost + r.totalWin + (r.pot ? r.pot.amount : 0), JSON.stringify(f));
+      }
+      potOk(s.potOf('play')); potOk(s.potOf('chips')); assert.ok(!all(a, 'error').length, JSON.stringify(all(a, 'error')));
+      // a decision left to time out settles without a throw in the timer
+      E.CFG.pull.decision.timeoutMs = 30; const p = toPending(s, a, 'more', 'play', 10); const before = s.wallet.get('ann').play; await sleep(120);
+      assert.strictEqual(s.open.size, 0, 'the timer settled it'); assert.ok(all(a, 'g:coldcall:result').some((r) => r.roundId === p.roundId && r.status === 'done'));
+      assert.ok(s.wallet.get('ann').play >= before, 'settled, win credited');
+    }
+    for (const day of ['zzz', '2026-13-45', '2026-1-5', 42, '']) for (const mode of ['play', 'chips']) {
+      const s = setup({ rng: E.rngFrom(94) }); const a = s.sock('ann'); rich(s, 'ann', mode);
+      s.store().setPlayer('ann', mode, Object.assign(E.newState(), { day }));
+      a.send('g:coldcall:state'); assert.ok(last(a, 'g:coldcall:state') && !all(a, 'error').length, 'state handler works for day ' + JSON.stringify(day) + ': ' + JSON.stringify(all(a, 'error')));
+      const before = s.wallet.get('ann')[mode]; const r = play(s, a, { bet: 100, mode }); assert.strictEqual(r.status, 'done'); assert.strictEqual(r.wallet[mode], before - r.cost + r.totalWin + (r.pot ? r.pot.amount : 0));
+    }
+  });
+
+  await test('W1B N6: spins, retrigger, maxSpins, maxRevealRounds, maxCascades and buyCost are frozen into the round: editing them while a decision is open changes nothing', async () => {
+    const edits = () => { E.CFG.spins.bonus1 = 30; E.CFG.spins.bonus2 = 30; E.CFG.retrigger.two = 9; E.CFG.retrigger.three = 9; E.CFG.maxSpins = 90; E.CFG.maxRevealRounds = 2; E.CFG.maxCascades = 1; E.CFG.buyCost.bonus1 = 5000; };
+    const keep = clone({ spins: E.CFG.spins, retrigger: E.CFG.retrigger, maxSpins: E.CFG.maxSpins, maxRevealRounds: E.CFG.maxRevealRounds, maxCascades: E.CFG.maxCascades, buyCost: E.CFG.buyCost });
+    const restore = () => Object.assign(E.CFG, clone(keep));
+    const run = (kind, edit) => {
+      const s = setup({ rng: E.rngFrom(95) }); const a = s.sock('ann'); rich(s, 'ann');
+      const p = toPending(s, a, kind, 'play', 10);
+      if (edit) edit();
+      try {
+        let r = p, n = 0;
+        while (r.status === 'pending') r = decide(s, a, r, r.pending.k === 'pick' ? { k: 'pick', p: r.pending.choices[0] } : { k: 'more', take: n++ % 2 === 0 });
+        return { r, wallet: s.wallet.get('ann').play };
+      } finally { restore(); }
+    };
+    for (const kind of ['pick', 'more']) {
+      const ctl = run(kind, null), edt = run(kind, edits);
+      assert.strictEqual(edt.r.totalWin, ctl.r.totalWin, kind + ': decided round pays the same under an edit'); assert.deepStrictEqual(edt.r.script, ctl.r.script, kind + ': same bonus script'); assert.strictEqual(edt.wallet, ctl.wallet);
+      // a disconnect defaults the round under the snapshot too
+      const run2 = (edit) => { const s = setup({ rng: E.rngFrom(96) }); const a = s.sock('ann'); rich(s, 'ann'); const p = toPending(s, a, kind, 'play', 10); if (edit) edit(); try { SRV.onDisconnect(a); return { r: last(a, 'g:coldcall:result'), wallet: s.wallet.get('ann').play }; } finally { restore(); } };
+      const c2 = run2(null), e2 = run2(edits);
+      assert.strictEqual(c2.r.status, 'done'); assert.strictEqual(e2.r.totalWin, c2.r.totalWin, kind + ': defaulted round pays the same under an edit'); assert.deepStrictEqual(e2.r.script, c2.r.script); assert.strictEqual(e2.wallet, c2.wallet);
+    }
+    assert.strictEqual(E.CFG.spins.bonus1, keep.spins.bonus1, 'knobs restored after the run');
+  });
+
   console.log(pass + ' passed' + (process.exitCode ? ', with failures' : ''));
   for (const k of Object.keys(E.CFG.pull)) delete E.CFG.pull[k]; Object.assign(E.CFG.pull, {}); PIN.restore();
   SRV.potRng = undefined; SRV.log = undefined;

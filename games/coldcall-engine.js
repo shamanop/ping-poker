@@ -121,10 +121,12 @@
      state = { v, lt (tenths of a lead), avg (cents, lead-weighted), cb: null | { bet }, warm: [positions], warmBet (cents the warm squares were made at, 0 = none), coldAt: null | ms, day, streak, rounds, callbacks }. */
   function newState() { return { v: 1, lt: 0, avg: 0, cb: null, warm: [], warmBet: 0, coldAt: null, day: null, streak: 0, rounds: 0, callbacks: 0 }; }
   const cloneState = (st) => Object.assign({}, st, { warm: st.warm.slice(), cb: st.cb ? Object.assign({}, st.cb) : null });
-  // the Callback is played at the exact lead-weighted average bet, to the nearest 10 cents, in [10, max bet level]: leads earned small cannot fire a big bet,
+  // the Callback is played at the lead-weighted average bet ROUNDED DOWN to a multiple of 10 cents, in [10, max bet level]: leads earned small cannot fire a big bet,
   // and a few cheap leads (the daily gift) cannot knock a big bettor down a whole bet level. Any multiple of 10 cents is a legal Eng.cents bet.
+  // Floor, never nearest (W1B N1): nearest let a player who mixes bet sizes sit just over a half step and arm every Callback up to 5 cents above what the leads were
+  // worth. With the floor, cb.bet <= the average always, so no bet mix gains; a flat bettor whose average is already a multiple of 10 is exact (1e-9 absorbs float noise).
   const CB_MAX = BET_LEVELS[BET_LEVELS.length - 1];
-  function cbBet(avg) { const a = Number.isFinite(avg) ? avg : 0; return Math.min(CB_MAX, Math.max(BET_LEVELS[0], Math.round(a / 10) * 10)); }
+  function cbBet(avg) { const a = Number.isFinite(avg) ? avg : 0; return Math.min(CB_MAX, Math.max(BET_LEVELS[0], Math.floor(a / 10 + 1e-9) * 10)); }
   function nextDay(d) { const [y, m, dd] = d.split('-').map(Number); return new Date(Date.UTC(y, m - 1, dd + 1)).toISOString().slice(0, 10); }
   // add `t` tenths of a lead worked at `bet` cents; arms THE CALLBACK at a full list (returns true if it armed one)
   function addLeads(st, t, bet, P) {
