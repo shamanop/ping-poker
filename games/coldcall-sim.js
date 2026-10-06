@@ -5,8 +5,9 @@
 //        stratified RTP: RTP = E[base cluster + base phone] + sum_k P(bell trigger k) * E[bonus k]; each bonus is sampled directly,
 //        so the heavy tail of the bonuses no longer dominates the interval (same idea as games/bender-rtp.js)
 //   nice -n 10 node games/coldcall-sim.js --buys [runsPerBuy=5000000] [seed=1] [--only call,hunt]  average value and RTP of every buy at its configured price
-//   nice -n 10 node games/coldcall-sim.js --pull [sessions=20000] [spinsPerSession=2000] [seed=1] [--pickpolicy first|best|none] [--more bank|take] [--bet 100] [--nowarmdiff]
-//        THE PULL (cold-call/PULL-ENGINE.md section 5): sequential flat-bet sessions with state (no idle time): RTP by part per paid spin, spins per Callback, warm, ghost, value per lead, pot
+//   nice -n 10 node games/coldcall-sim.js --pull [sessions=20000] [spinsPerSession=2000] [seed=1] [--pickpolicy first|best|none] [--more bank|take] [--bet 100] [--nowarmdiff] [--fresh] [--bet-switch]
+//        THE PULL (cold-call/PULL-ENGINE.md section 5): sequential sessions with state (no idle time): RTP by part per paid spin (money in real cents), spins per Callback, warm, ghost, value per lead, pot.
+//        The state is CARRIED across the sessions of a batch (a returning player); --fresh = every session starts empty (old behaviour). --bet-switch = the F1 attacker: 10c spins, $25 on the spin after >= 3 warm squares exist.
 //   nice -n 10 node games/coldcall-sim.js --bonus [runs=2000000] [seed=1] [--bet 100]     per bonus kind x pick policy x (bank|take): average value, P(cap), tails
 //   add --cfg '{"extra":{"base":{"phone":0.6}}}' (or --cfg @file.json) to override levers (objects merge, arrays and numbers replace); --json for one JSON line; --out file.json also writes the JSON.
 // Seeds are stratified: the run is cut into 1M-spin chunks, each chunk has its own seed (splitmix of base seed + chunk index) and its
@@ -53,37 +54,49 @@ if (!isMainThread) {
       }
       return parentPort.postMessage(out);
     }
-    // ---- pull: sessions of flat-bet sequential play with state
+    // ---- pull: sessions of sequential play with state. Money is counted in real CENTS (a Callback is played at cb.bet, not at the nominal bet).
     const o = workerData.pullOpts, bet = workerData.bet, P = cfg.pull, DAY = '2026-10-06';
-    const HIST = 3000;
+    const HIST = 3000, SW_LO = 10, SW_HI = 2500;
     const runChunk = (c, seed) => {
       const e = Eng.createEngine(withPick(c, o.pickpolicy)), decide = mkDecide(o.pickpolicy, o.more), Pc = c.pull;
-      const rng = Eng.rngFrom(seed), potRng = Eng.rngFrom((seed ^ 0xA5A5A5A5) >>> 0), pot = { bal: Pc.pot.seed, rem: 0, fed: 0, paid: 0, hits: 0, balAtHit: 0 };
-      const a = { sess: 0, paid: 0, cbRounds: 0, cluster: 0, phone: 0, nat: 0, cb: 0, moreNet: 0, natBonuses: 0, dead: 0, win: 0, filled: 0, arms: 0, armHist: new Array(HIST + 1).fill(0), marked: 0, warmCreated: 0, warmSpins: 0, warmPhone: 0, warmPhonePay: 0,
-        ghost: { n: 0, sum: 0, nz: 0, ge10: 0, ge100: 0, max: 0 }, picks: 0, offers: 0, takes: 0, takeWins: 0, stakeCents: 0, capHits: 0, sq: 0 };
+      // the office pot, the way the server runs it (store.pot: created holding `seed` cents of tracked house money; one shared pot per batch)
+      const rng = Eng.rngFrom(seed), potRng = Eng.rngFrom((seed ^ 0xA5A5A5A5) >>> 0), pot = { bal: Pc.pot.seed, rem: 0, fed: 0, seeded: Pc.pot.seed, paid: 0, hits: 0, balAtHit: 0 };
+      const a = { sess: 0, paid: 0, cbRounds: 0, cluster: 0, phone: 0, nat: 0, cb: 0, cbT: 0, cbBetSum: 0, cbUnder: 0, moreNet: 0, natBonuses: 0, dead: 0, win: 0, filled: 0, arms: 0, armHist: new Array(HIST + 1).fill(0), marked: 0, warmCreated: 0, warmSpins: 0, warmPhone: 0, warmPhonePay: 0,
+        ghost: { n: 0, sum: 0, nz: 0, ge10: 0, ge100: 0, max: 0 }, picks: 0, offers: 0, takes: 0, takeWins: 0, stakeCents: 0, capHits: 0, sq: 0, warmDropped: 0,
+        loStake: 0, loBack: 0, hiStake: 0, hiBack: 0, hiSpins: 0, dropStake: 0, dropBack: 0, dropSpins: 0, leftLt: 0, leftCb: 0, ends: 0 };
+      let st = Eng.newState(), since = 0, t = 1e9;
       for (let s = 0; s < o.sessions; s++) {
-        let st = Eng.newState(), paid = 0, since = 0, t = 1e9;
+        let paid = 0;
+        if (o.fresh) { st = Eng.newState(); since = 0; }        // old behaviour: every session starts empty and its unfinished list is thrown away
+        else st = Object.assign({}, st, { day: null });         // carried state; a session is still one calendar day (one daily claim, streak 1)
         while (paid < o.spins) {
-          const r = e.playRound(rng, { bet, state: st, now: t, day: DAY, script: false, auto: true, decide }, []);
-          t += 1000; st = r.newState; const R = r.round, pl = r.pull;
-          if (R.bonusRawTenths !== undefined) a.moreNet += R.bonusTenths - R.bonusRawTenths;
+          const cur = o.betSwitch ? (st.warm.length >= 3 ? SW_HI : SW_LO) : bet;
+          const r = e.playRound(rng, { bet: cur, state: st, now: t, day: DAY, script: false, auto: true, decide }, []);
+          t += 1000; st = r.newState; const R = r.round, pl = r.pull, bc = r.betCents / 10;   // bc: cents per tenth of the bet actually played
           if (r.winTenths >= capT) a.capHits++;
           if (pl.pick) a.picks++; if (pl.more) { a.offers++; if (pl.more.take) { a.takes++; if (pl.more.won) a.takeWins++; } }
-          if (r.callback) { a.cbRounds++; a.cb += R.bonusRawTenths; continue; }
-          paid++; since++; a.paid++; a.stakeCents += bet;
-          a.cluster += R.clusterTenths; a.phone += R.phoneTenths; if (R.bonusKind) { a.nat += R.bonusRawTenths; a.natBonuses++; }
+          if (R.bonusRawTenths !== undefined) a.moreNet += (R.bonusTenths - R.bonusRawTenths) * bc;
+          if (r.callback) { a.cbRounds++; a.cb += R.bonusRawTenths * bc; a.cbT += R.bonusRawTenths; a.cbBetSum += r.betCents; if (!o.betSwitch && r.betCents < bet) a.cbUnder++; continue; }
+          paid++; since++; a.paid++; a.stakeCents += cur; a.warmDropped += pl.warmDropped || 0;
+          a.cluster += R.clusterTenths * bc; a.phone += R.phoneTenths * bc; if (R.bonusKind) { a.nat += R.bonusRawTenths * bc; a.natBonuses++; }
+          if (o.betSwitch) { if (cur === SW_HI) { a.hiStake += cur; a.hiBack += r.winTenths * bc; a.hiSpins++; if (pl.warmDropped > 0) { a.dropStake += cur; a.dropBack += r.winTenths * bc; a.dropSpins++; } } else { a.loStake += cur; a.loBack += r.winTenths * bc; } }
           if (R.clusterTenths + R.phoneTenths === 0 && !R.bonusKind) a.dead++; else if (R.clusterTenths + R.phoneTenths > 0) a.win++;
           a.filled += pl.filled + (pl.daily ? Math.round(pl.daily.leads * 10) : 0);
           if (pl.armed) { a.arms++; a.armHist[Math.min(since, HIST)]++; since = 0; }
           if (R.marked > 0 && R.phones === 0) a.marked++;
           a.warmCreated += pl.warmOut.length; if (pl.warmIn.length) { a.warmSpins++; if (R.phoneFired) { a.warmPhone++; a.warmPhonePay += R.phoneTenths; } }
           if (pl.ghost) { const g = a.ghost, w = pl.ghost.pay; g.n++; g.sum += w; if (w > 0) g.nz++; if (w >= 10) g.ge10++; if (w >= 100) g.ge100++; if (w > g.max) g.max = w; }
-          // the office pot, the way the server runs it (one shared pot per chunk: every session feeds it)
-          const sl = Eng.potSlice(Pc.pot.feedBps, bet, pot.rem); pot.rem = sl.rem; pot.bal += sl.slice; pot.fed += sl.slice;
-          if (potRng() < Eng.potHitChance(Pc, bet) && pot.bal >= Pc.pot.minBal) { const prize = Math.min(pot.bal, Pc.pot.maxPayX * bet); pot.paid += prize; pot.hits++; pot.balAtHit += pot.bal; pot.bal = Pc.pot.seed - 0 > 0 ? Pc.pot.seed : 0; }
+          // the pot rule of games/coldcall.js settle(): bal kept above the cap, seed added after a hit, hit needs bal >= minBal and bal > 0
+          const sl = Eng.potSlice(Pc.pot.feedBps, cur, pot.rem); pot.rem = sl.rem; pot.bal += sl.slice; pot.fed += sl.slice;
+          if (potRng() < Eng.potHitChance(Pc, cur) && pot.bal >= Pc.pot.minBal && pot.bal > 0) {
+            const prize = Math.min(pot.bal, Pc.pot.maxPayX * cur); pot.paid += prize; pot.bal -= prize; pot.hits++; pot.balAtHit += pot.bal + prize;
+            if (Pc.pot.seed > 0) { pot.bal += Pc.pot.seed; pot.seeded += Pc.pot.seed; }
+          }
         }
         a.sess++;
+        if (o.fresh) { a.leftLt += st.lt; if (st.cb) a.leftCb++; a.ends++; }
       }
+      if (!o.fresh) { a.leftLt += st.lt; if (st.cb) a.leftCb++; a.ends++; }       // carried: what the player still holds at the end of the batch
       a.pot = pot; return a;
     };
     const res = [];
@@ -152,7 +165,7 @@ if (!isMainThread) {
   const flag = (f) => { const i = argv.indexOf(f); if (i < 0) return null; const v = argv[i + 1]; argv.splice(i, v && !v.startsWith('--') ? 2 : 1); return v && !v.startsWith('--') ? v : true; };
   const bool = (f) => { const i = argv.indexOf(f); if (i < 0) return false; argv.splice(i, 1); return true; };
   const cfgArg = flag('--cfg'), buysMode = bool('--buys'), stratMode = bool('--strat'), asJson = bool('--json'), thrArg = flag('--threads'), outFile = flag('--out'), onlyArg = flag('--only');
-  const pullMode = bool('--pull'), bonusMode = bool('--bonus'), noWarmDiff = bool('--nowarmdiff'), pickArg = flag('--pickpolicy'), moreArg = flag('--more'), betArg = flag('--bet');
+  const pullMode = bool('--pull'), bonusMode = bool('--bonus'), noWarmDiff = bool('--nowarmdiff'), freshArg = bool('--fresh'), betSwitchArg = bool('--bet-switch'), pickArg = flag('--pickpolicy'), moreArg = flag('--more'), betArg = flag('--bet');
   const ONLY = onlyArg && onlyArg !== true ? onlyArg.split(',') : ['call', 'bonus1', 'bonus2', 'hunt'];
   const nums = argv.filter((a) => !a.startsWith('--')).map(Number);
   const cfgText = cfgArg && cfgArg !== true ? (cfgArg[0] === '@' ? fs.readFileSync(cfgArg.slice(1), 'utf8') : cfgArg) : '{}';   // --cfg '@file.json' reads the override from a file
@@ -191,46 +204,51 @@ if (!isMainThread) {
     const sessions = nums[0] || 20000, spins = nums[1] || 2000, seedP = nums[2] || 1;
     const perChunk = Math.max(1, Math.min(Math.ceil(CHUNK / spins), Math.ceil(sessions / 20))), nChunks = Math.ceil(sessions / perChunk), totalSessions = nChunks * perChunk;
     const per = Array.from({ length: threads }, () => []); for (let k = 0; k < nChunks; k++) per[k % threads].push(k);
-    spawn(per, { mode: 'pull', size: 0, baseSeed: seedP, pullOpts: { sessions: perChunk, spins, pickpolicy, more, warmdiff: !noWarmDiff } }).then((parts) => {
+    spawn(per, { mode: 'pull', size: 0, baseSeed: seedP, pullOpts: { sessions: perChunk, spins, pickpolicy, more, warmdiff: !noWarmDiff, fresh: freshArg, betSwitch: betSwitchArg } }).then((parts) => {
       const chunks = parts.flat().sort((a, b) => a.k - b.k), P = cfg.pull;
       const sum = (key, which = 'on') => chunks.reduce((a, c) => a + c[which][key], 0);
       const paid = sum('paid');
-      const pctOf = (c, key) => c[key] / (c.paid * 10) * 100;                      // percent of stake: tenths of the bet over 10 tenths per paid spin
+      const pctOf = (c, key) => c[key] / c.stakeCents * 100;                       // percent of stake: real cents won over real cents staked (the Callback is valued at its own bet)
+      const potPct = (c) => c.pot.paid / c.stakeCents * 100;                       // what the pot actually paid out (seed money included); the fed slice is only an assumption
       const partVec = { cluster: [], basePhone: [], natBonus: [], callbackBonus: [], moreNet: [], pot: [], total: [] };
-      const rtpOf = (c) => pctOf(c, 'cluster') + pctOf(c, 'phone') + pctOf(c, 'nat') + pctOf(c, 'cb') + pctOf(c, 'moreNet') + P.pot.feedBps / 100;
+      const rtpOf = (c) => pctOf(c, 'cluster') + pctOf(c, 'phone') + pctOf(c, 'nat') + pctOf(c, 'cb') + pctOf(c, 'moreNet') + potPct(c);
       for (const { on: c } of chunks) {
-        partVec.cluster.push(pctOf(c, 'cluster')); partVec.basePhone.push(pctOf(c, 'phone')); partVec.natBonus.push(pctOf(c, 'nat')); partVec.callbackBonus.push(pctOf(c, 'cb')); partVec.moreNet.push(pctOf(c, 'moreNet')); partVec.pot.push(P.pot.feedBps / 100); partVec.total.push(rtpOf(c));
+        partVec.cluster.push(pctOf(c, 'cluster')); partVec.basePhone.push(pctOf(c, 'phone')); partVec.natBonus.push(pctOf(c, 'nat')); partVec.callbackBonus.push(pctOf(c, 'cb')); partVec.moreNet.push(pctOf(c, 'moreNet')); partVec.pot.push(potPct(c)); partVec.total.push(rtpOf(c));
       }
       const parts_ = {}; for (const k of Object.keys(partVec)) { const m = meanSe(partVec[k]); parts_[k] = { pct: m.mean, ci: 1.96 * m.se }; }
       const hist = new Array(3001).fill(0); for (const c of chunks) c.on.armHist.forEach((v, i) => { hist[i] += v; });
       const arms = hist.reduce((a, b) => a + b, 0), q = (p) => { let acc = 0; for (let i = 0; i < hist.length; i++) { acc += hist[i]; if (acc >= p * arms) return i; } return hist.length - 1; };
       const meanSpinsPerCb = arms ? hist.reduce((a, v, i) => a + v * i, 0) / arms : null;
-      const leads = sum('filled') / 10, cbBonus = sum('cb'), cbRounds = sum('cbRounds');
+      const leads = sum('filled') / 10, cbCents = sum('cb'), cbBonusT = sum('cbT'), cbRounds = sum('cbRounds'), stakeAll = sum('stakeCents'), bet0 = bet;
       const g = { n: 0, sum: 0, nz: 0, ge10: 0, ge100: 0, max: 0 }; for (const c of chunks) { const x = c.on.ghost; g.n += x.n; g.sum += x.sum; g.nz += x.nz; g.ge10 += x.ge10; g.ge100 += x.ge100; g.max = Math.max(g.max, x.max); }
-      const potHits = chunks.reduce((a, c) => a + c.on.pot.hits, 0), potBal = chunks.reduce((a, c) => a + c.on.pot.balAtHit, 0), potPaid = chunks.reduce((a, c) => a + c.on.pot.paid, 0), potFed = chunks.reduce((a, c) => a + c.on.pot.fed, 0);
+      const potHits = chunks.reduce((a, c) => a + c.on.pot.hits, 0), potBal = chunks.reduce((a, c) => a + c.on.pot.balAtHit, 0), potPaid = chunks.reduce((a, c) => a + c.on.pot.paid, 0), potFed = chunks.reduce((a, c) => a + c.on.pot.fed, 0), potSeeded = chunks.reduce((a, c) => a + c.on.pot.seeded, 0), potLeft = chunks.reduce((a, c) => a + c.on.pot.bal, 0);
       let warmDiff = null;
       if (!noWarmDiff) { const d = chunks.map((c) => rtpOf(c.on) - rtpOf(c.off)), m = meanSe(d); const dp = meanSe(chunks.map((c) => pctOf(c.on, 'phone') - pctOf(c.off, 'phone'))), dl = meanSe(chunks.map((c) => c.on.filled / c.on.paid - c.off.filled / c.off.paid)); warmDiff = { onPct: parts_.total.pct, offPct: meanSe(chunks.map((c) => rtpOf(c.off))).mean, diffPct: m.mean, ci: 1.96 * m.se, basePhoneDiffPct: dp.mean, basePhoneCi: 1.96 * dp.se, leadsPerSpinDiff: dl.mean }; }
-      const o = { mode: 'pull', sessions: totalSessions, spinsPerSession: spins, paidSpins: paid, seed: seedP, bet, pickpolicy, more, secs: (Date.now() - t0) / 1000, batches: chunks.length,
+      const ends = sum('ends'), sw = betSwitchArg ? { loPct: sum('loStake') ? sum('loBack') / sum('loStake') * 100 : null, hiPct: sum('hiStake') ? sum('hiBack') / sum('hiStake') * 100 : null, hiSpins: sum('hiSpins'), droppedPct: sum('dropStake') ? sum('dropBack') / sum('dropStake') * 100 : null, droppedSpins: sum('dropSpins'), hiSharePct: sum('hiSpins') / paid * 100, loBet: 10, hiBet: 2500 } : null;
+      const o = { mode: 'pull', sessions: totalSessions, spinsPerSession: spins, paidSpins: paid, seed: seedP, bet, pickpolicy, more, carry: !freshArg, betSwitch: sw, secs: (Date.now() - t0) / 1000, batches: chunks.length,
         parts: parts_, rtpPct: parts_.total.pct, rtpCi: parts_.total.ci,
-        callback: { arms, perHundredSpins: arms / paid * 100, spinsPer: { mean: meanSpinsPerCb, p10: q(0.1), median: q(0.5), p90: q(0.9) }, rounds: cbRounds, avgBonusX: cbRounds ? cbBonus / cbRounds / 10 : null },
+        callback: { arms, perHundredSpins: arms / paid * 100, spinsPer: { mean: meanSpinsPerCb, p10: q(0.1), median: q(0.5), p90: q(0.9) }, rounds: cbRounds, avgBonusX: cbRounds ? cbBonusT / cbRounds / 10 : null, avgBetCents: cbRounds ? sum('cbBetSum') / cbRounds : null, playedUnderNominal: betSwitchArg ? null : sum('cbUnder') },
+        leftOver: { points: ends, avgLeads: ends ? sum('leftLt') / 10 / ends : null, callbacksWaiting: sum('leftCb'), at: freshArg ? 'end of every session (thrown away)' : 'end of every batch (carried until then)' },
         deadShare: sum('dead') / paid, winShare: sum('win') / paid, bonusOneIn: sum('natBonuses') ? paid / sum('natBonuses') : null, capHits: sum('capHits'),
         warm: { markedNoPhonePer100: sum('marked') / paid * 100, createdPerSpin: sum('warmCreated') / paid, spinsWithWarmPer100: sum('warmSpins') / paid * 100, phoneOnWarmPer100: sum('warmPhone') / paid * 100, avgPhonePayOnWarmX: sum('warmPhone') ? sum('warmPhonePay') / sum('warmPhone') / 10 : null, diff: warmDiff },
         ghost: { per100: g.n / paid * 100, avgPayX: g.n ? g.sum / g.n / 10 : null, shareNonZero: g.n ? g.nz / g.n : null, shareGe1x: g.n ? g.ge10 / g.n : null, shareGe10x: g.n ? g.ge100 / g.n : null, maxX: g.max / 10 },
-        leads: { filledTotal: leads, perPaidSpin: leads / paid, callbackValuePerLeadX: leads ? cbBonus / 10 / leads : null, callbackPartPct: parts_.callbackBonus.pct },
+        leads: { filledTotal: leads, perPaidSpin: leads / paid, callbackValuePerLeadX: leads ? cbCents / bet0 / leads : null, callbackPartPct: parts_.callbackBonus.pct },
         decisions: { picksPer100: sum('picks') / paid * 100, offersPer100: sum('offers') / paid * 100, takesPer100: sum('takes') / paid * 100, takeWinRate: sum('takes') ? sum('takeWins') / sum('takes') : null },
-        pot: { hitsPer1M: potHits / paid * 1e6, avgBalAtHitCents: potHits ? potBal / potHits : null, paidPctOfStake: potPaid / sum('stakeCents') * 100, fedPctOfStake: potFed / sum('stakeCents') * 100, note: 'one shared pot per batch; the RTP part uses feedBps/10000 (assumes the pot pays back what it takes)' } };
+        pot: { hitsPer1M: potHits / paid * 1e6, avgBalAtHitCents: potHits ? potBal / potHits : null, paidPctOfStake: potPaid / stakeAll * 100, fedPctOfStake: potFed / stakeAll * 100, seededPctOfStake: potSeeded / stakeAll * 100, leftInPotCents: potLeft, note: 'one shared pot per batch, server rule (bal kept above the cap, seed after a hit, minBal); the RTP part is what the pot PAID (seed money included), not the fed slice' } };
       if (outFile) fs.writeFileSync(outFile, JSON.stringify(o));
       if (asJson) return console.log(JSON.stringify(o));
-      console.log(`COLD CALL --pull: ${totalSessions} sessions x ${spins} paid spins = ${paid} paid spins, flat bet ${bet}c, pick ${pickpolicy}, gamble ${more}, seed ${seedP}, ${threads} threads, ${chunks.length} batches, ${f(o.secs, 1)}s`);
-      console.log(`  total payback   ${f(o.rtpPct, 3)}% +- ${f(o.rtpCi, 3)} (95%, by batch means, per PAID spin; Callback rounds are free)`);
-      const pp = o.parts; console.log(`  by part         base clusters ${f(pp.cluster.pct)}%  base phone ${f(pp.basePhone.pct)}%  natural bonus ${f(pp.natBonus.pct)}% (+-${f(pp.natBonus.ci, 3)})  Callback bonus ${f(pp.callbackBonus.pct)}% (+-${f(pp.callbackBonus.ci, 3)})  ONE MORE CALL net ${f(pp.moreNet.pct, 3)}% (+-${f(pp.moreNet.ci, 3)})  pot slice ${f(pp.pot.pct)}%`);
-      console.log(`  Callback        ${f(o.callback.perHundredSpins, 3)} per 100 paid spins; spins per Callback mean ${f(o.callback.spinsPer.mean, 1)}  P10 ${o.callback.spinsPer.p10}  median ${o.callback.spinsPer.median}  P90 ${o.callback.spinsPer.p90}; avg Callback bonus ${f(o.callback.avgBonusX, 2)}x`);
+      console.log(`COLD CALL --pull: ${totalSessions} sessions x ${spins} paid spins = ${paid} paid spins, ${betSwitchArg ? 'bet SWITCH 10c/2500c (F1 attacker)' : 'flat bet ' + bet + 'c'}, ${freshArg ? 'FRESH sessions' : 'state carried across sessions'}, pick ${pickpolicy}, gamble ${more}, seed ${seedP}, ${threads} threads, ${chunks.length} batches, ${f(o.secs, 1)}s`);
+      console.log(`  total payback   ${f(o.rtpPct, 3)}% +- ${f(o.rtpCi, 3)} (95%, by batch means, per PAID spin, money in real cents; Callback rounds are free)`);
+      const pp = o.parts; console.log(`  by part         base clusters ${f(pp.cluster.pct)}%  base phone ${f(pp.basePhone.pct)}%  natural bonus ${f(pp.natBonus.pct)}% (+-${f(pp.natBonus.ci, 3)})  Callback bonus ${f(pp.callbackBonus.pct)}% (+-${f(pp.callbackBonus.ci, 3)})  ONE MORE CALL net ${f(pp.moreNet.pct, 3)}% (+-${f(pp.moreNet.ci, 3)})  pot paid ${f(pp.pot.pct, 3)}% (+-${f(pp.pot.ci, 3)})`);
+      console.log(`  Callback        ${f(o.callback.perHundredSpins, 3)} per 100 paid spins; spins per Callback mean ${f(o.callback.spinsPer.mean, 1)}  P10 ${o.callback.spinsPer.p10}  median ${o.callback.spinsPer.median}  P90 ${o.callback.spinsPer.p90}; avg Callback bonus ${f(o.callback.avgBonusX, 2)}x of its own bet; avg Callback bet ${f(o.callback.avgBetCents, 1)}c${o.callback.playedUnderNominal === null ? '' : ', ' + o.callback.playedUnderNominal + ' of ' + o.callback.rounds + ' played under the nominal bet'}`);
+      const lo = o.leftOver; console.log(`  left over       ${f(lo.avgLeads, 1)} leads on average and ${lo.callbacksWaiting} of ${lo.points} Callbacks still waiting at the ${lo.at}`);
+      if (o.betSwitch) console.log(`  bet switch      spins at 10c payback ${f(o.betSwitch.loPct)}% (base + natural bonus + ONE MORE CALL, no Callback/pot); the ${o.betSwitch.hiSpins} spins at $25 (${f(o.betSwitch.hiSharePct, 2)}% of spins) payback ${f(o.betSwitch.hiPct)}%, of which the ${o.betSwitch.droppedSpins} attack spins (warm squares made at 10c, dropped at $25) pay ${o.betSwitch.droppedPct === null ? 'n/a' : f(o.betSwitch.droppedPct) + '%'} and the rest are a same-bet $25 chain (warm made at $25 honoured at $25); warm squares dropped on a bet change ${sum('warmDropped')}`);
       console.log(`  spins           dead ${f(o.deadShare * 100, 2)}%  paid base ${f(o.winShare * 100, 2)}%  natural bonus 1 in ${f(o.bonusOneIn, 0)}  cap hits ${o.capHits}  leads worked ${f(o.leads.perPaidSpin, 3)} per paid spin  value per lead ${f(o.leads.callbackValuePerLeadX, 4)}x bet (Callback part ${f(o.leads.callbackPartPct, 2)}% of stake)`);
       const w = o.warm; console.log(`  warm            marked-no-phone spins ${f(w.markedNoPhonePer100, 2)} per 100; warm squares created ${f(w.createdPerSpin, 3)} per spin; spins starting with warm ${f(w.spinsWithWarmPer100, 2)} per 100; phone features fired on warm squares ${f(w.phoneOnWarmPer100, 3)} per 100 (avg pay ${w.avgPhonePayOnWarmX === null ? 'n/a' : f(w.avgPhonePayOnWarmX, 2) + 'x'})`);
       if (w.diff) console.log(`  warm payback    with ${f(w.diff.onPct, 3)}%  without (chance 0) ${f(w.diff.offPct, 3)}%  -> total differs by ${f(w.diff.diffPct, 3)}% +- ${f(w.diff.ci, 3)} (95%, batches of the same seeds; noisy: Callback and bonus tails); base phone part alone ${f(w.diff.basePhoneDiffPct, 3)}% +- ${f(w.diff.basePhoneCi, 3)}; leads per spin ${f(w.diff.leadsPerSpinDiff, 4)} (warm hits turn dead spins into paid ones)`);
       const gh = o.ghost; console.log(`  ghost           ${f(gh.per100, 2)} per 100 spins; avg shown ${gh.avgPayX === null ? 'n/a' : f(gh.avgPayX, 2) + 'x'}; pay > 0 ${gh.shareNonZero === null ? 'n/a' : f(gh.shareNonZero * 100, 1) + '%'}; >= 1x ${gh.shareGe1x === null ? 'n/a' : f(gh.shareGe1x * 100, 1) + '%'}; >= 10x ${gh.shareGe10x === null ? 'n/a' : f(gh.shareGe10x * 100, 2) + '%'}; max ${f(gh.maxX, 1)}x`);
       const d = o.decisions; console.log(`  decisions       picks ${f(d.picksPer100, 3)} per 100 spins; ONE MORE CALL offered ${f(d.offersPer100, 3)} per 100, taken ${f(d.takesPer100, 3)} per 100${d.takeWinRate === null ? '' : ', win rate ' + f(d.takeWinRate * 100, 2) + '%'}`);
-      console.log(`  pot             ${f(o.pot.hitsPer1M, 1)} hits per 1M spins; avg pot at hit ${o.pot.avgBalAtHitCents === null ? 'n/a' : f(o.pot.avgBalAtHitCents / 100, 2) + ' (bet units: ' + f(o.pot.avgBalAtHitCents / bet, 1) + 'x bet)'}; fed ${f(o.pot.fedPctOfStake, 3)}% of stake, paid out ${f(o.pot.paidPctOfStake, 3)}%`);
+      console.log(`  pot             ${f(o.pot.hitsPer1M, 1)} hits per 1M spins; avg pot at hit ${o.pot.avgBalAtHitCents === null ? 'n/a' : f(o.pot.avgBalAtHitCents / 100, 2) + ' (bet units: ' + f(o.pot.avgBalAtHitCents / bet, 1) + 'x bet)'}; fed ${f(o.pot.fedPctOfStake, 3)}% of stake, seed ${f(o.pot.seededPctOfStake, 3)}%, paid out ${f(o.pot.paidPctOfStake, 3)}%, ${f(o.pot.leftInPotCents / 100, 2)} left in the pot at the end`);
     }).catch((e) => { console.error(e); process.exit(1); });
     return;
   }
