@@ -80,6 +80,11 @@ with sync_playwright() as pw:
         s.fr.sent.clear(); submit(p, 1.5); sent = s.fr.sent_of('table_create'); err = p.evaluate("(document.getElementById('lb-createerr') || {}).innerText"); print('9 seats -> sent seats', [x['settings']['seats'] for x in sent], 'created', len(created(p)), 'err', repr(err))
         c.ok('a 9-seat table is not created', not any(x['seats'] == 9 for x in [cr_['table'] for cr_ in created(p)]))
         c.ok('if 9 was sent, the page shows why it failed', not sent or sent[-1]['settings']['seats'] <= 8 or bool(err), str(err))
+        # since the Q06 fix the 8-seat submit succeeds and closes the form: reopen it for the limit checks
+        if not p.locator('#lb-form').count():
+            p.goto(__import__('lib').BASE + '/'); p.wait_for_selector('#lb-create-btn', timeout=15000); time.sleep(1.8); s.dismiss_modals()
+            p.evaluate("window.__ev = []; PingSocket.onAny((e, d) => { window.__ev.push([e, d]) })")
+            p.click('#lb-create-btn'); p.wait_for_selector('#lb-form'); s.dismiss_modals()
         # buy-in minimum below the big blind
         fill_amt(p, '#lb-bmin', '0.10'); msg = p.evaluate("[...document.querySelectorAll('#lb-form .amt-msg')].map(e => e.innerText).filter(Boolean).join(' / ')")
         s.fr.sent.clear(); p.evaluate("window.__ev = []"); submit(p, 1.8)

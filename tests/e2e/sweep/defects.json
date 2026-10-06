@@ -7,7 +7,9 @@
   "where": "public/game.js:958-959 (client derives SB/BB as the two seats after the dealer; heads-up the dealer IS the small blind; also wrong when a seat is sitting out). The server knows hand.sbSeat/bbSeat but game_state does not carry them.",
   "steps": "Heads-up table (2 seats), start a hand. Hero is the button.",
   "expected": "Button seat shows SB (posts the small blind, acts first preflop), the other shows BB.",
-  "actual": "Hero (dealer, posted 25, first to act) is badged BB; the opponent (posted 50) is badged SB. Verified with players[0].isDealer true and roundBet 25 vs 50."
+  "actual": "Hero (dealer, posted 25, first to act) is badged BB; the opponent (posted 50) is badged SB. Verified with players[0].isDealer true and roundBet 25 vs 50.",
+  "status": "fixed",
+  "fix": "(c7b07dd, test 73b350d; merged bfbf029)"
  },
  {
   "id": "Q02",
@@ -29,7 +31,9 @@
   "steps": "(a) Disconnect on your turn (close the tab). Within 2 minutes sign in again from a fresh browser: lobby \"Your tables\" shows RESUME; press it. (b) Bust at a table, close the tab, sign in again and JOIN the same table from the lobby, type a buy-in (20000), Sit.",
   "expected": "(a) RESUME goes straight back to the seat. (b) Either the buy-in is taken as a rebuy, the rebuy panel appears, or the join is refused with a reason.",
   "actual": "(a) A table preview lists only the other player and shows \"SIT DOWN\" with Bank 8,000 and a 2000 buy-in; pressing it rebinds the held seat and charges nothing (bank 8000 -> 8000, seat 1975 -> 1975, verified with __audit), so the form lies about what happens. (b) table_joined stack 0, nothing charged (bank still 80,000), the page shows the previous hand's board and old hole cards, \"Waiting for a second player\", the seat reads \"JOINING\", no rebuy panel and no message. Evidence for (a): tests/e2e/sweep/s06c_disconnect.py.",
-  "shot2": "Q03b.jpg"
+  "shot2": "Q03b.jpg",
+  "status": "fixed",
+  "fix": "(3db2177, test 5faf7a7; merged aea1862)"
  },
  {
   "id": "Q04",
@@ -39,7 +43,9 @@
   "where": "public/juice.js streakCalendar (renders schedule cents with toLocaleString); public/shell.js:331",
   "steps": "Sign up a new account. The daily bonus window opens.",
   "expected": "$100 / $125 ... $1,000 (Play $), as the header pill says \"Day 1 $100\".",
-  "actual": "The window shows \"10,000\", \"12,500\" ... \"100,000\" and a CLAIM 10,000 button. The values are Play $ cents; a Chips-mode player reads them as 10,000 chips."
+  "actual": "The window shows \"10,000\", \"12,500\" ... \"100,000\" and a CLAIM 10,000 button. The values are Play $ cents; a Chips-mode player reads them as 10,000 chips.",
+  "status": "fixed",
+  "fix": "(c7b07dd, test 73b350d; merged bfbf029)"
  },
  {
   "id": "Q05",
@@ -49,7 +55,9 @@
   "where": "public/game.js:945 (sittingOut without sitOutRequest -> \"Joining\")",
   "steps": "Lose all chips at a table; look at your seat and the opponent's seat.",
   "expected": "\"Busted\" / \"Out of chips\" (or Rebuying).",
-  "actual": "Stack 0 seats read \"JOINING\", the same word used for a seat waiting for the next deal."
+  "actual": "Stack 0 seats read \"JOINING\", the same word used for a seat waiting for the next deal.",
+  "status": "fixed",
+  "fix": "(c7b07dd, test 73b350d; merged bfbf029)"
  },
  {
   "id": "Q06",
@@ -59,7 +67,9 @@
   "where": "public/lobby.js:488-489 (Math.min(9, f.seats + 1)); contract: seats 2..8, 9 rejected",
   "steps": "Create table form, press + on the seats stepper from 8.",
   "expected": "The stepper stops at 8.",
-  "actual": "It shows 9. Submitting is refused with \"Seat count is not supported (2 to 8, you have 9)\" (a usable message, but the form should not offer it)."
+  "actual": "It shows 9. Submitting is refused with \"Seat count is not supported (2 to 8, you have 9)\" (a usable message, but the form should not offer it).",
+  "status": "fixed",
+  "fix": "(c7b07dd, test 73b350d; merged bfbf029)"
  },
  {
   "id": "Q07",
@@ -69,7 +79,9 @@
   "where": "public/lobby.js:863 formats server errors with S.cur.unit (no current table while creating -> chips)",
   "steps": "Create form, Play $: set Minimum buy-in to $0.10 with $0.25/$0.50 blinds, press Create table.",
   "expected": "\"Minimum buy-in is below the big blind (at least $0.50, you have $0.10)\".",
-  "actual": "\"(at least 50, you have 10)\": the cents are printed bare, so a $ form reads as $50 / $10."
+  "actual": "\"(at least 50, you have 10)\": the cents are printed bare, so a $ form reads as $50 / $10.",
+  "status": "fixed",
+  "fix": "(c7b07dd, test 73b350d; merged bfbf029)"
  },
  {
   "id": "Q08",
@@ -79,6 +91,8 @@
   "where": "public/style.css:479 `.g-brand { display: none; }` hides #btn-home (public/index.html:60), the only in-game leave path; the bust panel Leave exists only at 0 chips. Same on master (style.css:470).",
   "steps": "Sit at any table with chips, look for a way to stand up and cash out (header, seat menu, bank panel, dock).",
   "expected": "A visible Leave / Stand up control that cashes the stack back to the bank.",
-  "actual": "None. #btn-home exists with display:none and 0x0 size. A player can only close the tab and wait for the 2 minute disconnect grace (and only between hands) before the stack goes back to the bank, during which the seat shows as disconnected."
+  "actual": "None. #btn-home exists with display:none and 0x0 size. A player can only close the tab and wait for the 2 minute disconnect grace (and only between hands) before the stack goes back to the bank, during which the seat shows as disconnected.",
+  "status": "fixed",
+  "fix": "(3db2177, test 5faf7a7; merged aea1862)"
  }
 ]

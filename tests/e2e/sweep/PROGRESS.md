@@ -7,7 +7,8 @@
 - Run a script: `E2E_BASE=http://127.0.0.1:4701 python3 tests/e2e/sweep/s02_hands.py desk chips` (view desk|phone, mode chips|play). Each prints checks and a summary line; shots go to `runs/shots/` (outside the repo), `-s.jpg` = small copy safe to Read.
 - Defects: see QA-FRANK.md (generated; edit defects.json, run `python3 tests/e2e/sweep/mkqa.py` and `collect_shots.py`, commit named paths only).
 - Phone (390) cannot be played (Q02), so phone coverage is geometry only (offscreen() in lib.py).
-- Fix waves: none started yet (see "Waves" below).
+- WAVE 1 MERGED AND VERIFIED (lead 2, 08:5x): p5-fix-a (3db2177, tests 5faf7a7) and p5-fix-b (c7b07dd, tests 73b350d) merged into v2-core (aea1862, bfbf029). Verified on the merged tree: 30_shapes 42/0, money 90/90, engine 96/96, tables 128/128, full `node tests/v2/run.js --jobs 1` 150/150 (lead2.json), fix_a_leave chips+play 23/0, fix_b_labels 22/0, s01 10/0, s02 chips+play 56/0, s03 24/0 (script patched: the 8-seat submit now succeeds, form reopened), s05 13/0, s06 chips 16/0, s06b 17/0, s06c 12/0, s07 chips 22/0. Fixed: Q01 Q03 Q04 Q05 Q06 Q07 Q08. OPEN: Q02 (phone layout, S2).
+- NEXT: Q02 is the only wave-2 candidate (needs a builder + screenshot critic at 390x844; touches public/*.css only). Not started. Both fix builders (wt-fix-a, wt-fix-b) are idle/done; worktrees can be removed. Not re-run after the merge: s06 play, s07 play, s08 admin, s09 bender, s10 misc (not touched by the fixes).
 
 ## Step 2: tests/e2e/*.py against v2-core 60fbd32 (server 4700, rerun_e2e.sh)
 Pass: buyin 15/0, create 23/0, host_drawer 10/0, rebuy 16/0, bender 12/0, admin 17/0, bank 14/0, showdown 10/0 (after reset), ui-audit 48/0 (after reset), games_shell bender 7/0.
