@@ -713,6 +713,7 @@ function maybeAutoStart(room, force) {
 
 function startHand(room) {
   const players = room.players;
+  if (room.pendingBlinds) { room.sb = room.pendingBlinds.sb; room.bb = room.pendingBlinds.bb; room.pendingBlinds = null; }
   room.deck      = makeDeck();
   room.community = [];
   room.pot       = 0;
@@ -1423,7 +1424,8 @@ io.on('connection', socket => {
     room.status = 'waiting';
     room.community = []; room.pot = 0; room.currentBet = 0; room.street = null;
     room.actionQueue = []; room.dealerIdx = 0; room.shown = {}; room.lastStacks = {};
-    room.sb = SMALL_BLIND; room.bb = BIG_BLIND; room.blindLevel = 0; room.blindsEnabled = false;
+    { const lt = tables.lookup && tables.lookup(room.id); room.sb = lt ? lt.blinds.sb : SMALL_BLIND; room.bb = lt ? lt.blinds.bb : BIG_BLIND; }
+    room.pendingBlinds = null; room.blindLevel = 0; room.blindsEnabled = false;
     setRoomPaused(room, false, 'Chris');
     roomLog(room, `Table reset by Chris, stacks ${stack.toLocaleString()}`);
 

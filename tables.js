@@ -84,12 +84,12 @@ function createTables(E) {
   const tables = new Map();                 // id -> table object (settings + id/hostKey/state/nightId/createdAt)
   const playRows = new Map();               // nightId -> rows (Play $ nights are never written to the ledger)
   const file = E.file;
-  let saveTimer = null;
+  let saveTimer = null, savedLegacyBlinds = null;
 
   function writeNow() {
     try {
       const tmp = file + '.tmp';
-      fs.writeFileSync(tmp, JSON.stringify({ version: 1, tables: [...tables.values()].filter(t => t.id !== LEGACY_ID) }));
+      fs.writeFileSync(tmp, JSON.stringify({ version: 1, tables: [...tables.values()].filter(t => t.id !== LEGACY_ID), legacyBlinds: tables.get(LEGACY_ID) ? tables.get(LEGACY_ID).blinds : savedLegacyBlinds }));
       fs.renameSync(tmp, file);
     } catch (e) { console.error('tables save failed:', e.message); }
   }
@@ -103,6 +103,7 @@ function createTables(E) {
   const humans = room => (room ? room.players.filter(p => !p.isBot) : []);
   const canHost = (t, key) => key === t.hostKey || accounts.isAdmin(key);
   const dispOf = key => accounts.displayOf(key);
+  const usd = n => '$' + (n % 100 ? (n / 100).toFixed(2) : (n / 100).toLocaleString('en-US'));
   const nowStr = () => new Date().toISOString().slice(0, 10).replace(/-/g, '');
 
   function genId() {
@@ -153,8 +154,9 @@ function createTables(E) {
   // The permanent chips table. Called at boot and whenever the empty legacy room is re-made.
   function attachLegacy(room) {
     let t = tables.get(LEGACY_ID);
-    if (!t) { t = LEGACY(); t.nightId = null; tables.set(LEGACY_ID, t); }
+    if (!t) { t = LEGACY(); t.nightId = null; if (savedLegacyBlinds) t.blinds = { ...savedLegacyBlinds }; tables.set(LEGACY_ID, t); }
     applyToRoom(room, t);
+    room.sb = t.blinds.sb; room.bb = t.blinds.bb;
     room.autoStart = true;
     room.keepStacks = false;
     room.blindSchedule = null;
@@ -401,7 +403,7 @@ function createTables(E) {
 
       const prior = room.lastStacks[key];
       let amount = buyIn === undefined || buyIn === null ? (prior >= t.buyIn.min ? Math.min(prior, t.buyIn.max) : t.buyIn.default) : buyIn;
-      if (!isInt(amount) || amount < t.buyIn.min || amount > t.buyIn.max) { err(`Buy-in must be between ${t.buyIn.min} and ${t.buyIn.max}`, 'range'); return; }
+      if (!isInt(amount) || amount < t.buyIn.min || amount > t.buyIn.max) { err(`Buy-in must be between ${usd(t.buyIn.min)} and ${usd(t.buyIn.max)}`, 'range'); return; }
       if (!existing && humans(room).length + room.players.filter(p => p.isBot).length >= room.maxSeats) { err('Table is full', 'full'); return; }
       const fund = reqFund === 'chips' || reqFund === 'play' ? reqFund : t.mode;
       if (fund === 'chips' && E.getBalance(acct.display) < amount) { err('Not enough in your bank', 'bank'); return; }
@@ -484,7 +486,7 @@ function createTables(E) {
     });
 
     on('table_update', ({ tableId, patch } = {}) => {
-      const { t, room } = hostFor(tableId); if (!t) return;
+      const { key, t, room } = hostFor(tableId); if (!t) return;
       if (t.state === 'ended' || !room) { err('This table has ended'); return; }
       if (!patch || typeof patch !== 'object' || Array.isArray(patch)) { err('Nothing to update'); return; }
       const allowed = ['name', 'blinds', 'actionTimerSec', 'rebuys', 'rebuyLimit', 'isPrivate', 'blindIncrease', 'autoStart', 'buyIn'];
@@ -492,12 +494,26 @@ function createTables(E) {
         if (!allowed.includes(k)) { err(`Cannot change ${k}`); return; }
         if (k === 'buyIn' && room.handNum > 0) { err('Buy-in limits are locked once a hand has been dealt'); return; }
       }
-      if (room.status === 'playing' && !room.paused) { err('Change settings between hands', 'paused'); return; }
+      const blindsOnly = Object.keys(patch).every(k => k === 'blinds');
+      if (room.status === 'playing' && !room.paused && !blindsOnly) { err('Change settings between hands', 'paused'); return; }
       const v = validateSettings({ ...t, ...patch });
       if (!v.ok) { err(v.message, 'range'); return; }
+      if (blindsOnly && (room.status === 'playing' || room.status === 'waiting_next')) {
+        t.blinds = v.value.blinds; room.pendingBlinds = { sb: t.blinds.sb, bb: t.blinds.bb };
+        const legacy = t.id === LEGACY_ID;
+        applyToRoom(room, t);
+        if (legacy) { room.autoStart = true; room.keepStacks = false; room.blindSchedule = null; room.startBlindInterval = 0; }
+        room.blindLevel = 0;
+        E.roomLog(room, `${dispOf(key)} changed the blinds, starting next hand`);
+        save(); pushLobby(); E.broadcastGameState(room);
+        event(t, 'updated', { table: publicTable(t), pendingBlinds: room.pendingBlinds });
+        return;
+      }
       for (const k of Object.keys(patch)) t[k] = v.value[k];
       const prevSb = room.sb, prevBb = room.bb;
       applyToRoom(room, t);
+      if (t.id === LEGACY_ID) { room.autoStart = true; room.keepStacks = false; room.blindSchedule = null; room.startBlindInterval = 0; }
+      room.pendingBlinds = null;
       if (patch.blinds || patch.blindIncrease) {
         if (room.blindTimer) { clearTimeout(room.blindTimer); room.blindTimer = null; }
         room.blindLevel = 0; room.sb = t.blinds.sb; room.bb = t.blinds.bb;
@@ -550,6 +566,13 @@ function createTables(E) {
     let j = null;
     try { j = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { j = null; }
     const cutoff = Date.now() - 14 * 86400000;
+    const lb = j && j.legacyBlinds;
+    if (lb && Number.isInteger(lb.sb) && Number.isInteger(lb.bb) && lb.sb >= 1 && lb.sb < lb.bb) {
+      savedLegacyBlinds = { sb: lb.sb, bb: lb.bb };
+      const lt = tables.get(LEGACY_ID), lr = rooms.get(LEGACY_ID);
+      if (lt) lt.blinds = { ...savedLegacyBlinds };
+      if (lr && lr.status !== 'playing') { lr.sb = lb.sb; lr.bb = lb.bb; }
+    }
     for (const t of (j && Array.isArray(j.tables) ? j.tables : [])) {
       if (!t || !t.id || tables.has(t.id) || t.id === LEGACY_ID) continue;
       if (t.state === 'ended') { if ((t.createdAt || 0) > cutoff) tables.set(t.id, t); continue; }

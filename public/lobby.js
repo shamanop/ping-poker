@@ -699,9 +699,10 @@ function hostUi(on) {
   const slot = $('host-slot'); if (!slot) return;
   hostBtn = h('button', { class: 'host-btn', id: 'host-btn', type: 'button', onclick: toggleDrawer }, 'Host'); slot.append(hostBtn);
 }
-let drawerPoll = null;
+let drawerPoll = null, blindsEl = null, blindsFor = null;
 function closeDrawer() {
   if (hostDrawer) { hostDrawer.remove(); hostDrawer = null; }
+  blindsEl = null; blindsFor = null;
   clearInterval(drawerPoll); drawerPoll = null;
   document.removeEventListener('pointerdown', drawerOutside, true);
   document.removeEventListener('keydown', drawerEsc, true);
@@ -720,6 +721,29 @@ function toggleDrawer() {
   document.addEventListener('pointerdown', drawerOutside, true);
   document.addEventListener('keydown', drawerEsc, true);
 }
+function blindsEditor(t, id, unit) {
+  window.Money && window.Money.setUnit && window.Money.setUnit(unit);
+  const val = (v) => (window.Money ? window.Money.fmt(v, { symbol: false }).replace(/,/g, '') : String(v));
+  const cur = t.blinds || { sb: t.sb, bb: t.bb };
+  const sbIn = h('input', { class: 'text-input', id: 'host-sb', type: 'text', inputmode: 'decimal', autocomplete: 'off', value: val(cur.sb), 'aria-label': 'Small blind' });
+  const bbIn = h('input', { class: 'text-input', id: 'host-bb', type: 'text', inputmode: 'decimal', autocomplete: 'off', value: val(cur.bb), 'aria-label': 'Big blind' });
+  const note = h('div', { class: 'lb-muted', id: 'host-blinds-msg' });
+  const save = () => {
+    const sb = parseAmt(sbIn.value, unit), bb = parseAmt(bbIn.value, unit);
+    if (sb == null || bb == null || sb < 1) { note.textContent = 'Enter both blinds.'; return; }
+    if (sb >= bb) { note.textContent = 'Small blind must be less than the big blind.'; return; }
+    S.onError = (m) => { note.textContent = m; };
+    emit('table_update', { tableId: id, patch: { blinds: { sb, bb } } });
+    note.textContent = 'Blinds set to ' + fm(sb, unit) + ' / ' + fm(bb, unit) + '. A hand in progress keeps the old blinds; the new ones start next hand.';
+  };
+  bbIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); save(); } });
+  sbIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); save(); } });
+  return h('div', { class: 'lb-stack', style: 'gap:var(--p8)' },
+    h('div', { class: 'lb-label' }, 'Blinds'),
+    h('div', { class: 'lb-btns', style: 'align-items:center' }, sbIn, h('span', null, '/'), bbIn,
+      h('button', { class: 'lb-btn sm', id: 'host-blinds-save', type: 'button', onclick: save }, 'Set blinds')),
+    note);
+}
 function drawDrawer(confirmEnd) {
   if (!hostDrawer || !S.cur) return;
   const t = S.cur, id = tId(t), info = S.info[id], paused = t.state === 'paused';
@@ -730,6 +754,7 @@ function drawDrawer(confirmEnd) {
     h('div', { class: 'lb-btns' },
       h('button', { class: 'lb-btn sm', id: 'host-start', onclick: () => emit('table_start', { tableId: id }) }, 'Start'),
       h('button', { class: 'lb-btn sm blue', id: 'host-pause', onclick: () => emit('table_pause', { tableId: id, paused: !paused }) }, paused ? 'Resume' : 'Pause')),
+    (blindsFor === id && blindsEl) ? blindsEl : (blindsFor = id, blindsEl = blindsEditor(t, id, unit)),
     h('div', { class: 'lb-label' }, 'Players'),
     ...((info && info.seated) || []).map((p) => h('div', { class: 'lb-seat' }, h('img', { src: avSrc(p), alt: '' }), h('div', null, h('b', null, p.display || p.key), h('span', null, fm(p.stack, unit))),
       p.key !== myKey() ? h('button', { class: 'lb-ghost', onclick: () => emit('table_kick', { tableId: id, key: p.key }) }, 'Kick') : null)),
