@@ -3,17 +3,37 @@
 Second slot for The Ping. Game id `coldcall`. Play money only. Brief from Isabelle 2026-10-05.
 This file is the status line: Isabelle reads it on GitHub. Newest milestone at the top of the log.
 
-## Status
+## Status (updated 2026-10-05 20:10)
+
+**DIRECTION CHANGE, Chris 20:02:** "I want the game engine to be very similar to le bandit" (Hacksaw's Le Bandit).
+The 5x3 / 243-ways engine and its two bonuses (ROTARY, QUOTE ACCEPTED form) are being replaced by a 6x5 cluster + cascade
+engine. This overrides the brief's "feel different from Bender" line. The look (A1), art, shell bridge, wallet flow, audio,
+switches, QA hook and the skin stay. The ways engine remains in git history (last commit with it working end to end: `e5a6af6`).
 
 | Milestone | State |
 |---|---|
-| 1. Plan | done 2026-10-05 17:50 (below) |
-| 2. Engine + sim + tests, measured RTP / bonus rate | done 2026-10-05 (numbers below) |
-| 3. Concept stills menu, hero pick, symbol set (`cold-call/art/`) | not started |
-| 4. Playable front end, both bonuses, SFX/MUSIC switches | not started |
+| 1. Plan | done 17:50; superseded by the v2 plan below |
+| 2. Engine + sim + tests (v1, 243 ways) | done, 98.10% measured; now RETIRED |
+| 3. Art: concept menu, pick, symbol set | look locked to A1; 30 pieces cut; 12 symbols + hero in the game (`2c18f07`) |
+| 4. Playable front end (v1 board) | done `5c74fdd`; base-screen skin in the A1 look in progress (`8d7a931`, `e5a6af6`) |
+| **2b. Engine v2 (6x5 clusters, super cascade, hot leads, 3 bonuses) + sim + tests** | **IN PROGRESS since 20:10; no numbers yet** |
+| 4b. Board front end for v2 (cascades, hot leads, reveal / upsell / close, bonuses, buys) | not started (after 2b) |
 | 5. QA pass, screenshots + numbers | not started |
 
-## Milestone 1: the plan
+### v2 plan (Le Bandit's rules, Cold Call's names)
+- 6 columns x 5 rows. A win is 5+ of the same symbol connected. 10 regular symbols (low: mug, note, ball, can, cups; high:
+  headset, rx, pile, cashwad, cash) + wild (closer). Scatter = bell. "Rainbow" = the ringing phone.
+- Super cascade: a win removes its symbols AND every other symbol of that type on the grid; new ones drop; repeat.
+- HOT LEADS: every square that was part of a win is marked. If a phone is on the grid when the wins are paid, every hot lead
+  reveals a quote bubble (bronze 0.2-4x, silver 5-20x, gold 25-500x), an UPSELL (multiplies its neighbours x2-x10) or THE CLOSE
+  (card machine: collects every bubble and other close; then the other squares reveal again until no new close appears).
+- Bonuses: 3 bells DIALING FOR DOLLARS (8 spins, leads stay until a phone uses them); 4 bells ALWAYS BE CLOSING (12 spins,
+  leads stay all bonus); 5 bells QUOTE ACCEPTED (12 spins, a phone every spin, no bronze; cannot be bought).
+  The rotary dial stays as the bonus intro (a reveal only).
+- Targets: RTP 98%, cap 10,000x, hit rate about 32%, any bonus about 1 in 150 to 200 spins (Le Bandit's shape; RARER than the
+  brief's 1 in 100: Isabelle or Chris can overrule), buys priced at measured value / 0.98 and re-simulated at that price.
+
+## Milestone 1: the plan (v1, 243 ways; SUPERSEDED 2026-10-05 20:02)
 
 ### Base game: 5 reels x 3 rows, 243 ways
 - Pays left to right, 3+ of a kind on adjacent reels from reel 1. No tumbles, no clusters: one spin, one result.
@@ -65,7 +85,7 @@ This file is the status line: Isabelle reads it on GitHub. Newest milestone at t
   brief names on Bender).
 - Levers: per-reel symbol weights, one pay-table scale, phone weight, quote weight, respin landing chance, field prizes.
 
-## Milestone 2: measured
+## Milestone 2: measured (v1 engine, RETIRED)
 
 Final sim, 200,000,000 plain spins, seed 20261005, 6 threads (`nice -n 15 node games/coldcall-sim.js 200000000 20261005`), levers as committed:
 
@@ -114,6 +134,8 @@ Server events `g:coldcall:state|history|spin` -> `g:coldcall:result`; buy ids `r
   sheets, swapped in through `public/games/coldcall/assets/symbols.json` with no code change. Screenshots: `qa/coldcall-art/`.
 - **Milestone 4 is built** (`5c74fdd`): playable front end with both bonuses, buys, SFX/MUSIC switches, the gated QA hook.
   Its own honest gaps are listed at the end of the Milestone 4 section. I re-ran the tests after the art went in: 31 + 17 pass.
+- **Engine direction changed by Chris at 20:02 (see Status at the top):** Le Bandit style 6x5 clusters. This overrides your
+  "feel different from Bender" line, and the bonus rate target moves to about 1 in 150-200 unless you or Chris say otherwise.
 - **In progress now (skin wave):** frame/buttons/bar from the blue placeholder skin to the painted boiler-room look, the two bonus
   screens with the painted dial/card-machine/seal pieces, hero moods on events, title and splash. Then milestone 5 QA.
 - **Image credit: $1.45 left** on the OpenRouter key you gave me (cap $15). OpenAI direct and my own OpenRouter account are empty.
@@ -153,6 +175,7 @@ Next, after Chris's notes and the credit top-up: each kept piece painted alone a
 (closer, cash, pile, rx, headset, can, mug, note, ball, phone, quote), plus the A1 scene as the background.
 
 ## Log
+- 2026-10-05 20:10 Direction change (Chris): engine v2, Le Bandit style. v1 engine retired, kept in history. Engine v2 builder started.
 - 2026-10-05 19:50 Milestone 4 verified by Frank (tests 31 + 17, engine copies identical, screenshots read). Skin wave started.
 - 2026-10-05 18:58 Look locked to A1 (Chris). Tile design sheets committed (milestone 3b).
 - 2026-10-05 18:50 Milestone 3a committed (concept menu). Frank re-ran `tests/coldcall.js` (27 pass) and `tests/bender.js` (17 pass); engine copies byte-identical.
