@@ -69,21 +69,21 @@
       let sx = 0, sy = 0; w.pos.forEach((p) => { const [x, y] = centre(cells[p]); sx += x; sy += y; });
       K().floatAt(Math.min(430, Math.max(90, sx / w.pos.length)), sy / w.pos.length, `<span>+${K().dollars(ctx.cents(w.pay))}</span>`);
     }
-    await K().wait(250);
+    await K().wait(220);
     // 2. the cluster pops; the same-type sweep is flagged and goes a beat later
     const sweepP = s.removed.filter((p) => !win.has(p)), gone = [];
     const addP = ctx.addWin(s.pay, 380);
-    win.forEach((p) => { const el = cells[p]; cells[p] = null; gone.push(A(el, [{ transform: 'scale(1)', opacity: 1 }, { transform: 'scale(1.22)', opacity: 1, offset: 0.3 }, { transform: 'scale(.1)', opacity: 0 }], { duration: 190, easing: 'ease-in' }).then(() => el.remove())); const [x, y] = K().stagePt(el); if (i % 2 === 0 || win.size < 9) K().FX.burst(x, y, { n: 3, speed: 200, size: 6, life: 0.5 }); });
+    win.forEach((p) => { const el = cells[p]; cells[p] = null; gone.push(A(el, [{ transform: 'scale(1)', opacity: 1 }, { transform: 'scale(1.22)', opacity: 1, offset: 0.3 }, { transform: 'scale(.1)', opacity: 0 }], { duration: 160, easing: 'ease-in' }).then(() => el.remove())); const [x, y] = K().stagePt(el); if (i % 2 === 0 || win.size < 9) K().FX.burst(x, y, { n: 3, speed: 200, size: 6, life: 0.5 }); });
     if (sweepP.length) {
-      sweepP.forEach((p) => cells[p].classList.add('sweep')); SFX().sweep(); await K().wait(210);
-      sweepP.forEach((p, k) => { const el = cells[p]; cells[p] = null; gone.push(A(el, [{ transform: 'none', opacity: 1 }, { transform: 'translateY(-10px) rotate(-14deg) scale(1.1)', opacity: 1, offset: 0.35 }, { transform: 'translateY(-20px) rotate(24deg) scale(.1)', opacity: 0 }], { duration: 230, delay: Math.min(k * 14, 140), easing: 'ease-in' }).then(() => el.remove())); });
+      sweepP.forEach((p) => cells[p].classList.add('sweep')); SFX().sweep(); await K().wait(170);
+      sweepP.forEach((p, k) => { const el = cells[p]; cells[p] = null; gone.push(A(el, [{ transform: 'none', opacity: 1 }, { transform: 'translateY(-10px) rotate(-14deg) scale(1.1)', opacity: 1, offset: 0.35 }, { transform: 'translateY(-20px) rotate(24deg) scale(.1)', opacity: 0 }], { duration: 190, delay: Math.min(k * 12, 120), easing: 'ease-in' }).then(() => el.remove())); });
     }
     await Promise.all(gone);
     // 3. what is left falls, new symbols drop in from the top
     const moved = s.falls.map(([f, t]) => [cells[f], f, t]); moved.forEach(([, f]) => { cells[f] = null; });
     const ps = [], nf = new Array(COLS).fill(0); s.fresh.forEach(([p]) => nf[col(p)]++);
-    for (const [el, f, t] of moved) { put(el, t); const dy = ((t - f) / COLS) * PITCH; ps.push(A(el, [{ transform: `translateY(${-dy}px)` }, { transform: 'translateY(3px)', offset: 0.85 }, { transform: 'none' }], { duration: 130 + 42 * ((t - f) / COLS), easing: 'cubic-bezier(.4,.1,.6,1)' })); }
-    for (const [p, id] of s.fresh) { const el = mk(id); put(el, p); reelsEl.appendChild(el); const dy = nf[col(p)] * PITCH; ps.push(A(el, [{ transform: `translateY(${-dy}px)`, opacity: 1 }, { transform: 'translateY(3px)', offset: 0.85, opacity: 1 }, { transform: 'none', opacity: 1 }], { duration: 150 + 42 * nf[col(p)], fill: 'backwards', easing: 'cubic-bezier(.4,.1,.6,1)' })); }
+    for (const [el, f, t] of moved) { put(el, t); const dy = ((t - f) / COLS) * PITCH; ps.push(A(el, [{ transform: `translateY(${-dy}px)` }, { transform: 'translateY(3px)', offset: 0.85 }, { transform: 'none' }], { duration: 110 + 36 * ((t - f) / COLS), easing: 'cubic-bezier(.4,.1,.6,1)' })); }
+    for (const [p, id] of s.fresh) { const el = mk(id); put(el, p); reelsEl.appendChild(el); const dy = nf[col(p)] * PITCH; ps.push(A(el, [{ transform: `translateY(${-dy}px)`, opacity: 1 }, { transform: 'translateY(3px)', offset: 0.85, opacity: 1 }, { transform: 'none', opacity: 1 }], { duration: 130 + 36 * nf[col(p)], fill: 'backwards', easing: 'cubic-bezier(.4,.1,.6,1)' })); }
     SFX().fall();
     await Promise.all([...ps, addP]);
     // the screen must now equal the script

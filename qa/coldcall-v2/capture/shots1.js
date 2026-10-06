@@ -11,7 +11,7 @@ const Q = (s) => `document.querySelectorAll('${s}').length`;
     await page.waitForFunction(() => !CC.core.st.busy, null, { timeout: 240000 }).catch(() => {});
   };
   try {
-    await go('cascade_win', '', { cond: `() => document.querySelectorAll('.cell.hit').length >= 5`, delay: 120, tries: 20 });
+    await go('cascade_win', '', { cond: `() => document.querySelectorAll('.cell.hit').length >= 5`, delay: 200, tries: 20 });
     await go('sweep', '&force=phone', { cond: `() => document.querySelectorAll('.cell.sweep').length >= 2`, delay: 60, tries: 12 });
     await go('hot_leads', '&force=phone', { cond: `() => !!document.querySelector('.stamp') && /CALL CONNECTED/.test(document.querySelector('.stamp').textContent)`, delay: 350, tries: 4 });
     await go('phone_reveal', '&force=phone', { cond: `() => document.querySelectorAll('.rv.b').length >= 4 && document.querySelectorAll('.rv.u').length >= 1`, delay: 520, tries: 8 });
