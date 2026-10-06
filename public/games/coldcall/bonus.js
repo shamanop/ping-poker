@@ -26,7 +26,7 @@
         let drag = null, done = false, autoT = 0;
         const angle = (e) => { const r = el.getBoundingClientRect(); return Math.atan2(e.clientY - (r.top + r.height / 2), e.clientX - (r.left + r.width / 2)) * 180 / Math.PI; };
         const finish = async () => {
-          if (done) return; done = true; clearTimeout(autoT);
+          if (done) return; done = true; clearTimeout(autoT); if (CC.bonus.poke === finish) CC.bonus.poke = null;
           el.removeEventListener('pointerdown', down); el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up); el.removeEventListener('keydown', key);
           el.classList.remove('hint'); hub.textContent = '...';
           const rest = Math.max(0, target - rot);
@@ -45,7 +45,8 @@
         const key = (e) => { if (e.code === 'Space' || e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); finish(); } };
         el.addEventListener('pointerdown', down); el.addEventListener('pointermove', move); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up); el.addEventListener('keydown', key);
         el.focus({ preventScroll: true });
-        if (ctx.st.auto) autoT = setTimeout(finish, 700);
+        autoT = setTimeout(finish, ctx.st.auto ? 700 : 25000);   // nobody touching the dial for 25 s: it places the call itself, the round never waits forever
+        CC.bonus.poke = finish;                                 // the SPIN button / Space during the intro places the call too (a round must never wait on a dial the player is not touching)
         el._finish = finish;                                    // test / accessibility hook: same path as a tap
       });
     }
@@ -74,21 +75,18 @@
     await intro(b, ctx);
     ctx.sceneEl.replaceChildren(); ctx.bonusOn(); ctx.st.pace = 0.8; hud.hidden = false; L.textContent = b.startSpins; $('bhTotL').textContent = lbl;
     // the HUD total is the WIN meter's own number (same running total, same moments); a bonus after a paying trigger spin reads ROUND TOTAL
-    let cur = ctx.cents(run0), tw = 0; T.textContent = ctx.dollars(cur);
-    const hudTo = (to, ms) => { const id = ++tw, from = cur; ctx.tween(from, to, ms, (x) => { if (id === tw) { cur = Math.round(x); T.textContent = ctx.dollars(cur); } }).then(() => { if (id === tw) { cur = to; T.textContent = ctx.dollars(to); } }); };
-    ctx.onAdd = (add, ms) => hudTo(ctx.cents(ctx.run.t), ms);
+    T.textContent = ctx.dollars(ctx.cents(run0)); ctx.st.mirror = (t) => { T.textContent = t; };
     for (const sp of b.spins) {
       ctx.modeName = NAME[sp.mode]; (CC.dbg.spinT = CC.dbg.spinT || []).push(performance.now() | 0); ctx.rib(ctx.modeName, 'SPIN ' + sp.n); if (sp.n === 1 || Math.random() < 0.25) ctx.say('freeSpin');
       await ctx.playSpin(sp, { bonus: true });
       if (!b.capped && ctx.run.t - run0 !== sp.bonusTotal) CC.dbg.mismatch.push({ what: 'bonus HUD total', spin: sp.n, shown: ctx.run.t - run0, script: sp.bonusTotal });
-      hudTo(ctx.cents(ctx.run.t), 200);
       L.textContent = sp.left; ctx.anim(L, [{ transform: 'scale(1)' }, { transform: 'scale(1.35)' }, { transform: 'scale(1)' }], { duration: 300 });
       if (sp.added > 0) { ctx.stamp('+' + sp.added + ' SPINS', 'THE BELLS RING', 1100); ctx.SFX.spinsAdded(sp.added); ctx.say('added'); await ctx.wait(900); }
       if (sp.upgrade) { ctx.stamp('UPGRADED!', NAME.bonus2, 1500, null, 'hi'); ctx.SFX.upgrade(); CC.hero.mood('hype', 1800); await ctx.wait(1250); }
     }
     const got = ctx.run.t - run0; if (!b.capped && got !== b.winTenths) CC.dbg.mismatch.push({ what: 'bonus total', shown: got, script: b.winTenths });
     // finale
-    ctx.onAdd = null; ctx.sceneEl.replaceChildren(); hud.hidden = true; ctx.st.pace = 1; (CC.dbg.spinT = CC.dbg.spinT || []).push(-(performance.now() | 0));
+    ctx.st.mirror = null; ctx.sceneEl.replaceChildren(); hud.hidden = true; ctx.st.pace = 1; (CC.dbg.spinT = CC.dbg.spinT || []).push(-(performance.now() | 0));
     if (ctx.willBig) { ctx.SFX.accepted(); CC.hero.mood('win', 3000); await ctx.wait(500); }   // the big-win overlay is the celebration; no second card before it
     else {
       ctx.SFX.accepted(); ctx.FX.coins(40); ctx.FX.confetti(25); CC.hero.mood('win', 3000);
