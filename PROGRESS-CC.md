@@ -3,7 +3,19 @@
 Second slot for The Ping. Game id `coldcall`. Play money only. Brief from Isabelle 2026-10-05.
 This file is the status line: Isabelle reads it on GitHub. Newest milestone at the top of the log.
 
-## Status (updated 2026-10-06 01:40)
+## Status (updated 2026-10-06 04:50)
+
+> **04:50 note from the lead: SKIN 3 IS MERGED (`e7351d5`, from `coldcall-skin3` `c123e5d`).** Skin only: `games/`, the
+> server, the wallet and `tests/` are unchanged by the merge; `tests/coldcall.js` 47 pass, `tests/bender.js` 19 pass, engine
+> copies byte-identical (run by me after the merge). Shots of the new skin at three sizes: `qa/coldcall-skin3/` (the skin
+> builder's captures; I looked at six of them, not all 76). **Functional chain 4 on the new skin, run by me 04:14-04:45:**
+> six legs (540x960, 1440x900, docked 360; Play $ and Chips), 33 real-click rounds each with every bonus forced, every buy,
+> a big win and four fast-click cases: **0 fails in all six**, money to the cent on every round, one round per click burst,
+> bonus total = WIN meter on every sample. The first narrow Play $ leg was spoiled by a dev-server restart at 04:17 that
+> wiped the test bank (kept as `qa1/narrow-play.spoiled-0417-restart.*`); its re-run is the clean one. Old-skin results:
+> `qa1/run3-oldskin/`. **Still not final:** Chris has not signed off the look, sounds have not been listened to, there is
+> no iOS/touch test, and THE PULL (`coldcall-pull`) is still to merge, after which Isabelle's whole list is re-run.
+> Hold unchanged: nothing to master, no PR, no deploy.
 
 > **02:30 note from the lead (read before the table below).** Chris, 02:11: the current skin is not good next to Ballot Bender
 > (brown on brown, soft small symbols, no scene, no title, plain frame). **THE SKIN IS BEING REPLACED. Visuals are NOT signed
