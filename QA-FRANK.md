@@ -7,7 +7,7 @@ Severity: S1 money or stuck table, S2 wrong or misleading, S3 looks. Status: ope
 | id | sev | status | title |
 |---|---|---|---|
 | Q01 | S2 | fixed | Heads-up: SB and BB badges are swapped on the seats |
-| Q02 | S2 | open | Phone width (390): header, lobby buttons and the action bar are off screen; the table cannot be played |
+| Q02 | S2 | known | Phone width (390): header, lobby buttons and the action bar are off screen; the table cannot be played |
 | Q03 | S2 | fixed | A player who already holds a seat is offered a buy-in form for it; the typed amount is silently ignored; a 0-chip seat shows a dead hand |
 | Q04 | S2 | fixed | Daily bonus window prints raw cents with no unit |
 | Q07 | S2 | fixed | Create-table refusals print amounts as raw cents on a Play $ form |
@@ -26,7 +26,7 @@ Severity: S1 money or stuck table, S2 wrong or misleading, S3 looks. Status: ope
 
 ## Q02 (S2) Phone width (390): header, lobby buttons and the action bar are off screen; the table cannot be played
 
-- Status: open
+- Status: known (not started: needs a phone CSS pass with a screenshot critic; s11_phone_geometry.py measures it)
 - Steps: Open the site at 390x844, sign in. Lobby, then sit at a table and wait for your turn.
 - Expected: Every control reachable; Fold / Call / Raise usable.
 - Actual: Measured by tests/e2e/sweep/s11_phone_geometry.py at 390x844. Lobby: money toggle, daily bonus, account and Sign out sit at x 430-749, CREATE TABLE / code box / JOIN reach x 435 (the page does not scroll). Table: the stage is 98 px wide (chat rail 204 px plus the dock take the rest), FOLD / CALL / RAISE are 22 px wide at x 298-334, emote buttons 3-6, the raise box and presets are off screen, the table is clipped. Moving the rail to the other side only mirrors it. A phone player can neither sign out nor act; the turn clock folds them.

@@ -20,7 +20,9 @@
   "steps": "Open the site at 390x844, sign in. Lobby, then sit at a table and wait for your turn.",
   "expected": "Every control reachable; Fold / Call / Raise usable.",
   "actual": "Measured by tests/e2e/sweep/s11_phone_geometry.py at 390x844. Lobby: money toggle, daily bonus, account and Sign out sit at x 430-749, CREATE TABLE / code box / JOIN reach x 435 (the page does not scroll). Table: the stage is 98 px wide (chat rail 204 px plus the dock take the rest), FOLD / CALL / RAISE are 22 px wide at x 298-334, emote buttons 3-6, the raise box and presets are off screen, the table is clipped. Moving the rail to the other side only mirrors it. A phone player can neither sign out nor act; the turn clock folds them.",
-  "shot2": "Q02b.jpg"
+  "shot2": "Q02b.jpg",
+  "status": "known",
+  "fix": "(not started: needs a phone CSS pass with a screenshot critic; s11_phone_geometry.py measures it)"
  },
  {
   "id": "Q03",
