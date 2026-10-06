@@ -32,6 +32,8 @@ function createMoneyPort({ service, ledger, bootId, afterWrite, onFence }) {
 
   const seatBalance = (table, key) => ledger.balance(seatAcct(table.id, key), table.cur);
   const seatFund = (table, key) => service.seatFund(table.id, key, table.cur);
+  // Balance of the owner's bank ('chips') or Play wallet ('play') fund.
+  const fundBalance = (key, fund) => ledger.balance((fund === 'chips' ? 'bank:' : 'play:') + key, fund);
 
   // Buy in from `fund` ('chips'|'play'|null = the table's own). Returns { id, dup, intent }.
   function buyIn(table, key, amount, fund, it, kind = 'buyin') {
@@ -100,7 +102,7 @@ function createMoneyPort({ service, ledger, bootId, afterWrite, onFence }) {
     return out;
   }
 
-  return { intent, buyIn, cashOut, leave, leaveAmount, sweep, settleHand, seatBalance, seatFund, buyInCount, lastHandNo, drift, nextOp, bootId: boot, seatAcct };
+  return { intent, buyIn, cashOut, leave, leaveAmount, sweep, settleHand, seatBalance, seatFund, fundBalance, buyInCount, lastHandNo, drift, nextOp, bootId: boot, seatAcct };
 }
 
 module.exports = { createMoneyPort, seatAcct };

@@ -1,20 +1,21 @@
 # tables/ + transport/ progress (builder P3, branch v2-tables, worktree wt-tables)
 
 ## HAND-OFF (top block, keep current)
-- Committed: (nothing yet beyond branch point 1c50d0e)
-- Done: step 0 setup (worktree, node_modules symlink, .gitignore tables/runs/)
-- Last proof: `node tests/v2-unit/run-money.js` -> money total 85/85 passed in 3 files
-- Open: steps 1-9
-- Next: step 1 tables/settings.js + tests/v2-unit/run-tables.js
-- Gotchas: engine amendment E1 NOT yet in v2-core (wt-engine at 1c50d0e); money amendments (cashOut seat fund, quarantine) ARE in (39dd280), so pass `null` fund to cashOut.
+- Committed: step 3 (see git log; v2-core 0245430 merged at ddfe12d: houseRound + engine E1).
+- Done: steps 0-3. settings.js, money-port.js, table.js (seats, deadlines, pause, grace, host transfer, autostart check; NO hands).
+- Last proof: `node tests/v2-unit/run-tables.js` -> tables total 67/67 in 3 files; run-money 90/90 (before E1 merge). Engine 96/96 per lead, not re-run by me.
+- Open: steps 4-9.
+- Next: step 4, hand lifecycle in tables/table.js. Hooks already in place: `fireHand(d)` (turn/pre/street/nexthand deadlines, hand:true so pause freezes them), `leaveInHand(seat, kind)` (called by leave() when `liveSeat(seat) && !seat.folded`), `startHand()` (autostart calls it), `this.hand` (engine hand), `committedOf(seat)`, `checkAutostart()`, phase field.
+- Table API facts: `new Table(rec, {money, clock, out, hooks:{seatOf,profileOf}, onError, rng, constants})`; rec is validateSettings value + {id, hostKey, permanent, nightId, nightFromId, nightHand0, blindStartAt, handNo}; `rec.seats` (count) is kept as `table.maxSeats`, `table.seats` is a Map seatNo -> seat record. `out.event(table, kind, data, toKey?)` kinds so far: joined, rebuy, left, room, money, table_event, taken_over; transport/views maps them to the wire names. Deadline ids: 'phase' (autostart/turn/street/nexthand, one at a time), 'grace:<seat>', 'host'.
+- Gotchas: buy-in reason is `buyin:<fund>` for rebuys too (ref kind differs only in the ref). money-port `cashOut` returns `{intent:{amount}}`; `leave()` sweeps the whole seat balance when no hand is live. Exec calls over ~60 s need setsid nohup. wt-tables has node_modules symlinked.
 
 ## Status
 | Step | What | State |
 |---|---|---|
 | 0 | setup, baseline | done (baseline = tests/v2/results/old-suite-baseline.txt, harness builder: all old suites pass on 9440541 except preselect (5 FAIL lines) and migrate (fails only when accounts.json is left in repo root)) |
-| 1 | tables/settings.js | todo |
+| 1 | tables/settings.js | done (24 tests) |
 | 2 | tables/money-port.js | done (20 tests), not yet reviewed by lead |
-| 3 | tables/table.js seats | todo |
+| 3 | tables/table.js seats | done (23 tests in tables-seats.js) |
 | 4 | hand lifecycle | todo |
 | 5 | registry | todo |
 | 6 | transport + boot | todo |
