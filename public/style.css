@@ -72,6 +72,15 @@
 html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--ink); }
 body { font-family: var(--f-text); font-size: var(--p14); line-height: 1.35; -webkit-font-smoothing: antialiased; font-variant-numeric: tabular-nums; }
 button, input { font: inherit; color: inherit; }
+
+/* ── Selection / drag policy (ui defect 5): nothing selectable by default, text allowlist below ── */
+body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+input, textarea, [contenteditable="true"], #chat-messages, #chat-messages *, .chat-input, .raise-input, .amt-input,
+.wp-invite-link, #room-code, #room-code-btn b, .lb-code, .lb-root .t, .lb-root .s, .lb-root h3, .lb-eyebrow, .error-text, .err, .lb-err, .amt-msg,
+.adm-dlg table, .adm-dlg td, .adm-dlg th, .adm-log, .adm-dlg pre, .bank-feed, .bank-players,
+#auth-name, #auth-pin, [type="password"], [type="text"], [type="search"], [type="number"] { -webkit-user-select: text; user-select: text; }
+img, svg { -webkit-user-drag: none; user-drag: none; }
+button img, .seat img, .card img, .seat-av img, .table-mark, .g-brand img, .chip img, .bet img, .sticker-item img, .throw-item img, .emote-btn img { pointer-events: none; }
 button { cursor: pointer; }
 .hidden { display: none !important; }
 :focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }

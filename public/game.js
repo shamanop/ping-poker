@@ -179,6 +179,12 @@ document.addEventListener('DOMContentLoaded', () => {
     showThrowTray(playerIdx, seat.querySelector('.seat-pill') || seat);
   });
 
+  $('player-seats').addEventListener('keydown', (e) => {
+    const seat = e.target.closest && e.target.closest('.seat[data-player-idx]');
+    if (!seat || seat !== e.target) return;
+    if (e.key === 'Enter' || e.key === ' ' || e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey)) { e.preventDefault(); seat.click(); }
+  });
+
   window.addEventListener('resize', onResize);
   $('raise-input')?.setAttribute('step', 'any');
   Money.onPrefChange(() => {
@@ -701,7 +707,7 @@ function initEmotes() {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     const t = e.target, tag = t && t.tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable)) return;
-    if (!$('game-screen')?.classList.contains('active') || document.querySelector('.modal-back:not(.hidden), .pj-modal')) return;
+    if (!$('game-screen')?.classList.contains('active') || PingUI.isOverlayOpen()) return;
     const i = '123456'.indexOf(e.key);
     if (e.key.length === 1 && i >= 0) sendEmote(EMOTE_KEYS[i]);
   });
@@ -1119,7 +1125,7 @@ function renderSeats(gs) {
   noteActions(state.prevForBubbles, gs);
   state.prevForBubbles = gs;
 
-  const html = gs.players.map((p, i) => {
+  const seatsNew = gs.players.map((p, i) => {
     const off = (i - myIdx + n) % n;
     const [x, y0, sc] = seatCenter(angles[off]);
     const hero = i === myIdx;
@@ -1148,21 +1154,47 @@ function renderSeats(gs) {
     }
 
     const cls = ['seat', hero ? 'hero' : '', peekUp ? '' : 'upper', p.isActive ? 'active' : '', p.folded ? 'folded' : '', p.sittingOut ? 'away' : '', state.winners?.has(p.name) ? 'winner' : ''].filter(Boolean).join(' ');
-    return `<div class="${cls}" data-player-idx="${i}" style="left:${x.toFixed(1)}px;top:${y.toFixed(1)}px;--ss:${sc.toFixed(3)}">
+    const inner = `
       ${peek}
       <div class="seat-pill">
         <div class="seat-av">${avatarInner(p.avatar, p.profilePic)}</div>
         <div class="seat-info">
-          <div class="seat-l1"><span class="seat-name">${esc(p.name)}</span>${tag ? `<span class="seat-tag ${tag.toLowerCase()}">${tag}</span>` : ''}</div>
+          <div class="seat-l1"><span class="seat-name" title="${esc(p.name)}">${esc(p.name)}</span>${tag ? `<span class="seat-tag ${tag.toLowerCase()}">${tag}</span>` : ''}</div>
           <div class="seat-l2"><span class="seat-chips">${fmt(p.chips)}</span>${stText || stCls === 'secs' ? `<span class="seat-status ${stCls}">${stText}</span>` : ''}</div>
         </div>
         ${p.isActive ? `<div class="seat-timer"><i style="--t:${state.turnEndAt ? Math.min(1, Math.max(0, (state.turnEndAt - Date.now()) / TURN_MS)).toFixed(3) : 1}"></i></div>` : ''}
       </div>
       ${bubble}
       ${hero ? hotColdHtml(handsNet(), 'hands') : ''}
-    </div>`;
-  }).join('');
-  el.innerHTML = html;
+    `;
+    return { key: p.seatNo != null ? 's' + p.seatNo : 'n' + p.name, cls, idx: i, left: x.toFixed(1) + 'px', top: y.toFixed(1) + 'px', ss: sc.toFixed(3), inner, name: p.name, hero };
+  });
+
+  // Patch, do not rebuild: a seat node lives as long as its seat does, so hover, focus and an open menu survive every state.
+  const live = state.seatEls || (state.seatEls = new Map());
+  const keep = new Set();
+  seatsNew.forEach((d, pos) => {
+    keep.add(d.key);
+    let node = live.get(d.key);
+    if (!node) {
+      node = document.createElement('div');
+      node.tabIndex = 0;
+      node.setAttribute('role', 'button');
+      node.setAttribute('aria-haspopup', 'menu');
+      node._inner = null;
+      live.set(d.key, node);
+    }
+    if (node.className !== d.cls) node.className = d.cls;
+    if (node.dataset.playerIdx !== String(d.idx)) node.dataset.playerIdx = d.idx;
+    if (node.style.left !== d.left) node.style.left = d.left;
+    if (node.style.top !== d.top) node.style.top = d.top;
+    if (node.style.getPropertyValue('--ss') !== d.ss) node.style.setProperty('--ss', d.ss);
+    const label = d.hero ? `${d.name}, you` : `${d.name}, seat ${d.idx + 1}`;
+    if (node.getAttribute('aria-label') !== label) node.setAttribute('aria-label', label);
+    if (node._inner !== d.inner) { node.innerHTML = d.inner; node._inner = d.inner; }
+    if (el.children[pos] !== node) el.insertBefore(node, el.children[pos] || null);
+  });
+  for (const [k, node] of live) if (!keep.has(k)) { node.remove(); live.delete(k); }
 
   gs.players.forEach((p, i) => {
     if (prevChipsMap[i] !== undefined && prevChipsMap[i] !== p.chips) {
@@ -1499,7 +1531,7 @@ function bindActions() {
 
   document.addEventListener('keydown', e => {
     if (!$('game-screen').classList.contains('active')) return;
-    if (e.ctrlKey || e.metaKey || e.altKey || state.barMode !== 'turn') return;
+    if (e.ctrlKey || e.metaKey || e.altKey || state.barMode !== 'turn' || PingUI.isOverlayOpen()) return;
     const t = e.target;
     const inText = (t.tagName === 'INPUT' && t.type !== 'range' && t.id !== 'raise-input') || t.tagName === 'TEXTAREA';
     if (inText) return;
