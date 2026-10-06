@@ -1,0 +1,10 @@
+/* mock-only helpers; anything concept-visible lives in each concept's own css */
+#app.calm *{animation-play-state:paused !important}
+*{animation-play-state:paused !important}            /* stills: every looping animation frozen on its first frame */
+#modebar{position:absolute}
+.pulse-still{animation:none !important}
+/* warm square: an ember-amber lit square (hot is cyan); it keeps its bet, so every concept tags it */
+.slots i.warm{margin:2px;border-radius:6px;background:linear-gradient(165deg,#ffd9a0,#e9953a 45%,#b4561a 80%,#6e300c);box-shadow:inset 0 0 0 2px rgba(255,208,88,.8),inset 0 -10px 14px rgba(60,20,0,.4),0 0 10px rgba(255,160,70,.55),0 3px 6px rgba(0,0,0,.6);transform:rotate(var(--rot,0deg))}
+.slots i.warm::after{content:"";position:absolute;right:0;bottom:0;width:15px;height:15px;border-radius:0 0 6px 0;background:linear-gradient(315deg,#2a1204 48%,rgba(255,235,200,.7) 52%)}
+/* quote bubble reveals borrowed from the live phone feature (.rv.b) */
+.ghostrv{opacity:.9}
