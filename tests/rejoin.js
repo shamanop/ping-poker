@@ -28,7 +28,7 @@ const seats = (c, n) => c.gs.players.filter(p => p.name === n);
     ok(a.gs.players.length === 2, 'waiting: dropped player leaves table');
     const b2 = client('bo'); const r1 = await b2.join();
     ok(r1 && seats(a, 'Bo').length + seats(a, 'bo').length === 1 && a.gs.players.length === 3, 'waiting: same name (any case) rejoins, one seat');
-    ok(a.gs.players.find(p => p.name.toLowerCase() === 'bo').chips === 1500, 'waiting: rejoin gets prior stack (1500)');
+    ok(a.gs.players.find(p => p.name.toLowerCase() === 'bo').chips === 2000, 'waiting: rejoin gets prior stack (2000)');
     // 2. refresh/takeover while connected
     const a2 = client('Ann'); await a2.join();
     ok(a.errors.some(e => /taken over/.test(e)), 'takeover: old connection told');

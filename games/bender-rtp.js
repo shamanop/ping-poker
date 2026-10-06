@@ -4,6 +4,12 @@
 // Splitting the bonus out and sampling it directly resolves RTP far tighter than plain spin-by-spin sims.
 const { fork } = require('child_process');
 const E = require('./bender-engine.js');
+// BB_CFG='{"scatterW":1.3,"payScale":1.9}' overrides engine CFG for tuning runs (payScale multiplies pay + scatterPay). Workers inherit the env.
+if (process.env.BB_CFG) {
+  const o = JSON.parse(process.env.BB_CFG), k = o.payScale; delete o.payScale;
+  if (k) { for (const a of Object.values(E.CFG.pay)) for (let i = 0; i < a.length; i++) a[i] *= k; for (const n in E.CFG.scatterPay) E.CFG.scatterPay[n] *= k; }
+  Object.assign(E.CFG, o);
+}
 
 if (process.argv[2] === 'worker') {
   const [seed, nBase, nBonus] = process.argv.slice(3).map(Number);

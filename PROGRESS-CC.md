@@ -3,22 +3,50 @@
 Second slot for The Ping. Game id `coldcall`. Play money only. Brief from Isabelle 2026-10-05.
 This file is the status line: Isabelle reads it on GitHub. Newest milestone at the top of the log.
 
-## Status (updated 2026-10-05 20:10)
+## Status (updated 2026-10-05 23:30)
 
-**DIRECTION CHANGE, Chris 20:02:** "I want the game engine to be very similar to le bandit" (Hacksaw's Le Bandit).
-The 5x3 / 243-ways engine and its two bonuses (ROTARY, QUOTE ACCEPTED form) are being replaced by a 6x5 cluster + cascade
-engine. This overrides the brief's "feel different from Bender" line. The look (A1), art, shell bridge, wallet flow, audio,
-switches, QA hook and the skin stay. The ways engine remains in git history (last commit with it working end to end: `e5a6af6`).
+**Not green yet.** The math is being retuned to high volatility (Isabelle's 22:55 note, Chris's call); the board plays; the full
+QA pass has not run. Nothing goes to master (Chris's hold, see Rules).
 
-| Milestone | State |
+| Part | State |
 |---|---|
-| 1. Plan | done 17:50; superseded by the v2 plan below |
-| 2. Engine + sim + tests (v1, 243 ways) | done, 98.10% measured; now RETIRED |
-| 3. Art: concept menu, pick, symbol set | look locked to A1; 30 pieces cut; 12 symbols + hero in the game (`2c18f07`) |
-| 4. Playable front end (v1 board) | done `5c74fdd`; base-screen skin in the A1 look in progress (`8d7a931`, `e5a6af6`) |
-| **2b. Engine v2 (6x5 clusters, super cascade, hot leads, 3 bonuses) + sim + tests** | **IN PROGRESS since 20:10; no numbers yet** |
-| 4b. Board front end for v2 (cascades, hot leads, reveal / upsell / close, bonuses, buys) | not started (after 2b) |
-| 5. QA pass, screenshots + numbers | not started |
+| Engine v2 (6x5 clusters, super cascade, hot leads, phone feature, 3 bonuses) | on this branch at the OLD volatility; contract `cold-call/ENGINE-V2.md` arrives with the retune merge. Buy prices on this branch are interim. |
+| **Math retune to high volatility** | **RUNNING since 23:05** in a separate worktree (branch `coldcall-v2`, not pushed). BEFORE column measured (below). No AFTER numbers yet. |
+| Board front end v2 (cascades, hot leads, reveal / upsell / close, 3 bonuses, buys, info) | built: `f862e27`, `fe1eb0b`; shots in `qa/coldcall-v2/`. I have NOT reviewed the shots myself yet. Its builder is still looking at a slow big-win overlay and a possible stuck round; no result yet. |
+| Master merged in + Chips | `2f0da2c` = master `b0c20e7` merged (0 behind), Cold Call ported from Ledger $ to Chips the way Bender was. NOT browser-smoked since the merge. |
+| Skin in the A1 look | done `3c75d02`; shots in `qa/coldcall-skin/` |
+| v1 (5x3, 243 ways, ROTARY + checkout form) | retired; last working commit `e5a6af6` |
+
+### Isabelle's verification list (22:55), item by item
+| # | Item | State |
+|---|---|---|
+| 1 | Before/after table (RTP +-CI, hit %, bands, bonus frequency and average, buy RTPs, max win) | BEFORE measured (below). AFTER: waits on the retune. Will be `cold-call/RETUNE.md`. |
+| 2 | Money settlement, Play $ and Chips | SERVER side done at this commit: one test, 480 rounds per currency over every bet level and every buy; on each round balance before - cost + win = after, whole units only, the other purse does not move, the pushed wallet equals the settled one, a same-instant double click is refused and not charged; bad amounts were already covered. BROWSER side (win meter = amount credited, fast clicks on the real button) NOT done: part of item 4. |
+| 3 | Engine byte-sync test | exists, passes at this commit |
+| 4 | Headless real-spin QA, 15+ spins, each bonus forced, a big win; 1440x900, 540x960, docked | NOT done. Runs after the retune is merged, on a restarted dev server. |
+| 5 | All tests pass | at this commit: `tests/coldcall.js` 47 pass, `tests/bender.js` 19 pass, run by me. The `npm test` chain: not run by me; `preselect`, `allin`, `pause`, `reset` hard-code `/home/isabelle/.cache` and are reported to fail the same way on master on this box. |
+
+### BEFORE column (old volatility, engine config of `808567d`; builder's runs on shaman, not re-run by me)
+- RTP 98.10% +-0.14 stratified (450M base spins + 8M runs per bonus); plain 200M cross-check 97.94% +-0.26.
+- Hit rate 32.22% whole round, 31.91% base only. Any bonus 1 in 156.4 (bonus 1: 171, bonus 2: 1,926, bonus 3: 25,803).
+- Average bonus 79.6x (bonus 1 50.2x, bonus 2 289.6x, bonus 3 1,684x). Bonuses 52.0% of RTP.
+- Max win 10,000x; the cap was hit 51 times in 200M spins (1 in 3.92M).
+- Buys at the old prices: call 4.6x 98.82% +-0.53; bonus1 51.3x 98.00% +-0.16; bonus2 297.1x 97.99% +-0.08; hunt 4.1x 97.35% +-1.23.
+
+| Band (round win / bet) | % of spins | % of RTP |
+|---|---|---|
+| 0 | 67.78 | 0 |
+| under 1x | 24.93 | 8.44 |
+| 1-2x | 3.337 | 4.43 |
+| 2-5x | 1.671 | 4.75 |
+| 5-20x | 1.461 | 15.49 |
+| 20-100x | 0.696 | 28.28 |
+| 100-1000x | 0.120 | 27.65 |
+| 1000x+ | 0.005 | 8.89 |
+
+Retune targets (replace every older target in this file): RTP 98.0% +-0.3 stratified; whole-round hit rate 20-24%; wins under 1x
+on at most about 5% of spins; any bonus 1 in 180-220; average natural bonus 90-120x; bonuses 45-55% of RTP; cap 10,000x; buys
+priced at measured value / 0.98 and re-simulated at that price.
 
 ### v2 plan (Le Bandit's rules, Cold Call's names)
 - 6 columns x 5 rows. A win is 5+ of the same symbol connected. 10 regular symbols (low: mug, note, ball, can, cups; high:
@@ -121,27 +149,32 @@ Script shape: `resolveRound(rng, buy)` -> `{winTenths, costTenths, script:{base:
 Server events `g:coldcall:state|history|spin` -> `g:coldcall:result`; buy ids `rotary` and `quote`. Tests: `node tests/coldcall.js` (27). Not wired into `npm test`, same as Bender.
 
 ## Rules I am holding to
-- Branch `coldcall` only. No push to master, no deploy.
+- Branch `coldcall` only. No push to master, no deploy. The merge into master is Isabelle's (Chris 22:45), never mine.
+- **HOLD, Chris 2026-10-05 21:29: "dont push it live yet we are playing".** Nothing to master, no pull request against master,
+  no deploy, by me or any builder, until Chris says so in his own words. Pushes to `coldcall` continue.
 - Own clone (`projects/ping-coldcall` on Frank's box), dev port 4610, at most 2 browser processes, kill by PID.
 - No paid APIs: art on shaman's local models (GPU lock first), code written here.
   One exception, asked for by Chris directly (2026-10-05 17:54): the concept stills menu was made with GPT image
   through OpenRouter, $3.31 (`cold-call/art/concepts/spend.jsonl`). Nothing else has used a paid API.
 
-## For Isabelle (updated 2026-10-05 19:50)
-- **Look:** Chris picked concept still A1 (Boiler Room, painted caricature) at 18:45, then approved the tile sheets
-  ("this looks perfect"; one change, the powder pile without the donut, done).
-- **Real art is in the game and pushed** (`2c18f07`): 12 reel symbols, the idle hero and a background, cut from the approved
-  sheets, swapped in through `public/games/coldcall/assets/symbols.json` with no code change. Screenshots: `qa/coldcall-art/`.
-- **Milestone 4 is built** (`5c74fdd`): playable front end with both bonuses, buys, SFX/MUSIC switches, the gated QA hook.
-  Its own honest gaps are listed at the end of the Milestone 4 section. I re-ran the tests after the art went in: 31 + 17 pass.
-- **Engine direction changed by Chris at 20:02 (see Status at the top):** Le Bandit style 6x5 clusters. This overrides your
-  "feel different from Bender" line, and the bonus rate target moves to about 1 in 150-200 unless you or Chris say otherwise.
-- **In progress now (skin wave):** frame/buttons/bar from the blue placeholder skin to the painted boiler-room look, the two bonus
-  screens with the painted dial/card-machine/seal pieces, hero moods on events, title and splash. Then milestone 5 QA.
-- **Image credit: $1.45 left** on the OpenRouter key you gave me (cap $15). OpenAI direct and my own OpenRouter account are empty.
-  Still to paint once there is credit: an empty office background, a clean dial, a frame, title art. Chris has been asked.
-- Chris asked for GPT-made art himself (17:54), so art is the one place this build uses a paid API. He cleared shaman for
-  compute and testing.
+## For Isabelle (updated 2026-10-05 23:30)
+- **THE HAND-OVER IS YOURS. Chris, topic 10, 22:45, his words: "send it to isabelle to fork into the repo".** When the list in
+  Status is all green, you merge `coldcall` into master yourself. Frank will not push master and will not open a pull request.
+  Chris's 21:29 hold still stands ("dont push it live yet we are playing"), and your 22:56 note says the same.
+- **Flag for you and Chris, not a blocker: Chips exposure.** With Chips now a slot currency, Cold Call's top bet (2,500) times
+  the 10,000x cap is a 25,000,000-chip win against the poker bank. If chips are ever settled between friends, someone is the
+  counterparty to that. Bender has the same exposure. Your call whether Chips mode gets a lower top bet or a lower cap.
+- **Branch state:** `coldcall` has master `b0c20e7` merged in (0 commits behind, merges clean) and plays in Play $ and Chips.
+- **Your 22:55 retarget is taken** (high volatility, verification list). Progress is the table in Status. It supersedes the
+  bonus-rate line in Chris's delegated calls below (now 1 in 180-220).
+- **Engine direction, Chris 20:02:** "I want the game engine to be very similar to le bandit". This overrode your "feel different
+  from Bender" line. His delegated calls (21:30, "just use your best judgement"): the checkout form is dropped as its own bonus,
+  the dial stays as the bonus intro, the top bonus is QUOTE ACCEPTED; it ships as a Bender cousin.
+- **Look:** Chris picked concept still A1 (18:45) and approved the tile sheets ("this looks perfect"). Real art is in the game.
+- **Image credit: $1.45 left** on the OpenRouter key you gave me (cap $15), as of 20:00. OpenAI direct and my own OpenRouter
+  account are empty. Still to paint once there is credit: an empty office background, a clean dial, a frame, title art.
+- Art is the one place this build used a paid API (Chris asked for GPT-made art himself, 17:54). He cleared shaman for compute.
+- I have no line out to you: ask me for a reply, or read this file.
 
 ## Milestone 3a: concept stills menu (done; Chris picked A1)
 Five concepts, four stills each (portrait, wide, low angle, mascot), 832x1248. Sent to Chris 2026-10-05; he picked A1 at 18:45.
@@ -175,6 +208,7 @@ Next, after Chris's notes and the credit top-up: each kept piece painted alone a
 (closer, cash, pile, rx, headset, can, mug, note, ball, phone, quote), plus the A1 scene as the background.
 
 ## Log
+- 2026-10-05 21:35 Skin wave verified (tests 31 + 17 before the merge; shots read). Engine v2 merged at `33ca611` (46 + 17 pass, copies identical). Board v2 builder started.
 - 2026-10-05 20:10 Direction change (Chris): engine v2, Le Bandit style. v1 engine retired, kept in history. Engine v2 builder started.
 - 2026-10-05 19:50 Milestone 4 verified by Frank (tests 31 + 17, engine copies identical, screenshots read). Skin wave started.
 - 2026-10-05 18:58 Look locked to A1 (Chris). Tile design sheets committed (milestone 3b).
@@ -218,3 +252,54 @@ http://127.0.0.1:4610/  -> sign in -> dock icon "Cold Call"                    #
 - Practice mode (no wallet, no server) resolves rounds with the local engine copy for animation, like Bender's practice mode; with a server attached the client never decides anything.
 - Hero mouth point and all sizes are tuned for the placeholder art; the final art pass will need new mouth coordinates and a look at the dial/form themes.
 - Another process is writing into `cold-call/art/tiles/` in this clone (modified `spend.jsonl`, new `gen_one.py`, `pile_nodonut.jpg`); I did not stage or touch those.
+
+
+## Skin wave (2026-10-05, Frank): the rest of the screen painted to match A1
+
+Front end only. Engine copies, `games/`, `server.js`, `public/shell.js` and Bender untouched. Game behaviour unchanged (the only logic added is the dead-spin counter that picks the `rage` mood).
+
+**What changed**
+- **Palette (sampled from A1 with PIL, all in `:root` of `style.css`):** wood `#4a2c12`/`#26160a`, dark umber `#150e06`, nicotine cream `#f1e3c1`, paper `#e7d6ac`, bakelite `#bfab80`, brass `#c8984a`/`#f0d083`/`#7d5a1f`, tie red `#a3281b`, seal green `#46592a`. Cells are a lamp-lit recess (`--tile-lit #54401f` centre to `--tile #2a1c0d` edge) so cream/beige pieces (headset, mug, note, pile) and dark ones (can, rx) both read. Type: Alfa Slab One (display), Courier Prime Bold (text), Special Elite (memo), subset woff2, ~66 KB.
+- **Base screen:** brass nameplate ribbon with rivets, wood housing with brass rim, lamp-window WIN readout, bakelite keys, painted `spin` piece with the word SPIN as HTML over the dome, typed-memo speech bubble (inked outline incl. tail), dark-leather modals with brass rim and paper buy slips, big-win overlay with `hero_win` and two `cashwad` pieces, toasts and stamps as paper slips. `bg.jpg` is cropped (170%, right/top, masked into the wood desk) so the ghost face is out of frame.
+- **ROTARY:** CSS bakelite dial (pewter ring, beige plate with grain, deep finger holes with brass rim, worn number plate hub, brass finger stop), two `phone_gold` flank the title, `hero_win` on the finale card.
+- **QUOTE ACCEPTED:** a carbon payment slip on the wood desk, empty boxes recessed, filled boxes inked in green, a seal slot per field that takes the green wax `seal` when the field pays, `cardmachine` + `card` on the desk, PAYMENT ACCEPTED drops the `seal` at 236 px with a stamped slip across it.
+- **Title/splash:** ONE idea, a rubber stamp. COLD CALL stamped in tie-red double border on a taped lead sheet (speckle mask from `stampmask.webp`), typed memo header, the hero leaning over the sheet, brass PICK UP key. All HTML/CSS type, no text in images.
+- **Manifest** (`assets/symbols.json`) now also holds `hero.moods` (file + mouth point each), `pieces`, `textures`, `fonts`. `assets.js` decodes every image in the splash, waits for the three fonts, and sets `--img-bg`, `--img-<piece>`, `--img-<texture>` on `:root`; `style.css` has no image path (only the three font files). `assets/img` is 614 KB (placeholder SVGs deleted).
+
+**Hero moods (`hero.js`, `CC.hero.set(mood, ms)`)**
+| Event | Mood | Held |
+|---|---|---|
+| base win (any size), and when ROTARY or QUOTE triggers | `hype` | 2.0 s / 1.8 s |
+| near miss: reel 5 tease or two phones, no feature, no base win | `shock` | 2.2 s |
+| 4 paid spins in a row with total win 0 (counter restarts after the rage, resets on any win or a buy) | `rage` | 2.4 s |
+| big-win overlay (also shown inside the overlay) and the ROTARY / QUOTE total card | `win` | overlay length + 1.5 s / 3.0 s |
+Back to `idle` after the hold, and instantly when the next spin starts. All five poses are the same 434 px canvas, feet aligned to idle's baseline by `cold-call/art/skin_export.py`, so the swap never moves the box (checked: same offset box 0,0,236,295 in all five). The bubble tail is refitted per mood from the manifest mouth point (tail angle 66.1 / 62.2 / 60.7 / 70.3 / 67.5 deg for idle / hype / shock / win / rage). `hero_out` and `frame` unused (bad cuts); `cash`, `handset`, `bell`, `cups`, `closer_scream` also not used.
+
+**Files:** `style.css` (rewritten), `index.html` (splash markup, hero.js tag), `assets.js`, `assets/symbols.json`, `hero.js` (new), `captions.js` (mood mouth, `rage` lines), `game.js`, `rotary.js`, `quote.js`, `qa.js` (new, only loaded with `?shot=`), `assets/fonts/*` (+ `LICENSES.txt`), `assets/img/{hero_hype,hero_shock,hero_win,hero_rage,spin,seal,cardmachine,card,cashwad,phone_gold,wood,grain,stampmask}.webp`, `cold-call/art/skin_export.py`, `cold-call/art/skin_textures.py`, `cold-call/art/SOURCES.md` (appended). The info modal no longer carries the Twemoji credit (no Twemoji art is left).
+
+**Shot commands** (server as in Milestone 4 via `bash qa/coldcall-skin/capture/startsrv.sh`; base `http://127.0.0.1:4610/games/coldcall/index.html`; scripts in `qa/coldcall-skin/capture/`, run from a folder that holds them, one browser at a time, 540x960, output `qa/coldcall-skin/`):
+- URL flags (`qa.js`): `?shot=splash`, `?shot=idle`, `?shot=hype|shock|rage|win` (mood held, matching caption), `?shot=bigwin`, `?shot=buy` (confirm step), `?shot=info`, `?force=rotary&shot=spin`, `?force=quote&shot=spin`, `?shot=quote_grand` (engine copy with respin landing chance 1, so every box fills and PAYMENT ACCEPTED lands; practice mode only).
+- `node skin_static.js [splash idle hype shock rage win bigwin buy info]` -> splash, idle, win (replaced by `skin_win.js`), near_miss, rage, mood_win, bigwin_overlay, bigwin_closed, buy_confirm, info_modal. `node skin_win.js` (real spins until a base win, hype mood). `node skin_bonus.js rotary` -> rotary_trigger, rotary_dial, rotary_dial_mult, rotary_freespins, rotary_complete. `node skin_bonus.js quote grand` -> quote_g_midfill / field_prize / payment_accepted (renamed quote_midfill, quote_field_prize, quote_payment_accepted); `node skin_bonus.js quote` -> quote_trigger. `node skin_docked.js` -> docked_360 (through the real shell, window docked at 360 px). `node skin_check.js` (assets decoded, fonts, 404s, hero box and tail angle per mood). `node skin_moods.js 80` (mood map on real rounds).
+
+**Verified (ran it, looked at it)**
+- `node tests/coldcall.js` 31 passed, `node tests/bender.js` 17 passed, `cmp games/coldcall-engine.js public/games/coldcall/engine.js` identical.
+- Opened every shot in `qa/coldcall-skin/` (20 files, all under 100 KB) and compared with A1. Fixed on the way: grain multiply made paper grey (now overlay, softer grain), ghost hero doubled behind the big-win overlay (hero hidden under `.bw`), dial focus rectangle, trigger stamp covering the hero (now under the chin), prize float over the prize text, cash wad blue fringe (defringed).
+- Running total sampled every 100 ms: ROTARY live round 590 samples, 0 blank, 0 decreases, 0 leftover nodes, max rAF 1; QUOTE live 4 forced rounds 713 samples, 0 blank, 0 decreases, 0 leftover, max rAF 2; QUOTE practice grand round 222 samples, 0/0/0, max rAF 2; `CC.dbg.mismatch` empty throughout.
+- Mood map on 80 real practice rounds (local engine, turbo): 26 base wins all `hype`, 5 near misses with no win all `shock`, 8 rage events exactly at the 4th dead spin, 0 violations of the map. No natural bonus or big win occurred in those 80, so `win` on a bonus total and on a big win was checked on forced rounds (`rotary_complete` shows `hero_win`, `bigwin_overlay` shows it, the log read `win` at the ROTARY total and `hype` at both bonus triggers), not on natural ones.
+- `skin_check.js`: 27 images decoded, 0 undecoded, 0 low-res warnings, 0 responses >= 400, three fonts `loaded`, 0 `<audio>` elements. Docked through the shell at 360x752: layout holds, shell wallet equals game balance after 2 spins.
+
+**What still looks wrong or is unverified (my own eye)**
+1. The head background is a dark blurred smear. `bg.jpg` is pre-blurred and has the ghost face, so I cropped it to the far office and masked it into the wood; it reads as mud, not as A1's crowded boiler room. It needs the clean painted background.
+2. The dial is CSS gradients next to painted pieces: it reads as better vector, not as paint. `hero_win` is a smaller figure than the idle pose (the sheet drew it at a different scale; I did not rescale art), and the bubble tail is still a short stub, not reaching the mouth.
+3. QUOTE screen: the content is centred so there is an empty band above the title and below the desk objects; card machine and card are static decoration (not tied to the payout). ROTARY free-spin win floats can still overlap each other (existing behaviour, not touched).
+- Unverified: a real touch screen or phone GPU (software GL only; 15 `drop-shadow` symbols, the 5-shadow bubble outline and `background-blend-mode` layers are untimed), Safari rendering of `paint-order`/`mask`, audio (nobody listened). `?shot=` flag ships in the public bundle (`qa.js` is only fetched when the URL asks for it and changes no rules). Near miss `shock` is checked on a flag and on 5 natural rounds; a near miss that also wins shows `hype`, by design.
+- Commit `8d7a931` (skin wave 1+4) was committed without the `Co-Authored-By` trailer; it was already pushed, so I left it alone. Later commits carry it. The CSS is one file, so the four commits are by step of work, not by file.
+
+
+## Skin wave follow-up (steer after the engine change to a 6x5 cluster/cascade game)
+Kept: base skin, splash, hero moods, bakelite dial. QUOTE ACCEPTED screen left as committed (e5a6af6), no more work on it (record shot `quote_midfill` only).
+- **Size-agnostic board:** `:root` has `--cols:5 --rows:3 --cell:94px --gap:5px`; `.slots`, `#reels`, `.reel` height and the board row height of `#shake` are all computed from them (grid + 34 px frame), cell backgrounds and the win highlight use no pixel sizes. A 6x5 board drops in by setting the four variables on `#stage`; the game code still builds 5x3 (`COLS`/`ROWS` come from the engine), I did not rebuild the board.
+- **`?mock=6x5`** (`qa.js`, layout only, no game logic): 30 cells at `--cell:78px --gap:3px` (6 x 78 + 5 x 3 = 483 fits the 520 px frame; 80 px cells would need a 3 px gap and slimmer frame padding), current symbols, one lit cluster. Shot `qa/coldcall-skin/board_6x5_mock.jpg`: symbols stay readable at 78 px; the lit cluster and dimmed cells read. Cost: the board row grows from 326 to 436 px, so the head row drops to its 150 px minimum on a 960 px stage and the hero's feet tuck under the ribbon (taller windows give it more room).
+- **Extras** (`assets/symbols.json` -> `extras`, decoded in the splash through `CC.assets.extraUrl(id)`, not used by any screen): `cups`, `bell`, `quote_bronze`, `quote_silver`, `quote_gold` exported at 256 px (`extra_<id>.webp`, `cold-call/art/skin_export.py`; the three `quote_*` PNGs were only read, not staged); `cashwad`, `cardmachine`, `seal` point at their existing piece files (300/300/340 px, not re-exported smaller). `assets/img` is 674 KB.
+- **Mood API:** `CC.hero.mood('shock')` (default hold per mood: hype 2.0 s, shock 2.2 s, rage 2.4 s, win 3.0 s, or pass ms); `CC.hero.set(mood, ms)` is the same call with an explicit hold. The map is unchanged; "near miss" is still the reel-5 tease or two phones until the scatter tease replaces it.
+- Not touched: `games/`, either engine copy, `tests/`, `server.js`. Tests re-run below.

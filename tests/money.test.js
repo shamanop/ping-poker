@@ -24,7 +24,7 @@ eq('negative', M.fmt(-300, C), '-$3');
 eq('signed', M.fmt(8500, Object.assign({ signed: true }, C)), '+$85');
 eq('signed negative', M.fmt(-8500, Object.assign({ signed: true }, C)), '-$85');
 eq('chips view of cents', M.fmt(12500, { unit: 'cents', mode: 'chips' }), '12,500');
-eq('chips unit usd view', M.fmt(1500, { unit: 'chips', mode: 'usd' }), '$1,500');
+eq('chips unit usd view', M.fmt(1500, { unit: 'chips', mode: 'usd' }), '$15');
 eq('chips unit chips view', M.fmt(1500, { unit: 'chips', mode: 'chips' }), '1,500');
 eq('NaN', M.fmt(NaN), '-');
 eq('undefined', M.fmt(undefined), '-');

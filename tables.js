@@ -17,16 +17,18 @@ const normCode = c => String(c == null ? '' : c).toUpperCase().replace(/[^A-Z0-9
 
 function defaultsFor(mode) {
   return mode === 'chips'
-    ? { buyIn: { min: 500, max: 5000, default: 1500 }, blinds: { sb: 10, bb: 20 } }
-    : { buyIn: { min: 500, max: 50000, default: 10000 }, blinds: { sb: 50, bb: 100 } };
+    ? { buyIn: { min: 500, max: 1000000, default: 2000 }, blinds: { sb: 25, bb: 50 } }
+    : mode === 'play'
+      ? { buyIn: { min: 500, max: 50000, default: 2000 }, blinds: { sb: 25, bb: 50 } }
+      : { buyIn: { min: 500, max: 50000, default: 10000 }, blinds: { sb: 50, bb: 100 } };
 }
 
 // Validates a settings object (create form shape). Returns { ok, value } or { ok:false, message }.
 function validateSettings(raw) {
   const bad = message => ({ ok: false, message });
   if (!raw || typeof raw !== 'object') return bad('Bad table settings');
-  const mode = raw.mode === undefined ? 'friends' : raw.mode;
-  if (!['friends', 'chips', 'play'].includes(mode)) return bad('Mode must be friends, chips or play');
+  const mode = raw.mode === undefined ? 'play' : raw.mode;
+  if (!['chips', 'play'].includes(mode)) return bad('Mode must be chips or play');
   const unit = mode === 'chips' ? 'chips' : 'cents';
   if (raw.unit !== undefined && raw.unit !== unit) return bad(`Mode ${mode} uses unit ${unit}`);
   const name = typeof raw.name === 'string' ? raw.name.replace(/[\u0000-\u001f<>]/g, '').trim().replace(/\s+/g, ' ') : '';
@@ -41,7 +43,6 @@ function validateSettings(raw) {
   if (buyIn.default < buyIn.min || buyIn.default > buyIn.max) return bad('Default buy-in must be between min and max');
   const blinds = { sb: bl.sb, bb: bl.bb };
   if (!isInt(blinds.sb) || !isInt(blinds.bb) || blinds.sb < 1 || blinds.bb < 2 || blinds.sb >= blinds.bb) return bad('Blinds must be whole numbers with small < big');
-  if (buyIn.min < blinds.bb) return bad('Minimum buy-in must cover the big blind');
   const seats = raw.seats === undefined ? 8 : raw.seats;
   if (!isInt(seats) || seats < 2 || seats > 9) return bad('Seats must be 2 to 9');
   const timer = raw.actionTimerSec === undefined ? 30 : raw.actionTimerSec;
@@ -83,12 +84,12 @@ function createTables(E) {
   const tables = new Map();                 // id -> table object (settings + id/hostKey/state/nightId/createdAt)
   const playRows = new Map();               // nightId -> rows (Play $ nights are never written to the ledger)
   const file = E.file;
-  let saveTimer = null;
+  let saveTimer = null, savedLegacyBlinds = null;
 
   function writeNow() {
     try {
       const tmp = file + '.tmp';
-      fs.writeFileSync(tmp, JSON.stringify({ version: 1, tables: [...tables.values()].filter(t => t.id !== LEGACY_ID) }));
+      fs.writeFileSync(tmp, JSON.stringify({ version: 1, tables: [...tables.values()].filter(t => t.id !== LEGACY_ID), legacyBlinds: tables.get(LEGACY_ID) ? tables.get(LEGACY_ID).blinds : savedLegacyBlinds }));
       fs.renameSync(tmp, file);
     } catch (e) { console.error('tables save failed:', e.message); }
   }
@@ -102,6 +103,7 @@ function createTables(E) {
   const humans = room => (room ? room.players.filter(p => !p.isBot) : []);
   const canHost = (t, key) => key === t.hostKey || accounts.isAdmin(key);
   const dispOf = key => accounts.displayOf(key);
+  const usd = n => '$' + (n % 100 ? (n / 100).toFixed(2) : (n / 100).toLocaleString('en-US'));
   const nowStr = () => new Date().toISOString().slice(0, 10).replace(/-/g, '');
 
   function genId() {
@@ -116,7 +118,7 @@ function createTables(E) {
     room.settings = t;
     room.mode = t.mode;
     room.unit = t.unit;
-    room.moneyMode = t.mode === 'friends' ? 'ledger' : t.mode;
+    room.moneyMode = t.mode;
     room.maxSeats = t.seats;
     room.turnMs = t.actionTimerSec * 1000;
     room.rebuysAllowed = t.rebuys;
@@ -145,15 +147,16 @@ function createTables(E) {
   }
 
   const LEGACY = () => buildTable({
-    name: 'The Ping', mode: 'chips', unit: 'chips', buyIn: { min: 500, max: 5000, default: 1500 }, blinds: { sb: 10, bb: 20 },
+    name: 'The Ping', mode: 'chips', unit: 'chips', buyIn: { min: 500, max: 1000000, default: 2000 }, blinds: { sb: 25, bb: 50 },
     blindIncrease: { enabled: false, everyMin: 15, schedule: 'standard' }, seats: MAX_SEATS, actionTimerSec: 30, rebuys: true, rebuyLimit: 0, isPrivate: false, autoStart: true,
   }, 'chris', LEGACY_ID);
 
   // The permanent chips table. Called at boot and whenever the empty legacy room is re-made.
   function attachLegacy(room) {
     let t = tables.get(LEGACY_ID);
-    if (!t) { t = LEGACY(); t.nightId = null; tables.set(LEGACY_ID, t); }
+    if (!t) { t = LEGACY(); t.nightId = null; if (savedLegacyBlinds) t.blinds = { ...savedLegacyBlinds }; tables.set(LEGACY_ID, t); }
     applyToRoom(room, t);
+    room.sb = t.blinds.sb; room.bb = t.blinds.bb;
     room.autoStart = true;
     room.keepStacks = false;
     room.blindSchedule = null;
@@ -172,7 +175,7 @@ function createTables(E) {
   }
   function publicTable(t) {
     const room = roomOf(t);
-    return { ...t, sb: room ? room.sb : t.blinds.sb, bb: room ? room.bb : t.blinds.bb, host: { key: t.hostKey, display: dispOf(t.hostKey) }, moneyMode: t.mode === 'friends' ? 'ledger' : t.mode };
+    return { ...t, sb: room ? room.sb : t.blinds.sb, bb: room ? room.bb : t.blinds.bb, host: { key: t.hostKey, display: dispOf(t.hostKey) }, moneyMode: t.mode };
   }
   function seatedList(t) {
     return humans(roomOf(t)).filter(p => p.connected).map(p => ({ key: p.acct || E.bankKey(p.name), display: p.name, avatar: p.avatarId || null, pic: p.acct ? accounts.picUrl(accounts.get(p.acct)) : null, stack: p.chips }));
@@ -199,8 +202,19 @@ function createTables(E) {
   }
 
   // ── nights ────────────────────────────────────────────────────────────────
+  const playExtra = [];                     // hand snapshots + wins for the Play $ bank charts (memory only)
+  function playEntries() {
+    const all = [...playExtra];
+    for (const rows of playRows.values()) all.push(...rows);
+    return all.sort((a, b) => a.t - b.t);
+  }
   function noteRow(room, row) {
     if (room.mode !== 'play' || !room.nightId) return;
+    if (row.type === 'snapshot' || row.type === 'win') {
+      playExtra.push({ t: Date.now(), room: room.id, tableId: room.id, nightId: room.nightId, mode: 'cents', ...row });
+      if (playExtra.length > 20000) playExtra.splice(0, playExtra.length - 20000);
+      return;
+    }
     const rows = playRows.get(room.nightId) || [];
     rows.push({ t: Date.now(), room: room.id, tableId: room.id, nightId: room.nightId, mode: 'cents', ...row });
     playRows.set(room.nightId, rows);
@@ -209,15 +223,11 @@ function createTables(E) {
 
   function nightPayload(t) {
     const n = nightOf(t);
-    const payments = t.mode === 'friends' ? n.payments : [];
     const players = n.players.map(p => ({ key: p.key, display: accounts.get(p.key) ? dispOf(p.key) : p.display, avatar: accounts.get(p.key) ? accounts.get(p.key).avatar : null, pic: accounts.get(p.key) ? accounts.picUrl(accounts.get(p.key)) : null, buyIns: p.buyIns, rebuys: p.rebuys, cashedOut: p.cashedOut, net: p.net }));
-    const nameOf = k => (accounts.get(k) ? dispOf(k) : k);
-    const pays = payments.map(p => ({ ...p, fromName: nameOf(p.from), toName: nameOf(p.to) }));
     const d = new Date(n.endedAt || Date.now());
     const lines = [`The Ping - ${t.name} - ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`];
     for (const p of players) lines.push(`${p.display} ${fmtUnits(p.net, t.unit, true)}`);
-    if (pays.length) lines.push('Settle: ' + pays.map(p => `${p.fromName} -> ${p.toName} ${fmtUnits(p.amount, t.unit)}`).join('; '));
-    const out = { nightId: t.nightId, tableId: t.id, table: { name: t.name, mode: t.mode, unit: t.unit }, ended: t.state === 'ended', startedAt: n.startedAt, endedAt: n.endedAt, players, payments: pays, zeroSum: n.zeroSum, text: lines.join('\n') };
+    const out = { nightId: t.nightId, tableId: t.id, table: { name: t.name, mode: t.mode, unit: t.unit }, ended: t.state === 'ended', startedAt: n.startedAt, endedAt: n.endedAt, players, zeroSum: n.zeroSum, text: lines.join('\n') };
     if (n.drift) out.drift = n.drift;
     return out;
   }
@@ -366,7 +376,7 @@ function createTables(E) {
       socket.emit('table_info', { table: publicTable(t), seated: seatedList(t), openSeats: Math.max(0, t.seats - humans(roomOf(t)).length) });
     });
 
-    on('table_join', ({ tableId, buyIn, seat } = {}) => {
+    on('table_join', ({ tableId, buyIn, seat, fund: reqFund } = {}) => {
       const key = authed(); if (!key) return;
       const t = lookup(tableId);
       if (!t) { err('No table with that code'); return; }
@@ -393,16 +403,16 @@ function createTables(E) {
 
       const prior = room.lastStacks[key];
       let amount = buyIn === undefined || buyIn === null ? (prior >= t.buyIn.min ? Math.min(prior, t.buyIn.max) : t.buyIn.default) : buyIn;
-      if (!isInt(amount) || amount < t.buyIn.min || amount > t.buyIn.max) { err(`Buy-in must be between ${t.buyIn.min} and ${t.buyIn.max}`, 'range'); return; }
+      if (!isInt(amount) || amount < t.buyIn.min || amount > t.buyIn.max) { err(`Buy-in must be between ${usd(t.buyIn.min)} and ${usd(t.buyIn.max)}`, 'range'); return; }
       if (!existing && humans(room).length + room.players.filter(p => p.isBot).length >= room.maxSeats) { err('Table is full', 'full'); return; }
-      if (t.mode === 'chips') {
-        const bal = E.getBalance(acct.display);
-        if (bal < amount) { err('Not enough in your bank', 'bank'); return; }
-      }
+      const fund = reqFund === 'chips' || reqFund === 'play' ? reqFund : t.mode;
+      if (fund === 'chips' && E.getBalance(acct.display) < amount) { err('Not enough in your bank', 'bank'); return; }
+      if (fund === 'play' && E.getPlay(key) < amount) { err('Not enough Play $', 'bank'); return; }
 
       let player = existing;
       if (player) {
-        E.payIn(room, player.name, amount, 'buyin', { key });
+        E.payIn(room, player.name, amount, 'buyin', { key, fund });
+        player.fund = fund;
         delete room.lastStacks[key];
         applySeat(player, acct);
         player.chips = amount; player.chipsBought = amount; player.connected = true; player.socketId = socket.id;
@@ -411,7 +421,8 @@ function createTables(E) {
       } else {
         player = E.makePlayer(socket.id, acct.display, E.AV_EMOJI[Number(String(acct.avatar).slice(1)) - 1] || '🃏', amount);
         player.acct = key; applySeat(player, acct);
-        E.payIn(room, acct.display, amount, 'buyin', { key });
+        E.payIn(room, acct.display, amount, 'buyin', { key, fund });
+        player.fund = fund;
         delete room.lastStacks[key];
         if (room.status === 'playing' || room.status === 'waiting_next') player.sittingOut = true;
         room.players.push(player);
@@ -475,7 +486,7 @@ function createTables(E) {
     });
 
     on('table_update', ({ tableId, patch } = {}) => {
-      const { t, room } = hostFor(tableId); if (!t) return;
+      const { key, t, room } = hostFor(tableId); if (!t) return;
       if (t.state === 'ended' || !room) { err('This table has ended'); return; }
       if (!patch || typeof patch !== 'object' || Array.isArray(patch)) { err('Nothing to update'); return; }
       const allowed = ['name', 'blinds', 'actionTimerSec', 'rebuys', 'rebuyLimit', 'isPrivate', 'blindIncrease', 'autoStart', 'buyIn'];
@@ -483,12 +494,26 @@ function createTables(E) {
         if (!allowed.includes(k)) { err(`Cannot change ${k}`); return; }
         if (k === 'buyIn' && room.handNum > 0) { err('Buy-in limits are locked once a hand has been dealt'); return; }
       }
-      if (room.status === 'playing' && !room.paused) { err('Change settings between hands', 'paused'); return; }
+      const blindsOnly = Object.keys(patch).every(k => k === 'blinds');
+      if (room.status === 'playing' && !room.paused && !blindsOnly) { err('Change settings between hands', 'paused'); return; }
       const v = validateSettings({ ...t, ...patch });
       if (!v.ok) { err(v.message, 'range'); return; }
+      if (blindsOnly && (room.status === 'playing' || room.status === 'waiting_next')) {
+        t.blinds = v.value.blinds; room.pendingBlinds = { sb: t.blinds.sb, bb: t.blinds.bb };
+        const legacy = t.id === LEGACY_ID;
+        applyToRoom(room, t);
+        if (legacy) { room.autoStart = true; room.keepStacks = false; room.blindSchedule = null; room.startBlindInterval = 0; }
+        room.blindLevel = 0;
+        E.roomLog(room, `${dispOf(key)} changed the blinds, starting next hand`);
+        save(); pushLobby(); E.broadcastGameState(room);
+        event(t, 'updated', { table: publicTable(t), pendingBlinds: room.pendingBlinds });
+        return;
+      }
       for (const k of Object.keys(patch)) t[k] = v.value[k];
       const prevSb = room.sb, prevBb = room.bb;
       applyToRoom(room, t);
+      if (t.id === LEGACY_ID) { room.autoStart = true; room.keepStacks = false; room.blindSchedule = null; room.startBlindInterval = 0; }
+      room.pendingBlinds = null;
       if (patch.blinds || patch.blindIncrease) {
         if (room.blindTimer) { clearTimeout(room.blindTimer); room.blindTimer = null; }
         room.blindLevel = 0; room.sb = t.blinds.sb; room.bb = t.blinds.bb;
@@ -527,35 +552,12 @@ function createTables(E) {
       socket.emit('table_created', { table: publicTable(n) });
     });
 
-    on('table_adjust', ({ tableId, key: target, amount, note } = {}) => {
-      const key = authed(); if (!key) return;
-      if (!accounts.isAdmin(key)) { err('Only the admin can adjust', 'not_host'); return; }
-      const t = lookup(tableId);
-      if (!t) { err('No table with that code'); return; }
-      if (t.mode !== 'friends') { err('Adjustments are for Friends $ tables (use the bank panel for Chips)'); return; }
-      const k = keyOf(target);
-      if (!accounts.get(k)) { err('Unknown player'); return; }
-      if (!isInt(amount) || amount === 0 || Math.abs(amount) > MAX_UNITS) { err('Amount must be a non-zero whole number', 'range'); return; }
-      ledger.log('adjust', dispOf(k), Math.abs(amount), null, null, null, t.id, { mode: t.unit, tableId: t.id, nightId: t.nightId, key: k, signed: amount, note: String(note || '').slice(0, 80), by: key });
-      event(t, 'adjusted', { key: k, display: dispOf(k), amount });
-      if (t.state === 'ended') emitToParticipants(t, 'settle_up', nightPayload(t));
-    });
-
     const nightTable = nightId => [...tables.values()].find(t => t.nightId === nightId) || null;
     on('night_get', ({ nightId } = {}) => {
       const key = authed(); if (!key) return;
       const t = nightTable(String(nightId || ''));
       if (!t || !isParticipant(t, key)) { err('No such night'); return; }
       socket.emit('settle_up', nightPayload(t));
-    });
-    on('settle_mark', ({ nightId, from, to, amount } = {}) => {
-      const key = authed(); if (!key) return;
-      const t = nightTable(String(nightId || ''));
-      if (!t || !isParticipant(t, key)) { err('No such night'); return; }
-      const pay = nightPayload(t).payments.find(p => p.from === from && p.to === to && p.amount === amount);
-      if (!pay) { err('No such payment'); return; }
-      ledger.log('settle', dispOf(from), amount, null, null, null, t.id, { mode: t.unit, tableId: t.id, nightId: t.nightId, from, to, by: key });
-      emitToParticipants(t, 'settle_up', nightPayload(t));
     });
   }
 
@@ -564,9 +566,17 @@ function createTables(E) {
     let j = null;
     try { j = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { j = null; }
     const cutoff = Date.now() - 14 * 86400000;
+    const lb = j && j.legacyBlinds;
+    if (lb && Number.isInteger(lb.sb) && Number.isInteger(lb.bb) && lb.sb >= 1 && lb.sb < lb.bb) {
+      savedLegacyBlinds = { sb: lb.sb, bb: lb.bb };
+      const lt = tables.get(LEGACY_ID), lr = rooms.get(LEGACY_ID);
+      if (lt) lt.blinds = { ...savedLegacyBlinds };
+      if (lr && lr.status !== 'playing') { lr.sb = lb.sb; lr.bb = lb.bb; }
+    }
     for (const t of (j && Array.isArray(j.tables) ? j.tables : [])) {
       if (!t || !t.id || tables.has(t.id) || t.id === LEGACY_ID) continue;
       if (t.state === 'ended') { if ((t.createdAt || 0) > cutoff) tables.set(t.id, t); continue; }
+      if (t.mode === 'friends') continue; // Friends $ tables were removed; a live one cannot resume
       t.emptySince = Date.now();
       tables.set(t.id, t);
       const room = applyToRoom(E.makeRoom(t.id, null), t);
@@ -590,7 +600,7 @@ function createTables(E) {
   }, Math.min(60000, EMPTY_MS));
   sweep.unref();
 
-  return { syncAccount, register, load, flush, attachLegacy, afterDrop, onRoomEmptied, finishNight, noteRow, card, publicTable, tables, lookup, genSchedule, setHostSocket, pushLobby, LEGACY_ID };
+  return { syncAccount, register, load, flush, attachLegacy, afterDrop, onRoomEmptied, finishNight, noteRow, playEntries, card, publicTable, tables, lookup, genSchedule, setHostSocket, pushLobby, LEGACY_ID };
 }
 
 module.exports = { createTables, validateSettings, genSchedule, fmtUnits, MAX_SEATS };

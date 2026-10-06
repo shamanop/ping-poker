@@ -278,3 +278,6 @@
 .lb-inline .text-input { flex: 1 1 calc(160 * var(--px)); min-width: 0; width: auto; }
 .lb-inline .lb-btn, .lb-inline .lb-ghost { flex: none; }
 .lb-err.ok { color: var(--gold); }
+
+.blinds-plate.editable { cursor: pointer; outline: 1px dashed rgba(184, 137, 58, .55); outline-offset: 2px; }
+.blinds-plate.editable:hover { background: rgba(184, 137, 58, .15); }

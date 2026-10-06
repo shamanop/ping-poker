@@ -12,7 +12,7 @@ const { createTables } = require('./tables');
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const STARTING_CHIPS  = 1500;
+const STARTING_CHIPS  = 2000;
 const BANK_DEFAULT    = 10000;
 const DATA_DIR        = process.env.DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH || __dirname;
 const BANK_FILE       = process.env.BANK_FILE || path.join(DATA_DIR, 'bank.json');
@@ -143,26 +143,66 @@ function adjustBank(name, delta, type, room, tableChips, extra) {
   }
   bank[k] = Math.max(0, bank[k] + delta);
   saveBank();
+  pushMoney(k);
   if (type) ledger.log(type, name, Math.abs(delta), bank[k], tableChips, room ? room.handNum : null, room ? room.id : null, extra);
   return bank[k];
 }
 
-function bankSummary(roomId) {
-  const live = [];
+let gameHooks = null;
+function playBalance(k) { return gameHooks && gameHooks.wallet ? gameHooks.wallet.get(k).play : Infinity; }
+function atTableOf(k) {
+  let n = 0;
+  for (const r of rooms.values()) {
+    if (r.unit !== 'chips') continue;
+    for (const p of r.players) if (!p.isBot && bankKey(p.name) === k) n += p.chips + (r.status === 'playing' && r.pot > 0 ? (p.handBet || 0) : 0);
+  }
+  return n;
+}
+// One shape for everything a player's own money bar needs: chips bank + table stack, plus the Play $ wallet.
+function moneyView(key) {
+  const k = bankKey(key);
+  const bankChips = bank[k] === undefined ? null : bank[k];
+  const atTable = atTableOf(k);
+  const w = gameHooks && gameHooks.wallet ? gameHooks.wallet.get(k) : null;
+  return { bank: bankChips, atTable, chips: bankChips === null ? null : bankChips + atTable, wallet: w };
+}
+function pushMoney(key) {
+  const k = bankKey(key);
+  if (!k || !io || !io.sockets) return;
+  let view = null;
+  for (const s of io.sockets.sockets.values()) {
+    if (s.data && s.data.acct === k) { view = view || moneyView(k); s.emit('money', view); }
+  }
+}
+
+function bankSummary(roomId, view) {
   const own = rooms.get(roomId);
-  const nightId = (own && own.nightId) || null;
+  const want = view === 'play' || view === 'chips' ? view : (own && own.mode === 'play' ? 'play' : 'chips');
+  const liveOf = room => room.players.map(p => {
+    let status;
+    if (!p.connected && !p.isBot) status = 'away';
+    else if (p.sittingOut || p.sitOutRequest || p.chips === 0) status = 'sitting-out';
+    else status = 'seated';
+    return { name: p.name, isBot: !!p.isBot, chips: p.chips, inPot: room.status === 'playing' && room.pot > 0 ? (p.handBet || 0) : 0, status };
+  });
+  if (want === 'play') {
+    const live = [], wal = {};
+    for (const room of rooms.values()) if (room.mode === 'play') live.push(...liveOf(room).filter(l => !l.isBot));
+    for (const a of Object.values(accounts.all())) { const k = bankKey(a.key); const w = gameHooks && gameHooks.wallet ? gameHooks.wallet.get(k) : null; if (w) wal[k] = w.play; }
+    return { ...ledger.summary(roomId, wal, live, { all: true, rows: tables.playEntries() }), view: 'play', unit: 'cents' };
+  }
+  const base = own && own.mode === 'play' ? ROOM_ID : roomId;
+  const chipsRoom = rooms.get(base);
+  const nightId = (chipsRoom && chipsRoom.nightId) || null;
+  const live = [];
   for (const room of rooms.values()) {
-    if (nightId ? room !== own : room.nightId) continue;
-    for (const p of room.players) {
-      if (p.isBot && room.id !== roomId) continue;
-      let status;
-      if (!p.connected && !p.isBot) status = 'away';
-      else if (p.sittingOut || p.sitOutRequest || p.chips === 0) status = 'sitting-out';
-      else status = 'seated';
-      live.push({ name: p.name, isBot: !!p.isBot, chips: p.chips, inPot: room.status === 'playing' && room.pot > 0 ? (p.handBet || 0) : 0, status });
+    if (nightId ? room !== chipsRoom : room.nightId) continue;
+    for (const l of liveOf(room)) {
+      if (l.isBot && room.id !== base) continue;
+      live.push(l);
     }
   }
-  return ledger.summary(roomId, bank, live, { nightId });
+  return { ...ledger.summary(base, bank, live, { nightId }), view: 'chips', unit: 'chips' };
 }
 
 function saveBank() {
@@ -238,28 +278,48 @@ app.get('/api/bank-summary', (req, res) => {
 const rooms = new Map();
 const AV_EMOJI = ['🤠', '🦊', '🐉', '🎩', '🦁', '🐺', '🦅', '🎲', '👑', '💀', '🎯', '⚡'];
 
-// Money in/out of a table seat by room mode. Chips: bank.json (+ ledger). Friends: ledger rows only (cents IOU).
-// Play: nothing is stored except in-memory night rows used for the settle screen.
+// Money in/out of a table seat by room mode. Chips: bank.json (+ ledger log). Play $: the wallet, plus in-memory night rows for the settle screen.
 function moneyMeta(room, name, key) {
   if (!room.nightId) return undefined;
   return { mode: room.unit, tableId: room.id, nightId: room.nightId, key: key || bankKey(name) };
 }
+// Funding source for a seat: 'chips' (bank) or 'play' (wallet). Anything else, or the table's own currency, means no conversion.
+const fundOf = (room, f) => (f === 'chips' || f === 'play') && (room.mode === 'chips' || room.mode === 'play') ? f : room.mode;
+// 1 table unit = 1 unit of the other currency (1 chip = 1 Play $ cent). Moves money between the bank and the wallet around a normal payIn/payOut.
+function convertFunds(name, key, from, to, amount) {
+  if (!(amount > 0) || from === to || !gameHooks || !gameHooks.wallet) return;
+  const w = gameHooks.wallet;
+  if (from === 'play') { w.spend(key, 'play', amount); adjustBank(name, amount, null); }
+  else { adjustBank(name, -amount, null); w.credit(key, 'play', amount); }
+}
 function payIn(room, name, amount, type, opts = {}) {
+  const fund = fundOf(room, opts.fund);
+  if (fund !== room.mode) convertFunds(name, opts.key || bankKey(name), fund, room.mode, amount);
   const meta = moneyMeta(room, name, opts.key);
-  if (room.mode === 'play') { tables.noteRow(room, { name, type, amount, key: (meta && meta.key) }); return null; }
-  if (room.mode === 'friends') { ledger.log(type, name, amount, null, amount, room.handNum, room.id, meta); return null; }
+  if (room.mode === 'play') {
+    const k = (meta && meta.key) || opts.key || bankKey(name);
+    if (gameHooks && gameHooks.wallet) gameHooks.wallet.spend(k, 'play', amount);
+    tables.noteRow(room, { name, type, amount, key: k }); return null;
+  }
   return adjustBank(name, -amount, type, room, amount, meta);
 }
 function payOut(room, name, amount, opts = {}) {
   let meta = moneyMeta(room, name, opts.key);
   if (meta && opts.reason) meta.reason = opts.reason;
   if (opts.park && room.mode === 'chips') meta = { ...(meta || {}), park: true };
-  if (room.mode === 'play') { tables.noteRow(room, { name, type: 'cashout', amount, key: (meta && meta.key) }); return null; }
-  if (room.mode === 'friends') { ledger.log('cashout', name, amount, null, 0, room.handNum, room.id, meta); return null; }
-  return adjustBank(name, amount, 'cashout', room, 0, meta);
+  const seat = room.players.find(p => !p.isBot && p.name === name);
+  const fund = fundOf(room, opts.fund || (seat && seat.fund));
+  let out;
+  if (room.mode === 'play') {
+    const k = (meta && meta.key) || opts.key || bankKey(name);
+    if (gameHooks && gameHooks.wallet && amount > 0) gameHooks.wallet.credit(k, 'play', amount);
+    tables.noteRow(room, { name, type: 'cashout', amount, key: k }); out = null;
+  } else out = adjustBank(name, amount, 'cashout', room, 0, meta);
+  if (fund !== room.mode) { convertFunds(name, (meta && meta.key) || opts.key || bankKey(name), room.mode, fund, amount); if (room.mode === 'chips') out = getBalance(name); }
+  return out;
 }
 const tables = createTables({
-  io, rooms, ledger, accounts, file: TABLES_FILE, bankKey, makeRoom, makePlayer, getBalance, payIn, payOut, AV_EMOJI,
+  io, rooms, ledger, accounts, file: TABLES_FILE, bankKey, makeRoom, makePlayer, getBalance, getPlay: k => (gameHooks && gameHooks.wallet ? gameHooks.wallet.get(k).play : Infinity), payIn, payOut, AV_EMOJI,
   dropSeat: (...a) => dropSeat(...a), broadcastRoomUpdate: r => broadcastRoomUpdate(r), broadcastGameState: r => broadcastGameState(r),
   emitPrivateCards: r => emitPrivateCards(r), maybeAutoStart: (...a) => maybeAutoStart(...a), beginGame: (...a) => beginGame(...a),
   scheduleBlindIncrease: r => scheduleBlindIncrease(r), clearHandTimers: r => clearHandTimers(r), setPaused: (...a) => setRoomPaused(...a), roomLog: (r, m) => roomLog(r, m),
@@ -653,6 +713,7 @@ function maybeAutoStart(room, force) {
 
 function startHand(room) {
   const players = room.players;
+  if (room.pendingBlinds) { room.sb = room.pendingBlinds.sb; room.bb = room.pendingBlinds.bb; room.pendingBlinds = null; }
   room.deck      = makeDeck();
   room.community = [];
   room.pot       = 0;
@@ -924,6 +985,10 @@ function scheduleNextHand(room, delayMs = 5000) {
     for (const p of room.players) if (!p.isBot && p.acct && p.handStartChips > 0) accounts.recordHand(p.acct, { won: p.chips > p.handStartChips, pot });
   }
   if (room.mode !== 'play') ledger.endHand(room, getBalance);
+  else {
+    tables.noteRow(room, { type: 'snapshot', handNum: room.handNum, players: room.players.map(p => ({ name: p.name, chips: p.chips, played: !p.isBot && !p.sittingOut && p.handStartChips > 0, isBot: !!p.isBot })) });
+    for (const p of room.players) if (!p.isBot && p.handStartChips > 0 && p.chips > p.handStartChips) tables.noteRow(room, { type: 'win', name: p.name, amount: p.chips - p.handStartChips, key: bankKey(p.name) });
+  }
   room.status = 'waiting_next';
   broadcastGameState(room);
 
@@ -1002,7 +1067,7 @@ function scheduleNextHand(room, delayMs = 5000) {
 
 function modeFields(room) {
   return {
-    mode: room.mode, unit: room.unit, moneyMode: room.mode === 'friends' ? 'ledger' : room.mode,
+    mode: room.mode, unit: room.unit, moneyMode: room.mode,
     table: { id: room.id, name: room.settings ? room.settings.name : null, mode: room.mode, unit: room.unit, sb: room.sb, bb: room.bb, maxSeats: room.maxSeats },
   };
 }
@@ -1151,6 +1216,7 @@ io.on('connection', socket => {
     socket.data.sessionH = r.sessionH || crypto.createHash('sha256').update(r.token).digest('hex');
     socket.emit('auth_ok', withToken ? { account: accounts.publicAccount(a), token: r.token } : { account: accounts.publicAccount(a) });
     accounts.emit('auth', socket, a.key);
+    try { socket.emit('money', moneyView(a.key)); } catch {}
     try { socket.emit('account:stats', social.statsView(a.key)); socket.emit('achv:state', social.achvView(a.key)); } catch {}
   };
   const authed = () => { if (!socket.data.acct) { socket.emit('error', { message: 'Sign in first', code: 'auth' }); return null; } return socket.data.acct; };
@@ -1211,22 +1277,32 @@ io.on('connection', socket => {
     for (const s of io.sockets.sockets.values()) if (s.data && s.data.acct) online.add(s.data.acct);
     const rows = Object.values(accounts.all()).map(a => {
       const k = bankKey(a.key);
-      let atTable = 0;
-      for (const r of rooms.values()) {
-        if (r.unit !== 'chips') continue;
-        for (const p of r.players) if (!p.isBot && bankKey(p.name) === k) atTable += p.chips + (r.status === 'playing' && r.pot > 0 ? (p.handBet || 0) : 0);
-      }
+      const atTable = atTableOf(k);
       const seen = Math.max(a.lastLoginAt || 0, ...(a.sessions || []).map(x => x.lastSeen || 0));
-      return { key: a.key, display: a.display, isAdmin: !!a.isAdmin, claimed: !!a.claimed, lastSeen: seen || null, online: online.has(a.key), balance: bank[k] === undefined ? null : bank[k] + atTable };
+      const w = gameHooks && gameHooks.wallet ? gameHooks.wallet.get(k) : null;
+      return { key: a.key, display: a.display, isAdmin: !!a.isAdmin, claimed: !!a.claimed, lastSeen: seen || null, online: online.has(a.key), balance: bank[k] === undefined ? null : bank[k] + atTable, play: w ? w.play : null };
     }).sort((x, y) => (y.online - x.online) || ((y.lastSeen || 0) - (x.lastSeen || 0)) || x.display.localeCompare(y.display));
     socket.emit('admin_overview', {
       accounts: rows,
-      table: room ? { paused: !!room.paused, status: room.status, seated: room.players.filter(p => !p.isBot).length, handNum: room.handNum || 0, startChips: room.startChips || STARTING_CHIPS } : null,
+      table: room ? { paused: !!room.paused, status: room.status, seated: room.players.filter(p => !p.isBot).length, handNum: room.handNum || 0, startChips: room.startChips || STARTING_CHIPS, sb: room.sb, bb: room.bb, nextSb: room.pendingBlinds ? room.pendingBlinds.sb : null, nextBb: room.pendingBlinds ? room.pendingBlinds.bb : null } : null,
     });
   });
-  on('admin_bank_summary', () => {
+  on('admin_bank_summary', ({ view } = {}) => {
     if (!adminOnly()) return;
-    socket.emit('bank_summary', bankSummary(ROOM_ID));
+    socket.emit('bank_summary', bankSummary(ROOM_ID, view === 'play' ? 'play' : 'chips'));
+  });
+  on('admin_set_play', ({ key, cents } = {}) => {
+    if (!adminOnly()) return;
+    const k = typeof key === 'string' ? accounts.keyOf(key) : '';
+    const v = Math.round(Number(cents));
+    if (!k || !accounts.get(k)) { socket.emit('admin_result', { op: 'set_play', ok: false, message: 'Unknown player' }); return; }
+    if (!Number.isFinite(v) || v < 0 || v > 100000000000) { socket.emit('admin_result', { op: 'set_play', ok: false, message: 'Enter a Play $ amount from 0 up to 1,000,000,000' }); return; }
+    if (!gameHooks || !gameHooks.wallet) { socket.emit('admin_result', { op: 'set_play', ok: false, message: 'Wallet unavailable' }); return; }
+    gameHooks.wallet.adminSet(k, v);
+    gameHooks.pushWallet(k);
+    pushMoney(k);
+    console.log(`admin ${accounts.displayOf(socket.data.acct)} set Play $ for ${k} to ${v} cents`);
+    socket.emit('admin_result', { op: 'set_play', key: k, ok: true, message: 'Play $ set' });
   });
   on('admin_reset_pin', ({ key, newPin } = {}) => {
     const me = adminOnly(); if (!me) return;
@@ -1243,9 +1319,9 @@ io.on('connection', socket => {
     socket.emit('balance_data', { balance: getBalance(cleanNameOf(name)) });
   });
 
-  on('get_bank_summary', ({ roomId } = {}) => {
+  on('get_bank_summary', ({ roomId, view } = {}) => {
     if (typeof roomId !== 'string' || !socket.rooms.has(roomId)) return;
-    socket.emit('bank_summary', bankSummary(roomId));
+    socket.emit('bank_summary', bankSummary(roomId, view === 'play' || view === 'chips' ? view : undefined));
   });
 
   // Only the seated player named "chris" can edit money. `balance` is the player's TOTAL (bank + chips at the table).
@@ -1280,6 +1356,7 @@ io.on('connection', socket => {
       ledger.log('adjust', target, Math.abs(total - before), bank[k], newStack, room.handNum, room.id, { delta: total - before });
       roomLog(room, `${byName} set ${target}'s money to ${total.toLocaleString()}`);
     }
+    pushMoney(k);
     if (seat && seat.connected) {
       io.to(seat.socketId).emit('balance_data', { balance: bank[k] });
       if (seat.chips === 0) io.to(seat.socketId).emit('bust_out', bustPayload(room, seat));
@@ -1343,10 +1420,12 @@ io.on('connection', socket => {
       p.sittingOut = p.chips === 0 || !!p.sitOutRequest;
     }
 
+    for (const k of Object.keys(bank)) pushMoney(k);
     room.status = 'waiting';
     room.community = []; room.pot = 0; room.currentBet = 0; room.street = null;
     room.actionQueue = []; room.dealerIdx = 0; room.shown = {}; room.lastStacks = {};
-    room.sb = SMALL_BLIND; room.bb = BIG_BLIND; room.blindLevel = 0; room.blindsEnabled = false;
+    { const lt = tables.lookup && tables.lookup(room.id); room.sb = lt ? lt.blinds.sb : SMALL_BLIND; room.bb = lt ? lt.blinds.bb : BIG_BLIND; }
+    room.pendingBlinds = null; room.blindLevel = 0; room.blindsEnabled = false;
     setRoomPaused(room, false, 'Chris');
     roomLog(room, `Table reset by Chris, stacks ${stack.toLocaleString()}`);
 
@@ -1532,7 +1611,7 @@ io.on('connection', socket => {
   });
 
   // ── rebuy ─────────────────────────────────────────────────────────────────
-  on('rebuy', ({ roomId, tableId, amount } = {}) => {
+  on('rebuy', ({ roomId, tableId, amount, fund: reqFund } = {}) => {
     const room = rooms.get(roomId || tableId);
     if (!room) return;
     const playerIdx = room.players.findIndex(p => p.socketId === socket.id);
@@ -1551,18 +1630,21 @@ io.on('connection', socket => {
 
     const t = room.settings, legacy = !room.nightId;
     const startChips = room.startChips || STARTING_CHIPS;
-    const min = legacy ? BIG_BLIND : t.buyIn.min, max = legacy ? Math.max(t ? t.buyIn.max : STARTING_CHIPS, startChips) : t.buyIn.max;
-    const balance = room.mode === 'chips' ? getBalance(player.name) : Infinity;
+    const min = t ? t.buyIn.min : BIG_BLIND, max = legacy ? Math.max(t ? t.buyIn.max : STARTING_CHIPS, startChips) : t.buyIn.max;
+    const fund = fundOf(room, player.chips > 0 ? player.fund : (reqFund || player.fund));
+    const balance = fund === 'chips' ? getBalance(player.name) : fund === 'play' ? playBalance(player.acct || bankKey(player.name)) : Infinity;
+    const fundWord = fund === 'play' ? 'Play $' : 'chips in bank';
     let buyIn = amount;
     if (buyIn === undefined || buyIn === null) buyIn = Math.min(legacy ? startChips : t.buyIn.default, balance);
     if (!Number.isSafeInteger(buyIn) || buyIn < min || buyIn > max) {
-      if (room.mode === 'chips' && balance < min) socket.emit('error', { message: 'Not enough chips in bank to rebuy', code: 'bank' });
+      if (balance < min) socket.emit('error', { message: `Not enough ${fundWord} to rebuy`, code: 'bank' });
       else socket.emit('error', { message: `Rebuy must be between ${min} and ${max}`, code: 'range' });
       return;
     }
-    if (buyIn > balance) { socket.emit('error', { message: 'Not enough chips in bank to rebuy', code: 'bank' }); return; }
+    if (buyIn > balance) { socket.emit('error', { message: `Not enough ${fundWord} to rebuy`, code: 'bank' }); return; }
 
-    const newBalance = payIn(room, player.name, buyIn, 'rebuy', { key: player.acct });
+    const newBalance = payIn(room, player.name, buyIn, 'rebuy', { key: player.acct, fund });
+    player.fund = fund;
     room.rebuyCounts[pkey] = (room.rebuyCounts[pkey] || 0) + 1;
     player.chips     = buyIn;
     player.chipsBought = (player.chipsBought || 0) + buyIn;
@@ -1710,7 +1792,7 @@ function dropSeat(room, player, opts = {}) {
 
 const social = require('./social.js').createSocial({ io, accounts, now: () => Date.now(), file: BIGWINS_FILE });
 process.env.WALLET_FILE = WALLET_FILE;
-try{ const g = require('./games')({io, rooms, ledger, accounts, tables, social, now:()=>Date.now()}); social.setWallet(g.wallet); }catch(e){ if(e.code!=='MODULE_NOT_FOUND') throw e; }
+try{ const g = require('./games')({io, rooms, ledger, accounts, tables, social, now:()=>Date.now(), chips:{ get:k=>{ const b=bank[bankKey(k)]; return b===undefined?BANK_DEFAULT:b; }, add:(k,d)=>adjustBank(k,d,null) }}); social.setWallet(g.wallet); gameHooks = g; }catch(e){ if(e.code!=='MODULE_NOT_FOUND') throw e; }
 
 const PORT = process.env.PORT || 3000;
 if (require.main === module) {

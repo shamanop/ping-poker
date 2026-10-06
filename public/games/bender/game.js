@@ -26,13 +26,15 @@
   // ---------- shell bridge (iframe ?bridge=1): server-authoritative rounds, wallet in cents ----------
   const BRIDGE = Q.get('bridge') === '1' && window.parent !== window;
   const DEFAULT_BETS = BETS.slice();
-  const money = { live: false, mode: 'play', wallet: { play: 0, ledgerNet: 0, ledgerLimit: -50000 } };
+  const money = { live: false, mode: 'play', wallet: { play: 0, chips: 0 } };
   const pend = new Map(); let reqSeq = 0;
   const toParent = (m) => { if (BRIDGE) window.parent.postMessage(m, '*'); };
-  const walletBal = () => (money.mode === 'ledger' ? money.wallet.ledgerNet : money.wallet.play);
-  const avail = () => (money.live ? (money.mode === 'ledger' ? money.wallet.ledgerNet - (money.wallet.ledgerLimit ?? -50000) : money.wallet.play) : st.bal);
-  const fmtBal = (n) => (money.live && money.mode === 'ledger' && n > 0 ? '+' : '') + fmt(n);
-  const unitWord = () => (money.live ? 'funds' : 'VOTES');
+  const chipsFmt = (n) => Math.round(n).toLocaleString('en-US');
+  const liveFmt = () => (money.mode === 'chips' ? chipsFmt : dollars);
+  const walletBal = () => (money.mode === 'chips' ? money.wallet.chips : money.wallet.play);
+  const avail = () => (money.live ? walletBal() : st.bal);
+  const fmtBal = (n) => fmt(n);
+  const unitWord = () => (money.live ? (money.mode === 'chips' ? 'chips' : 'Play $') : 'VOTES');
 
   const stage = $('stage'), cellsEl = $('cells'), floatsEl = $('floats'), ov = $('ov'), boardEl = $('board'), mascot = $('mascot'), mimg = $('mimg'), dump = $('dump');
   const els = new Map();
@@ -59,9 +61,17 @@
   const slots = $('slots'); slots.className = 'slots'; for (let i = 0; i < COLS * ROWS; i++) slots.appendChild(document.createElement('i'));
 
   // ---------- images ----------
-  ['pen', 'stk', 'bal', 'yrd', 'meg', 'cap', 'phn', 'seal', 'W', 'S'].forEach((s) => { new Image().src = `assets/img/${s}.webp`; });
-  ['idle', 'drink', 'hype', 'shock', 'cheer', 'pass'].forEach((p) => { new Image().src = `assets/img/mascot_${p}.webp`; });
-  ['banner_closeenough', 'banner_ballotbender', 'banner_megalandslide', 'banner_worldisyours', 'dumpster_erupt'].forEach((p) => { new Image().src = `assets/img/${p}.webp`; });
+  const PRE = [];
+  ['pen', 'stk', 'bal', 'yrd', 'meg', 'cap', 'phn', 'seal', 'W', 'S'].forEach((s) => PRE.push(`assets/img/sym/${s}.webp`));
+  ['idle', 'drink', 'hype', 'shock', 'cheer', 'pass'].forEach((p) => PRE.push(`assets/img/mascot_${p}.webp`));
+  ['banner_closeenough', 'banner_ballotbender', 'banner_megalandslide', 'banner_worldisyours', 'dumpster_erupt', 'title_stack', 'bal'].forEach((p) => PRE.push(`assets/img/${p}.webp`));
+  // decode off the first-spin path (decode() also fills the decoded-image cache so first paint does not hitch); in-DOM art is decoded too
+  const preDecoded = [];
+  const preDecode = () => {
+    const urls = new Set(PRE); for (const im of document.images) if (im.src) urls.add(im.getAttribute('src'));
+    for (const u of urls) { const im = new Image(); im.src = u; preDecoded.push(im); if (im.decode) im.decode().catch(() => {}); }
+  };
+  preDecode();
 
   // ---------- mascot: pose + caption bubble ----------
   let poseT = 0, curPose = 'idle', lastLine = '';
@@ -69,17 +79,69 @@
     o = o || {};
     clearTimeout(poseT); curPose = name;
     mimg.src = `assets/img/mascot_${name}.webp`; mimg.className = 'p-' + name; mimg.style.left = ((POSE_X.idle - POSE_X[name]) / 640 * mascot.offsetHeight).toFixed(1) + 'px'; mascot.className = name === 'idle' || name === 'drink' || name === 'hype' ? '' : name;
+    if (bub.classList.contains('on') && !bub.classList.contains('out')) bubblePlace();
     const er = !!o.erupt, was = dump.src.includes('erupt');
     if (er !== was) { dump.src = `assets/img/dumpster_${er ? 'erupt' : 'back'}.webp`; if (er) { dump.classList.remove('erupt'); void dump.offsetWidth; dump.classList.add('erupt'); } }
     if (name !== 'idle' && ms !== 0) poseT = setTimeout(() => pose('idle'), ms || 1500);
   }
-  function say(group, force) {
+  // tail target per pose (px at 640px art height): the face edge beside the mouth, so the tail always points at it
+  const MOUTH = { idle: [172, 140], drink: [105, 120], hype: [160, 165], shock: [192, 150], cheer: [172, 232], pass: [203, 132] };
+  const bub = $('bubble'), bubT = $('bubbleT'), bpath = $('bpath'), headEl = $('head');
+  let bubTimer = 0, bubOut = 0, bubText = '';
+  function bubbleFit(text, maxW) {
+    const p = bubT; p.textContent = text; p.style.height = 'auto'; p.style.left = '0px'; p.style.top = '0px';
+    let fs = 28, lines = 9, lh = 1.1;
+    for (; fs >= 17; fs -= 1) {
+      p.style.fontSize = fs + 'px'; p.style.width = maxW + 'px';
+      lines = Math.round(p.scrollHeight / (fs * lh));
+      if (lines <= 3 && p.scrollWidth <= maxW) break;
+    }
+    let lo = 60, hi = maxW;
+    while (hi - lo > 2) { const mid = (lo + hi) >> 1; p.style.width = mid + 'px'; if (Math.round(p.scrollHeight / (fs * lh)) <= lines && p.scrollWidth <= mid) hi = mid; else lo = mid; }
+    p.style.width = hi + 'px';
+    return [hi, p.scrollHeight];
+  }
+  function bubblePath(x0, y0, x1, y1, r, tx, ty) {
+    const hw = 15, onBottom = ty > y1 + 6;
+    let d = `M${x0 + r} ${y0}H${x1 - r}A${r} ${r} 0 0 1 ${x1} ${y0 + r}`;
+    if (!onBottom) { const c = Math.min(Math.max(ty, y0 + r + hw + 4), y1 - r - hw - 4); d += `V${c - hw}L${tx} ${ty}L${x1} ${c + hw}`; }
+    d += `V${y1 - r}A${r} ${r} 0 0 1 ${x1 - r} ${y1}`;
+    if (onBottom) { const c = Math.min(Math.max(tx - 22, x0 + r + hw + 4), x1 - r - hw - 4); d += `H${c + hw}L${tx} ${ty}L${c - hw} ${y1}`; }
+    return d + `H${x0 + r}A${r} ${r} 0 0 1 ${x0} ${y1 - r}V${y0 + r}A${r} ${r} 0 0 1 ${x0 + r} ${y0}Z`;
+  }
+  function bubblePlace() {
+    if (!bubText) return;
+    const hw = headEl.clientWidth, hh = headEl.clientHeight, k = mimg.offsetHeight / 640, m = MOUTH[curPose] || MOUTH.idle;
+    const tx = mascot.offsetLeft + mimg.offsetLeft + m[0] * k, ty = mascot.offsetTop + mimg.offsetTop + m[1] * k;
+    const PADX = 24, PADY = 15, LEFT = 432, TOP = 66, GAP = 34;
+    const maxW = Math.floor(Math.max(120, Math.min(300, tx - GAP - LEFT - 2 * PADX)));
+    const [tw, th] = bubbleFit(bubText, maxW);
+    const bw = tw + 2 * PADX, bh = th + 2 * PADY;
+    const x1 = Math.max(LEFT + bw, tx - GAP), x0 = x1 - bw;
+    const y0 = Math.max(TOP, Math.min(ty - bh * 0.62, hh - 22 - bh)), y1 = y0 + bh;
+    bubT.style.left = (x0 + PADX) + 'px'; bubT.style.top = (y0 + PADY) + 'px';
+    bpath.setAttribute('d', bubblePath(x0, y0, x1, y1, 26, tx, ty));
+    bub.style.transformOrigin = tx + 'px ' + ty + 'px';
+    bub.dataset.box = [x0, y0, bw, bh, tx, ty].map((v) => Math.round(v)).join(',');
+  }
+  function bubbleHide() {
+    clearTimeout(bubTimer); if (!bub.classList.contains('on')) return;
+    bub.classList.remove('pop'); bub.classList.add('out');
+    bubOut = setTimeout(() => { bub.classList.remove('on', 'out'); }, 280);
+  }
+  function bubbleShow(text) {
+    clearTimeout(bubTimer); clearTimeout(bubOut);
+    bubText = text; bub.classList.remove('out', 'pop'); bubblePlace();
+    bub.classList.add('on'); void bub.offsetWidth; bub.classList.add('pop');
+    bubTimer = setTimeout(bubbleHide, 2800 + 65 * text.length);
+  }
+  function say(group) {
     const pool = L[group]; if (!pool || !pool.length) return;
     let t; for (let i = 0; i < 6; i++) { t = pool[(Math.random() * pool.length) | 0]; if (t !== lastLine) break; }
-    lastLine = t; const p = $('bubbleT'), b = $('bubble');
-    p.textContent = t; p.classList.toggle('sm', t.length > 30);
-    b.classList.remove('pop'); void b.offsetWidth; b.classList.add('pop');
+    lastLine = t; SFX.talk(t.length); bubbleShow(t);
   }
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { if (bub.classList.contains('on')) bubblePlace(); });
+  addEventListener('resize', () => { if (bub.classList.contains('on')) bubblePlace(); });
 
   // ---------- cell DOM ----------
   const pos = (c, r) => [c * PX + (PX - SZ) / 2, r * PY + (PY - SZ) / 2];
@@ -92,7 +154,7 @@
   }
   function mk(cell, c, r) {
     const el = document.createElement('div'); el.className = 'cell'; el.dataset.id = cell.id;
-    const img = document.createElement('img'); img.src = `assets/img/${cell.s}.webp`; img.alt = ''; el.appendChild(img);
+    const img = document.createElement('img'); img.src = `assets/img/sym/${cell.s}.webp`; img.alt = ''; el.appendChild(img);
     setMult(el, cell); el.classList.toggle('stick', !!cell.stick);
     el.style.transform = tf(c, r); cellsEl.appendChild(el); els.set(cell.id, el);
     if (cell.stick && stage.classList.contains('bonus')) lockIn(el, c, r);
@@ -102,14 +164,30 @@
     setTimeout(() => {
       if (!el.isConnected) return;
       el.classList.add('lockin'); setTimeout(() => el.classList.remove('lockin'), 700);
-      FX.ring(...cellPt(c, r), { n: 2, r1: 190 }); FX.burst(...cellPt(c, r), { n: 10, speed: 420, size: 12, cols: SYMCOL.W, g: 300 });
-      FX.shake(7, 220);
-    }, 520);
+      FX.ring(...cellPt(c, r), { n: 2, r1: 200 }); FX.burst(...cellPt(c, r), { n: 10, speed: 420, size: 12, cols: SYMCOL.W, g: 300 });
+      dust(c, r, true); FX.flash(100, '#FFF4CF', 0.4); shk(10, 300); bounce(7, true); sfxSlam(2);
+    }, 520 * speed());
   }
+  // COUNTED: the stamp drops from above, hits the ballot with an ink splat, holds, then fades
   function votedStamp() {
     const d = document.createElement('div'); d.className = 'votedstamp'; d.innerHTML = '<b>COUNTED</b><i>100% LEGIT</i>'; stage.appendChild(d);
-    anim(d, [{ transform: 'translate(-50%,-50%) scale(3) rotate(-18deg)', opacity: 0 }, { transform: 'translate(-50%,-50%) scale(.9) rotate(-9deg)', opacity: 1, offset: .22 }, { transform: 'translate(-50%,-50%) scale(1) rotate(-9deg)', opacity: 1, offset: .3 }, { transform: 'translate(-50%,-50%) scale(1) rotate(-9deg)', opacity: 1, offset: .85 }, { transform: 'translate(-50%,-50%) scale(1.1) rotate(-9deg)', opacity: 0 }], { duration: 2400, easing: 'ease-out' }).then(() => d.remove());
-    setTimeout(() => FX.shake(16, 380), 480);
+    const T = 2400, B = 'translate(-50%,-50%)', R = 'rotate(-9deg)';
+    const kf = reduce
+      ? [{ transform: `${B} ${R}`, opacity: 0 }, { transform: `${B} ${R}`, opacity: 1, offset: 0.12 }, { transform: `${B} ${R}`, opacity: 1, offset: 0.85 }, { transform: `${B} ${R}`, opacity: 0 }]
+      : [{ transform: `${B} translateY(-1000px) scale(2.4) rotate(-22deg)`, opacity: 1, easing: 'cubic-bezier(.55,0,.9,.5)' },
+        { transform: `${B} translateY(0) scale(1.12,.84) ${R}`, opacity: 1, offset: 0.16, easing: 'ease-out' },
+        { transform: `${B} translateY(-34px) scale(.96,1.05) ${R}`, opacity: 1, offset: 0.24, easing: 'ease-in' },
+        { transform: `${B} translateY(0) scale(1) ${R}`, opacity: 1, offset: 0.32 },
+        { transform: `${B} scale(1) ${R}`, opacity: 1, offset: 0.85 },
+        { transform: `${B} scale(1.1) ${R}`, opacity: 0 }];
+    const p = anim(d, kf, { duration: T, easing: 'linear' }), cx = d.offsetLeft, cy = d.offsetTop;
+    setTimeout(() => {
+      if (!d.isConnected) return;
+      FX.shake(20 * lite(), 420, { big: true }); FX.flash(110, '#fff', 0.55); FX.ring(cx, cy, { n: 2, r1: 520, w: 22, c: '#C8352B', dur: 0.5 });
+      FX.burst(cx, cy, { n: 30, speed: 900, size: 16, shape: 'ballot', cols: ['#FDFBF7', '#C8352B'], g: 900, up: 200, life: 1 });
+      bounce(10, true); sfxSlam(3); SFX.stamp();
+    }, 0.16 * T * speed());
+    const gone = () => d.remove(); p.then(gone); setTimeout(gone, T * speed() + 600);
   }
   function reconcile(grid) {
     const keep = new Set();
@@ -124,6 +202,13 @@
     cur = grid;
   }
   const clearFx = () => { for (const el of els.values()) el.classList.remove('dim', 'hit', 'tease', 'oneshort'); };
+  // drop any .cell node the els map no longer tracks (and map entries whose node left the DOM)
+  function sweepCells() {
+    const live = new Set(els.values());
+    for (const n of cellsEl.querySelectorAll('.cell')) if (!live.has(n)) n.remove();
+    for (const [id, el] of els) if (!el.isConnected) els.delete(id);
+  }
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && !st.busy) sweepCells(); });
 
   // ---------- readouts ----------
   let countTok = 0;
@@ -131,8 +216,8 @@
     const tok = ++countTok; const t0 = performance.now(); ms = Math.max(1, ms * speed());
     return new Promise((res) => {
       const tick = (now) => {
-        if (tok !== countTok && el === $('win')) { el.textContent = f(to); return res(); }
-        const k = Math.min(1, (now - t0) / ms), e = 1 - Math.pow(1 - k, 3);
+        if (tok !== countTok && el === $('win')) return res();
+        const k = Math.max(0, Math.min(1, (now - t0) / ms)), e = 1 - Math.pow(1 - k, 3);
         el.textContent = f(from + (to - from) * e);
         if (k < 1) requestAnimationFrame(tick); else { if (after) after(); res(); }
       };
@@ -142,12 +227,15 @@
   function setWin(x, animate, ms = 380) {
     const from = st.win; st.win = x;
     const w = $('win');
-    if (animate && x > from) { w.classList.remove('pop'); void w.offsetWidth; w.classList.add('pop'); return countTo(w, from, x, ms); }
+    if (animate && x > from) {
+      if (!reduce) anim(w, [{ transform: 'scale(1.75)' }, { transform: 'scale(.9)', offset: 0.38 }, { transform: 'scale(1.07)', offset: 0.68 }, { transform: 'scale(1)' }], { duration: 440, easing: 'ease-out' });
+      return countTo(w, from, x, ms);
+    }
     countTok++; w.textContent = fmt(x); return Promise.resolve();
   }
   function setBal(v, animate) {
     const from = st.balShown; st.bal = v; st.balShown = v;
-    if (animate && from !== v) { const el = $('bal'); const t0 = performance.now(), ms = 700 * speed(); const tick = (now) => { const k = Math.min(1, (now - t0) / ms); el.textContent = fmtBal(from + (v - from) * (1 - Math.pow(1 - k, 3))); if (k < 1) requestAnimationFrame(tick); else el.textContent = fmtBal(v); }; requestAnimationFrame(tick); }
+    if (animate && from !== v) { const el = $('bal'); const t0 = performance.now(), ms = 700 * speed(); const tick = (now) => { const k = Math.max(0, Math.min(1, (now - t0) / ms)); el.textContent = fmtBal(from + (v - from) * (1 - Math.pow(1 - k, 3))); if (k < 1) requestAnimationFrame(tick); else el.textContent = fmtBal(v); }; requestAnimationFrame(tick); }
     else $('bal').textContent = fmtBal(v);
   }
   const HC = [];
@@ -164,17 +252,52 @@
   function drawBet() { $('bet').textContent = fmt(bet()); $('betDn').disabled = st.busy || st.betIdx === 0; $('betUp').disabled = st.busy || st.betIdx === BETS.length - 1; $('buy').disabled = st.busy; $('buyFrom').textContent = 'from ' + fmt(bet() * E.CFG.buyCost.election); }
   function setBusy(b) {
     st.busy = b; $('spin').classList.toggle('run', b); $('spin').classList.toggle('idle', !b); drawBet();
+    poke();
   }
+
+  // ---------- animation power: all CSS loops pause when hidden/offscreen/docked-away; the desktop side art also pauses after 8 s with no spin or input ----------
+  const vpEl = $('vp'); let calmT = 0, shown = true;
+  function calmNow() { calmT = 0; if (!st.busy && !document.hidden && shown) vpEl.classList.add('calm'); }
+  function poke() { vpEl.classList.remove('calm'); clearTimeout(calmT); if (!st.busy) calmT = setTimeout(calmNow, 8000); }
+  function visState() { vpEl.classList.toggle('paused', document.hidden || !shown); if (document.hidden || !shown) { clearTimeout(calmT); } else poke(); }
+  document.addEventListener('visibilitychange', visState);
+  let lastPoke = 0;
+  ['pointerdown', 'pointermove', 'keydown', 'touchstart'].forEach((e) => addEventListener(e, () => { const n = performance.now(); if (n - lastPoke > 400 && !st.busy && !document.hidden && shown) { lastPoke = n; poke(); } }, { passive: true, capture: true }));
+  if (typeof IntersectionObserver === 'function') new IntersectionObserver((es) => { shown = es[es.length - 1].isIntersecting; visState(); }).observe(vpEl);
+  poke();
 
   // ---------- floats / stamps ----------
   function floatAt(x, y, html, cls) {
     const f = document.createElement('div'); f.className = 'float ' + (cls || ''); f.innerHTML = html; f.style.left = x + 'px'; f.style.top = y + 'px'; floatsEl.appendChild(f);
-    anim(f, [{ transform: 'translate(-50%,-50%) scale(.3)', opacity: 0 }, { transform: 'translate(-50%,-50%) scale(1.25)', opacity: 1, offset: 0.18 }, { transform: 'translate(-50%,-70%) scale(1)', opacity: 1, offset: 0.7 }, { transform: 'translate(-50%,-130%) scale(1)', opacity: 0 }], { duration: 1100, easing: 'ease-out' }).then(() => f.remove());
+    const T = 'translate(-50%,-50%)';
+    const kf = reduce
+      ? [{ transform: T, opacity: 0 }, { transform: T, opacity: 1, offset: 0.15 }, { transform: 'translate(-50%,-70%)', opacity: 1, offset: 0.7 }, { transform: 'translate(-50%,-130%)', opacity: 0 }]
+      : [{ transform: `${T} scale(2.6)`, opacity: 0 }, { transform: `${T} scale(.86)`, opacity: 1, offset: 0.12 }, { transform: `${T} scale(1.18)`, opacity: 1, offset: 0.22 }, { transform: `${T} scale(1)`, opacity: 1, offset: 0.32 }, { transform: 'translate(-50%,-70%) scale(1)', opacity: 1, offset: 0.7 }, { transform: 'translate(-50%,-130%) scale(1)', opacity: 0 }];
+    const gone = () => f.remove(); anim(f, kf, { duration: 1100, easing: 'ease-out' }).then(gone); setTimeout(gone, 1100 * speed() + 600);
   }
   const toast = (t, ms = 1600) => { const d = document.createElement('div'); d.className = 'toast'; d.textContent = t; stage.appendChild(d); setTimeout(() => d.remove(), ms); };
+  const STAMP_AMP = { nice: 9, tasty: 13 };
+  // small-tier banner: drops from above, squashes on impact, rebounds, settles, then lifts away
   function stamp(text, cls, ms = 1500, sub) {
     const d = document.createElement('div'); d.className = 'stamp ' + cls; d.innerHTML = `<b>${text}</b>${sub ? `<i>${sub}</i>` : ''}`; boardEl.appendChild(d);
-    anim(d, [{ transform: 'translate(-50%,-50%) scale(2.6) rotate(-14deg)', opacity: 0 }, { transform: 'translate(-50%,-50%) scale(.92) rotate(-6deg)', opacity: 1, offset: 0.2 }, { transform: 'translate(-50%,-50%) scale(1) rotate(-6deg)', opacity: 1, offset: 0.8 }, { transform: 'translate(-50%,-64%) scale(1) rotate(-6deg)', opacity: 0 }], { duration: ms, easing: 'ease-out' }).then(() => d.remove());
+    const B = 'translate(-50%,-50%)', R = 'rotate(-6deg)';
+    const kf = reduce
+      ? [{ transform: `${B} ${R}`, opacity: 0 }, { transform: `${B} ${R}`, opacity: 1, offset: 0.15 }, { transform: `${B} ${R}`, opacity: 1, offset: 0.8 }, { transform: `${B} ${R}`, opacity: 0 }]
+      : [{ transform: `translate(-50%,-380%) scale(1.5) rotate(-16deg)`, opacity: 1, easing: 'cubic-bezier(.55,0,.9,.5)' },
+        { transform: `${B} scale(1.1,.86) ${R}`, opacity: 1, offset: 0.16, easing: 'ease-out' },
+        { transform: `translate(-50%,-60%) scale(.97,1.04) ${R}`, opacity: 1, offset: 0.24, easing: 'ease-in' },
+        { transform: `${B} scale(1) ${R}`, opacity: 1, offset: 0.32 },
+        { transform: `${B} scale(1) ${R}`, opacity: 1, offset: 0.8 },
+        { transform: `translate(-50%,-64%) scale(1) ${R}`, opacity: 0 }];
+    const p = anim(d, kf, { duration: ms, easing: 'linear' });
+    const amp = STAMP_AMP[cls] || 0;
+    if (amp) setTimeout(() => {
+      if (!d.isConnected) return;
+      const [bx, by] = sOff(boardEl), cx = bx + d.offsetLeft, cy = by + d.offsetTop;
+      shk(amp, 300); FX.ring(cx, cy, { n: 1, r1: 300, w: 16, dur: 0.4 }); sfxSlam(cls === 'tasty' ? 2 : 1); bounce(amp * 0.5, true);
+      FX.burst(cx, cy + 30, { n: cls === 'tasty' ? 16 : 10, speed: 700, size: 14, shape: 'ballot', cols: ['#FDFBF7'], g: 900, up: 150, life: 0.9 });
+    }, 0.16 * ms * speed());
+    const gone = () => d.remove(); p.then(gone); setTimeout(gone, ms * speed() + 600);
   }
   const pick = (a) => a[(Math.random() * a.length) | 0];
 
@@ -186,6 +309,42 @@
   const tierOf = (x) => { const k = tierName(x), t = TIER[k]; return t ? { n: t.n, img: k, lvl: t.lvl } : null; };
   const xFmt = (x) => (x >= 100 ? Math.round(x) : x.toFixed(1).replace(/\.0$/, ''));
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  // ---------- slam helpers (turbo = lighter, reduced motion = no shake/flash/squash) ----------
+  const lite = () => (st.turbo ? 0.55 : 1);
+  const sfxSlam = (n) => { if (window.SFX && SFX.slam) SFX.slam(n); };
+  const shk = (amp, dur, o) => FX.shake(amp * lite(), dur * (st.turbo ? 0.6 : 1), o);
+  const SQ = (sx, sy, y) => `translateY(${y || 0}px) scale(${sx},${sy})`;
+  let lastBounce = 0;
+  function bounce(px, force) {
+    const now = performance.now();
+    if (reduce || (!force && now - lastBounce < 80 * speed())) return;
+    lastBounce = now;
+    anim(boardEl, [{ transform: 'translateY(0)' }, { transform: `translateY(${(px * lite()).toFixed(1)}px)`, offset: 0.35 }, { transform: 'translateY(0)' }], { duration: 200, composite: 'add' });
+  }
+  function dust(c, r, heavy) {
+    const [x, y] = cellPt(c, r), by = y + PY / 2 - 14, n = (heavy ? 5 : 3) * (st.turbo ? 0.6 : 1);
+    const o = { n, speed: heavy ? 340 : 240, size: heavy ? 15 : 10, up: 10, g: 120, drag: 3, life: 0.42, shape: 'foam', cols: ['#FDFBF7', '#DDD5C4'], spread: 0.3 };
+    FX.burst(x - 36, by, { ...o, ang: Math.PI }); FX.burst(x + 36, by, { ...o, ang: 0 });
+  }
+  // a symbol hits its cell: overshoot + squash/stretch on the image, dust puffs at its base; scatter/wild land heavier
+  function landFx(el, c, r, o = {}) {
+    const heavy = !!o.heavy;
+    dust(c, r, heavy);
+    if (heavy) { FX.ring(...cellPt(c, r), { n: 1, r1: 230, w: 18, c: '#FDFBF7', dur: 0.45 }); FX.flash(90, '#FFF4CF', 0.3); shk(8, 340); sfxSlam(2); bounce(9, true); }
+    const img = el.isConnected && el.querySelector('img'); if (reduce || !img) return;
+    const O = { transformOrigin: '50% 100%' };
+    anim(img, heavy
+      ? [{ ...O, transform: SQ(1.3, 0.6) }, { ...O, transform: SQ(0.9, 1.18, -26), offset: 0.38 }, { ...O, transform: SQ(1.08, 0.94), offset: 0.66 }, { ...O, transform: 'none' }]
+      : [{ ...O, transform: SQ(1.16, 0.76) }, { ...O, transform: SQ(0.96, 1.08, -12), offset: 0.4 }, { ...O, transform: SQ(1.03, 0.98), offset: 0.7 }, { ...O, transform: 'none' }], { duration: heavy ? 420 : 300, easing: 'ease-out' });
+  }
+  // freeze frame: pause running animations (not the camera shake or flashes), then resume
+  function freeze(ms) {
+    if (reduce) return;
+    const anims = stage.getAnimations({ subtree: true }).filter((a) => a.playState === 'running' && a.effect && a.effect.target && a.effect.target.id !== 'shake' && !a.effect.target.classList.contains('flash'));
+    anims.forEach((a) => a.pause());
+    setTimeout(() => anims.forEach((a) => { try { a.play(); } catch (e) { /* gone */ } }), Math.max(30, ms * speed()));
+  }
 
   // ---------- drop an initial grid ----------
   function hitStop(ms) {
@@ -201,7 +360,7 @@
     const outs = [];
     for (const [id, el] of els) if (!keepIds.has(id)) {
       const m = /translate\(([-\d.]+)px,\s*([-\d.]+)px\)/.exec(el.style.transform); const x = +m[1], y = +m[2];
-      outs.push(anim(el, [{ transform: `translate(${x}px,${y}px)`, opacity: 1 }, { transform: `translate(${x}px,${y + 700}px)`, opacity: 0 }], { duration: 300, delay: (x / PX) * 18 + (4 - y / PY) * 14, easing: 'cubic-bezier(.5,0,.9,.6)' }).then(() => { el.remove(); els.delete(id); }));
+      outs.push(anim(el, [{ transform: `translate(${x}px,${y}px)`, opacity: 1 }, { transform: `translate(${x}px,${y + 700}px)`, opacity: 0 }], { duration: 300, delay: (x / PX) * 18 + (4 - y / PY) * 14, easing: 'cubic-bezier(.5,0,.9,.6)' }).then(() => { el.remove(); if (els.get(id) === el) els.delete(id); }));
     }
     // the old board is still falling away while the new symbols already start to drop in
     if (outs.length) await wait(140);
@@ -221,16 +380,19 @@
         el.style.opacity = 0;
         const dur = 380, delay = colDelay[c] + (ROWS - 1 - r) * 28;
         landings.push(anim(el, [{ transform: `translate(${x}px,${y0}px)`, opacity: 1 }, { transform: `translate(${x}px,${y}px)`, opacity: 1 }], { duration: dur, delay, easing: 'cubic-bezier(.5,0,.9,.55)', fill: 'backwards' }).then(() => {
-          el.style.opacity = ''; if (cell.s === 'S') { el.classList.add('scat'); FX.burst(...cellPt(c, r), { n: 8, speed: 380, size: 12, cols: SYMCOL.S, g: 300, life: .7, shape: 'star' }); } if (!reduce) anim(el.querySelector('img'), [{ transform: 'scale(1.06,.86)', transformOrigin: '50% 100%' }, { transform: 'scale(.97,1.04)', transformOrigin: '50% 100%', offset: .55 }, { transform: 'none', transformOrigin: '50% 100%' }], { duration: 190 });
+          el.style.opacity = ''; if (cell.s === 'S') { el.classList.add('scat'); FX.burst(...cellPt(c, r), { n: 8, speed: 380, size: 12, cols: SYMCOL.S, g: 300, life: .7, shape: 'star' }); }
+          landFx(el, c, r, { heavy: cell.s === 'S' || cell.s === 'W' });
         }));
       }
     }
     // sound + anticipation choreography
     for (let c = 0; c < COLS; c++) {
+      setTimeout(() => SFX.colDrop(c), colDelay[c] * speed());
       setTimeout(() => {
         let heavy = false; const before = scSeen; for (let r = 0; r < ROWS; r++) if (grid[c][r].s === 'S') { heavy = true; scSeen++; SFX.scatter(scSeen); }
-        SFX.land(heavy);
-        if (before < 3 && scSeen >= 3) hitStop(250);
+        SFX.land(heavy, c);
+        bounce(heavy ? 8 : 3.5, heavy);
+        if (before < 3 && scSeen >= 3) { for (let cc = 0; cc < COLS; cc++) for (let rr = 0; rr < ROWS; rr++) if (grid[cc][rr].s === 'S') FX.ring(...cellPt(cc, rr), { n: 2, r1: 280 }); hitStop(250); }
         for (let r = 0; r < ROWS; r++) if (grid[c][r].s === 'W' && !keepIds.has(grid[c][r].id)) { if (!wildLanded) { wildLanded = true; SFX.wild(); } }
       }, (colDelay[c] + 380 + 40) * speed());
     }
@@ -243,7 +405,7 @@
     await Promise.all([...landings, ...outs]);
     stage.classList.remove('anticip'); for (const id of teaseIds) els.get(id)?.classList.remove('tease');
     reconcile(grid);
-    if (!isBonus && script.scatters === 2) { pose('shock', 1500); say('nearMiss'); if (PJ) PJ.sfx('nearMiss'); }
+    if (!isBonus && script.scatters === 2) { pose('shock', 1500); say('nearMiss'); if (PJ) SFX.nearMiss(); }
   }
 
   // ---------- a step (one tumble) ----------
@@ -254,12 +416,19 @@
   };
   async function playStep(step, idx, runWin, isBonus) {
     const inCl = new Set(); for (const k of step.clusters) for (const [c, r] of k.cells) inCl.add(c + ',' + r);
-    for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) { const el = els.get(cur[c][r].id); if (!el) continue; el.classList.add(inCl.has(c + ',' + r) ? 'hit' : 'dim'); }
+    // winners punch together in a stamp-slam, losers dim
+    for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) {
+      const el = els.get(cur[c][r].id); if (!el) continue; const hit = inCl.has(c + ',' + r);
+      el.classList.add(hit ? 'hit' : 'dim');
+      if (hit && !reduce) anim(el.querySelector('img'), [{ transform: 'scale(1)' }, { transform: 'scale(1.38) rotate(-3deg)', offset: 0.2 }, { transform: 'scale(.88) rotate(1.5deg)', offset: 0.44 }, { transform: 'scale(1.16)', offset: 0.68 }, { transform: 'scale(1.08)' }], { duration: 420, easing: 'ease-out' });
+    }
     SFX.chime(idx);
-    const sw = step.stepWin, b = bet();
+    const sw = step.stepWin, b = bet(), nHit = inCl.size;
+    shk(Math.min(16, 4 + nHit * 0.5), 300); bounce(4 + Math.min(4, sw), true); sfxSlam(sw >= 10 ? 3 : sw >= 2 ? 2 : 1);
     for (const k of step.clusters) {
       let sx = 0, sy = 0; for (const [c, r] of k.cells) { sx += c; sy += r; }
       const x = (sx / k.cells.length + .5) * PX, y = (sy / k.cells.length + .5) * PY;
+      FX.ring(x + HOLE.x + sOff(boardEl)[0], y + HOLE.y + sOff(boardEl)[1], { n: 1, r1: 110 + k.cells.length * 14, w: 14, c: '#FFE9A8', dur: 0.4 });
       floatAt(Math.min(HOLE.w - 100, Math.max(100, x)), y, `<span>+${fmt(k.win * b)}</span>${k.mult > 1 ? `<b>x${k.mult}</b>` : ''}`);
       for (const [c, r] of k.cells.slice(0, 3)) FX.burst(...cellPt(c, r), { n: 3, speed: 260, size: 11, cols: SYMCOL[k.sym], g: 400, life: .6 });
       if ((runWin.lvl || 0) >= 2 || sw >= 10) FX.lightning(chain(k.cells));
@@ -274,10 +443,11 @@
     const dead = [];
     for (const key of step.killed) {
       const [c, r] = key.split(',').map(Number), cell = cur[c][r], el = els.get(cell.id); if (!el) continue;
-      FX.burst(...cellPt(c, r), { n: 9, speed: 560, size: 15, cols: SYMCOL[cell.s] || SYMCOL.W, up: 160 });
-      dead.push(anim(el, [{ transform: el.style.transform + ' scale(1)', opacity: 1 }, { transform: el.style.transform + ' scale(1.25)', opacity: 1, offset: .35 }, { transform: el.style.transform + ' scale(0)', opacity: 0 }], { duration: 260, easing: 'ease-in' }).then(() => { el.remove(); els.delete(cell.id); }));
+      FX.burst(...cellPt(c, r), { n: 6, speed: 560, size: 15, cols: SYMCOL[cell.s] || SYMCOL.W, up: 160 });
+      FX.burst(...cellPt(c, r), { n: st.turbo ? 3 : 6, speed: 520, size: 17, shape: 'ballot', cols: ['#FDFBF7'], g: 800, up: 220, life: 0.95, drag: 1.4 });
+      const t0 = el.style.transform;
+      dead.push(anim(el, [{ transform: `${t0} scale(1) rotate(0deg)`, opacity: 1 }, { transform: `${t0} scale(1.32) rotate(5deg)`, opacity: 1, offset: .3 }, { transform: `${t0} scale(0) rotate(-16deg)`, opacity: 0 }], { duration: 280, easing: 'ease-in' }).then(() => { el.remove(); if (els.get(cell.id) === el) els.delete(cell.id); }));
     }
-    if (st.turbo === false && sw >= 1) FX.shake(Math.min(14, 3 + step.clusters.reduce((a, k) => a + k.size, 0) * 0.5), 260);
     // growth
     for (const g of step.grown) {
       const el = els.get(cur[g.c][g.r].id); if (!el) continue;
@@ -290,7 +460,8 @@
         floatAt(Math.min(HOLE.w - 100, Math.max(100, (g.c + .5) * PX)), (g.r + .5) * PY - 40, `<b>${g.from}x \u2192 ${g.to}x</b>`);
         FX.flash(90, '#FFE9A8', 0.35);
       }
-      anim(el.querySelector('img'), [{ transform: 'scale(1)' }, { transform: 'scale(1.5)', offset: .35 }, { transform: 'scale(1)' }], { duration: 480, easing: 'ease-out' });
+      shk(isBonus ? 9 : 6, 260); sfxSlam(2); FX.ring(...cellPt(g.c, g.r), { n: 1, r1: 200, w: 16, dur: 0.45 });
+      if (!reduce) anim(el.querySelector('img'), [{ transform: 'scale(1)' }, { transform: 'scale(1.7) rotate(-6deg)', offset: .3 }, { transform: 'scale(.88)', offset: .56 }, { transform: 'scale(1.1)', offset: .78 }, { transform: 'scale(1)' }], { duration: 560, easing: 'ease-out' });
       anim(m, [{ transform: 'translate(-50%,-50%) scale(1)' }, { transform: 'translate(-50%,-50%) scale(1.7)', offset: .35 }, { transform: 'translate(-50%,-50%) scale(1)' }], { duration: 480 });
     }
     clearFx();
@@ -302,13 +473,14 @@
       const el = els.get(f.id); if (!el) continue;
       const [x, y0] = pos(f.c, f.from), [, y1] = pos(f.c, f.to);
       el.style.transform = tf(f.c, f.to);
-      moves.push(anim(el, [{ transform: `translate(${x}px,${y0}px)` }, { transform: `translate(${x}px,${y1}px)` }], { duration: 150 + 55 * (f.to - f.from), easing: 'cubic-bezier(.5,0,.9,.6)' }));
+      const sy = step.grid[f.c][f.to].s;
+      moves.push(anim(el, [{ transform: `translate(${x}px,${y0}px)` }, { transform: `translate(${x}px,${y1}px)` }], { duration: 150 + 55 * (f.to - f.from), easing: 'cubic-bezier(.5,0,.9,.6)' }).then(() => { landFx(el, f.c, f.to, { heavy: sy === 'S' || sy === 'W' }); bounce(3); }));
     }
     for (const s of step.spawn) {
       const el = mk(s.cell, s.c, s.r), [x, y] = pos(s.c, s.r);
       if (s.fromTop) {
         const n = cnt[s.c], y0 = (s.r - n) * PY - 20;
-        moves.push(anim(el, [{ transform: `translate(${x}px,${y0}px)` }, { transform: `translate(${x}px,${y}px)` }], { duration: 170 + 55 * n, delay: s.order * 22, easing: 'cubic-bezier(.5,0,.9,.6)', fill: 'backwards' }));
+        moves.push(anim(el, [{ transform: `translate(${x}px,${y0}px)` }, { transform: `translate(${x}px,${y}px)` }], { duration: 170 + 55 * n, delay: s.order * 22, easing: 'cubic-bezier(.5,0,.9,.6)', fill: 'backwards' }).then(() => { landFx(el, s.c, s.r, { heavy: s.cell.s === 'S' || s.cell.s === 'W' }); bounce(3); }));
       } else {
         moves.push(anim(el, [{ transform: `translate(${x}px,${y}px) scale(.2)`, opacity: 0 }, { transform: `translate(${x}px,${y}px) scale(1)`, opacity: 1 }], { duration: 260, easing: 'ease-out', fill: 'backwards' }));
       }
@@ -321,6 +493,7 @@
 
   // ---------- one spin script ----------
   async function replay(script, runWin, isBonus) {
+    FX.settle(0.35);
     await dropInitial(script, isBonus);
     await wait(100);
     for (let i = 0; i < script.steps.length; i++) await playStep(script.steps[i], i, runWin, isBonus);
@@ -340,7 +513,7 @@
 
   async function bonusIntro(kind, spins) {
     const Ls = kind === 'landslide';
-    SFX.sting(); FX.ballots(90); FX.ring(540, 760, { n: 3, r1: 520, w: 22 }); pose('shock', 3000); say('bonusStart');
+    SFX.bonusStart(); FX.ballots(90); FX.ring(540, 760, { n: 3, r1: 520, w: 22 }); pose('shock', 3000); say('bonusStart');
     const p = modal(`<div class="scene"><img class="ttl" src="assets/img/title_stack.webp" alt="">
       <h2 ${Ls ? 'class="sm"' : ''}>${Ls ? 'Landslide' : 'Recount'}</h2><h3><b class="n">${spins}</b> free spins</h3>
       <p>${Ls ? 'A wild is already planted. Wilds stick and double every time they win.' : 'Wilds stick to the board and double every time they win. Dump & Count boxes add spins.'}</p>
@@ -352,7 +525,7 @@
 
   // ---------- PingJuice win tiers ----------
   const PJ = window.PingJuice;
-  if (PJ) PJ.config.stage = '#stage';
+  if (PJ) { PJ.config.stage = '#stage'; PJ.sfx = () => false; } // one audio engine: SFX owns every sound in this game
   if (!window.Money) window.Money = { fmt: (n) => fmt(n) };
   function juiceTier(x, maxed) { return maxed || x >= 1000 ? 'jackpot' : x >= 100 ? 'mega' : x >= 20 ? 'big' : x >= 5 ? 'nice' : null; }
   function juiceWin(x, amt, maxed) {
@@ -368,34 +541,48 @@
   }
   async function bigWin(totalX, o = {}) {
     const t = tierOf(totalX); if (!t) return;
-    const fast = !!o.fast, amt = Math.round(totalX * bet()), lvl = t.lvl, tm = st.turbo ? 0.45 : 1;
+    const fast = !!o.fast, amt = o.to != null ? Math.round(o.to) : Math.round(totalX * bet()), from = o.from != null ? Math.round(o.from) : 0, lvl = t.lvl, tm = st.turbo ? 0.45 : 1;
     const logx = totalX >= 100 ? Math.log10(totalX / 100) : 0, mul = 1 + 0.5 * logx;
     const [bx, by] = sOff(boardEl), cx = bx + 500, cy = by + 440;
     const bg = document.createElement('div'); bg.id = 'tierbg'; bg.style.cssText = `top:${by}px;height:${boardEl.offsetHeight}px`;
     bg.innerHTML = `<div class="glow"></div><div class="burst"></div><div class="rays"></div>`;
     const box = document.createElement('div'); box.id = 'tier'; box.style.cssText = `top:${by}px;height:${boardEl.offsetHeight}px`;
-    box.innerHTML = `<div class="in"><img class="banner" src="assets/img/banner_${t.img}.webp" alt="${t.n}"><div class="xx">x${xFmt(totalX)}</div><div class="amt t${lvl} shk">0</div></div>`;
+    box.innerHTML = `<div class="in"><img class="banner" src="assets/img/banner_${t.img}.webp" alt="${t.n}"><div class="xx">x${xFmt(totalX)}</div>${from > 0 ? '<div class="tot">TOTAL WIN</div>' : ''}<div class="amt t${lvl} shk">${fmt(from)}</div></div>`;
+    box.style.setProperty('--tm', tm);
     stage.append(bg, box); stage.classList.add('bw');
+    let iv = 0;
+    try {
     SFX.big(lvl); SFX.duck(true); if (lvl >= 3 && !fast) SFX.drop();
+    // the banner drops from above; at impact: freeze frame, camera shake scaled by tier, flash, shockwave, paper burst
+    const IMPACT = 0.52 * 620 * tm;
+    setTimeout(() => {
+      if (!box.isConnected) return;
+      const fz = 60 + lvl * 35;
+      FX.flash(140, '#fff', 0.7); FX.ring(cx, cy, { n: 2, r1: 560 + lvl * 90, w: 24, dur: 0.55 }); sfxSlam(lvl + 1); bounce(10 + lvl * 2, true);
+      FX.burst(cx, cy + 40, { n: Math.round((18 + lvl * 8) * lite()), speed: 1000, size: 17, shape: 'ballot', cols: ['#FDFBF7'], g: 900, up: 250, life: 1.1 });
+      freeze(fz);
+      setTimeout(() => FX.shake(Math.min(46, 16 + lvl * 6 + 6 * logx) * lite(), (520 + lvl * 90 + 200 * logx) * (st.turbo ? 0.6 : 1), { big: lvl >= 3 }), reduce ? 0 : fz * speed());
+    }, IMPACT);
     pose('cheer', 4200 + lvl * 500, { erupt: true }); say('bigWin');
     const [dx, dy] = sOff(dump);
-    FX.flash(170, '#fff', 0.85);
+    FX.flash(120, '#fff', 0.4);
     FX.eruption(dx + dump.offsetWidth * 0.5, dy + dump.offsetHeight * 0.3, [60, 100, 160, 260][lvl - 1] * mul);
     FX.radial(cx, cy, (28 + lvl * 14) * mul, { speed: 1500 });
     FX.rain([40, 80, 140, 240][lvl - 1] * mul); FX.confetti((30 + lvl * 25) * mul); FX.cannon(-1, (20 + lvl * 12) * mul); FX.cannon(1, (20 + lvl * 12) * mul);
-    FX.shake(Math.min(46, 14 + lvl * 5 + 6 * logx), 500 + lvl * 80 + 200 * logx, { big: lvl >= 3 });
     if (lvl >= 2) { const [mx, my] = mugPt(); FX.foam(mx, my, (40 + lvl * 20) * mul, { ang: -Math.PI / 2 + 0.25 }); setTimeout(() => FX.foam(mx, my, 30 * mul, { ang: -Math.PI / 2 + 0.25 }), 350 * tm); }
     const a = box.querySelector('.amt');
-    a.textContent = fmt(amt); const base = parseFloat(getComputedStyle(a).fontSize), w = a.scrollWidth; if (w > 920) a.style.fontSize = (base * 920 / w).toFixed(1) + 'px'; a.textContent = '0';
-    let tk = 0; const iv = setInterval(() => SFX.tick(tk++), 55 * tm);
+    a.textContent = fmt(amt); const base = parseFloat(getComputedStyle(a).fontSize), w = a.scrollWidth; if (w > 920) a.style.fontSize = (base * 920 / w).toFixed(1) + 'px'; a.textContent = fmt(from);
+    let tk = 0; iv = setInterval(() => SFX.tick(tk++), 55 * tm);
     const D = (fast ? 1600 : Math.min(12000, [2000, 3000, 4200, 6000][lvl - 1] + (totalX >= 1000 ? 2000 * Math.log10(totalX / 100) : 0))) * tm;
     const t0 = performance.now(); let tapAt = st.tap;
     const skipped = await new Promise((res) => {
       const tick = (now) => {
         if (now - t0 < 450) tapAt = st.tap;
-        const sk = st.tap !== tapAt, k = sk ? 1 : Math.min(1, (now - t0) / D);
+        const sk = st.tap !== tapAt, k = sk ? 1 : Math.max(0, Math.min(1, (now - t0) / D));
         const e = k < 0.85 ? (k / 0.85) * 0.8 : 0.8 + 0.2 * (1 - Math.pow(1 - (k - 0.85) / 0.15, 3));
-        a.textContent = fmt(amt * (k >= 1 ? 1 : e));
+        const v = from + (amt - from) * (k >= 1 ? 1 : e);
+        a.textContent = fmt(v);
+        if (o.meter) { countTok++; st.win = v; $('win').textContent = fmt(v); }
         if (k < 1) requestAnimationFrame(tick); else res(sk);
       };
       requestAnimationFrame(tick);
@@ -405,15 +592,17 @@
     SFX.coin(); SFX.clink(lvl); SFX.cheer(lvl); FX.burst(cx, cy, { n: 40, speed: 900, size: 18, up: 300, shape: 'star' }); FX.rain(20 + lvl * 10); FX.flash(120, '#FFE9A8', 0.5);
     a.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.12)' }, { transform: 'scale(1)' }], { duration: 360 });
     await holdUntilTap((fast ? 700 : skipped ? 900 : 1200) * tm, 350);
-    SFX.duck(false);
-    box.style.transition = bg.style.transition = 'opacity .35s'; box.style.opacity = bg.style.opacity = 0; await sleep(350); box.remove(); bg.remove(); stage.classList.remove('bw');
+    box.style.transition = bg.style.transition = 'opacity .35s'; box.style.opacity = bg.style.opacity = 0; await sleep(350);
+    } finally {
+      clearInterval(iv); SFX.duck(false); box.remove(); bg.remove(); stage.classList.remove('bw'); FX.settle(0.4);
+    }
     st.skip = false; pose('idle');
   }
   // sub-10x wins: stamp banner + proportional juice (non-blocking)
   function smallTier(x) {
     const k = tierName(x); if (k !== 'tasty' && k !== 'nice') return false;
     stamp(pick(MINI[k]), k, k === 'tasty' ? 1700 : 1400, `x${xFmt(x)}`);
-    if (k === 'tasty') { FX.confetti(35); FX.cannon(-1, 14); FX.cannon(1, 14); FX.shake(12, 420); SFX.cheer(0); } else { FX.rain(18); FX.shake(9, 320); }
+    if (k === 'tasty') { FX.confetti(35); FX.cannon(-1, 14); FX.cannon(1, 14); FX.shake(12, 420); SFX.tasty(); } else { FX.rain(18); FX.shake(9, 320); SFX.nice(); }
     SFX.coin(); SFX.clink(2); pose('hype', 1800); say(k);
     return true;
   }
@@ -466,9 +655,9 @@
     if (st.busy) { if (mode !== 'spin') st.queued = mode; else st.skip = true; return; }
     const b = bet(), costX = mode === 'buy-election' ? E.CFG.buyCost.election : mode === 'buy-landslide' ? E.CFG.buyCost.landslide : 1, cost = b * costX;
     if (avail() < cost) { toast(mode === 'spin' ? `Not enough ${unitWord()}. Lower your bet.` : `Not enough ${unitWord()} for that bonus.`); st.auto = false; $('auto').classList.remove('on'); return; }
-    SFX.init(); setBusy(true); st.skip = false;
+    SFX.init(); setBusy(true); st.skip = false; FX.clear(); sweepCells();
     setBal(st.bal - cost, true); setWin(0, false); SFX.spin(); pose('idle');
-    if (mode === 'spin') { if (Math.random() < 0.55) say('spin'); } else say('buy');
+    if (mode === 'spin') { if (Math.random() < 0.55) say('spin'); } else { say('buy'); SFX.buy(); }
     let res, srvTotal = null;
     if (money.live) {
       try { const p = await serverRound(mode, b); res = p.res; srvTotal = p.total; }
@@ -501,7 +690,7 @@
       if (!res.bonus && total > 0) {
         st.streak = 0; st.lastLose = false;
         juiceTier_ = juiceWin(res.win, total, false);
-        if (tierOf(res.win)) { try { await bigWin(res.win, { onCount: credit }); } finally { credit(); } }
+        if (tierOf(res.win)) { try { await bigWin(res.win, { to: total, meter: true, onCount: credit }); } finally { credit(); } }
         else { await setWin(total, false); credit(); SFX.coin(); if (!smallTier(res.win)) { SFX.clink(res.win >= 1 ? 2 : 0); pose('hype', 1500); if (Math.random() < 0.8) say('smallWin'); } }
       } else if (res.bonus) { await setWin(total, false); credit(); }
       else {
@@ -511,7 +700,7 @@
         if (res.base && res.base.scatters === 2) quip = true;
         else if (four) {
           for (const [c, r] of four) els.get(cur[c][r].id)?.classList.add('oneshort');
-          setTimeout(() => clearFx(), 700 * speed()); say('oneShort'); SFX.slideWhistle(false, 0); quip = true;
+          setTimeout(() => clearFx(), 700 * speed()); say('oneShort'); SFX.oneShort(); quip = true;
           if (st.streak % 6 === 0) st.streak = 0;
         } else if (st.streak % 6 === 0) { pose(['pass', 'drink', 'shock'][st.poseRot++ % 3], 1800); say('loseStreak'); SFX.slideWhistle(false, 0); quip = true; }
         else if (!st.lastLose && Math.random() < 0.45) { const dr = Math.random() < 0.5; pose(dr ? 'drink' : 'pass', 1200); say('lose'); if (dr) SFX.hic(); quip = true; }
@@ -534,24 +723,24 @@
     const rib = () => { $('ribL').textContent = `${name} ${spinNo}/${totalSpins}`; $('ribR').textContent = `${Math.max(0, totalSpins - spinNo)} left`; };
     for (const sp of bn.spins) {
       spinNo++; rib(); spill(spinNo); say('bonusSpin');
-      SFX.spin();
-      const bt = tierOf(sp.win); run.lvl = bt ? bt.lvl : 0; run.hold = !!bt;
+      SFX.spin(true);
+      const bt = tierOf(sp.win), x0 = run.x; run.lvl = bt ? bt.lvl : 0; run.hold = !!bt;
       await replay(sp, run, true);
       run.hold = false;
-      if (bt) await bigWin(sp.win, { fast: true, onCount: () => setWin(run.x * b, true, 500) });
+      if (bt) await bigWin(sp.win, { fast: true, from: x0 * b, to: run.x * b, meter: true, onCount: () => setWin(run.x * b, false) });
       else { await setWin(run.x * b, false); smallTier(sp.win); }
       run.lvl = 0;
       if (sp.retrigger) {
         totalSpins += sp.retrigger; rib();
         for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) if (sp.final[c][r].s === 'S') els.get(sp.final[c][r].id)?.classList.add('tease');
-        SFX.scatter(sp.scatters); SFX.fanfare(); SFX.slideWhistle(true, 0.2); FX.ballots(60); for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) if (sp.final[c][r].s === 'S') FX.ring(...cellPt(c, r), { n: 2, r1: 200 }); FX.shake(20, 600); FX.flash(120, '#FFE9A8', 0.6); pose('cheer', 1800);
+        SFX.scatter(sp.scatters); SFX.retrigger(); FX.ballots(60); for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) if (sp.final[c][r].s === 'S') FX.ring(...cellPt(c, r), { n: 2, r1: 200 }); FX.shake(20, 600); FX.flash(120, '#FFE9A8', 0.6); pose('cheer', 1800);
         stamp(`+${sp.retrigger} SPINS`, 'retrig', 1500);
         await wait(1500); clearFx();
       }
       await wait(160);
     }
     const t = tierOf(res.win);
-    SFX.fanfare(); SFX.cheer(t ? t.lvl : 2); SFX.clink(2); FX.ballots(120); FX.ring(540, 800, { n: 3, r1: 600, w: 26 }); pose('cheer', 5000, { erupt: true }); say('bonusEnd'); votedStamp();
+    SFX.bonusEnd(t ? t.lvl : 2); FX.ballots(120); FX.ring(540, 800, { n: 3, r1: 600, w: 26 }); pose('cheer', 5000, { erupt: true }); say('bonusEnd'); votedStamp();
     const amt = Math.round(res.win * b);
     { const jt = juiceTier(res.win, !!res.maxed); if (PJ && (jt === 'big' || jt === 'mega' || jt === 'jackpot')) PJ.screenShake(jt === 'big' ? 0.7 : 1.2, 450); }
     const p = modal(`<div class="scene out"><img class="ttl" src="assets/img/title_stack.webp" alt="">
@@ -571,13 +760,19 @@
   // ---------- controls ----------
   $('spin').addEventListener('click', () => { SFX.init(); st.tap++; if (st.busy) { st.skip = true; return; } play('spin'); });
   $('board').addEventListener('click', () => { st.tap++; if (st.busy) st.skip = true; });
-  $('betDn').addEventListener('click', () => { if (st.busy) return; st.betIdx = Math.max(0, st.betIdx - 1); SFX.click(); drawBet(); });
-  $('betUp').addEventListener('click', () => { if (st.busy) return; st.betIdx = Math.min(BETS.length - 1, st.betIdx + 1); SFX.click(); drawBet(); });
-  $('turbo').addEventListener('click', () => { st.turbo = !st.turbo; $('turbo').classList.toggle('on', st.turbo); SFX.click(); });
+  $('betDn').addEventListener('click', () => { if (st.busy) return; st.betIdx = Math.max(0, st.betIdx - 1); SFX.bet(-1); drawBet(); });
+  $('betUp').addEventListener('click', () => { if (st.busy) return; st.betIdx = Math.min(BETS.length - 1, st.betIdx + 1); SFX.bet(1); drawBet(); });
+  $('turbo').addEventListener('click', () => { st.turbo = !st.turbo; $('turbo').classList.toggle('on', st.turbo); SFX.turbo(st.turbo); });
   $('auto').addEventListener('click', () => { SFX.init(); st.auto = !st.auto; $('auto').classList.toggle('on', st.auto); SFX.click(); if (st.auto && !st.busy) play('spin'); });
-  const sndUi = (on) => { $('sndw').style.display = on ? '' : 'none'; $('sndx').style.display = on ? 'none' : ''; $('snd').classList.toggle('on', on); $('snd').setAttribute('aria-pressed', on ? 'true' : 'false'); $('snd').setAttribute('aria-label', on ? 'Sound on' : 'Sound off'); $('snd').title = on ? 'Sound on' : 'Sound off'; };
-  sndUi(SFX.isOn());
-  $('snd').addEventListener('click', () => { SFX.init(); const on = SFX.toggle(); if (PJ) PJ.setSfx(on); sndUi(on); });
+  const postMusicPref = () => { if (window.parent !== window) window.parent.postMessage({ type: 'bender-music-pref', value: SFX.isMusicOn() }, '*'); };
+  const swUi = (id, on, name, x, w) => { const b = $(id); if (x) x.style.display = on ? 'none' : ''; if (w) w.style.display = on ? '' : 'none'; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); b.setAttribute('aria-label', name + (on ? ' on' : ' off')); b.title = name + (on ? ' on' : ' off'); };
+  const sndUi = (on) => swUi('snd', on, 'Sound effects', $('sndx'), $('sndw'));
+  const musUi = (on) => swUi('mus', on, 'Music', $('musx'), null);
+  sndUi(SFX.isOn()); musUi(SFX.isMusicOn());
+  $('snd').addEventListener('click', () => { SFX.init(); const on = SFX.toggle(); if (PJ) PJ.setSfx(on); sndUi(on); if (on) SFX.click(); });
+  $('mus').addEventListener('click', () => { SFX.init(); const on = SFX.toggleMusic(); musUi(on); postMusicPref(); });
+  // shell/lobby radio can flip the slot's music switch; the slot reports user flips back as 'bender-music-pref'
+  addEventListener('message', (ev) => { const m = ev.data; if (!m || m.type !== 'music-enabled' || (window.parent !== window && ev.source !== window.parent)) return; SFX.setMusicEnabled(!!m.value); musUi(SFX.isMusicOn()); });
   $('pigeon').addEventListener('click', () => { SFX.init(); SFX.hic(); say('idle'); });
   stage.addEventListener('click', (e) => { if (e.target.closest('#tier')) st.tap++; });
   addEventListener('keydown', (e) => { const sc = ov.querySelector('.scrim'); if (e.key === 'Escape' && sc) { e.stopImmediatePropagation(); sc._done?.('x'); } });
@@ -597,7 +792,7 @@
   $('info').addEventListener('click', async () => {
     if (st.busy) return; SFX.init(); SFX.click();
     const C = E.CFG, P = C.pay, f = (n) => (n >= 100 ? Math.round(n) : n >= 10 ? n.toFixed(1).replace(/\.0$/, '') : n.toFixed(2).replace(/0$/, ''));
-    const rows = ['seal', 'phn', 'cap', 'meg', 'yrd', 'bal', 'stk', 'pen'].map((s) => `<div><img src="assets/img/${s}.webp" alt=""><span>${NAMES[s]}<small>5: ${f(P[s][0])}x<br>10+: ${f(P[s][5])}x<br>20+: ${f(P[s][8])}x</small></span></div>`).join('');
+    const rows = ['seal', 'phn', 'cap', 'meg', 'yrd', 'bal', 'stk', 'pen'].map((s) => `<div><img src="assets/img/sym/${s}.webp" alt=""><span>${NAMES[s]}<small>5: ${f(P[s][0])}x<br>10+: ${f(P[s][5])}x<br>20+: ${f(P[s][8])}x</small></span></div>`).join('');
     const tiers = E.TIERS.slice().reverse().filter((t) => t[1] !== 'nice' && t[1] !== 'tasty').map(([x, k], i, a) => `${TIER_LABEL[k]} ${x}x${i === a.length - 1 ? '+' : ''}`).join(', ');
     await modal(`<div class="card" style="width:960px;padding:36px 40px 40px"><h2 style="font-size:64px">How it plays</h2>
       <p style="margin-top:10px;font-size:26px">Match 5 or more of the same symbol touching up, down, left or right. Winners vanish and new symbols tumble in until nothing pays.</p>
@@ -638,17 +833,16 @@
   function applyWallet(w) {
     if (!w) return;
     if (typeof w.play === 'number') money.wallet.play = w.play;
-    if (typeof w.ledgerNet === 'number') money.wallet.ledgerNet = w.ledgerNet;
-    if (typeof w.ledgerLimit === 'number') money.wallet.ledgerLimit = w.ledgerLimit;
+    if (typeof w.chips === 'number') money.wallet.chips = w.chips;
     if (money.live && !st.busy) setBal(walletBal(), false);
   }
   function modeUi() {
     const bar = $('modebar'); if (!bar) return;
     bar.dataset.state = money.live ? money.mode : 'practice';
     bar.querySelectorAll('button').forEach((b) => b.classList.toggle('on', money.live && b.dataset.m === money.mode));
-    $('modenote').textContent = !money.live ? 'Practice (no wallet)' : money.mode === 'ledger' ? 'Ledger $ is a friendly tally. Settle up yourselves.' : 'Pretend money.';
-    $('balM').querySelector('.lbl').innerHTML = '&#9733; ' + (!money.live ? 'VOTES' : money.mode === 'ledger' ? 'NET' : 'BALANCE');
-    const fineTxt = !money.live ? 'Practice (no wallet). Free play only.' : (window.BENDER_FOOTER || 'No deposits, no payouts. Ledger $ is a friendly tally.');
+    $('modenote').textContent = !money.live ? 'Practice (no wallet)' : money.mode === 'chips' ? 'Real poker chips from your bank.' : 'Pretend money.';
+    $('balM').querySelector('.lbl').innerHTML = '&#9733; ' + (!money.live ? 'VOTES' : money.mode === 'chips' ? 'CHIPS' : 'BALANCE');
+    const fineTxt = !money.live ? 'Practice (no wallet). Free play only.' : (window.BENDER_FOOTER || 'No deposits, no payouts. Chips are your poker bank.');
     [$('fine'), $('dis')].forEach((el) => { if (el) el.textContent = fineTxt; });
   }
   function setBets(list) {
@@ -656,8 +850,9 @@
     st.betIdx = Math.min(BETS.length - 1, Math.max(0, BETS.indexOf(100) >= 0 ? BETS.indexOf(100) : 3));
   }
   function goLive(m) {
-    if (!money.live) { money.live = true; fmt = dollars; setBets(Array.isArray(m.bets) && m.bets.length ? m.bets : DEFAULT_BETS.concat([2500])); }
-    if (m.mode === 'play' || m.mode === 'ledger') money.mode = m.mode;
+    if (!money.live) { money.live = true; setBets(Array.isArray(m.bets) && m.bets.length ? m.bets : DEFAULT_BETS.concat([2500])); }
+    if (m.mode === 'play' || m.mode === 'chips') money.mode = m.mode;
+    fmt = liveFmt();
     applyWallet(m.wallet || m.balances); modeUi(); if (!st.busy) setBal(walletBal(), false); drawBet();
   }
   function goPractice(msg) {
@@ -666,11 +861,11 @@
   }
   function initBridge() {
     const bar = document.createElement('div'); bar.id = 'modebar';
-    bar.innerHTML = '<div class="mb"><button data-m="play">Play $</button><button data-m="ledger">Ledger $</button></div><span id="modenote"></span>';
+    bar.innerHTML = '<div class="mb"><button data-m="play">Play $</button><button data-m="chips">Chips</button></div><span id="modenote"></span>';
     $('stage').appendChild(bar);
     bar.addEventListener('click', (e) => {
       const b = e.target.closest('button'); if (!b || !money.live || st.busy) return;
-      money.mode = b.dataset.m; SFX.click(); setBal(walletBal(), false); modeUi(); toParent({ type: 'mode', mode: money.mode });
+      money.mode = b.dataset.m; fmt = liveFmt(); SFX.click(); setBal(walletBal(), false); modeUi(); drawBet(); toParent({ type: 'mode', mode: money.mode });
     });
     modeUi();
     if (!BRIDGE) return;
@@ -688,7 +883,7 @@
   function boot() {
     $('bal').textContent = fmtBal(st.bal); $('win').textContent = '0'; drawBet(); $('ribR').textContent = 'MAX ' + fx(E.MAX_WIN_X) + 'x';
     $('fine').textContent = $('dis').textContent = window.BENDER_FOOTER || 'Free play only. No real money.';
-    initBridge();
+    initBridge(); postMusicPref();
     say('idle');
     fillIdle((seed ^ 0x9e3779b9) >>> 0);
     const start = () => { SFX.init(); $('splash').classList.add('out'); SFX.music('base'); setTimeout(() => $('splash').remove(), 600); };
@@ -696,6 +891,6 @@
     if (Q.get('buy')) setTimeout(() => play(Q.get('buy') === 'landslide' ? 'buy-landslide' : 'buy-election'), 400);
     document.addEventListener('pointerdown', () => SFX.init(), { once: true });
   }
-  window.BENDER = { st, engine, play, get last() { return st.last; }, seed, bigWin, smallTier, stamp, pose, say, spill, bonusOn, bonusOff };
+  window.BENDER = { st, engine, play, get last() { return st.last; }, seed, bigWin, smallTier, stamp, pose, say, bubble: bubbleShow, spill, bonusOn, bonusOff };
   boot();
 })();

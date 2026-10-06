@@ -7,7 +7,7 @@ const BET_LEVELS = Eng.BET_LEVELS;
 const BUYS = Eng.BUYS;   // call, bonus1, bonus2, hunt (prices in Eng.CFG.buyCost, tenths of the bet)
 const RATE_MS = 150;
 const HISTORY_MAX = 20;
-const RTP_LABEL = '98.1% (long-run, 450M-spin stratified sim, +-0.14)';
+const RTP_LABEL = '97.95% (long-run, 450M-spin stratified sim, +-0.11)';
 
 // QA hook: forces a feature so the front end can be driven by a test. It runs ONLY when the server process was started
 // with COLDCALL_TEST=1 (and NODE_ENV is not 'production'); otherwise `force` in a spin payload is ignored. Forced rounds are paid and
@@ -28,8 +28,7 @@ const keyOf = (socket) => { const a = socket.data && socket.data.acct; return St
 function err(socket, code, message) { socket.emit('error', { message, code, game: 'coldcall' }); }
 
 function walletErr(socket, e) {
-  if (e && e.code === 'funds') return err(socket, 'funds', 'Not enough Play $');
-  if (e && e.code === 'limit') return err(socket, 'limit', 'Ledger limit reached');
+  if (e && e.code === 'funds') return err(socket, 'funds', e.message);
   return err(socket, 'bad_request', 'Could not place that bet');
 }
 
@@ -46,7 +45,7 @@ module.exports = {
       const w = ctx.wallet.get(keyOf(socket));
       socket.emit('g:coldcall:state', {
         engine: 2, grid: { cols: Eng.COLS, rows: Eng.ROWS },
-        betLevels: BET_LEVELS, modes: ['play', 'ledger'], rtp: RTP_LABEL, maxWinX: Eng.MAX_WIN_X,
+        betLevels: BET_LEVELS, modes: ['play', 'chips'], rtp: RTP_LABEL, maxWinX: Eng.MAX_WIN_X,
         buyCostX: Object.fromEntries(BUYS.map((b) => [b, Eng.CFG.buyCost[b] / 10])),
         wallet: w, balances: w, bets: BET_LEVELS,
         ...(testHookOn() ? { qaHook: true } : {}),
@@ -61,7 +60,7 @@ module.exports = {
       socket.data.coldcallLast = t;
       const p = payload && typeof payload === 'object' ? payload : {};
       if (!Number.isSafeInteger(p.bet) || !BET_LEVELS.includes(p.bet)) return err(socket, 'bad_bet', 'Pick a listed bet');
-      if (p.mode !== 'play' && p.mode !== 'ledger') return err(socket, 'bad_mode', 'Pick Play $ or Ledger $');
+      if (p.mode !== 'play' && p.mode !== 'chips') return err(socket, 'bad_mode', 'Pick Play $ or Chips');
       const buy = p.buyBonus == null || p.buyBonus === false ? null : p.buyBonus;
       if (buy !== null && !BUYS.includes(buy)) return err(socket, 'bad_request', 'Bad bonus');
 

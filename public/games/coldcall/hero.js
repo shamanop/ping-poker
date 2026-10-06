@@ -8,7 +8,10 @@
     const el = document.getElementById('hero'); if (!el || !CC.assets || !CC.assets.ready) return;
     cur = m; el.src = CC.assets.moodUrl(m); el.dataset.mood = m; if (CC.caption) CC.caption.fit();
   };
-  function set(m, ms = 1600) { clearTimeout(t); show(m); if (m !== 'idle' && ms > 0) t = setTimeout(() => show('idle'), ms); }
+  function set(m, ms = 1600) { clearTimeout(t); if (CC.dbg && m !== 'idle') (CC.dbg.moods = CC.dbg.moods || []).push({ r: CC.dbg.started || 0, m }); show(m); if (m !== 'idle' && ms > 0) t = setTimeout(() => show('idle'), ms); }
   function img(m, cls) { const im = document.createElement('img'); im.src = CC.assets.moodUrl(m); im.alt = ''; im.draggable = false; im.decoding = 'sync'; if (cls) im.className = cls; return im; }
-  CC.hero = { set, img, cur: () => cur };
+  const HOLD = { idle: 0, hype: 2000, shock: 2200, rage: 2400, win: 3000 };
+  // one call for the game/board code: CC.hero.mood('shock') (default hold per mood, or pass ms)
+  const mood = (m, ms) => set(m, ms == null ? HOLD[m] : ms);
+  CC.hero = { set, mood, img, cur: () => cur };
 })();

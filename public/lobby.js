@@ -44,14 +44,20 @@ function parseAmt(text, unit) {
 }
 function ladder(unit, min, max, extra = []) {
   const set = new Set([min, max, ...extra.filter((v) => v >= min && v <= max)]);
-  if (unit === 'chips') { const st = max - min > 5000 ? 100 : 50; for (let v = Math.ceil(min / st) * st; v <= max; v += st) set.add(v); }
-  else for (let v = Math.ceil(min / 100) * 100; v <= max; v += v < 5000 ? 100 : 500) set.add(v);
+  const N = 60, lo = Math.max(1, min);
+  for (let i = 1; i < N; i++) {
+    const raw = lo * Math.pow(Math.max(max, lo) / lo, i / N);
+    const p = Math.pow(10, Math.max(0, Math.floor(Math.log10(raw)) - 1));
+    let v = Math.round(raw / p) * p;
+    if (v >= 100) v = Math.round(v / 100) * 100;
+    if (v > min && v < max) set.add(v);
+  }
   return [...set].sort((a, b) => a - b);
 }
 const nearIdx = (vals, v) => { let bi = 0, bd = Infinity; vals.forEach((x, i) => { const d = Math.abs(x - v); if (d < bd) { bd = d; bi = i; } }); return bi; };
 const unitOf = (mode) => (mode === 'chips' ? 'chips' : 'cents');
-const modeLabel = (m) => ({ play: 'Play $', friends: 'Friends $', chips: 'Chips' }[m] || m);
-const modeNote = (m) => ({ play: 'Play $ is fake money from your play wallet.', friends: 'Ledger $ is a friendly tally, settle up on your own.', chips: 'Chips come from your bank balance.' }[m] || '');
+const modeLabel = (m) => ({ play: 'Play $', chips: 'Chips' }[m] || m);
+const modeNote = (m) => ({ play: 'Buy-ins come out of your Play $ balance and cash back into it when you stand up.', chips: 'Chips come from your bank balance.' }[m] || '');
 const avSrc = (e) => (e && e.pic) || avUrl(e && e.avatar);
 const avUrl = (a) => { let s = String(a ?? 'a01'); if (/^\d+$/.test(s)) s = 'a' + s.padStart(2, '0'); s = s.replace(/\.png$/, ''); return 'images/avatars/' + s + '.png'; };
 const code6 = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
@@ -106,7 +112,7 @@ function renderTop() {
   topEl.style.display = sw ? 'none' : '';
   if (sw) return;
   const p = S.profile, u = S.user;
-  const net = p && p.netCents != null ? 'Ledger ' + fm(p.netCents, 'cents', { signed: true }) : '';
+  const net = p && p.netCents != null ? 'Net ' + fm(p.netCents, 'cents', { signed: true }) : '';
   const play = !window.Shell && S.wallet && S.wallet.play != null ? 'Play ' + fm(S.wallet.play, 'cents') : '';
   const cls = p && p.netCents > 0 ? 'up' : p && p.netCents < 0 ? 'down' : '';
   topEl.replaceChildren(
@@ -327,33 +333,48 @@ function settingsCard(t) {
 
 // ── buy-in picker (slider + typed) ────────────────────────────────
 function buyInPicker(t, mySettled) {
-  const unit = t.unit || unitOf(t.mode), bi = t.buyIn, bank = unit === 'chips' ? (S.user && (S.user.bankChips ?? S.user.chips)) : null;
-  const hi = bank != null && Number.isFinite(bank) ? Math.max(bi.min, Math.min(bi.max, bank)) : bi.max;
-  const vals = ladder(unit, bi.min, hi, [bi.default]);
+  const unit = t.unit || unitOf(t.mode), bi = t.buyIn;
+  let fund = t.mode;
+  const bankOf = (f) => (f === 'chips' ? (S.user && (S.user.bankChips ?? S.user.chips)) : (S.wallet ? S.wallet.play : null));
+  const hiOf = (bk) => (bk != null && Number.isFinite(bk) ? Math.max(bi.min, Math.min(bi.max, bk)) : bi.max);
+  let bank = bankOf(fund), hi = hiOf(bank);
+  let vals = ladder(unit, bi.min, hi, [bi.default]);
   let val = Math.min(hi, Math.max(bi.min, bi.default));
   window.Money && window.Money.setUnit && window.Money.setUnit(unit);
   const range = h('input', { type: 'range', min: 0, max: vals.length - 1, step: 1, value: nearIdx(vals, val), id: 'lb-buyin-range', 'aria-label': 'Buy-in' });
   const fill = h('div', { class: 'fill' });
   const typed = h('input', { class: 'text-input', id: 'lb-buyin-input', type: 'text', inputmode: 'decimal', autocomplete: 'off', value: plain(val) });
   const msg = h('div', { class: 'lb-err', id: 'lb-buyin-err' });
-  function plain(v) { return unit === 'chips' || (window.Money && window.Money.getMode && window.Money.getMode() === 'chips') ? String(v) : '$' + (v % 100 ? (v / 100).toFixed(2) : v / 100); }
+  function plain(v) { return window.Money ? window.Money.fmt(v, { symbol: false }).replace(/,/g, '') : String(v); }
   const paint = () => { const a = range.value / Math.max(1, vals.length - 1); fill.style.left = 'var(--p8)'; fill.style.width = 'calc((100% - var(--p16)) * ' + a + ')'; };
-  range.addEventListener('input', () => { val = vals[+range.value]; typed.value = plain(val); msg.textContent = ''; paint(); });
+  range.addEventListener('input', () => { val = vals[+range.value]; typed.value = plain(val); msg.textContent = ''; paint(); drawBal(); });
   const commit = () => {
     const v = parseAmt(typed.value, unit);
     if (v == null) { msg.textContent = 'Enter an amount.'; return false; }
     val = Math.min(hi, Math.max(bi.min, v)); typed.value = plain(val); range.value = nearIdx(vals, val); paint();
-    msg.textContent = v !== val ? 'Buy-in is ' + fm(bi.min, unit) + ' to ' + fm(hi, unit) + '.' : ''; return true;
+    msg.textContent = v !== val ? 'Buy-in is ' + fm(bi.min, unit) + ' to ' + fm(hi, unit) + '.' : ''; drawBal(); return true;
   };
   typed.addEventListener('change', commit); typed.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); commit(); } });
   paint();
+  const balLine = h('div', { class: 'lb-muted', id: 'lb-fund-bal' });
+  const drawBal = () => {
+    const cross = fund !== t.mode;
+    balLine.textContent = bank == null ? '' : (fund === 'play' ? 'Your Play $: ' + fm(bank, 'cents') : 'Your bank: ' + fm(bank, 'chips')) + (cross ? '. This buy-in costs ' + (fund === 'play' ? fm(val, 'cents') : fm(val, 'chips')) + ' (1 chip = $0.01).' : '');
+  };
+  const fundBtn = (f, label) => h('button', { type: 'button', class: 'lb-btn' + (fund === f ? '' : ' blue'), id: 'lb-fund-' + f, onclick: () => {
+    if (fund === f) return; fund = f; bank = bankOf(fund); hi = hiOf(bank);
+    vals = ladder(unit, bi.min, hi, [bi.default]); val = Math.min(hi, Math.max(bi.min, val)); range.max = vals.length - 1; range.value = nearIdx(vals, val); typed.value = plain(val); msg.textContent = '';
+    fundRow.replaceChildren(fundBtn('chips', 'Chips'), fundBtn('play', 'Play $')); paint(); drawBal();
+  } }, label);
+  const fundRow = h('div', { class: 'lb-field', id: 'lb-fund' }, fundBtn('chips', 'Chips'), fundBtn('play', 'Play $'));
+  drawBal();
   const night = mySettled != null ? h('div', { class: 'lb-muted' }, 'Your night so far: ', h('b', { class: mySettled > 0 ? 'up' : mySettled < 0 ? 'down' : '' }, fm(mySettled, unit, { signed: true }))) : null;
   const el = h('div', { class: 'lb-stack', style: 'gap:var(--p14)' },
     h('div', { class: 'lb-field' }, h('label', null, 'Buy-in'), h('div', { class: 'lb-join' }, typed, h('span'))),
     h('div', { class: 'lb-slider' }, h('div', { class: 'trk' }), fill, range),
     h('div', { class: 'lb-ends' }, h('span', null, fm(bi.min, unit)), h('span', null, fm(hi, unit))), msg, night,
-    bank != null ? h('div', { class: 'lb-muted' }, 'Your bank: ' + fm(bank, unit)) : null);
-  return { el, get: () => (commit() ? val : null), msg };
+    fundRow, balLine);
+  return { el, get: () => (commit() ? val : null), getFund: () => fund, msg };
 }
 
 // ── join / buy-in modal ───────────────────────────────────────────
@@ -383,7 +404,7 @@ function modalJoin(info, me) {
   const sit = h('button', { class: 'lb-btn', id: 'lb-sit', onclick: () => {
     const v = me ? (me.stack || t.buyIn.default) : pick.get(); if (v == null) return;
     sit.disabled = true; err.textContent = ''; S.onError = (m) => { sit.disabled = false; err.textContent = m; };
-    emit('table_join', { tableId: id, buyIn: v });
+    emit('table_join', { tableId: id, buyIn: v, fund: pick.getFund() });
   } }, me ? 'Return to seat' : 'Sit down');
   openModal(
     h('div', null, h('span', { class: 'lb-eyebrow' }, 'Table ' + id), h('h3', null, t.name)),
@@ -402,16 +423,16 @@ function seatCells(info) {
 }
 
 // ── create ────────────────────────────────────────────────────────
-const PRESETS = { cents: [[25, 50], [50, 100], [100, 200], [200, 500], [500, 1000], [2500, 5000]], chips: [[10, 20], [25, 50], [50, 100], [100, 200], [250, 500]] };
+const PRESETS = { cents: [[25, 50], [50, 100], [100, 200], [200, 500], [500, 1000], [2500, 5000]], chips: [[25, 50], [50, 100], [100, 200], [250, 500], [500, 1000]] };
 function freshForm(mode, prev) {
   const unit = unitOf(mode), c = unit === 'chips';
   return Object.assign({ mode, unit, name: (prev && prev.name) || ((S.user && S.user.display) || 'My') + "'s table",
-    min: c ? 500 : 500, max: c ? 5000 : 50000, def: c ? 1500 : 10000, preset: c ? 2 : 1, custom: false, csb: c ? 50 : 50, cbb: c ? 100 : 100,
+    min: 500, max: c ? 1000000 : 50000, def: c ? 2000 : mode === 'play' ? 2000 : 10000, preset: c ? 0 : mode === 'play' ? 0 : 1, custom: false, csb: c ? 50 : 50, cbb: c ? 100 : 100,
     seats: 8, timer: 30, bi: false, biEvery: 15, biSched: 'standard', rebuys: true, priv: true }, prev ? { seats: prev.seats, timer: prev.timer, bi: prev.bi, biEvery: prev.biEvery, biSched: prev.biSched, rebuys: prev.rebuys, priv: prev.priv } : {});
 }
 function blindsOf(f) { if (f.custom) return { sb: f.csb, bb: f.cbb }; const p = PRESETS[f.unit][f.preset]; return { sb: p[0], bb: p[1] }; }
 function viewCreate() {
-  const f = S.form = S.form || freshForm('friends');
+  const f = S.form = S.form || freshForm('play');
   const host = h('div', { class: 'lb-form lb-card', id: 'lb-form' }), side = h('div', { class: 'lb-stack' });
   const grid = h('div', { class: 'lb-create' }, host, side);
   setMain(scrollWrap(h('div', { class: 'lb-wrap' }, h('div', { style: 'display:flex;justify-content:space-between;align-items:center' }, h('button', { class: 'lb-link', onclick: () => show('lobby') }, 'Back to lobby')), grid)));
@@ -446,10 +467,10 @@ function seg(opts, cur, onPick, id) {
 function formBody(f, redraw, sum) {
   const u = f.unit, g = (label, ...k) => h('div', { class: 'grp' }, h('span', { class: 'lb-label' }, label), ...k);
   const set = (k) => (v) => { f[k] = v; redraw(); };
-  const modeSeg = seg([['play', 'Play $', 'fake money'], ['friends', 'Friends $', 'ledger tally'], ['chips', 'Chips', 'bank chips']], f.mode, (m) => { if (m !== f.mode) { S.form = Object.assign(f, freshForm(m, f)); } redraw(); }, 'lb-mode');
+  const modeSeg = seg([['play', 'Play $', 'fake money'], ['chips', 'Chips', 'bank chips']], f.mode, (m) => { if (m !== f.mode) { S.form = Object.assign(f, freshForm(m, f)); } redraw(); }, 'lb-mode');
   const name = h('input', { class: 'text-input', id: 'lb-tname', maxlength: 24, value: f.name, oninput: (e) => { f.name = e.target.value; sum(); } });
   // buy-in range
-  const lo = u === 'chips' ? 100 : 500, hi = u === 'chips' ? 10000 : 50000, vals = ladder(u, lo, hi, [f.min, f.max, f.def]);
+  const lo = 500, hi = u === 'chips' ? 1000000 : 50000, vals = ladder(u, lo, hi, [f.min, f.max, f.def]);
   const rl = h('input', { type: 'range', min: 0, max: vals.length - 1, step: 1, value: nearIdx(vals, f.min), 'aria-label': 'Minimum buy-in' });
   const rh = h('input', { type: 'range', min: 0, max: vals.length - 1, step: 1, value: nearIdx(vals, f.max), 'aria-label': 'Maximum buy-in' });
   const fill = h('div', { class: 'fill' });
@@ -491,7 +512,7 @@ function submitCreate(f, err, btn) {
   if (!(b.sb >= 1 && b.bb > b.sb && b.bb >= 2)) return (err.textContent = 'Small blind must be less than big blind.');
   if (!(f.min <= f.def && f.def <= f.max)) return (err.textContent = 'Buy-in needs min <= default <= max.');
   err.textContent = ''; btn.disabled = true; S.onError = (m) => { btn.disabled = false; err.textContent = m; };
-  emit('table_create', { settings: { name: nm, mode: f.mode, unit: f.unit, moneyMode: f.mode === 'play' ? 'play' : f.mode === 'friends' ? 'ledger' : 'chips',
+  emit('table_create', { settings: { name: nm, mode: f.mode, unit: f.unit, moneyMode: f.mode,
     buyIn: { min: f.min, max: f.max, default: f.def }, blinds: b, blindIncrease: { enabled: f.bi, everyMin: f.biEvery, schedule: f.biSched },
     seats: f.seats, actionTimerSec: f.timer, rebuys: f.rebuys, rebuyLimit: 0, isPrivate: f.priv } });
 }
@@ -517,7 +538,7 @@ function drawShare() {
       h('button', { class: 'lb-btn full', id: 'lb-enter', onclick: () => { S.onError = (m) => { err.textContent = m; }; emit('table_join', { tableId: id, buyIn: me.stack || t.buyIn.default }); } }, 'Go to the table'), err);
   } else {
     const pick = S.sharePick && S.sharePick.id === id ? S.sharePick.p : (S.sharePick = { id, p: buyInPicker(t, S.net[id]) }).p;
-    const sit = h('button', { class: 'lb-btn full', id: 'lb-sit', onclick: () => { const v = pick.get(); if (v == null) return; sit.disabled = true; S.onError = (m) => { sit.disabled = false; err.textContent = m; }; emit('table_join', { tableId: id, buyIn: v }); } }, 'Sit down');
+    const sit = h('button', { class: 'lb-btn full', id: 'lb-sit', onclick: () => { const v = pick.get(); if (v == null) return; sit.disabled = true; S.onError = (m) => { sit.disabled = false; err.textContent = m; }; emit('table_join', { tableId: id, buyIn: v, fund: pick.getFund() }); } }, 'Sit down');
     right = h('section', { class: 'lb-card lb-stack' }, h('h2', null, 'Take your seat'), pick.el, h('div', { class: 'lb-copy' }, modeNote(t.mode)), err, sit);
   }
   S.shareBox.replaceChildren(
@@ -641,7 +662,7 @@ function openProfile() {
       h('div', { class: 'lb-avatars' }, Array.from({ length: 12 }, (_, i) => { const id = 'a' + String(i + 1).padStart(2, '0');
         return h('button', { type: 'button', class: !u.pic && id === String(av).replace(/\.png$/, '') ? 'on' : '', onclick: (e) => { av = id; photoMsg.textContent = ''; emit('profile_update', u.pic ? { avatar: id, avatarPic: null } : { avatar: id }); S.user.avatar = id; S.user.pic = null; refreshProfile(); } }, h('img', { src: avUrl(id), alt: id })); }))),
     h('div', { class: 'lb-xprow', id: 'lb-profxp' }, h('b', null, 'LV ' + (S.acctStats ? S.acctStats.level : 1)), h('span', { class: 'lb-xptrack' }, h('i', { style: 'width:' + Math.max(2, S.acctStats ? S.acctStats.xpPct : 0) + '%' })), h('small', null, S.acctStats ? S.acctStats.xp + ' / ' + S.acctStats.nextXp + ' XP' : '')),
-    h('div', { class: 'lb-stats' }, h('div', null, h('b', { class: net > 0 ? 'up' : net < 0 ? 'down' : '' }, fm(net, 'cents', { signed: true })), h('small', null, 'Ledger net')),
+    h('div', { class: 'lb-stats' }, h('div', null, h('b', { class: net > 0 ? 'up' : net < 0 ? 'down' : '' }, fm(net, 'cents', { signed: true })), h('small', null, 'Net')),
       h('div', null, h('b', null, st.nights ?? st.nightsPlayed ?? (p.recent || []).length), h('small', null, 'Nights')), h('div', null, h('b', null, st.hands ?? st.handsPlayed ?? 0), h('small', null, 'Hands'))),
     recent.length ? h('div', { class: 'lb-rows' }, recent.map((r) => h('div', { class: 'lb-row' }, h('div', null, h('div', { class: 't' }, r.name || r.tableName || r.nightId), h('div', { class: 's' }, r.date || '')), h('b', { class: r.net > 0 ? 'up' : 'down' }, fm(r.net, r.unit || 'cents', { signed: true }))))) : null,
     achSection(),
@@ -655,8 +676,7 @@ function openProfile() {
 function viewSettle(d) {
   d = d || S.night; if (!d) return show('lobby');
   const unit = (d.table && d.table.unit) || 'cents';
-  const players = (d.players || []).slice().sort((a, b) => b.net - a.net), pays = d.payments || [];
-  const nameOf = (k) => { const p = (d.players || []).find((x) => x.key === k); return (p && p.display) || k; };
+  const players = (d.players || []).slice().sort((a, b) => b.net - a.net);
   const tid = d.tableId || (d.table && d.table.id) || String(d.nightId || '').split('_').pop();
   setMain(scrollWrap(h('div', { class: 'lb-settle' },
     h('div', { class: 'hd' }, h('span', { class: 'lb-eyebrow' }, (d.table && d.table.name) || 'The Ping'), h('h1', { id: 'lb-settle-h' }, 'Night closed')),
@@ -664,11 +684,7 @@ function viewSettle(d) {
       h('span', { class: 'rk' }, i + 1), h('img', { src: avSrc(p), alt: '' }),
       h('div', { class: 'nm' }, p.display || p.key, h('div', { class: 'sub' }, 'In ' + fm((p.buyIns || 0) + (p.rebuys || 0), unit) + '  /  Out ' + fm(p.cashedOut, unit))),
       h('span'), h('span', { class: 'amt ' + (p.net > 0 ? 'up' : p.net < 0 ? 'down' : '') }, fm(p.net, unit, { signed: true }))))),
-    h('section', { class: 'lb-card' }, h('h2', null, 'How to settle'), pays.length ? pays.map((p) => h('div', { class: 'lb-pay' + (p.paid ? ' paid' : ''), 'data-pay': p.from + '>' + p.to },
-      h('span', { class: 'what' }, h('b', null, nameOf(p.from)), ' pays ', h('b', null, nameOf(p.to)), ' ', fm(p.amount, unit)),
-      h('span', { class: 'lb-muted' }, p.paid ? 'Paid' : ''),
-      p.paid ? h('span') : h('button', { class: 'lb-ghost', onclick: () => emit('settle_mark', { nightId: d.nightId, from: p.from, to: p.to, amount: p.amount }) }, 'Mark paid'))) : [h('div', { class: 'lb-empty' }, 'Everyone is square. Nothing to pay.')],
-      h('div', { class: 'lb-copy', style: 'margin-top:var(--p12)' }, modeNote(d.table && d.table.mode))),
+    h('div', { class: 'lb-copy', style: 'margin:var(--p12) 0' }, modeNote(d.table && d.table.mode)),
     h('div', { class: 'lb-btns' },
       h('button', { class: 'lb-btn blue', id: 'lb-copytext', onclick: () => copy(d.text || '', 'Results') }, 'Copy as text'),
       h('button', { class: 'lb-btn blue', id: 'lb-clone', onclick: () => { S.onError = (m) => toast(m); emit('table_clone', { tableId: tid }); } }, 'New table, same settings'),
@@ -679,13 +695,16 @@ function viewSettle(d) {
 function hostUi(on) {
   closeDrawer();
   if (hostBtn) { hostBtn.remove(); hostBtn = null; }
+  const plate = document.querySelector('.blinds-plate');
+  if (plate) { plate.classList.toggle('editable', !!on); plate.title = on ? 'Change blinds' : ''; }
   if (!on) return;
   const slot = $('host-slot'); if (!slot) return;
   hostBtn = h('button', { class: 'host-btn', id: 'host-btn', type: 'button', onclick: toggleDrawer }, 'Host'); slot.append(hostBtn);
 }
-let drawerPoll = null;
+let drawerPoll = null, blindsEl = null, blindsFor = null;
 function closeDrawer() {
   if (hostDrawer) { hostDrawer.remove(); hostDrawer = null; }
+  blindsEl = null; blindsFor = null;
   clearInterval(drawerPoll); drawerPoll = null;
   document.removeEventListener('pointerdown', drawerOutside, true);
   document.removeEventListener('keydown', drawerEsc, true);
@@ -704,6 +723,34 @@ function toggleDrawer() {
   document.addEventListener('pointerdown', drawerOutside, true);
   document.addEventListener('keydown', drawerEsc, true);
 }
+function blindsEditor(t, id, unit) {
+  window.Money && window.Money.setUnit && window.Money.setUnit(unit);
+  const val = (v) => (window.Money ? window.Money.fmt(v, { symbol: false }).replace(/,/g, '') : String(v));
+  const cur = t.blinds || { sb: t.sb, bb: t.bb };
+  const sbIn = h('input', { class: 'text-input', id: 'host-sb', type: 'text', inputmode: 'decimal', autocomplete: 'off', value: val(cur.sb), 'aria-label': 'Small blind' });
+  const bbIn = h('input', { class: 'text-input', id: 'host-bb', type: 'text', inputmode: 'decimal', autocomplete: 'off', value: val(cur.bb), 'aria-label': 'Big blind' });
+  const note = h('div', { class: 'lb-muted', id: 'host-blinds-msg' });
+  const save = () => {
+    const sb = parseAmt(sbIn.value, unit), bb = parseAmt(bbIn.value, unit);
+    if (sb == null || bb == null || sb < 1) { note.textContent = 'Enter both blinds.'; return; }
+    if (sb >= bb) { note.textContent = 'Small blind must be less than the big blind.'; return; }
+    S.onError = (m) => { note.textContent = m; };
+    emit('table_update', { tableId: id, patch: { blinds: { sb, bb } } });
+    note.textContent = 'Blinds set to ' + fm(sb, unit) + ' / ' + fm(bb, unit) + '. A hand in progress keeps the old blinds; the new ones start next hand.';
+  };
+  bbIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); save(); } });
+  sbIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); save(); } });
+  return h('div', { class: 'lb-stack', style: 'gap:var(--p8)' },
+    h('div', { class: 'lb-label' }, 'Blinds'),
+    h('div', { style: 'display:grid;grid-template-columns:1fr auto 1fr;gap:var(--p8);align-items:center' }, sbIn, h('span', null, '/'), bbIn),
+    h('button', { class: 'lb-btn sm full', id: 'host-blinds-save', type: 'button', onclick: save }, 'Set blinds'),
+    note);
+}
+document.addEventListener('click', (e) => {
+  if (!hostBtn || !e.target.closest || !e.target.closest('.blinds-plate')) return;
+  if (!hostDrawer) toggleDrawer();
+  setTimeout(() => { const i = $('host-sb'); if (i) { i.focus(); i.select(); } }, 60);
+});
 function drawDrawer(confirmEnd) {
   if (!hostDrawer || !S.cur) return;
   const t = S.cur, id = tId(t), info = S.info[id], paused = t.state === 'paused';
@@ -714,6 +761,7 @@ function drawDrawer(confirmEnd) {
     h('div', { class: 'lb-btns' },
       h('button', { class: 'lb-btn sm', id: 'host-start', onclick: () => emit('table_start', { tableId: id }) }, 'Start'),
       h('button', { class: 'lb-btn sm blue', id: 'host-pause', onclick: () => emit('table_pause', { tableId: id, paused: !paused }) }, paused ? 'Resume' : 'Pause')),
+    (blindsFor === id && blindsEl) ? blindsEl : (blindsFor = id, blindsEl = blindsEditor(t, id, unit)),
     h('div', { class: 'lb-label' }, 'Players'),
     ...((info && info.seated) || []).map((p) => h('div', { class: 'lb-seat' }, h('img', { src: avSrc(p), alt: '' }), h('div', null, h('b', null, p.display || p.key), h('span', null, fm(p.stack, unit))),
       p.key !== myKey() ? h('button', { class: 'lb-ghost', onclick: () => emit('table_kick', { tableId: id, key: p.key }) }, 'Kick') : null)),
@@ -763,6 +811,7 @@ function bind() {
   s.on('self_changed', (v) => { if (!S.user || !v || v.key !== S.user.key) return; Object.assign(S.user, { display: v.display, avatar: v.avatar, pic: v.pic || null }); refreshProfile(); });
   s.on('account_changed', () => { if (!S.user) return; if (S.view === 'lobby') { emit('get_leaderboard', {}); emit('social:feed'); emit('social:biggest'); emit('lobby_list', {}); } if (S.view === 'share' && S.arg) emit('table_preview', { code: S.arg }); });
   s.on('wallet', (w) => { S.wallet = w; renderTop(); });
+  s.on('money', (m) => { if (!m) return; if (S.user) S.user.bankChips = m.bank; if (m.wallet) S.wallet = m.wallet; renderTop(); });
   s.on('social:feed', onFeed);
   s.on('social:biggest', onBest);
   s.on('achv:state', (v) => { S.achv = v; drawAch(); renderAchHint(); });

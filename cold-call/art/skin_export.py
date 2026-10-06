@@ -10,6 +10,7 @@ def bbox(im): return im.getchannel('A').point(lambda v: 255 if v > 24 else 0).ge
 idle = Image.open(os.path.join(CUT, 'hero_idle.png')).convert('RGBA'); CW = idle.size[0]
 ib = bbox(idle)
 MOODS = ['hype', 'shock', 'win', 'rage']
+EXTRAS = ['cups', 'bell', 'quote_bronze', 'quote_silver', 'quote_gold']     # -> extra_<id>.webp at 256 px (cashwad, cardmachine, seal reuse their piece files)
 PIECES = {'spin': 256, 'seal': 300, 'cardmachine': 340, 'card': 300, 'cashwad': 300, 'phone_gold': 300}
 def defringe(im):                          # the sheet's slate-blue survives on soft edges of some cuts: pull blue down on translucent pixels
     a = np.asarray(im).astype(np.int32); edge = (a[..., 3] > 0) & (a[..., 3] < 250)
@@ -27,3 +28,7 @@ if __name__ == '__main__':
         im = defringe(Image.open(os.path.join(CUT, n + '.png')).convert('RGBA')); k = s / max(im.size)
         if k < 1: im = im.resize((round(im.width * k), round(im.height * k)), Image.LANCZOS)
         save(im, n)
+    for n in EXTRAS:
+        im = defringe(Image.open(os.path.join(CUT, n + '.png')).convert('RGBA')); k = 256 / max(im.size)
+        if k < 1: im = im.resize((round(im.width * k), round(im.height * k)), Image.LANCZOS)
+        save(im, 'extra_' + n)

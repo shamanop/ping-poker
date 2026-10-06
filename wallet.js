@@ -1,13 +1,12 @@
 'use strict';
-// Per-account wallet: Play $ (fake) and Ledger $ (friendly IOU tally). Integer cents only. Own atomic file.
+// Per-account wallet: Play $ (fake, integer cents, own atomic file) and Chips (the poker bank, reached through opts.chips).
 const fs = require('fs');
 const path = require('path');
 
 const START_PLAY = 1000000;      // 10,000.00
 const TOPUP_BELOW = 10000;       // refill allowed only when play < 100.00
 const TOPUP_COOLDOWN_MS = 3600000;
-const DEFAULT_LIMIT = -50000;    // -500.00
-const MODES = ['play', 'ledger'];
+const MODES = ['play', 'chips'];
 
 function fail(code, message) { const e = new Error(message || code); e.code = code; return e; }
 const isCents = (n) => typeof n === 'number' && Number.isSafeInteger(n);
@@ -21,6 +20,7 @@ function createWallet(opts = {}) {
   const now = opts.now || Date.now;
   const logPlay = !!opts.logPlay;
   const onChange = opts.onChange || null;
+  const chips = opts.chips || null; // { get(key), add(key, delta) } over the bank
   let data = {};
   try { const j = JSON.parse(fs.readFileSync(file, 'utf8')); if (j && typeof j === 'object') data = j; } catch { data = {}; }
 
@@ -43,10 +43,10 @@ function createWallet(opts = {}) {
     const k = keyOf(acct);
     if (!k) throw fail('acct', 'No account');
     let w = data[k];
-    if (!w) { w = data[k] = { play: START_PLAY, ledgerNet: 0, ledgerLimit: DEFAULT_LIMIT, lastTopUp: null, byGame: {} }; save(); }
+    if (!w) { w = data[k] = { play: START_PLAY, lastTopUp: null, byGame: {} }; save(); }
     return w;
   }
-  const view = (w) => ({ play: w.play, ledgerNet: w.ledgerNet, ledgerLimit: w.ledgerLimit });
+  const view = (w, k) => ({ play: w.play, chips: chips && k ? chips.get(k) : null });
 
   function stat(w, game, mode) {
     const g = (w.byGame[game] = w.byGame[game] || {});
@@ -71,54 +71,62 @@ function createWallet(opts = {}) {
   function spend(acct, mode, amount, ref) {
     checkArgs(mode, amount);
     if (amount === 0) throw fail('amount', 'Bad amount');
+    const k = keyOf(acct);
     const w = rec(acct);
     if (mode === 'play') {
       if (w.play < amount) throw fail('funds', 'Not enough Play $');
       w.play -= amount;
     } else {
-      if (w.ledgerNet - amount < w.ledgerLimit) throw fail('limit', 'Ledger limit reached');
-      w.ledgerNet -= amount;
+      if (!chips) throw fail('mode', 'Chips unavailable');
+      if (chips.get(k) < amount) throw fail('funds', 'Not enough chips');
+      chips.add(k, -amount);
     }
-    if (ref && ref.game) { const s = stat(w, ref.game, mode); s.rounds += 1; s.wagered += amount; }
+    if (ref && ref.game) { const st = stat(w, ref.game, mode); st.rounds += 1; st.wagered += amount; }
     save();
-    logRow(acct, mode, -amount, mode === 'play' ? w.play : w.ledgerNet, ref);
-    if (onChange) try { onChange(keyOf(acct), view(w)); } catch {}
-    return view(w);
+    if (mode === 'play') logRow(acct, mode, -amount, w.play, ref);
+    if (onChange) try { onChange(k, view(w, k)); } catch {}
+    return view(w, k);
   }
 
   function credit(acct, mode, amount, ref) {
     checkArgs(mode, amount);
+    const k = keyOf(acct);
     const w = rec(acct);
-    if (amount === 0) return view(w);
-    if (mode === 'play') w.play += amount; else w.ledgerNet += amount;
+    if (amount === 0) return view(w, k);
+    if (mode === 'play') w.play += amount;
+    else { if (!chips) throw fail('mode', 'Chips unavailable'); chips.add(k, amount); }
     if (ref && ref.game) stat(w, ref.game, mode).won += amount;
     save();
-    logRow(acct, mode, amount, mode === 'play' ? w.play : w.ledgerNet, ref);
-    if (onChange) try { onChange(keyOf(acct), view(w)); } catch {}
-    return view(w);
+    if (mode === 'play') logRow(acct, mode, amount, w.play, ref);
+    if (onChange) try { onChange(k, view(w, k)); } catch {}
+    return view(w, k);
   }
 
-  function get(acct) { return view(rec(acct)); }
+  function get(acct) { const k = keyOf(acct); return view(rec(acct), k); }
 
   function stats(acct) { return JSON.parse(JSON.stringify(rec(acct).byGame)); }
 
-  function setLimit(acct, cents) {
-    if (!isCents(cents) || cents > 0) throw fail('amount', 'Bad limit');
-    const w = rec(acct); w.ledgerLimit = cents; save(); return view(w);
+  function adminSet(acct, cents) {
+    if (!isCents(cents) || cents < 0) throw fail('amount', 'Bad amount');
+    const k = keyOf(acct);
+    const w = rec(acct); w.play = cents; save();
+    if (onChange) try { onChange(k, view(w, k)); } catch {}
+    return view(w, k);
   }
 
   function topUp(acct) {
+    const k = keyOf(acct);
     const w = rec(acct);
     if (w.play >= TOPUP_BELOW) throw fail('not_needed', 'Top up is only for balances under 100');
     const wait = w.lastTopUp == null ? 0 : w.lastTopUp + TOPUP_COOLDOWN_MS - now();
     if (wait > 0) { const e = fail('cooldown', 'Top up again later'); e.retryMs = wait; throw e; }
     w.play = START_PLAY; w.lastTopUp = now();
     save();
-    if (onChange) try { onChange(keyOf(acct), view(w)); } catch {}
-    return view(w);
+    if (onChange) try { onChange(k, view(w, k)); } catch {}
+    return view(w, k);
   }
 
-  return { spend, credit, get, stats, setLimit, topUp, flush, file, START_PLAY, DEFAULT_LIMIT };
+  return { spend, credit, get, stats, topUp, adminSet, flush, file, START_PLAY };
 }
 
-module.exports = { createWallet, START_PLAY, DEFAULT_LIMIT, TOPUP_BELOW, TOPUP_COOLDOWN_MS };
+module.exports = { createWallet, START_PLAY, TOPUP_BELOW, TOPUP_COOLDOWN_MS };

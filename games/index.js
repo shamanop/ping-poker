@@ -21,7 +21,7 @@ module.exports = function games(ctx) {
     });
   }
 
-  const wallet = ctx.wallet || createWallet({ ledger: ctx.ledger, now: ctx.now, onChange: pushWallet, logPlay: false });
+  const wallet = ctx.wallet || createWallet({ ledger: ctx.ledger, chips: ctx.chips, now: ctx.now, onChange: pushWallet, logPlay: false });
   const full = { ...ctx, wallet, now: ctx.now || Date.now, rng: ctx.rng || undefined };
   if (!full.rng) delete full.rng;
 

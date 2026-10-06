@@ -36,7 +36,7 @@
         <img class="logo" src="assets/img/title_wide.webp" alt="Ballot Bender by VoterPing">
         <img id="dump" src="assets/img/dumpster_back.webp" alt="">
         <div id="mascot"><img id="mimg" src="assets/img/mascot_idle.webp" alt=""></div>
-        <div id="bubble"><img src="assets/img/bubble_blank.webp" alt=""><p id="bubbleT"></p></div>
+        <div id="bubble" role="status" aria-live="polite"><svg id="bsvg" xmlns="http://www.w3.org/2000/svg"><path id="bpath"/></svg><p id="bubbleT"></p></div>
       </section>
       <div id="ribbon"><span id="ribL">5+ matching = win. Wilds multiply.</span><span class="r" id="ribR"></span></div>
       <div id="board">
@@ -57,7 +57,8 @@
             <button id="turbo">Turbo</button>
             <button id="auto">Auto</button>
             <button id="info" aria-label="Pay table">i</button>
-            <button id="snd" aria-label="Sound"><svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 4V5L7 9H3z"/><path id="sndx" d="M15 9l6 6M21 9l-6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" style="display:none"/><path id="sndw" d="M15 8.5a5 5 0 0 1 0 7M17.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+            <button id="snd" aria-label="Sound effects"><svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 4V5L7 9H3z"/><path id="sndx" d="M15 9l6 6M21 9l-6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" style="display:none"/><path id="sndw" d="M15 8.5a5 5 0 0 1 0 7M17.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span>SFX</span></button>
+            <button id="mus" aria-label="Music"><svg viewBox="0 0 24 24"><path d="M9 3v12.2A3.5 3.5 0 1 0 11 18.4V8h7V3H9z"/><path id="musx" d="M3 4l18 17" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" style="display:none"/></svg><span>MUSIC</span></button>
           </div>
           <div class="props r"><img class="pigeon" id="pigeon" src="assets/img/pigeon_honk.webp" alt=""></div>
         </div>
