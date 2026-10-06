@@ -14,6 +14,6 @@
     "quote": "img/quote.svg",
     "upsell": "img/upsell.svg"
   },
-  "hero": { "file": "img/hero.svg", "mouth": { "x": 0.5, "y": 0.3 } },
+  "hero": { "file": "img/hero.svg", "mouth": { "x": 0.61, "y": 0.56 } },
   "background": { "file": "img/bg.svg" }
 }

@@ -153,3 +153,40 @@ Next, after Chris's notes and the credit top-up: each kept piece painted alone a
 - 2026-10-05 18:50 Milestone 3a committed (concept menu). Frank re-ran `tests/coldcall.js` (27 pass) and `tests/bender.js` (17 pass); engine copies byte-identical.
 - 2026-10-05 Milestone 2 done: engine, server module, sim, 27 tests; 200M-spin sim 98.10% +- 0.10; buys 97.99% / 98.07%.
 - 2026-10-05 17:50 Milestone 1 plan written. Branch created from master bffe087.
+
+## Milestone 4: playable front end (2026-10-05, built by Frank on placeholder art)
+Status table above is stale for row 4 (left untouched on purpose): this milestone is built, QA'd on my box, not yet reviewed by Chris.
+
+**Built.** `public/games/coldcall/`: `index.html`, `style.css` (all colours/fonts/sizes in `:root` variables), `game.js` (reels, win presentation, counters, big-win overlay, buy + info modals, bet/mode, three transports), `rotary.js` (dial + free spins), `quote.js` (checkout form), `audio.js` (synthesized WebAudio), `fx.js` (canvas particles), `captions.js` (speech bubble), `assets.js` (manifest loader), `boot.js`, plus the untouched byte-identical `engine.js`.
+The browser only animates the server script; the running total only ever adds (`ctx.addWin` is clamped to the server round total; a mismatch is recorded in `CC.dbg.mismatch`, 0 seen).
+- **Art swap:** everything loads through `assets/symbols.json` (12 symbols + hero + background; hero entry carries the mouth point the speech tail aims at). Placeholders are Twemoji SVGs (CC-BY 4.0), sources in `cold-call/art/SOURCES.md`. Vector, so the "2x display size" rule only matters once raster art arrives; the loader logs a warning for low-res raster art.
+- **Shell wiring:** `public/shell.js` +32/-3 lines: a parallel Cold Call bridge block (own request queue, same postMessage protocol as Bender), a dock icon, and one changed line so errors tagged `game:'coldcall'` are not routed into Bender's queue. No change to lobby/index pages or Bender.
+- **Rules from the brief:** no looping `<audio>` trick (zero `<audio>` elements, context created/resumed on first gesture), looping CSS animations freeze via `#app.calm` (idle 8 s, tab hidden, window blur/docked), 2 rAF loops max (one shared count-up ticker + the fx canvas), images decoded during the splash, `#ov`/scene/fx/floats swept after every round, SFX and MUSIC are separate switches stored in `ping.sfx` / `ping.music`, caption bubble sized to its text and fitted once per line, CSS grid layout, stage 540 wide x 960..1250 scaled to fit.
+
+**Run it.**
+```
+mkdir -p _scratch/srv && echo '{}' > _scratch/srv/bank.json && echo '[]' > _scratch/srv/ledger.json
+COLDCALL_TEST=1 PORT=4610 BANK_FILE=$PWD/_scratch/srv/bank.json LEDGER_FILE=$PWD/_scratch/srv/ledger.json node server.js   # accounts/wallet files land next to bank.json
+http://127.0.0.1:4610/games/coldcall/index.html?live=1&name=NAME&pin=1234      # standalone against the dev server (auto login/sign-up)
+  add &force=rotary|quote|big (QA, needs COLDCALL_TEST=1 server side), &nosplash, &buy=rotary|quote
+http://127.0.0.1:4610/games/coldcall/index.html                                # practice: no wallet, local engine copy (like Bender's practice mode)
+http://127.0.0.1:4610/  -> sign in -> dock icon "Cold Call"                    # through the shell (?bridge=1 iframe)
+```
+**Test hook and its gate.** Spin payload `force: 'rotary' | 'quote' | 'big'` (`big` = reroll plain spins until >= 25x, `both` is not offered: a natural double trigger is ~1 in 157,000). Honoured only when `process.env.COLDCALL_TEST === '1'` AND `NODE_ENV !== 'production'`, read per call; the state event carries `qaHook:true` and the result `forced` only then. A force on a buy is dropped. Forced rounds are real engine rounds through the normal spend/credit path. 4 new tests in `tests/coldcall.js` (hook ignored without the env var, ignored with `NODE_ENV=production`, ignored for `0/true/yes`, and accounting exact when on).
+
+**Verified (numbers).** `node tests/coldcall.js` 31 pass (27 + 4), `node tests/bender.js` 17 pass, engine copies byte-identical (`cmp`). Headless Chromium (software GL), 540x960, dev server on 4610, scripts in `_scratch/` (gitignored):
+- 8 real clicked spins on the live socket: displayed balance == server wallet to the cent after every spin (asserted in the script); the win text matched the script's win in every logged row (read by eye, not asserted).
+- Final-code session: forced ROTARY 3 rounds, forced QUOTE 5 live rounds plus 1 grand round in a practice page, forced BIG 1 round (a 1027-tenth QUOTE round; earlier sessions ran more of each; the last two cosmetic edits, float positions on the form, were re-checked on the grand round and the big round only). ROTARY: dial dragged with the mouse for stop 1 and tapped for stop 2 in every round; the dial stops where the script says and the chips show the script's values (by construction: the dial resolves the hole from `script.dial.*.value`, I did not add an independent check of the dial angle). QUOTE: bubbles carry their amounts on the reels, fly into the form, respins, upsell, field prizes (MAJOR seen on a live round). BIG: overlay counts up, closes, 0 leftover nodes, fx loop stopped.
+- Running total sampled every 100 ms (about 1,300 to 2,000 samples per bonus run): 0 blank, 0 decreases inside a round (it resets to $0.00 only when the next paid round starts). This found and fixed a real bug: a count-up could dip 1 cent when a frame timestamp preceded its start time.
+- Max pending rAF callbacks from game scripts: 2 (instrumented). Looping animations: `calm` set after idle, `animation-play-state: paused` on hero/spin, cleared on input; blur also freezes.
+- SFX/MUSIC: independent, persisted across reload, music does not start when off; AudioContext `running` after the first click, `none` before.
+- Through the real shell at 1280x800: dock icon, bridge init, spins, shell wallet == game balance, docked at 360 px wide (`shell_docked_narrow.jpg`), mode bar works.
+- Screenshots (24 files, all < 110 KB) in `qa/coldcall-m4/`: `base_idle`, `base_win`, `rotary_dial*`, `rotary_freespins*`, `rotary_complete`, `quote_trigger`, `quote_form_midfill`, `quote_respin`, `quote_field_prize`, `quoteGrand_payment_accepted`, `bigwin_overlay`, `bigwin_closed`, `buy_confirm`, `shell_*`.
+
+**Unfinished or unverified (honest list).**
+- Audio is synthesized and its graph/switches are checked, but nobody has listened to it (headless box): levels, ducking and the hold-music loop are unjudged. Not tested on iOS Safari or a touch screen; no real GPU/phone frame times (software GL only).
+- PAYMENT ACCEPTED was verified on a real-engine round with the respin landing chance forced to 1 in a practice page, not a natural round (natural grand is ~1 in 364,000). Quote-then-ROTARY in one round (two features) and a bought bonus run to the end in the browser were not exercised; the buy flow was checked only to the confirm/cancel step (the server side of buys is covered by tests). The reel-5 tease animation exists but was not specifically captured.
+- Lobby feed, achievements and "biggest win today" still only know Bender (`social.js`, `lobby.js` untouched to keep shared-file diffs small).
+- Practice mode (no wallet, no server) resolves rounds with the local engine copy for animation, like Bender's practice mode; with a server attached the client never decides anything.
+- Hero mouth point and all sizes are tuned for the placeholder art; the final art pass will need new mouth coordinates and a look at the dial/form themes.
+- Another process is writing into `cold-call/art/tiles/` in this clone (modified `spend.jsonl`, new `gen_one.py`, `pile_nodonut.jpg`); I did not stage or touch those.

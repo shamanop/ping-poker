@@ -12,6 +12,7 @@
     bigWin: ['Top of the leaderboard!', 'Frame that check!', 'Who is closing? I am closing!'],
     rotary: ['A callback! Dial it up!', 'Spin the dial, friend.', 'Free spins on the line!'],
     quote: ['Quotes everywhere! Fill the form!', 'Quote accepted? Quote accepted!', 'Card number, please...'],
+    freeSpin: ['Every ring counts!', 'Free calls, full commission!', 'Keep dialing!', 'Callbacks pay double. Not really, but still.'],
     buy: ['Skipping the small talk.', 'Straight to the close.']
   };
   const pickFrom = (g, last) => { const p = LINES[g] || LINES.idle; let t = p[0]; for (let i = 0; i < 6; i++) { t = p[(Math.random() * p.length) | 0]; if (t !== last) break; } return t; };

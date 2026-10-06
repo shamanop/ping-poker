@@ -75,7 +75,7 @@
     ctx.sceneEl.replaceChildren(); ctx.bonusOn();
     let total = f.startSpins, leftBefore = f.startSpins;
     for (const sp of f.spins) {
-      ctx.rib(`FREE SPIN ${sp.n}/${total}`, `x${f.mult}  |  ${leftBefore} left`); ctx.SFX.spin();
+      ctx.rib(`FREE SPIN ${sp.n}/${total}`, `x${f.mult}  |  ${leftBefore} left`); ctx.SFX.spin(); if (sp.n === 1 || Math.random() < 0.3) ctx.say('freeSpin');
       await ctx.spinGrid(sp.grid, {});
       if (sp.winTenths > 0 || (sp.wins && sp.wins.length)) {
         await ctx.presentWins(sp.wins, f.mult, ctx); await ctx.addWin(sp.winTenths, 450); await ctx.wait(650); ctx.clearHits();
@@ -90,8 +90,8 @@
     if (!(ctx.willBig && ctx.isLast)) {
       ctx.SFX.accepted(); ctx.FX.coins(40); ctx.FX.confetti(25);
       const end = document.createElement('div'); end.className = 'scn';
-      end.innerHTML = '<h2>ROTARY<br>COMPLETE</h2><div class="chips"><div class="chip set"><small>FREE SPINS</small><b></b></div><div class="chip set"><small>MULTIPLIER</small><b></b></div></div><div class="chip set" style="width:100%"><small>BONUS WIN</small><b></b></div><div class="tap">TAP TO CONTINUE</div>';
-      const bs = end.querySelectorAll('b'); bs[0].textContent = total; bs[1].textContent = 'x' + f.mult; bs[2].textContent = ctx.dollars(ctx.cents(f.totalTenths));
+      end.innerHTML = '<h2>ROTARY<br>COMPLETE</h2><div class="chips"><div class="chip set"><small>SPINS PLAYED</small><b></b></div><div class="chip set"><small>MULTIPLIER</small><b></b></div></div><div class="chip set" style="width:100%"><small>TOTAL WIN</small><b></b></div><div class="tap">TAP TO CONTINUE</div>';
+      const bs = end.querySelectorAll('b'); bs[0].textContent = total; bs[1].textContent = 'x' + f.mult; bs[2].textContent = ctx.dollars(ctx.cents(ctx.run.t));
       ctx.sceneEl.replaceChildren(end); await ctx.waitTap(7000); CC.fx.clear();
     }
     ctx.sceneEl.replaceChildren(); ctx.bonusOff(); ctx.rib('3+ in a row, left to right', 'MAX ' + E.MAX_WIN_X.toLocaleString('en-US') + 'x');

@@ -29,7 +29,7 @@
   const bet = () => st.bets[st.betIdx];
   const dollars = (c) => { const n = Math.round(c), a = Math.abs(n); return (n < 0 ? '-' : '') + '$' + Math.floor(a / 100).toLocaleString('en-US') + '.' + String(a % 100).padStart(2, '0'); };
   const boxFmt = (c) => { c = Math.round(c); if (c >= 100000) return '$' + (c / 100000).toFixed(c % 100000 ? 1 : 0).replace(/\.0$/, '') + 'k'; if (c >= 10000) return '$' + Math.round(c / 100); if (c >= 100) return '$' + (c / 100).toFixed(2).replace(/\.?0+$/, ''); return c + 'c'; };
-  const costT = (kind) => (kind === 'spin' ? 10 : (st.server && st.server.buyCostX ? st.server.buyCostX[kind] * 10 : E.CFG.buyCost[kind]));
+  const costT = (kind) => (kind === 'spin' ? 10 : (st.server && st.server.buyCostX ? Math.round(st.server.buyCostX[kind] * 10) : E.CFG.buyCost[kind]));
   const walletBal = () => (st.mode === 'ledger' ? money.wallet.ledgerNet : money.wallet.play);
   const avail = () => (st.live ? (st.mode === 'ledger' ? money.wallet.ledgerNet - (money.wallet.ledgerLimit ?? -50000) : money.wallet.play) : st.pracBal);
   const pick = (a) => a[(Math.random() * a.length) | 0];
@@ -85,8 +85,8 @@
   }
   function setBusy(b) { st.busy = b; $('spin').classList.toggle('run', b); $('spin').classList.toggle('idle', !b); drawBet(); }
   function toast(t, ms = 1800) { const d = document.createElement('div'); d.className = 'toast'; d.textContent = t; stage.appendChild(d); setTimeout(() => d.remove(), ms); }
-  function floatAt(x, y, html, cls) {
-    const f = document.createElement('div'); f.className = 'float ' + (cls || ''); f.innerHTML = html; f.style.left = x + 'px'; f.style.top = y + 'px'; floatsEl.appendChild(f);
+  function floatAt(x, y, html, cls, parent) {
+    const f = document.createElement('div'); f.className = 'float ' + (cls || ''); f.innerHTML = html; f.style.left = x + 'px'; f.style.top = y + 'px'; (parent || floatsEl).appendChild(f);
     anim(f, [{ transform: 'translate(-50%,-50%) scale(.3)', opacity: 0 }, { transform: 'translate(-50%,-50%) scale(1.2)', opacity: 1, offset: 0.2 }, { transform: 'translate(-50%,-80%) scale(1)', opacity: 1, offset: 0.7 }, { transform: 'translate(-50%,-140%) scale(1)', opacity: 0 }], { duration: 1100, easing: 'ease-out' }).then(() => f.remove());
   }
   function stamp(text, sub, ms = 1500, parent, cls) {
@@ -227,7 +227,7 @@
     if (st.modal) return;
     const b = bet(), cost = costT(kind) * b / 10;
     if (avail() < cost) { toast(kind === 'spin' ? 'Not enough funds. Lower your bet.' : 'Not enough funds for that bonus.'); st.auto = false; $('auto').classList.remove('on'); return; }
-    SFX_.init(); wake(); setBusy(true); st.skip = false; sweep(); resetWin(); setBal(st.bal - cost, true); SFX_.spin(); say(kind === 'spin' ? 'spin' : 'buy');
+    SFX_.init(); wake(); dbg.started = (dbg.started || 0) + 1; setBusy(true); st.skip = false; sweep(); resetWin(); setBal(st.bal - cost, true); SFX_.spin(); say(kind === 'spin' ? 'spin' : 'buy');
     clearHits();
     let p;
     try { p = await T.spin(b, st.mode, kind === 'spin' ? null : kind); }

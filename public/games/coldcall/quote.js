@@ -69,11 +69,11 @@
       const F = f.fields[i], row = form.rows[i], [rx, ry] = ctx.localPt(row, ctx.sceneEl);
       if (!F.done && !(F.upsells > 0 && F.filled > 0)) { row.classList.add('dim'); continue; }
       if (F.upsells > 0 && F.sum > 0) {
-        const extra = F.sum * (F.mult - 1); ctx.SFX.chime(3); ctx.floatAt(rx, ry, `<span>UPSELL x${F.mult} +${ctx.dollars(ctx.cents(extra))}</span>`); await ctx.addWin(extra, 450); await ctx.wait(500);
+        const extra = F.sum * (F.mult - 1); ctx.SFX.chime(3); ctx.floatAt(rx, ry, `<span>UPSELL x${F.mult} +${ctx.dollars(ctx.cents(extra))}</span>`, '', ctx.sceneEl); await ctx.addWin(extra, 450); await ctx.wait(500);
       }
       if (F.done) {
         row.classList.add('done'); ctx.SFX.field(i); ctx.FX.burst(...ctx.stagePt(row), { n: 18, speed: 300, size: 8 });
-        ctx.floatAt(rx, ry, `<span>${TIER_LABEL[F.tier]}</span><b>+${ctx.dollars(ctx.cents(F.prize))}</b>`); await ctx.addWin(F.prize, 500); await ctx.wait(650);
+        ctx.floatAt(rx + 105, ry, `<span>${TIER_LABEL[F.tier]}</span><b>+${ctx.dollars(ctx.cents(F.prize))}</b>`, '', ctx.sceneEl); await ctx.addWin(F.prize, 500); await ctx.wait(650);
       } else row.classList.add('dim');
     }
     if (f.grand) {
@@ -86,8 +86,8 @@
     if (!(ctx.willBig && ctx.isLast)) {
       if (!f.grand) ctx.SFX.register();
       const end = document.createElement('div'); end.className = 'scn';
-      end.innerHTML = '<h2>QUOTE<br>ACCEPTED</h2><div class="chip set" style="width:100%"><small>BONUS WIN</small><b></b></div><p class="sub"></p><div class="tap">TAP TO CONTINUE</div>';
-      end.querySelector('b').textContent = ctx.dollars(ctx.cents(f.totalTenths));
+      end.innerHTML = '<h2>QUOTE<br>ACCEPTED</h2><div class="chip set" style="width:100%"><small>TOTAL WIN</small><b></b></div><p class="sub"></p><div class="tap">TAP TO CONTINUE</div>';
+      end.querySelector('b').textContent = ctx.dollars(ctx.cents(ctx.run.t));
       end.querySelector('.sub').textContent = f.fields.filter((x) => x.done).map((x) => x.name).join(' + ') || 'No field completed';
       ctx.sceneEl.replaceChildren(end); await ctx.waitTap(7000);
     } else await ctx.wait(500);

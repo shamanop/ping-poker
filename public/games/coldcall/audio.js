@@ -47,6 +47,7 @@ const SFX = (() => {
   const api = {
     init,
     isSfx: () => sfxOn, isMusic: () => musicOn,
+    debug: () => ({ ctx: ctx ? ctx.state : 'none', music: !!musicTimer, sfx: sfxOn, musicOn, sfxGain: sfxG ? sfxG.gain.value : null, musGain: musG ? musG.gain.value : null }),
     setSfx(on) { sfxOn = !!on; lsSet('ping.sfx', sfxOn ? '1' : '0'); if (sfxG) sfxG.gain.value = sfxOn ? 0.9 : 0; return sfxOn; },
     setMusic(on) {
       musicOn = !!on; lsSet('ping.music', musicOn ? '1' : '0'); if (musG) musG.gain.value = musicOn ? 1 : 0;
