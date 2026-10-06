@@ -84,13 +84,16 @@ function play(s, sock, payload, i = 0) {
   while (r.status === 'pending') r = decide(s, sock, r, policy(i + n++, r.pending));
   return r;
 }
-// buy bonuses until one stops at a decision of the wanted kind (other decisions are answered by the policy)
+// buy bonuses until one stops at a decision of the wanted kind at ANY step of the round (other decisions are answered by the policy)
 function toPending(s, sock, kind, mode = 'play', bet = 10) {
   for (let i = 0; i < 600; i++) {
     let r = spin(s, sock, { bet, mode, buyBonus: i % 3 === 2 ? 'bonus2' : 'bonus1' });
     if (r.error) throw new Error('toPending: ' + JSON.stringify(r.error));
-    if (r.status === 'pending' && r.pending.k === kind) return r;
-    let n = 0; while (r.status === 'pending') r = decide(s, sock, r, policy(i + n++, r.pending));
+    let n = 0;
+    while (r.status === 'pending') {   // every pending step of the round is checked, not only the first (a PICK is often followed by a ONE MORE CALL)
+      if (r.pending.k === kind) return r;
+      r = decide(s, sock, r, policy(i + n++, r.pending));
+    }
   }
   throw new Error('no ' + kind + ' decision in 600 buys');
 }

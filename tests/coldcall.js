@@ -581,11 +581,13 @@ function replayRound(s, cfg) {
     }
   });
 
-  await test('engine: short sanity band (2M spins, fixed seed): hit rate 18-26%, any bonus 1 in 120-250, RTP in a wide band (the tight figure is the sim)', () => {
+  await test('engine: short sanity band (2M spins, fixed seed): hit rate 18-26%, natural bonus 1 in 300-600, RTP 60-130 (the tight figure is the sim)', () => {
+    // re-pinned at 265dd33 (levers values, LEVERS.md 8): this is the STATELESS base game (pull.on = false: no Callback, warm squares, PICK or pot), so it is the full game minus about 28 points:
+    // natural bonus 1 in 420 (was 207; the Callback adds the rest, any bonus stays 1 in 208), measured 1 in 417, hit 20.48%, RTP 67.6% (full game 97.96 less Callback 22.4, warm 4.3, pot 1.0, PICK edge)
     const rng = E.rngFrom(2026); const N = 2000000; let sum = 0, hit = 0, bonus = 0, tot = 0;
     for (let i = 0; i < N; i++) { const r = eng.round(rng, null); sum += r.winTenths; if (r.clusterTenths > 0) hit++; if (r.bonusKind) bonus++; }
     const rtp = sum / N / 10 * 100, hr = hit / N * 100;
-    assert.ok(hr > 18 && hr < 26, 'hit ' + hr.toFixed(2)); assert.ok(N / bonus > 120 && N / bonus < 250, 'bonus 1 in ' + N / bonus); assert.ok(rtp > 70 && rtp < 130, 'rtp ' + rtp.toFixed(2));
+    assert.ok(hr > 18 && hr < 26, 'hit ' + hr.toFixed(2)); assert.ok(N / bonus > 300 && N / bonus < 600, 'bonus 1 in ' + N / bonus); assert.ok(rtp > 60 && rtp < 130, 'rtp ' + rtp.toFixed(2));
   });
 
   await test('engine: buys priced near 98% each (bonus buys 60k runs, call 400k; wide band, the tight figure is the sim)', () => {

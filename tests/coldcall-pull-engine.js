@@ -55,10 +55,12 @@ const NODAY = { day: null };
     assert.ok(fs.readFileSync(path.join(__dirname, '..', 'games', 'coldcall-engine.js')).equals(fs.readFileSync(path.join(__dirname, '..', 'public', 'games', 'coldcall', 'engine.js'))), 'public copy must be byte-identical');
   });
 
+  // digest pinned at 265dd33 with the levers values (base bell 1.175, phone 0.2275, buyCost 27/964/2910/20; the old weights gave c808ef7e...). It guards the stateless path against drift in the
+  // mechanisms, not the weights: after a deliberate weight change regenerate it by printing h.digest('hex') from the loop below and say so here.
   await test('legacy equality: resolveRound / round / playSpin / playBonus reproduce the pre-PULL engine seed for seed (digest of 3000 rounds incl. scripts)', () => {
     const h = crypto.createHash('sha256');
     for (const buy of [null, 'call', 'hunt', 'bonus1', 'bonus2']) for (let seed = 1; seed <= 600; seed++) { const r = E.resolveRound(E.rngFrom(seed * 7 + 3), buy); h.update(JSON.stringify([r.winTenths, r.costTenths, r.script])); }
-    assert.strictEqual(h.digest('hex'), 'c808ef7efa2c5e236caca7bb8273ea7002fb5b5299f3f02199a1d7dac04edcb8');
+    assert.strictEqual(h.digest('hex'), '2068652ad3cd313bd53f067cbf60f9e01169e37a36b4acf2d84ab85aef7acf29');
   });
 
   await test('pull.on = false: playRound is the legacy round, state returned unchanged, no decisions, no pull effects, same draws', () => {

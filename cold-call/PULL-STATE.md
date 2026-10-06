@@ -64,3 +64,9 @@ Open, by choice (known limits):
 - Done: contract `PULL-UI.md`; concept comps A/B/C, Opus blind judge picked B (rolodex, decisions in the HUD) + steals; A flow 5120a28; B look c31fd6c; W1B fixes e56db4f.
 - Running now: builder T re-pins the three red tests (coldcall band, pull-engine legacy digest, server "W1B N5"); builder I integrates ASK A (reset ctx.timer on `ready`), shows leads out of the knob (450), daily token, ghost wording "IF A PHONE HAD LANDED", then screenshots 540/1440/360 x Play $ / Chips.
 - Next: Opus critic pass (Frank spawns with collect=true; I will ask), ONE fix round, four suites from a git archive export, hand-off section.
+
+## RE-PIN (levers values)
+Three tests re-pinned to 265dd33 (bell 1.175, phone 0.2275, buyCost 27/964/2910/20); no knob or engine value touched. Results: coldcall.js 47, pull-engine 38, pull-server 47, bender 19, cmp clean.
+- tests/coldcall.js sanity band: natural bonus 1 in 120-250 -> 300-600 (now 1 in 417, levers 1 in 420), RTP 70-130 -> 60-130 (stateless base game 67.6%: full 97.96 less Callback 22.4, warm 4.3, pot 1.0, PICK edge); hit 20.48% stays in 18-26.
+- tests/coldcall-pull-engine.js legacy digest: c808ef7e... -> 2068652a... (regenerate by printing h.digest('hex') from that loop; the comment above the test says so).
+- tests/coldcall-pull-server.js W1B N5: assertions unchanged; toPending now checks every pending step of a round, not only the first (a PICK is often followed by the ONE MORE CALL; with bell 1.175 seed 93 never stopped first at 'more').
