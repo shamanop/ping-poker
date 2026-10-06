@@ -92,4 +92,46 @@ function throwsRule(fn, code) {
   assert.fail(`expected RuleError${code ? ' ' + code : ''}, nothing thrown`);
 }
 
-module.exports = { assert, H, mulberry32, rint, pick, makeSuite, runSuite, card, ALL, rigDeck, mk, play, runOut, finish, stacksOf, clone, throwsRule };
+
+// ─── random setups and actions ───────────────────────────────────────────────
+const UNIT = 2520; // lcm(1..9): amounts that are multiples of it never leave an odd chip in any split
+
+// Random table: 2-9 seats picked from 0..8, random blinds and stacks (including stacks below the blinds).
+// exact=true makes every amount a multiple of UNIT.
+function randomSetup(rng, { exact = false, minSeats = 2, maxSeats = 9 } = {}) {
+  const n = rint(rng, minSeats, maxSeats);
+  const pool = L_shuffle([0, 1, 2, 3, 4, 5, 6, 7, 8], rng).slice(0, n).sort((a, b) => a - b);
+  const bb = exact ? UNIT * rint(rng, 1, 3) : pick(rng, [2, 2, 4, 10, 20, 50, 50, 100, 250]);
+  const sb = exact ? UNIT * rint(rng, 1, bb / UNIT) : (rng() < 0.7 ? Math.max(1, Math.floor(bb / 2)) : rint(rng, 1, bb));
+  const shared = rint(rng, 1, 40) * bb; // some equal stacks make ties and exact side-pot edges likely
+  const seats = pool.map(seat => {
+    const r = rng();
+    let stack;
+    if (exact) stack = UNIT * rint(rng, 1, r < 0.5 ? 6 : 40);
+    else if (r < 0.15) stack = rint(rng, 1, bb * 2);          // below / around the blinds
+    else if (r < 0.35) stack = shared;
+    else if (r < 0.75) stack = rint(rng, bb, bb * 40);
+    else stack = rint(rng, bb * 40, bb * 400);
+    return { seat, stack };
+  });
+  return { seats, button: pick(rng, pool), sb, bb, deck: shuffle(makeDeck(), rng) };
+}
+function L_shuffle(arr, rng) { return shuffle(arr, rng); }
+
+// A random action that is legal for the seat to act. Returns { type, to? }.
+function legalPick(la, rng, { shove = 0.1, exact = false } = {}) {
+  const r = rng();
+  if (la.canRaise && r < 0.4) {
+    let to;
+    const k = rng();
+    if (k < shove) to = la.maxRaiseTo;
+    else if (k < shove + 0.25) to = la.minRaiseTo;
+    else if (exact) to = la.minRaiseTo + UNIT * rint(rng, 0, Math.floor((la.maxRaiseTo - la.minRaiseTo) / UNIT));
+    else to = rint(rng, la.minRaiseTo, la.maxRaiseTo);
+    return { type: 'raise', to };
+  }
+  if (r < 0.52 && la.toCall > 0) return { type: 'fold' };
+  return { type: la.canCheck ? 'check' : 'call' };
+}
+
+module.exports = { UNIT, randomSetup, legalPick, assert, H, mulberry32, rint, pick, makeSuite, runSuite, card, ALL, rigDeck, mk, play, runOut, finish, stacksOf, clone, throwsRule };

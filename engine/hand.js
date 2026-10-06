@@ -17,6 +17,13 @@ class RuleError extends Error {
 
 const isInt = n => Number.isSafeInteger(n);
 
+// Seat argument: an integer, or a digit string (socket/object keys). Anything else is NaN (never a seat).
+function toSeat(x) {
+  if (typeof x === 'number' && Number.isInteger(x)) return x;
+  if (typeof x === 'string' && /^\d{1,6}$/.test(x)) return Number(x);
+  return NaN;
+}
+
 // ─── seat helpers ────────────────────────────────────────────────────────────
 
 function seatNums(hand) { return Object.keys(hand.seats).map(Number).sort((a, b) => a - b); }
@@ -115,7 +122,7 @@ function info(hand, n) {
 }
 
 function legalActions(hand, seat) {
-  const n = Number(seat);
+  const n = toSeat(seat);
   if (hand.phase !== 'betting' || !Number.isInteger(n) || hand.toAct !== n) return null;
   const i = info(hand, n);
   return {
@@ -132,7 +139,7 @@ function legalActions(hand, seat) {
 // ─── apply ───────────────────────────────────────────────────────────────────
 
 function apply(hand, seat, action) {
-  const n = Number(seat);
+  const n = toSeat(seat);
   if (hand.phase !== 'betting' || !Number.isInteger(n) || hand.toAct !== n) {
     throw new RuleError('not_your_turn', { seat, toAct: hand.toAct });
   }
@@ -269,7 +276,7 @@ function dealNext(hand) {
 }
 
 function foldOut(hand, seat) {
-  const n = Number(seat);
+  const n = toSeat(seat);
   const s = Number.isInteger(n) ? hand.seats[n] : undefined;
   if (!s) throw new RuleError('not_in_hand', { seat });
   if (hand.phase === 'showdown' || hand.phase === 'done') throw new RuleError('hand_over', { phase: hand.phase });

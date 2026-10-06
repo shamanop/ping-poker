@@ -614,7 +614,7 @@ module.exports = function register(t) {
   t.case('acting out of turn throws not_your_turn and changes nothing', () => {
     const h = mk({ stacks: [1000, 1000, 1000], button: 0 });
     const before = J(h);
-    for (const seat of [1, 2, 3, 99, -1, 1.5, NaN, undefined, '1', 'x']) {
+    for (const seat of [1, 2, 3, 99, -1, 1.5, NaN, undefined, null, '', true, [], {}, 'x', '-1', '1.5', '1']) {
       for (const a of [{ type: 'fold' }, { type: 'check' }, { type: 'call' }, { type: 'raise', to: 200 }]) {
         throwsRule(() => H.apply(h, seat, a), 'not_your_turn');
       }
