@@ -695,6 +695,8 @@ function viewSettle(d) {
 function hostUi(on) {
   closeDrawer();
   if (hostBtn) { hostBtn.remove(); hostBtn = null; }
+  const plate = document.querySelector('.blinds-plate');
+  if (plate) { plate.classList.toggle('editable', !!on); plate.title = on ? 'Change blinds' : ''; }
   if (!on) return;
   const slot = $('host-slot'); if (!slot) return;
   hostBtn = h('button', { class: 'host-btn', id: 'host-btn', type: 'button', onclick: toggleDrawer }, 'Host'); slot.append(hostBtn);
@@ -740,10 +742,15 @@ function blindsEditor(t, id, unit) {
   sbIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); save(); } });
   return h('div', { class: 'lb-stack', style: 'gap:var(--p8)' },
     h('div', { class: 'lb-label' }, 'Blinds'),
-    h('div', { class: 'lb-btns', style: 'align-items:center' }, sbIn, h('span', null, '/'), bbIn,
-      h('button', { class: 'lb-btn sm', id: 'host-blinds-save', type: 'button', onclick: save }, 'Set blinds')),
+    h('div', { style: 'display:grid;grid-template-columns:1fr auto 1fr;gap:var(--p8);align-items:center' }, sbIn, h('span', null, '/'), bbIn),
+    h('button', { class: 'lb-btn sm full', id: 'host-blinds-save', type: 'button', onclick: save }, 'Set blinds'),
     note);
 }
+document.addEventListener('click', (e) => {
+  if (!hostBtn || !e.target.closest || !e.target.closest('.blinds-plate')) return;
+  if (!hostDrawer) toggleDrawer();
+  setTimeout(() => { const i = $('host-sb'); if (i) { i.focus(); i.select(); } }, 60);
+});
 function drawDrawer(confirmEnd) {
   if (!hostDrawer || !S.cur) return;
   const t = S.cur, id = tId(t), info = S.info[id], paused = t.state === 'paused';

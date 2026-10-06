@@ -1284,7 +1284,7 @@ io.on('connection', socket => {
     }).sort((x, y) => (y.online - x.online) || ((y.lastSeen || 0) - (x.lastSeen || 0)) || x.display.localeCompare(y.display));
     socket.emit('admin_overview', {
       accounts: rows,
-      table: room ? { paused: !!room.paused, status: room.status, seated: room.players.filter(p => !p.isBot).length, handNum: room.handNum || 0, startChips: room.startChips || STARTING_CHIPS } : null,
+      table: room ? { paused: !!room.paused, status: room.status, seated: room.players.filter(p => !p.isBot).length, handNum: room.handNum || 0, startChips: room.startChips || STARTING_CHIPS, sb: room.sb, bb: room.bb, nextSb: room.pendingBlinds ? room.pendingBlinds.sb : null, nextBb: room.pendingBlinds ? room.pendingBlinds.bb : null } : null,
     });
   });
   on('admin_bank_summary', ({ view } = {}) => {

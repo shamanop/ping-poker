@@ -186,6 +186,7 @@
   let pendingBal = null;
 
   // ── table ──
+  const plainAmt = n => (window.Money ? window.Money.fmt(n, { symbol: false }).replace(/,/g, '') : String(n));
   function renderTable() {
     const host = $('adm-table'); if (!host || tab !== 'table') return;
     const t = overview && overview.table;
@@ -198,7 +199,21 @@
       <div class="adm-card"><h3>Reset table</h3>
         <p>Cancels the current hand, refunds bets, and sets everyone's total money to the starting stack. The table must be paused first.</p>
         <div class="adm-row"><input class="adm-in" id="adm-stack" type="number" min="200" step="1" value="${keepStack || last}" aria-label="Starting stack">
-        <button type="button" class="adm-btn danger" id="adm-reset" ${t.paused ? '' : 'disabled'}>Reset table</button></div></div>`;
+        <button type="button" class="adm-btn danger" id="adm-reset" ${t.paused ? '' : 'disabled'}>Reset table</button></div></div>
+      <div class="adm-card"><h3>Blinds</h3>
+        <p>Now ${esc(money(t.sb))} / ${esc(money(t.bb))}${t.nextBb ? ' &middot; next hand ' + esc(money(t.nextSb)) + ' / ' + esc(money(t.nextBb)) : ''}. Changes made mid-hand start on the next hand.</p>
+        <div class="adm-row"><input class="adm-in" id="adm-sb" type="text" inputmode="decimal" value="${esc(plainAmt(t.nextSb || t.sb))}" aria-label="Small blind"> /
+        <input class="adm-in" id="adm-bb" type="text" inputmode="decimal" value="${esc(plainAmt(t.nextBb || t.bb))}" aria-label="Big blind">
+        <button type="button" class="adm-btn pri" id="adm-blinds">Set blinds</button></div></div>`;
+    $('adm-blinds').addEventListener('click', () => {
+      const M = window.Money, prevUnit = M && M.getUnit ? M.getUnit() : null; if (M && M.setUnit) M.setUnit('chips');
+      const sb = M ? M.parse($('adm-sb').value) : Math.round(Number($('adm-sb').value)), bb = M ? M.parse($('adm-bb').value) : Math.round(Number($('adm-bb').value));
+      if (prevUnit) M.setUnit(prevUnit);
+      if (!(sb >= 1) || !(bb >= 2)) { status('Enter both blinds', 'err'); return; }
+      if (sb >= bb) { status('Small blind must be less than the big blind', 'err'); return; }
+      status('Working'); sock().emit('table_update', { tableId: 'POKERPING', patch: { blinds: { sb, bb } } });
+      setTimeout(() => { status('Blinds set to ' + money(sb) + ' / ' + money(bb) + (t.status === 'playing' ? ', from the next hand' : ''), 'ok'); refresh(); }, 400);
+    });
     $('adm-pause').addEventListener('click', () => { status('Working'); sock().emit('set_pause', { paused: !t.paused }); setTimeout(refresh, 350); });
     $('adm-reset').addEventListener('click', () => {
       const amount = Math.floor(Number($('adm-stack').value));
