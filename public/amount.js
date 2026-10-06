@@ -91,17 +91,17 @@
     const el = mk('div', 'amt');
     const row = mk('div', 'amt-row');
     const sym = mk('span', 'amt-sym');
-    const input = mk('input', 'amt-text text-input', { type: 'text', autocomplete: 'off', spellcheck: 'false', autocapitalize: 'off', 'aria-label': label, enterkeyhint: 'done' });
+    const input = mk('input', 'amt-text field field--num', { type: 'text', autocomplete: 'off', spellcheck: 'false', autocapitalize: 'off', 'aria-label': label, enterkeyhint: 'done' });
     const suffix = mk('span', 'amt-suffix');
-    const slider = mk('input', 'amt-slider', { type: 'range', step: '1', 'aria-label': label + ' slider' });
+    const slider = mk('input', 'amt-slider slider', { type: 'range', step: '1', 'aria-label': label + ' slider' });
     const ends = mk('div', 'amt-ends');
     const endMin = mk('span', 'amt-min'), endMax = mk('span', 'amt-max');
     const presetBox = mk('div', 'amt-presets');
     const msgEl = mk('div', 'amt-msg', { role: 'alert', 'aria-live': 'polite' });
-    const confirmEl = mk('div', 'amt-confirm');
+    const confirmEl = mk('div', 'amt-confirm panel panel--inset panel--tight');
     const confirmTxt = mk('span', 'amt-confirm-txt');
-    const confirmYes = mk('button', 'amt-confirm-yes', { type: 'button' });
-    const confirmNo = mk('button', 'amt-confirm-no', { type: 'button' });
+    const confirmYes = mk('button', 'amt-confirm-yes btn btn--primary btn--sm', { type: 'button' });
+    const confirmNo = mk('button', 'amt-confirm-no btn btn--secondary btn--sm', { type: 'button' });
     confirmYes.textContent = 'All-in';
     confirmNo.textContent = 'Cancel';
     confirmEl.append(confirmTxt, confirmYes, confirmNo);
@@ -152,7 +152,7 @@
     function renderPresets() {
       while (presetBox.firstChild) presetBox.removeChild(presetBox.firstChild);
       presets.forEach(p => {
-        const b = mk('button', 'amt-pre' + (p.units === allInUnits && p.label === 'All-in' ? ' amt-pre-allin' : ''), { type: 'button', 'data-units': String(p.units) });
+        const b = mk('button', 'btn btn--secondary btn--chip amt-pre' + (p.units === allInUnits && p.label === 'All-in' ? ' amt-pre-allin' : ''), { type: 'button', 'data-units': String(p.units) });
         const l = mk('span', 'amt-pre-l'); l.textContent = p.label;
         const v = mk('b', 'amt-pre-v'); v.textContent = fmt(p.units);
         b.append(l, v);
@@ -170,6 +170,7 @@
       const u = units === null ? min : units;
       slider.value = String(nearestIdx(u));
       slider.setAttribute('aria-valuetext', fmt(inRange(u) ? u : min));
+      if (slider.style && slider.style.setProperty) slider.style.setProperty('--fill', (stops.length > 1 ? (Number(slider.value) / (stops.length - 1)) * 100 : 0).toFixed(1) + '%');
     }
 
     function closeConfirm() { confirmOpen = false; confirmEl.hidden = true; confirmEl.classList.add('hidden'); }

@@ -42,7 +42,7 @@
     const grid = document.querySelector('.g-grid');
     if (!head || !grid || $('bank-btn')) return;
     const btn = document.createElement('button');
-    btn.type = 'button'; btn.id = 'bank-btn'; btn.className = 'bank-chip'; btn.textContent = 'Bank';
+    btn.type = 'button'; btn.id = 'bank-btn'; btn.className = 'btn btn--secondary btn--sm'; btn.textContent = 'Bank';
     btn.title = 'Bank dashboard (B)';
     const slot = $('bank-slot');
     if (slot) slot.replaceWith(btn);
@@ -53,24 +53,24 @@
     grid.appendChild(pb);
 
     const panel = document.createElement('section');
-    panel.id = 'bank-panel'; panel.className = 'bank-panel'; panel.setAttribute('aria-label', 'Bank');
+    panel.id = 'bank-panel'; panel.className = 'bank-panel panel panel--flush'; panel.setAttribute('aria-label', 'Bank');
     panel.innerHTML = `
       <div class="bank-head">
         <div class="bank-title">THE <em>BANK</em></div>
         <div class="bank-sub" id="bank-sub">Buy-ins, balances and chips over time</div>
-        <div class="bank-view" id="bank-view" role="group" aria-label="Currency"><button type="button" data-v="chips">Chips</button><button type="button" data-v="play">Play $</button></div>
+        <div class="bank-view seg" id="bank-view" role="group" aria-label="Currency"><button type="button" data-v="chips">Chips</button><button type="button" data-v="play">Play $</button></div>
         <div class="bank-total" id="bank-total"></div>
-        <button type="button" class="bank-close" id="bank-close" aria-label="Close bank">&#x2715;</button>
+        <button type="button" class="bank-close panel__close" id="bank-close" aria-label="Close bank">&#x2715;</button>
       </div>
       <div class="bank-body">
         <div class="bank-col">
-          <div class="bank-card" style="flex:1"><h3>Standings<small id="bank-pcount"></small></h3><div class="bank-players bank-scroll" id="bank-players"></div></div>
+          <div class="bank-card panel panel--flush" style="flex:1"><h3 class="panel__title panel__title--sm">Standings<small id="bank-pcount"></small></h3><div class="bank-players bank-scroll" id="bank-players"></div></div>
         </div>
         <div class="bank-col">
-          <div class="bank-card bank-chartcard"><h3 id="bank-chart-title">Chips at the table, hand by hand<small id="bank-hcount"></small></h3><div class="bank-card-body" id="bank-line"></div></div>
+          <div class="bank-card bank-chartcard panel panel--flush"><h3 class="panel__title panel__title--sm" id="bank-chart-title">Chips at the table, hand by hand<small id="bank-hcount"></small></h3><div class="bank-card-body" id="bank-line"></div></div>
           <div class="bank-row2">
-            <div class="bank-card"><h3>Total buy-ins<span class="bank-legend"><span><i style="background:${BRASS}"></i>Buy-in</span><span><i style="background:${CLAY}"></i>Rebuys</span></span></h3><div class="bank-card-body" id="bank-bars"></div></div>
-            <div class="bank-card"><h3>Activity<small id="bank-ecount"></small></h3><div class="bank-feed bank-scroll" id="bank-feed"></div></div>
+            <div class="bank-card panel panel--flush"><h3 class="panel__title panel__title--sm">Total buy-ins<span class="bank-legend"><span><i style="background:${BRASS}"></i>Buy-in</span><span><i style="background:${CLAY}"></i>Rebuys</span></span></h3><div class="bank-card-body" id="bank-bars"></div></div>
+            <div class="bank-card panel panel--flush"><h3 class="panel__title panel__title--sm">Activity<small id="bank-ecount"></small></h3><div class="bank-feed bank-scroll" id="bank-feed"></div></div>
           </div>
         </div>
       </div>`;
@@ -184,7 +184,7 @@
       const netCls = p.isBot ? '' : p.net > 0 ? 'pos' : p.net < 0 ? 'neg' : '';
       const sub = [STATUS[p.status] || p.status, p.handsPlayed + ' hand' + (p.handsPlayed === 1 ? '' : 's')];
       const tag = p.isBot ? '<i>House</i>' : (p.name.toLowerCase() === meName ? '<i>You</i>' : '');
-      return `<div class="bp${p.name.toLowerCase() === meName ? ' me' : ''}${off ? ' off' : ''}" style="--pc:${colorOf(p.name)}">
+      return `<div class="bp panel panel--inset${p.name.toLowerCase() === meName ? ' me' : ''}${off ? ' off' : ''}" style="--pc:${colorOf(p.name)}">
         <div class="bp-avw"><div class="bp-av">${avatarFor(p.name)}</div><span class="bp-dot ${p.status}" title="${STATUS[p.status] || ''}"></span></div>
         <div class="bp-who">${E(p.name)}${tag}</div>
         <div class="bp-sub">${E(sub.join(' · '))}</div>

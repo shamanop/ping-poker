@@ -116,7 +116,7 @@ function setScale() {
   if (host && !stageRO && window.ResizeObserver) { stageRO = new ResizeObserver(() => onResize()); stageRO.observe(host); }
   const w = host && host.clientWidth ? host.clientWidth : window.innerWidth;
   const h = host && host.clientHeight ? host.clientHeight : window.innerHeight;
-  const u = Math.max(0.8, Math.min(1.35, Math.min(h / 900, w / 1440)));
+  const u = Math.max(h < 600 ? 0.5 : 0.8, Math.min(1.35, Math.min(h / 900, w / 1440)));   // a short (landscape phone) stage may go below 0.8
   document.documentElement.style.setProperty('--u', u.toFixed(4));
   state.u = window.innerWidth <= 600 ? PHONE_TABLE_U : u;   // phone.css redeclares the same unit on #game-screen
   return u;
@@ -200,7 +200,7 @@ function showScreen(id) {
 function toast(title, sub = '', kind = '', ms = 3200) {
   const wrap = $('toasts');
   const el = document.createElement('div');
-  el.className = `toast ${kind}`.trim();
+  el.className = `toast panel panel--toast ${kind}`.trim();
   el.style.setProperty('--ms', (ms / 1000) + 's');
   el.innerHTML = `<b>${esc(title)}</b>${sub ? `<span>${esc(sub)}</span>` : ''}`;
   wrap.appendChild(el);
@@ -776,7 +776,7 @@ function layoutTable() {
   const sw = stage.clientWidth, sh = stage.clientHeight;
   const seatW = 168 * u, seatH = 56 * u;
   const AR = 1152 / 535;
-  const H = Math.max(Math.min(200, sw * 0.9 / AR), Math.min(sw * 0.9 / AR, (sh - 107 * u) / 0.8284));
+  const H = Math.max(Math.min(200 * Math.min(1, u / 0.8), sw * 0.9 / AR), Math.min(sw * 0.9 / AR, (sh - 107 * u) / 0.8284));   // the 200 px floor scales down with u so a short stage is not overrun
   const W = H * AR;
   const spare = Math.max(0, (sh - 45 * u) - (62 * u + 0.8284 * H));
   const tbTop = 34 * u - 0.0256 * H + spare * 0.5;
@@ -842,9 +842,10 @@ function renderGame() {
   const so = $('btn-sit-out');
   const canSit = !!(me && gs.status === 'playing' && !(me.sittingOut && !me.sitOutRequest && !me.cardCount));
   so.disabled = !canSit;
-  so.textContent = canSit && me.sitOutRequest ? 'Back in' : 'Sit out';
+  so.textContent = canSit && me.sitOutRequest ? "I'm back" : 'Sit out';
   so.title = !canSit ? 'Available while a hand is being played' : me.sitOutRequest ? 'Rejoin from the next hand' : 'Sit out from the next hand';
   so.classList.toggle('on', canSit && !!me.sitOutRequest);
+  so.setAttribute('aria-pressed', canSit && me.sitOutRequest ? 'true' : 'false');
 }
 
 // ─── Action bubbles (short-lived, driven by lastAction changes) ───
@@ -1463,11 +1464,11 @@ function showThrowTray(playerIdx, nearEl) {
 
   const rect = nearEl.getBoundingClientRect();
   const tray = document.createElement('div');
-  tray.className = 'throw-tray';
+  tray.className = 'throw-tray panel panel--tight';
   tray.innerHTML = `
     <div class="throw-tray-label">Throw at <strong>${esc(gs.players[playerIdx].name)}</strong></div>
     <div class="throw-options">
-      ${['💣', '🍅', '💦', '🎉'].map(e => `<div class="throw-option" data-item="${e}">${art('throws', e)}</div>`).join('')}
+      ${['💣', '🍅', '💦', '🎉'].map(e => `<button type="button" class="throw-option btn btn--icon btn--secondary" data-item="${e}" aria-label="Throw ${e}">${art('throws', e)}</button>`).join('')}
     </div>`;
 
   const trayW = 168 * state.u;

@@ -55,7 +55,7 @@ class Sess:
     def sign_up(self, name, pin='4321', avatar=None):
         p = self.page; self.goto()
         p.wait_for_selector('#lb-name', timeout=15000)
-        p.click('.lb-seg button[data-tab="up"]')
+        p.click('.seg button[data-tab="up"]')
         p.fill('#lb-name', name); p.fill('#lb-pin', pin)
         p.click('#lb-submit')
         p.wait_for_selector('#lb-join-btn, #lb-create-btn, .pj-modal', timeout=15000)

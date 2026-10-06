@@ -333,7 +333,7 @@
   function showToast(t) {
     toastLive++;
     var el = document.createElement('div');
-    el.className = 'pj-toast in' + (t.sticker ? '' : ' nosticker');
+    el.className = 'pj-toast panel panel--toast in' + (t.sticker ? '' : ' nosticker');
     var html = esc(t.text).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
     el.innerHTML = (t.sticker ? '<img alt="" src="' + stickerUrl(t.sticker) + '">' : '') + '<div class="pj-toast-t">' + html + '</div>';
     toastHost().appendChild(el);
@@ -430,10 +430,10 @@
     if (modalOpen) return modalOpen.promise;
     var m = document.createElement('div');
     m.className = 'pj-modal'; m.setAttribute('role', 'dialog'); m.setAttribute('aria-modal', 'true'); m.setAttribute('aria-label', 'Daily bonus');
-    m.innerHTML = '<div class="pj-card"><div class="kick">' + esc(o.kicker || 'DAILY BONUS') + '</div>' +
+    m.innerHTML = '<div class="pj-card panel"><div class="kick">' + esc(o.kicker || 'DAILY BONUS') + '</div>' +
       '<div class="pj-card-art"><img class="glitter" alt="" src="' + artUrl('glitter') + '"><img alt="" src="' + stickerUrl('vp-chip') + '"></div>' +
       '<div class="amt">' + (typeof amount === 'number' ? money(0, true) : esc(amount)) + '</div>' +
-      '<p>' + esc(o.note || 'Come back every day to keep your streak alive.') + '</p><button type="button" class="claim">CLAIM</button></div>';
+      '<p>' + esc(o.note || 'Come back every day to keep your streak alive.') + '</p><button type="button" class="claim btn btn--primary btn--lg btn--block">CLAIM</button></div>';
     document.body.appendChild(m);
     var btn = m.querySelector('.claim'), amt = m.querySelector('.amt'), done;
     var promise = new Promise(function (r) { done = r; });
@@ -475,17 +475,17 @@
     var tiles = '';
     for (var i = 1; i <= 7; i++) {
       var st = i < day || (i === day && !avail) ? 'done' : (i === day ? 'today' : 'future');
-      tiles += '<div class="pj-day ' + st + (i === 7 ? ' jackpot' : '') + '" data-day="' + i + '">' +
+      tiles += '<div class="pj-day panel panel--inset ' + st + (i === 7 ? ' jackpot' : '') + '" data-day="' + i + '">' +
         '<div class="dn">DAY ' + i + '</div>' +
         (i === 7 ? '<img class="art" alt="" src="' + stickerUrl('vp-charm') + '"><div class="jp">JACKPOT</div>' : '') +
         '<div class="da">' + esc(fmt(sched[i - 1])) + '</div>' +
         '<div class="stamp">CLAIMED</div></div>';
     }
-    m.innerHTML = '<div class="pj-card pj-cal"><div class="kick">DAY <b class="cn">' + day + '</b> OF 7</div>' +
+    m.innerHTML = '<div class="pj-card pj-cal panel"><div class="kick">DAY <b class="cn">' + day + '</b> OF 7</div>' +
       '<div class="pj-cal-streak"><span class="flame"></span></div>' +
       '<div class="pj-days">' + tiles + '</div>' +
       '<p class="pj-note">' + (avail ? 'Claim today to keep the streak alive. Miss a day and it resets to Day 1.' : 'Claimed. Come back tomorrow for Day ' + (day === 7 ? 1 : day + 1) + '.') + '</p>' +
-      '<button type="button" class="claim">' + (avail ? 'CLAIM ' + esc(fmt(sched[day - 1])) : 'CLOSE') + '</button></div>';
+      '<button type="button" class="claim btn btn--primary btn--lg btn--block">' + (avail ? 'CLAIM ' + esc(fmt(sched[day - 1])) : 'CLOSE') + '</button></div>';
     document.body.appendChild(m);
     var btn = m.querySelector('.claim'), todayEl = m.querySelector('.pj-day[data-day="' + day + '"]'), done;
     var flame = m.querySelector('.flame'); try { PJ.streakFlame(flame, streak); } catch (e) { /* optional */ }

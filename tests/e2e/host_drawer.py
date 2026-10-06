@@ -43,8 +43,9 @@ with sync_playwright() as p:
     c.ok('garbage blind shows a message', pg.inner_text('#host-blinds-msg').strip() != '')
     # ui defect 3: at 1280x720 the drawer stays inside the viewport and scrolls
     pg.set_viewport_size({'width': 1280, 'height': 720}); pg.wait_for_timeout(500)
-    g = pg.evaluate("(() => { const d = document.getElementById('host-drawer'); const r = d.getBoundingClientRect(); return {bottom: r.bottom, h: innerHeight, oy: getComputedStyle(d).overflowY} })()")
+    g = pg.evaluate("(() => { const d = document.getElementById('host-drawer'), body = d.querySelector('.host-body'), end = document.getElementById('host-end'); const r = d.getBoundingClientRect(), e = end.getBoundingClientRect(); return {bottom: r.bottom, h: innerHeight, oy: getComputedStyle(body).overflowY, endBottom: e.bottom, endTop: e.top} })()")
     c.ok('host drawer bottom inside the 720px viewport (%s)' % g, g['bottom'] <= g['h'] + 0.5 and g['oy'] in ('auto', 'scroll'))
+    c.ok('END NIGHT stays inside the viewport at 720px, pinned under the scrolling body', g['endTop'] >= 0 and g['endBottom'] <= g['h'] + 0.5)
     shot(pg, 'host_drawer', '#host-drawer')
     b.close()
 c.done('host_drawer.py')

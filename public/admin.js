@@ -35,7 +35,7 @@
   function makeFab() {
     if (fab) return;
     fab = document.createElement('button');
-    fab.type = 'button'; fab.id = 'adm-fab'; fab.className = 'adm-fab'; fab.title = 'Admin console'; fab.setAttribute('aria-label', 'Admin console');
+    fab.type = 'button'; fab.id = 'adm-fab'; fab.className = 'adm-fab btn btn--icon btn--secondary'; fab.title = 'Admin console'; fab.setAttribute('aria-label', 'Admin console');
     fab.innerHTML = '<svg viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/><path d="M8 3.500v5M16 9.500v5M10 15.500v5" stroke-width="3.200"/></svg>';
     let saved = 'bl'; try { saved = localStorage.getItem(POS_KEY) || 'bl'; } catch (e) { /* ignore */ }
     placeFab(saved);
@@ -71,16 +71,16 @@
     if (veil) return;
     veil = document.createElement('div');
     veil.className = 'adm-veil'; veil.id = 'adm-veil';
-    veil.innerHTML = `<section class="adm-dlg" role="dialog" aria-label="Admin console">
+    veil.innerHTML = `<section class="adm-dlg panel panel--flush" role="dialog" aria-label="Admin console">
       <div class="adm-head">
         <div class="adm-title">THE <em>BANK</em> &middot; ADMIN</div>
-        <div class="adm-tabs">
+        <div class="adm-tabs seg">
           <button type="button" class="adm-tab" data-t="bank">Bank</button>
           <button type="button" class="adm-tab" data-t="accounts">Accounts</button>
           <button type="button" class="adm-tab" data-t="table">Table</button>
         </div>
         <div class="adm-status" id="adm-status" role="status" aria-live="polite"></div>
-        <button type="button" class="adm-x" id="adm-x" aria-label="Close admin console">&#x2715;</button>
+        <button type="button" class="adm-x panel__close" id="adm-x" aria-label="Close admin console">&#x2715;</button>
       </div>
       <div class="adm-body">
         <div class="adm-pane" data-p="bank"><div class="adm-bankhost" id="adm-bankhost"></div></div>
@@ -140,15 +140,15 @@
       let acts;
       if (editing && editing.key === a.key && editing.kind === 'bal') {
         acts = `<span class="adm-amt-slot" id="adm-edit-slot"></span>
-          <button type="button" class="adm-btn pri" data-a="bal-ok">Save</button><button type="button" class="adm-btn" data-a="cancel">Cancel</button>`;
+          <button type="button" class="btn btn--primary btn--sm" data-a="bal-ok">Save</button><button type="button" class="btn btn--secondary btn--sm" data-a="cancel">Cancel</button>`;
       } else if (editing && editing.key === a.key && editing.kind === 'play') {
         acts = `<span class="adm-amt-slot" id="adm-edit-slot"></span>
-          <button type="button" class="adm-btn pri" data-a="play-ok">Save</button><button type="button" class="adm-btn" data-a="cancel">Cancel</button>`;
+          <button type="button" class="btn btn--primary btn--sm" data-a="play-ok">Save</button><button type="button" class="btn btn--secondary btn--sm" data-a="cancel">Cancel</button>`;
       } else if (editing && editing.key === a.key && editing.kind === 'pin') {
-        acts = `<input class="adm-in pin" id="adm-edit" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password" placeholder="New PIN" aria-label="New PIN for ${esc(a.display)}">
-          <button type="button" class="adm-btn pri" data-a="pin-ok">Reset PIN</button><button type="button" class="adm-btn" data-a="cancel">Cancel</button>`;
+        acts = `<input class="adm-in pin field field--sm" id="adm-edit" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password" placeholder="New PIN" aria-label="New PIN for ${esc(a.display)}">
+          <button type="button" class="btn btn--primary btn--sm" data-a="pin-ok">Reset PIN</button><button type="button" class="btn btn--secondary btn--sm" data-a="cancel">Cancel</button>`;
       } else {
-        acts = `<button type="button" class="adm-btn" data-a="bal">Set chips</button><button type="button" class="adm-btn" data-a="play">Set Play $</button><button type="button" class="adm-btn" data-a="pin">Reset PIN</button>`;
+        acts = `<button type="button" class="btn btn--secondary btn--sm" data-a="bal">Set chips</button><button type="button" class="btn btn--secondary btn--sm" data-a="play">Set Play $</button><button type="button" class="btn btn--secondary btn--sm" data-a="pin">Reset PIN</button>`;
       }
       return `<tr data-k="${k}"><td class="nm"><span class="adm-dot${a.online ? ' on' : ''}" title="${a.online ? 'Connected now' : 'Offline'}"></span><b>${esc(a.display)}</b>${a.isAdmin ? '<i>Owner</i>' : ''}${a.claimed ? '' : '<i>Unclaimed</i>'}</td>
         <td>${a.online ? 'online now' : ago(a.lastSeen)}</td><td class="n adm-bal">${num(bankOf(a))}</td><td class="n adm-at">${atTable}</td><td class="n adm-play">${a.play == null ? "--" : "$" + (a.play / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td><td class="n"><div class="adm-acts">${acts}</div></td></tr>`;
@@ -218,13 +218,13 @@
       [tf.sb, tf.bb].forEach(f => f.input.addEventListener('input', () => { tf.touched = true; }));
     } else if (!tf.touched && !tf.sb.isDirty() && !tf.bb.isDirty()) { tf.sb.set(wantSb, { source: 'server' }); tf.bb.set(wantBb, { source: 'server' }); }
     if (host.contains(document.activeElement) && host.querySelector('#adm-blinds')) return; // typing in here: keep the DOM
-    host.innerHTML = `<div class="adm-card"><h3>Main table</h3>
-        <p><span class="adm-tag ${t.paused ? 'paused' : 'live'}">${t.paused ? 'Paused' : 'Running'}</span> &nbsp; ${t.seated} seated &middot; ${t.handNum} hands &middot; ${esc(t.status || '')}</p>
-        <div class="adm-row"><button type="button" class="adm-btn pri" id="adm-pause">${t.paused ? 'Resume table' : 'Pause table'}</button></div></div>
-      <div class="adm-card"><h3>Blinds</h3>
+    host.innerHTML = `<div class="adm-card panel panel--inset"><h3>Main table</h3>
+        <p><span class="adm-tag tag ${t.paused ? 'paused' : 'live'}">${t.paused ? 'Paused' : 'Running'}</span> &nbsp; ${t.seated} seated &middot; ${t.handNum} hands &middot; ${esc(t.status || '')}</p>
+        <div class="adm-row"><button type="button" class="btn btn--secondary btn--sm" id="adm-pause">${t.paused ? 'Resume table' : 'Pause table'}</button></div></div>
+      <div class="adm-card panel panel--inset"><h3>Blinds</h3>
         <p>Now ${esc(money(t.sb))} / ${esc(money(t.bb))}${t.nextBb ? ' &middot; next hand ' + esc(money(t.nextSb)) + ' / ' + esc(money(t.nextBb)) : ''}. Changes made mid-hand start on the next hand.</p>
         <div class="adm-row"><span id="adm-sb-slot"></span> / <span id="adm-bb-slot"></span>
-        <button type="button" class="adm-btn pri" id="adm-blinds">Set blinds</button></div></div>`;
+        <button type="button" class="btn btn--secondary btn--sm" id="adm-blinds">Set blinds</button></div></div>`;
     $('adm-sb-slot').appendChild(tf.sb.el); $('adm-bb-slot').appendChild(tf.bb.el);
     $('adm-blinds').addEventListener('click', () => {
       const sb = tf.sb.value(), bb = tf.bb.value();
