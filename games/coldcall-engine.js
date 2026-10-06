@@ -26,7 +26,7 @@
     weights: [29.925, 25.552, 20.828, 17.21, 13.464, 10.034, 8.159, 6.436, 5.001, 3.79],
     // closer (wild), bell (scatter) and phone weights per cell, per mode (a phone is also guaranteed on every bonus3 spin and on a 'call' buy)
     extra: {
-      base: { wild: 1, bell: 1.52, phone: 0.308 },
+      base: { wild: 1, bell: 1.175, phone: 0.2275 },   // levers Part 3 (2026-10-06): bell 1.52 -> 1.175 pays for the Callback, phone 0.308 -> 0.2275 pays for warm squares (cold-call/LEVERS.md section 8)
       bonus1: { wild: 5, bell: 1.567, phone: 4.5 },
       bonus2: { wild: 3, bell: 1.567, phone: 4.5 },
       bonus3: { wild: 2, bell: 1.567, phone: 3 },
@@ -66,24 +66,24 @@
     maxCascades: 40,             // hard cap on cascade steps in one spin
     maxRevealRounds: 30,         // hard cap on the reveal / close repeat loop (it cannot pass the number of hot leads anyway)
     // buy prices, tenths of the bet. Set from the measured average value / 0.98 (rounded to a whole tenth), then re-simulated.
-    buyCost: { call: 29, bonus1: 849, bonus2: 2824, hunt: 35 },
+    buyCost: { call: 27, bonus1: 964, bonus2: 2910, hunt: 20 },   // levers Part 3: repriced for the new bell weight and for PICK (best-pick average / 0.98), LEVERS.md 8.5
     hunt: { bellMult: 1.845 },     // 'hunt': one spin whose bell weight is multiplied (base game otherwise)
     maxWinTenths: MAX_WIN_T,
     // THE PULL (cold-call/PULL.md, PULL-ENGINE.md): per-player memory, decisions and the floor. Money in tenths of the bet, leads in whole leads (one decimal at most),
     // pot money in cents. The VALUES are provisional (the levers agent sets them); the mechanisms are the engine's. pull.on = false is the old stateless game.
     pull: {
       on: true,
-      list: 50,                                     // leads for THE CALLBACK
+      list: 450,                                    // leads for THE CALLBACK: one about every 422 paid spins (LEVERS.md 8.1)
       fill: { dead: 1.2, win: 0.6, bonus: 0.6 },    // leads per paid base spin: round paid 0 / paid > 0 / triggered a natural bonus (dead must stay > win)
       callback: { kind: 'bonus1' },                 // 'bonus1' | 'bonus2'; played free at cb.bet, no base spin, never fills the list
       carryOver: true,                              // leads above the list size stay for the next list
-      cold: { afterMs: 86400000, stepMs: 21600000, batch: 3, floor: 10 },   // idle 24 h, then `batch` leads go cold every stepMs, never below `floor`; warm squares die at the first event
+      cold: { afterMs: 129600000, stepMs: 43200000, batch: 8, floor: 300 },   // idle 36 h, then `batch` leads go cold every 12 h, never below `floor`; warm squares die at the first event
       warm: { chance: 0.35, cap: 4 },               // per marked square of a base spin that ended with marked squares and no phone
-      ghost: { on: true, maxWinTenths: 10, minTenths: 0 },   // WOULD HAVE CLOSED: a real phone feature on a sub-rng, pay never added
-      pick: { on: true, minLeads: 2, mult: { bronze: 0, silver: 2, gold: 3, upsell: 2, close: 2 } },   // PICK YOUR LEAD: tier weights of the picked square x mult
-      more: { on: true, mult: 2, rtp: 0.98, minTenths: 20 },   // ONE MORE CALL: wins with probability rtp / mult, pays bonus x mult, else 0
-      daily: { base: 3, perStreak: 1, streakMax: 4, stakeCap: 100 },   // free leads on the first paid spin of a day; stake in cents
-      pot: { feedBps: 50, oneInPerDollar: 20000, seed: 0, minBal: 100, maxPayX: 10000 },   // server only (cents, basis points)
+      ghost: { on: true, maxWinTenths: 10, minTenths: 50 },   // IF A PHONE HAD LANDED: a real phone feature on a sub-rng, pay never added; shown on a spin that paid under 1x, only if it would have paid >= 5x (about 6 spins in 100)
+      pick: { on: true, minLeads: 2, mult: { bronze: 0.3, silver: 2, gold: 3, upsell: 1, close: 1 } },   // PICK YOUR LEAD: tier weights of the picked square x mult
+      more: { on: true, mult: 2, rtp: 1.0, minTenths: 50 },   // ONE MORE CALL: a fair coin, wins with probability rtp / mult = 1/2, pays bonus x mult, else 0; offered from a 5x bonus up
+      daily: { base: 0.2, perStreak: 0.05, streakMax: 4, stakeCap: 10 },   // free leads on the first paid spin of a day: 0.2 to 0.4 of a lead, worked at 10 cents: a ritual, not money (critic N2: 8 to 24 leads paid a once-a-day $1 player about $5 a day; this pays about a cent), LEVERS.md 8.8
+      pot: { feedBps: 100, oneInPerDollar: 3000, seed: 0, minBal: 1000, maxPayX: 50 },   // server only (cents, basis points); seed stays 0 (W9); maxPayX / oneInPerDollar = 1.67%: the most a pot chaser can add (W8)
       feed: { minWinX: 100 },                       // server only
       decision: { timeoutMs: 20000 },               // server only
     },
