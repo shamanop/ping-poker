@@ -40,10 +40,12 @@ function setup(opts = {}) {
   const clock = { now: () => t, advance: (ms) => { t += ms; } };
   const file = path.join(tmp, 'w' + Math.random().toString(36).slice(2) + '.json');
   const hook = { push: () => {} };
-  const wallet = createWallet({ file, ledger, now: clock.now, onChange: (k) => hook.push(k), logPlay: !!opts.logPlay });
-  const g = games({ io, ledger, now: clock.now, rng: opts.rng, accounts: {}, tables: {}, rooms: {}, wallet });
+  const bank = new Map();
+  const chips = { get: (k) => (bank.has(k) ? bank.get(k) : 10000), add: (k, d) => { bank.set(k, Math.max(0, chips.get(k) + d)); hook.push(k); } };
+  const wallet = createWallet({ file, ledger, chips, now: clock.now, onChange: (k) => hook.push(k), logPlay: !!opts.logPlay });
+  const g = games({ io, ledger, now: clock.now, rng: opts.rng, accounts: {}, tables: {}, rooms: {}, wallet, chips });
   hook.push = g.pushWallet;
-  return { io, rows, clock, wallet, g, file, sock: (a) => makeSocket(io, a) };
+  return { io, rows, clock, wallet, g, file, bank, chips, sock: (a) => makeSocket(io, a) };
 }
 
 // ---------------------------------------------------------------- test helpers
@@ -190,9 +192,9 @@ function replayRound(s, cfg) {
 }
 
 (async () => {
-  await test('wallet: new account starts at 10,000.00 play, 0 ledger, -500 limit', () => {
+  await test('wallet: new account starts at 10,000.00 Play $ and the chips bank balance', () => {
     const { wallet } = setup();
-    assert.deepStrictEqual(wallet.get('ann'), { play: 1000000, ledgerNet: 0, ledgerLimit: -50000 });
+    assert.deepStrictEqual(wallet.get('ann'), { play: 1000000, chips: 10000 });
   });
 
   await test('wallet: spend/credit math + per-game stats for coldcall', () => {
@@ -200,12 +202,13 @@ function replayRound(s, cfg) {
     wallet.spend('ann', 'play', 100, { game: 'coldcall', round: 'r1' });
     wallet.credit('ann', 'play', 250, { game: 'coldcall', round: 'r1' });
     assert.strictEqual(wallet.get('ann').play, 1000000 - 100 + 250);
-    wallet.spend('ann', 'ledger', 500, { game: 'coldcall', round: 'r2' });
-    wallet.credit('ann', 'ledger', 1500, { game: 'coldcall', round: 'r2' });
-    assert.strictEqual(wallet.get('ann').ledgerNet, 1000);
+    wallet.spend('ann', 'chips', 500, { game: 'coldcall', round: 'r2' });
+    assert.strictEqual(wallet.get('ann').chips, 9500);
+    wallet.credit('ann', 'chips', 1500, { game: 'coldcall', round: 'r2' });
+    assert.strictEqual(wallet.get('ann').chips, 11000);
     const st = wallet.stats('ann').coldcall;
     assert.deepStrictEqual(st.play, { rounds: 1, wagered: 100, won: 250 });
-    assert.deepStrictEqual(st.ledger, { rounds: 1, wagered: 500, won: 1500 });
+    assert.deepStrictEqual(st.chips, { rounds: 1, wagered: 500, won: 1500 });
   });
 
   await test('wallet: float, negative, NaN, string, Infinity, huge amounts and bad mode are rejected, nothing moves', () => {
@@ -214,18 +217,18 @@ function replayRound(s, cfg) {
       assert.throws(() => wallet.spend('ann', 'play', bad), (e) => e.code === 'amount', 'spend ' + String(bad));
       assert.throws(() => wallet.credit('ann', 'play', bad), (e) => e.code === 'amount', 'credit ' + String(bad));
     }
-    assert.throws(() => wallet.spend('ann', 'chips', 10), (e) => e.code === 'mode');
-    assert.deepStrictEqual(wallet.get('ann'), { play: 1000000, ledgerNet: 0, ledgerLimit: -50000 });
+    assert.throws(() => wallet.spend('ann', 'ledger', 10), (e) => e.code === 'mode');
+    assert.deepStrictEqual(wallet.get('ann'), { play: 1000000, chips: 10000 });
   });
 
-  await test('wallet: insufficient funds and ledger limit are exact', () => {
+  await test('wallet: insufficient funds are exact in both purses, chips never go negative', () => {
     const { wallet } = setup();
     wallet.spend('bo', 'play', 999950, { game: 'coldcall' });
     assert.throws(() => wallet.spend('bo', 'play', 100), (e) => e.code === 'funds');
     assert.strictEqual(wallet.get('bo').play, 50);
-    wallet.spend('cy', 'ledger', 50000);
-    assert.throws(() => wallet.spend('cy', 'ledger', 10), (e) => e.code === 'limit');
-    assert.strictEqual(wallet.get('cy').ledgerNet, -50000);
+    wallet.spend('cy', 'chips', 10000);
+    assert.throws(() => wallet.spend('cy', 'chips', 10), (e) => e.code === 'funds');
+    assert.strictEqual(wallet.get('cy').chips, 0);
   });
 
   // ---------------------------------------------------------------- engine (v2: 6x5 clusters, super cascade, hot leads, three bonuses)
@@ -620,19 +623,20 @@ function replayRound(s, cfg) {
       const r = last(a, 'g:coldcall:result'); const m = E.resolveRound(mirror, null);
       assert.strictEqual(r.bet, bet); assert.strictEqual(r.cost, bet); assert.strictEqual(r.totalWin, m.winTenths * bet / 10); assert.strictEqual(r.totalWinTenths, m.winTenths);
       assert.deepStrictEqual(r.script, m.script);
-      expect += -bet + r.totalWin; assert.strictEqual(r.wallet.play, expect); assert.strictEqual(r.wallet.ledgerNet, 0);
+      expect += -bet + r.totalWin; assert.strictEqual(r.wallet.play, expect); assert.strictEqual(r.wallet.chips, 10000);
       for (const k of ['roundId', 'script', 'totalWin', 'tier', 'wallet']) assert.ok(k in r, k);
     }
     assert.deepStrictEqual(s.wallet.get('ann').play, expect);
     await tick(); assert.strictEqual(last(a, 'wallet').play, expect);
   });
 
-  await test('coldcall: ledger spin moves only the ledger purse and writes ledger rows', async () => {
+  await test('coldcall: chips spin moves only the chips bank', async () => {
     const s = setup({ rng: E.rngFrom(6) }); const a = s.sock('ann');
-    a.send('g:coldcall:spin', { bet: 200, mode: 'ledger' });
+    a.send('g:coldcall:spin', { bet: 200, mode: 'chips' }); await tick();
     const r = last(a, 'g:coldcall:result');
-    assert.strictEqual(r.wallet.play, 1000000); assert.strictEqual(r.wallet.ledgerNet, -200 + r.totalWin);
-    assert.ok(s.rows.length >= 1 && s.rows.every((x) => x[0] === 'game'));
+    assert.strictEqual(r.mode, 'chips');
+    assert.strictEqual(r.wallet.play, 1000000); assert.strictEqual(r.wallet.chips, 10000 - 200 + r.totalWin);
+    assert.strictEqual(s.chips.get('ann'), r.wallet.chips);
   });
 
   await test('coldcall: buys charge costTenths*bet/10, play the chosen bonus, and the engine win is paid exactly', async () => {
@@ -660,12 +664,13 @@ function replayRound(s, cfg) {
     assert.ok(s.wallet.get('ann').play >= 0);
   });
 
-  await test('coldcall: ledger limit stops spins, no negative play, balances never go below the floor', async () => {
+  await test('coldcall: an empty chips bank stops spins, no negative play, balances never go below zero', async () => {
     const s = setup({ rng: E.rngFrom(7) }); const a = s.sock('ann');
-    s.wallet.spend('ann', 'ledger', 49900);
-    for (let i = 0; i < 40; i++) { s.clock.advance(200); a.send('g:coldcall:spin', { bet: 1000, mode: 'ledger' }); }
-    assert.ok(all(a, 'error').some((e) => e.code === 'limit'));
-    assert.ok(s.wallet.get('ann').ledgerNet >= -50000);
+    s.wallet.spend('ann', 'chips', 9900);
+    for (let i = 0; i < 40; i++) { s.clock.advance(200); a.send('g:coldcall:spin', { bet: 1000, mode: 'chips' }); }
+    const e = all(a, 'error').find((x) => x.code === 'funds');
+    assert.ok(e && /chips/.test(e.message));
+    assert.ok(s.chips.get('ann') >= 0);
     const b = s.sock('bo'); s.wallet.spend('bo', 'play', 999900);
     s.clock.advance(200); b.send('g:coldcall:spin', { bet: 500, mode: 'play' });
     assert.strictEqual(last(b, 'error').code, 'funds'); assert.strictEqual(s.wallet.get('bo').play, 100);
@@ -675,13 +680,13 @@ function replayRound(s, cfg) {
     const s = setup(); const a = s.sock('ann');
     const bad = [{ bet: 0, mode: 'play' }, { bet: -10, mode: 'play' }, { bet: 15, mode: 'play' }, { bet: 1.5, mode: 'play' }, { bet: NaN, mode: 'play' }, { bet: Infinity, mode: 'play' },
       { bet: 1e21, mode: 'play' }, { bet: 2 ** 60, mode: 'play' }, { bet: Number.MAX_SAFE_INTEGER, mode: 'play' }, { bet: 5000, mode: 'play' }, { bet: [100], mode: 'play' },
-      { bet: '100', mode: 'play' }, { bet: 100, mode: 'chips' }, { bet: 100, mode: 'PLAY' }, { bet: 100, mode: ['play'] }, { bet: 100 }, { mode: 'play' }, null, 'x', 7, [],
+      { bet: '100', mode: 'play' }, { bet: 100, mode: 'ledger' }, { bet: 100, mode: 'PLAY' }, { bet: 100, mode: ['play'] }, { bet: 100 }, { mode: 'play' }, null, 'x', 7, [],
       { bet: 100, mode: 'play', buyBonus: 'nope' }, { bet: 100, mode: 'play', buyBonus: 'election' }, { bet: 100, mode: 'play', buyBonus: 'rotary' }, { bet: 100, mode: 'play', buyBonus: 'quote' }, { bet: 100, mode: 'play', buyBonus: 'Bonus1' }, { bet: 100, mode: 'play', buyBonus: 1 }, { bet: 100, mode: 'play', buyBonus: true },
       { bet: 100, mode: 'play', buyBonus: {} }, { bet: 100, mode: 'play', buyBonus: ['bonus1'] }, { bet: 100, mode: 'play', buyBonus: 'BONUS2' }];
     for (const p of bad) { s.clock.advance(200); a.send('g:coldcall:spin', p); }
     assert.strictEqual(all(a, 'error').length, bad.length);
     assert.strictEqual(all(a, 'g:coldcall:result').length, 0);
-    assert.deepStrictEqual(s.wallet.get('ann'), { play: 1000000, ledgerNet: 0, ledgerLimit: -50000 });
+    assert.deepStrictEqual(s.wallet.get('ann'), { play: 1000000, chips: 10000 });
   });
 
   await test('coldcall: client-sent amounts are ignored (win, cost, amount fields in the payload change nothing)', async () => {
@@ -705,15 +710,15 @@ function replayRound(s, cfg) {
   await test('coldcall: concurrent spins and buys from many sockets keep exact accounting', async () => {
     const s = setup({ rng: E.rngFrom(11) });
     const socks = [s.sock('ann'), s.sock('ann'), s.sock('bo'), s.sock('bo')];
-    for (let i = 0; i < 40; i++) { s.clock.advance(200); for (const k of socks) k.send('g:coldcall:spin', { bet: 50, mode: i % 2 ? 'play' : 'ledger', buyBonus: i % 10 === 3 ? 'bonus1' : i % 10 === 7 ? 'call' : null }); }
+    for (let i = 0; i < 40; i++) { s.clock.advance(200); for (const k of socks) k.send('g:coldcall:spin', { bet: 50, mode: i % 2 ? 'play' : 'chips', buyBonus: i % 10 === 3 ? 'bonus1' : i % 10 === 7 ? 'call' : null }); }
     await tick();
     for (const key of ['ann', 'bo']) {
       const mine = socks.filter((k) => k.data.acct.key === key);
       const results = mine.flatMap((k) => all(k, 'g:coldcall:result'));
-      const play = results.filter((r) => r.mode === 'play'), led = results.filter((r) => r.mode === 'ledger');
+      const play = results.filter((r) => r.mode === 'play'), led = results.filter((r) => r.mode === 'chips');
       const w = s.wallet.get(key);
       assert.strictEqual(w.play, 1000000 - play.reduce((a, r) => a + r.cost, 0) + play.reduce((a, r) => a + r.totalWin, 0));
-      assert.strictEqual(w.ledgerNet, -led.reduce((a, r) => a + r.cost, 0) + led.reduce((a, r) => a + r.totalWin, 0));
+      assert.strictEqual(w.chips, 10000 - led.reduce((a, r) => a + r.cost, 0) + led.reduce((a, r) => a + r.totalWin, 0));
       for (const k of mine) assert.deepStrictEqual(last(k, 'wallet'), w);
     }
   });
@@ -766,7 +771,7 @@ function replayRound(s, cfg) {
     await withEnv({ COLDCALL_TEST: '1', NODE_ENV: null }, async () => {
       const s = setup({ rng: E.rngFrom(79) }); const a = s.sock('ann'); let bal = 1000000;
       a.send('g:coldcall:state'); assert.strictEqual(last(a, 'g:coldcall:state').qaHook, true);
-      for (const f of FORCE_CASES) for (const mode of ['play', 'ledger']) {
+      for (const f of FORCE_CASES) for (const mode of ['play', 'chips']) {
         s.clock.advance(200); a.send('g:coldcall:spin', { bet: 200, mode, force: f });
         const r = last(a, 'g:coldcall:result'); assert.strictEqual(r.forced, f); assert.strictEqual(r.buyBonus, null);
         const sc = r.script;
@@ -778,7 +783,7 @@ function replayRound(s, cfg) {
         assert.strictEqual(r.cost, 200); assert.strictEqual(r.totalWin, r.totalWinTenths * 200 / 10);
         const w = s.wallet.get('ann');
         if (mode === 'play') { bal += -r.cost + r.totalWin; assert.strictEqual(w.play, bal); assert.strictEqual(r.wallet.play, bal); }
-        else assert.strictEqual(w.ledgerNet, r.wallet.ledgerNet);
+        else assert.strictEqual(w.chips, r.wallet.chips);
       }
       assert.strictEqual(s.wallet.stats('ann').coldcall.play.rounds, 7);
     });

@@ -28,8 +28,7 @@ const keyOf = (socket) => { const a = socket.data && socket.data.acct; return St
 function err(socket, code, message) { socket.emit('error', { message, code, game: 'coldcall' }); }
 
 function walletErr(socket, e) {
-  if (e && e.code === 'funds') return err(socket, 'funds', 'Not enough Play $');
-  if (e && e.code === 'limit') return err(socket, 'limit', 'Ledger limit reached');
+  if (e && e.code === 'funds') return err(socket, 'funds', e.message);
   return err(socket, 'bad_request', 'Could not place that bet');
 }
 
@@ -45,7 +44,7 @@ module.exports = {
     state(socket, payload, ctx) {
       const w = ctx.wallet.get(keyOf(socket));
       socket.emit('g:coldcall:state', {
-        betLevels: BET_LEVELS, modes: ['play', 'ledger'], rtp: RTP_LABEL, maxWinX: Eng.MAX_WIN_X,
+        betLevels: BET_LEVELS, modes: ['play', 'chips'], rtp: RTP_LABEL, maxWinX: Eng.MAX_WIN_X,
         buyCostX: Object.fromEntries(BUYS.map((b) => [b, Eng.CFG.buyCost[b] / 10])),
         wallet: w, balances: w, bets: BET_LEVELS,
         ...(testHookOn() ? { qaHook: true } : {}),
@@ -60,7 +59,7 @@ module.exports = {
       socket.data.coldcallLast = t;
       const p = payload && typeof payload === 'object' ? payload : {};
       if (!Number.isSafeInteger(p.bet) || !BET_LEVELS.includes(p.bet)) return err(socket, 'bad_bet', 'Pick a listed bet');
-      if (p.mode !== 'play' && p.mode !== 'ledger') return err(socket, 'bad_mode', 'Pick Play $ or Ledger $');
+      if (p.mode !== 'play' && p.mode !== 'chips') return err(socket, 'bad_mode', 'Pick Play $ or Chips');
       const buy = p.buyBonus == null || p.buyBonus === false ? null : p.buyBonus;
       if (buy !== null && !BUYS.includes(buy)) return err(socket, 'bad_request', 'Bad bonus');
 

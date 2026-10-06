@@ -74,7 +74,7 @@ async function playUntil(clients, cond, ms = 60000) {
     await chris.join(); await bob.join();
     let sum = await chris.summary();
     reconcile(sum, 'fresh', 20000);
-    ok(find(sum, 'Bob').totalBuyIns === 1500 && find(sum, 'Bob').buyIns === 1, 'fresh: Bob has one 1,500 buy-in');
+    ok(find(sum, 'Bob').totalBuyIns === 2000 && find(sum, 'Bob').buyIns === 1, 'fresh: Bob has one 2,000 buy-in');
 
     // Rejoin x5 in waiting state (drop + rejoin with varying case) must not add buy-ins
     for (const nm of ['bob', 'BOB', 'Bob', 'bOb', 'Bob']) {
@@ -83,7 +83,7 @@ async function playUntil(clients, cond, ms = 60000) {
     }
     sum = await chris.summary();
     const b = find(sum, 'Bob');
-    ok(b.buyIns === 1 && b.totalBuyIns === 1500, `rejoin x5 (waiting): Bob still 1 buy-in / 1,500 (got ${b.buyIns} / ${b.totalBuyIns})`);
+    ok(b.buyIns === 1 && b.totalBuyIns === 2000, `rejoin x5 (waiting): Bob still 1 buy-in / 2,000 (got ${b.buyIns} / ${b.totalBuyIns})`);
     ok(b.net === 0, `rejoin x5 (waiting): Bob net P&L 0 (got ${b.net})`);
     ok(!sum.events.some(e => /^bob$/i.test(e.name) && e.type === 'cashout') && sum.events.filter(e => /^bob$/i.test(e.name) && e.type === 'buyin').length === 1, 'rejoin x5 (waiting): feed has no cash-out/buy-in pairs for Bob');
     reconcile(sum, 'after rejoins', 20000);
@@ -93,14 +93,14 @@ async function playUntil(clients, cond, ms = 60000) {
     ok(chris.gs.status === 'playing', 'hand started');
     sum = await chris.summary();
     reconcile(sum, 'mid-hand', 20000);
-    ok(sum.players.filter(p => !p.isBot).reduce((x, p) => x + p.atTable, 0) === 3000, 'mid-hand: at-table total stays 3,000 with blinds in the pot');
+    ok(sum.players.filter(p => !p.isBot).reduce((x, p) => x + p.atTable, 0) === 4000, 'mid-hand: at-table total stays 4,000 with blinds in the pot');
     for (const nm of ['BOB', 'bob', 'Bob']) {
       bob.s.disconnect(); await sleep(300);
       bob = client(nm); await bob.join();
     }
     sum = await chris.summary();
     const b2 = find(sum, 'Bob');
-    ok(b2.buyIns === 1 && b2.totalBuyIns === 1500, `refresh x3 (mid-hand): Bob still 1 buy-in / 1,500 (got ${b2.buyIns} / ${b2.totalBuyIns})`);
+    ok(b2.buyIns === 1 && b2.totalBuyIns === 2000, `refresh x3 (mid-hand): Bob still 1 buy-in / 2,000 (got ${b2.buyIns} / ${b2.totalBuyIns})`);
     ok(!sum.events.some(e => /^bob$/i.test(e.name) && e.type === 'cashout'), 'refresh x3 (mid-hand): feed has no phantom Bob cash-out');
     reconcile(sum, 'after mid-hand refreshes', 20000);
 

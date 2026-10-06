@@ -23,14 +23,16 @@
   const st = { bets: DEFAULT_BETS.slice(), betIdx: 3, busy: false, auto: false, turbo: false, skip: false, tap: 0, mode: 'play', live: false, s: 1,
     bal: 100000, balShown: 100000, winShown: 0, winTarget: 0, modal: 0, pracBal: 100000, server: null, rounds: 0, dead: 0 };
   const RAGE_STREAK = 4;                                       // paid spins in a row with no win before the hero loses it (then the count restarts)
-  const money = { wallet: { play: 0, ledgerNet: 0, ledgerLimit: -50000 } };
+  const money = { wallet: { play: 0, chips: 0 } };
   const bet = () => st.bets[st.betIdx];
-  const dollars = (c) => { const n = Math.round(c), a = Math.abs(n); return (n < 0 ? '-' : '') + '$' + Math.floor(a / 100).toLocaleString('en-US') + '.' + String(a % 100).padStart(2, '0'); };
+  const usd = (c) => { const n = Math.round(c), a = Math.abs(n); return (n < 0 ? '-' : '') + '$' + Math.floor(a / 100).toLocaleString('en-US') + '.' + String(a % 100).padStart(2, '0'); };
+  // every amount on screen goes through dollars(): Play $ and practice show dollars, Chips mode shows whole chips (1 chip = 1 cent), as Ballot Bender does
+  const dollars = (c) => (st.live && st.mode === 'chips' ? Math.round(c).toLocaleString('en-US') : usd(c));
   // buys offered right now: ids with a price in the server state (practice: the engine config). A buy the state does not price is not shown.
   const buyPrices = () => { const src = st.live ? (st.server && st.server.buyCostX) || {} : null; return E.BUYS.filter((id) => (src ? typeof src[id] === 'number' : typeof E.CFG.buyCost[id] === 'number')).map((id) => [id, src ? Math.round(src[id] * 10) : E.CFG.buyCost[id]]); };
   const costT = (kind) => { if (kind === 'spin') return 10; const f = buyPrices().find(([id]) => id === kind); return f ? f[1] : Infinity; };
-  const walletBal = () => (st.mode === 'ledger' ? money.wallet.ledgerNet : money.wallet.play);
-  const avail = () => (st.live ? (st.mode === 'ledger' ? money.wallet.ledgerNet - (money.wallet.ledgerLimit ?? -50000) : money.wallet.play) : st.pracBal);
+  const walletBal = () => (st.mode === 'chips' ? money.wallet.chips : money.wallet.play);
+  const avail = () => (st.live ? walletBal() : st.pracBal);
   const pick = (a) => a[(Math.random() * a.length) | 0];
   const rand = (a, b) => a + Math.random() * (b - a);
   const dbg = (CC.dbg = { mismatch: [], rounds: [], calls: 0 });
@@ -75,7 +77,7 @@
   function resetWin() { setWin.tok = (setWin.tok || 0) + 1; st.winShown = st.winTarget = 0; const w = $('win'); w.dataset.c = 0; w.textContent = dollars(0); }
   function setBal(v, animate) {
     const from = st.balShown, tok = (setBal.tok = (setBal.tok || 0) + 1), el = $('bal'); st.bal = v;
-    const f = (n) => (st.live && st.mode === 'ledger' && n > 0 ? '+' : '') + dollars(n);
+    const f = (n) => dollars(n);
     if (!animate || from === v) { st.balShown = v; el.textContent = f(v); return; }
     const t0 = performance.now(), dur = 600 * speed();
     Tick.add((now) => { if (tok !== setBal.tok) return false; const k = Math.max(0, Math.min(1, (now - t0) / dur)); st.balShown = Math.round(from + (v - from) * (1 - Math.pow(1 - k, 3))); el.textContent = f(st.balShown); return k < 1; });
@@ -267,28 +269,27 @@
   function applyWallet(w) {
     if (!w) return;
     if (typeof w.play === 'number') money.wallet.play = w.play;
-    if (typeof w.ledgerNet === 'number') money.wallet.ledgerNet = w.ledgerNet;
-    if (typeof w.ledgerLimit === 'number') money.wallet.ledgerLimit = w.ledgerLimit;
+    if (typeof w.chips === 'number') money.wallet.chips = w.chips;
     if (st.live && !st.busy) setBal(walletBal(), false);
   }
   function modeUi() {
     const bar = $('modebar'); if (!bar) return;
     bar.querySelectorAll('button').forEach((x) => x.classList.toggle('on', st.live && x.dataset.m === st.mode));
-    $('modenote').textContent = !st.live ? 'Practice (no wallet)' : st.mode === 'ledger' ? 'Ledger $ is a friendly tally. Settle up yourselves.' : 'Pretend money.';
-    $('balL').textContent = !st.live ? 'PRACTICE' : st.mode === 'ledger' ? 'NET' : 'BALANCE';
-    $('fine').textContent = !st.live ? 'Practice (no wallet). Free play only.' : 'No deposits, no payouts. Ledger $ is a friendly tally.';
+    $('modenote').textContent = !st.live ? 'Practice (no wallet)' : st.mode === 'chips' ? 'Real poker chips from your bank.' : 'Pretend money.';
+    $('balL').textContent = !st.live ? 'PRACTICE' : st.mode === 'chips' ? 'CHIPS' : 'BALANCE';
+    $('fine').textContent = !st.live ? 'Practice (no wallet). Free play only.' : 'No deposits, no payouts. Chips are your poker bank.';
   }
   function goLive(m) {
     if (m.state) st.server = m.state;
     if (!st.live) { st.live = true; T.kind = BRIDGE ? 'bridge' : 'socket'; setBets(Array.isArray(m.bets) && m.bets.length ? m.bets : DEFAULT_BETS); }
-    if (m.mode === 'play' || m.mode === 'ledger') st.mode = m.mode;
+    if (m.mode === 'play' || m.mode === 'chips') st.mode = m.mode;
     applyWallet(m.wallet || m.balances); modeUi(); if (!st.busy) setBal(walletBal(), false); drawBet();
   }
   function goPractice(msg) { st.live = false; T.kind = 'practice'; pend.clear(); setBets(DEFAULT_BETS); setBal(st.pracBal, false); modeUi(); drawBet(); if (msg) toast(msg, 2400); }
   function setBets(list) { st.bets = list.slice(); const i = st.bets.indexOf(100); st.betIdx = i >= 0 ? i : Math.min(3, st.bets.length - 1); }
   function initTransport() {
     const bar = document.createElement('div'); bar.id = 'modebar';
-    bar.innerHTML = '<div class="mb"><button data-m="play">Play $</button><button data-m="ledger">Ledger $</button></div><span id="modenote"></span>'; stage.appendChild(bar);
+    bar.innerHTML = '<div class="mb"><button data-m="play">Play $</button><button data-m="chips">Chips</button></div><span id="modenote"></span>'; stage.appendChild(bar);
     bar.addEventListener('click', (e) => { const x = e.target.closest('button'); if (!x || !st.live || st.busy) return; st.mode = x.dataset.m; SFX_.click(); setBal(walletBal(), false); modeUi(); toParent({ type: 'mode', mode: st.mode }); });
     modeUi();
     if (BRIDGE) {

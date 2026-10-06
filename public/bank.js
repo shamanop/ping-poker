@@ -6,6 +6,8 @@
   const colorMap = new Map();
   const avCache = new Map();
   let data = null, isOpen = false, pollTimer = null, adminHost = null;
+  let view = (() => { try { return localStorage.getItem('pp-bank-view') === 'play' ? 'play' : 'chips'; } catch (e) { return 'chips'; } })();
+  const isPlay = () => view === 'play';
 
   const $ = id => document.getElementById(id);
   const fmt = n => Money.fmt(n);
@@ -65,6 +67,7 @@
       <div class="bank-head">
         <div class="bank-title">THE <em>BANK</em></div>
         <div class="bank-sub" id="bank-sub">Buy-ins, balances and chips over time</div>
+        <div class="bank-view" id="bank-view" role="group" aria-label="Currency"><button type="button" data-v="chips">Chips</button><button type="button" data-v="play">Play $</button></div>
         <div class="bank-total" id="bank-total"></div>
         <button type="button" class="bank-close" id="bank-close" aria-label="Close bank">&#x2715;</button>
       </div>
@@ -73,7 +76,7 @@
           <div class="bank-card" style="flex:1"><h3>Standings<small id="bank-pcount"></small></h3><div class="bank-players bank-scroll" id="bank-players"></div></div>
         </div>
         <div class="bank-col">
-          <div class="bank-card bank-chartcard"><h3>Chips at the table, hand by hand<small id="bank-hcount"></small></h3><div class="bank-card-body" id="bank-line"></div></div>
+          <div class="bank-card bank-chartcard"><h3 id="bank-chart-title">Chips at the table, hand by hand<small id="bank-hcount"></small></h3><div class="bank-card-body" id="bank-line"></div></div>
           <div class="bank-row2">
             <div class="bank-card"><h3>Total buy-ins<span class="bank-legend"><span><i style="background:${BRASS}"></i>Buy-in</span><span><i style="background:${CLAY}"></i>Rebuys</span></span></h3><div class="bank-card-body" id="bank-bars"></div></div>
             <div class="bank-card"><h3>Activity<small id="bank-ecount"></small></h3><div class="bank-feed bank-scroll" id="bank-feed"></div></div>
@@ -82,6 +85,8 @@
       </div>`;
     grid.appendChild(panel);
 
+    panel.querySelectorAll('#bank-view button').forEach(b => b.addEventListener('click', () => setView(b.dataset.v)));
+    paintView();
     btn.addEventListener('click', () => toggle());
     $('bank-close').addEventListener('click', () => toggle(false));
     document.addEventListener('keydown', e => {
@@ -93,9 +98,23 @@
     bindTip();
   }
 
+  function paintView() {
+    document.querySelectorAll('#bank-view button').forEach(b => b.classList.toggle('on', b.dataset.v === view));
+    const t = $('bank-chart-title'); if (t) t.firstChild.nodeValue = (isPlay() ? 'Play $' : 'Chips') + ' at the table, hand by hand';
+  }
+  function setView(v) {
+    if (v !== 'chips' && v !== 'play') return;
+    if (v === view) return;
+    view = v; try { localStorage.setItem('pp-bank-view', v); } catch (e) {}
+    data = null; lineGeo = null;
+    Money.setUnit(isPlay() ? 'cents' : 'chips');
+    ['bank-players', 'bank-line', 'bank-bars', 'bank-feed'].forEach(id => { const el = $(id); if (el) lastHtml.delete(el); });
+    paintView(); request(); render();
+  }
+
   function request() {
-    if (adminHost) { if (state.socket) state.socket.emit('admin_bank_summary', {}); return; }
-    if (state.socket && state.roomId) state.socket.emit('get_bank_summary', { roomId: state.roomId });
+    if (adminHost) { if (state.socket) state.socket.emit('admin_bank_summary', { view }); return; }
+    if (state.socket && state.roomId) state.socket.emit('get_bank_summary', { roomId: state.roomId, view });
   }
 
   // Admin console hosts the same panel anywhere (no table needed); mount(null) puts it back in the game grid.
@@ -151,7 +170,7 @@
     const buy = humans.reduce((s, p) => s + p.totalBuyIns, 0);
     setHTML($('bank-total'),
       `<div class="pl"><label>Total money</label><b>${fmt(bankSum + onTable)}</b></div>` +
-      `<div class="pl"><label>In bank</label><b>${fmt(bankSum)}</b></div>` +
+      `<div class="pl"><label>${isPlay() ? 'In wallet' : 'In bank'}</label><b>${fmt(bankSum)}</b></div>` +
       `<div class="pl"><label>On the table</label><b>${fmt(onTable)}</b></div>` +
       `<div class="pl"><label>Bought in</label><b>${fmt(buy)}</b></div>` +
       `<div class="pl"><label>Hands</label><b>${data.maxHand || 0}</b></div>`);
@@ -163,7 +182,7 @@
     const me = state.gameState && state.gameState.players[state.myIdx];
     const meName = me && me.name ? me.name.toLowerCase() : '';
     const u = window.Lobby && Lobby.user && Lobby.user();
-    const canEdit = meName === 'chris' || !!(u && u.isAdmin);
+    const canEdit = !isPlay() && (meName === 'chris' || !!(u && u.isAdmin));
     if (document.querySelector('#bank-players .bp-edit')) return;
     $('bank-pcount').textContent = data.players.length ? data.players.length + ' players' : '';
     if (!data.players.length) {
@@ -181,7 +200,7 @@
         <div class="bp-sub">${E(sub.join(' · '))}</div>
         <div class="bp-bal"><b${canEdit && !p.isBot ? ` class="editable" data-name="${E(p.name)}" data-total="${totalOf(p)}" title="Click to set this player's money"` : ''}>${p.isBot ? '&mdash;' : fmt(totalOf(p))}</b><span>Total</span></div>
         <div class="bp-stats">
-          <div><label>In bank</label><b>${p.isBot ? '&mdash;' : fmt(p.bank || 0)}</b></div>
+          <div><label>${isPlay() ? 'In wallet' : 'In bank'}</label><b>${p.isBot ? '&mdash;' : fmt(p.bank || 0)}</b></div>
           <div><label>At table</label><b>${fmt(p.status === 'offline' ? 0 : p.atTable)}</b></div>
           <div><label>Net P&amp;L</label><b class="${netCls}">${p.isBot ? '&mdash;' : signed(p.net)}</b></div>
           <div><label>Best win</label><b>${p.isBot ? '&mdash;' : (p.biggestWin ? fmt(p.biggestWin) : '&ndash;')}</b></div>
@@ -191,7 +210,7 @@
     if (changed) $('bank-players').querySelectorAll('.bp-bal b.editable').forEach(b => b.addEventListener('click', () => editBank(b)));
   }
 
-  const inputText = v => (Money.getMode() === 'usd' && Money.getUnit() === 'cents') ? (v % 100 ? (v / 100).toFixed(2) : String(v / 100)) : String(v);
+  const inputText = v => Money.getMode() === 'usd' ? (v % 100 ? (v / 100).toFixed(2) : String(v / 100)) : String(v);
   function editBank(b) {
     const name = b.dataset.name;
     const input = document.createElement('input');
@@ -216,7 +235,7 @@
   }
 
   function niceMax(v) {
-    const steps = [500, 1000, 1500, 2000, 2500, 3000, 4000, 5000, 6000, 8000, 10000, 15000, 20000, 30000, 50000, 100000];
+    const steps = [100, 200, 500, 1000, 1500, 2000, 2500, 3000, 4000, 5000, 6000, 8000, 10000, 15000, 20000, 30000, 50000, 100000];
     return steps.find(s => s >= v) || Math.ceil(v / 10000) * 10000;
   }
 
@@ -228,7 +247,7 @@
     const names = Object.keys(data.series);
     const hands = new Set();
     names.forEach(n => data.series[n].forEach(pt => hands.add(pt[0])));
-    $('bank-hcount').textContent = hands.size ? 'Dashed line = 1,500 starting stack \u00b7 ' + hands.size + ' hand' + (hands.size === 1 ? '' : 's') : '';
+    $('bank-hcount').textContent = hands.size ? (isPlay() ? '' : 'Dashed line = 1,500 starting stack \u00b7 ') + hands.size + ' hand' + (hands.size === 1 ? '' : 's') : '';
     if (!hands.size) { lineGeo = null; setHTML(host, emptyNote('Nothing to plot yet', 'Chips are recorded at the end of every hand. Play one and the lines appear.')); return; }
     const W = host.clientWidth, H = host.clientHeight; if (!W || !H) return;
     const u = U();
@@ -236,9 +255,9 @@
     const hs = [...hands].sort((a, b) => a - b);
     const x0 = hs[0], x1 = hs[hs.length - 1];
     const span = Math.max(1, x1 - x0);
-    let ymax = 1500;
+    let ymax = isPlay() ? 2000 : 1500;
     names.forEach(n => data.series[n].forEach(pt => { ymax = Math.max(ymax, pt[1]); }));
-    const step = [250, 500, 1000, 2000, 2500, 5000, 10000, 20000, 25000, 50000].find(s => ymax * 1.03 / s <= 5) || 100000;
+    const step = [250, 500, 1000, 2000, 2500, 5000, 10000, 20000, 25000, 50000, 100000, 250000].find(s => ymax * 1.03 / s <= 5) || 500000;
     const yt = Math.ceil(ymax * 1.03 / step);
     ymax = yt * step;
     const X = h => m.l + (hs.length === 1 ? (W - m.l - m.r) / 2 : (h - x0) / span * (W - m.l - m.r));
@@ -257,7 +276,7 @@
       g += `<text x="${X(h)}" y="${H - m.b + 17 * u}" text-anchor="middle">${h}</text>`;
     });
     g += `<text x="${m.l - 8 * u}" y="${H - m.b + 17 * u}" text-anchor="end" style="letter-spacing:.1em;text-transform:uppercase;font-size:calc(9 * var(--px))">Hand</text>`;
-    if (1500 < ymax) g += `<line class="ref" x1="${m.l}" x2="${W - m.r}" y1="${Y(1500)}" y2="${Y(1500)}"/>`;
+    if (!isPlay() && 1500 < ymax) g += `<line class="ref" x1="${m.l}" x2="${W - m.r}" y1="${Y(1500)}" y2="${Y(1500)}"/>`;
 
     const ends = [];
     names.forEach(n => {
@@ -277,7 +296,7 @@
       g += `<text class="lab" x="${e.x + 8 * u}" y="${ly + 4 * u}" style="fill:${e.c}">${E(e.n.length > 9 ? e.n.slice(0, 8) + '…' : e.n)} ${short(e.v)}</text>`;
     });
     g += `<line class="cross" id="bank-cross" x1="0" x2="0" y1="${m.t}" y2="${H - m.b}" style="display:none"/>`;
-    setHTML(host, `<svg class="bank-chart" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Chips over hands per player">${g}</svg><div class="bank-tip" id="bank-tip" style="display:none"></div>`);
+    setHTML(host, `<svg class="bank-chart" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${isPlay() ? 'Play dollars' : 'Chips'} over hands per player">${g}</svg><div class="bank-tip" id="bank-tip" style="display:none"></div>`);
   }
 
   function bindTip() {
@@ -343,6 +362,7 @@
   function attach() {
     if (!state.socket) return false;
     state.socket.on('bank_summary', d => {
+      if (d && d.view && d.view !== view) return;
       data = d;
       const u = d && (d.unit || (d.table && d.table.unit)); if (u) Money.setUnit(u);
       if (isOpen) render();

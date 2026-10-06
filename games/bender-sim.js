@@ -1,11 +1,12 @@
 'use strict';
 // node games/bender-sim.js [spins=200000] [seed=12345]
-// Quick plain-spin RTP / hit rate / 95% CI vs the 100% target (single-spin sd is huge; use bender-rtp.js for a tight figure).
+
+// Quick plain-spin RTP / hit rate / 95% CI vs the 98% target (single-spin sd is huge; use bender-rtp.js for a tight figure).
 const fs = require('fs');
 const path = require('path');
 const E = require('./bender-engine.js');
 const N = +process.argv[2] || 200000, SEED = +process.argv[3] || 12345;
-const TARGET = 100; // retuned 10/5 to 100% (pay table x1.0388, buy costs = measured bonus EV); precise figure: node games/bender-rtp.js
+const TARGET = 98; // retuned 10/5 to 98%, bonus ~1 in 100 (scatterW 1.19, pay table + scatterPay x2.07, buy costs = measured bonus EV / 0.98); precise figure: node games/bender-rtp.js
 
 function run(Eng, rng, n) {
   const eng = Eng.createEngine();

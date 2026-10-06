@@ -46,7 +46,7 @@ function png(w = 16, seed = 0) {
   return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
 }
 const dataUrl = (mime, buf) => `data:${mime};base64,${buf.toString('base64')}`;
-const settings = () => ({ name: 'Profile Night', mode: 'friends', buyIn: { min: 500, max: 5000, default: 1000 }, blinds: { sb: 5, bb: 10 }, seats: 8, actionTimerSec: 0, rebuys: true, isPrivate: false });
+const settings = () => ({ name: 'Profile Night', mode: 'play', buyIn: { min: 500, max: 5000, default: 1000 }, blinds: { sb: 5, bb: 10 }, seats: 8, actionTimerSec: 0, rebuys: true, isPrivate: false });
 
 (async () => {
   try {

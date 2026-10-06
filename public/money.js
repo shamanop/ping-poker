@@ -19,20 +19,19 @@
     opts = opts || {};
     const n = Number(units);
     if (units === null || units === undefined || units === '' || !isFinite(n)) return '-';
-    const u = opts.unit || unit;
     const mode = opts.mode || effective();
     const sym = opts.symbol !== false;
     const neg = n < 0;
     const sign = neg ? '-' : (opts.signed && n > 0 ? '+' : '');
-    let v = u === 'cents' ? (mode === 'usd' ? n / 100 : n) : n;
     const dollars = mode === 'usd';
+    let v = dollars ? n / 100 : n;
     const a = Math.abs(v);
     let body;
     if (opts.compact && a >= (typeof opts.compact === 'number' ? opts.compact : 10000)) {
       const k = a >= 1e6 ? a / 1e6 : a / 1e3;
       const suf = a >= 1e6 ? 'M' : 'K';
       body = (Math.round(k * 10) / 10).toString().replace(/\.0$/, '') + suf;
-    } else if (dollars && u === 'cents' && Math.round(n) % 100 !== 0) {
+    } else if (dollars && Math.round(n) % 100 !== 0) {
       body = Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     } else {
       body = group(Math.round(v));
@@ -47,9 +46,8 @@
     if (!/^-?\d*\.?\d+$|^-?\d+\.$/.test(t)) return null;
     const v = parseFloat(t);
     if (!isFinite(v)) return null;
-    const u = opts.unit || unit;
     const mode = opts.mode || effective();
-    return (u === 'cents' && mode === 'usd') ? Math.round(v * 100) : Math.round(v);
+    return mode === 'usd' ? Math.round(v * 100) : Math.round(v);
   }
 
   function setMode(m, silent) {
@@ -110,7 +108,7 @@
 
   // nice step in units for slider/presets: 25 cents-mode (quarters), 1 in chips
   function niceStep(bb) {
-    if (unit !== 'cents') return 1;
+    if (unit !== 'cents' && effective() !== 'usd') return 1;
     const b = Number(bb) || 100;
     if (b >= 2000) return 100;
     if (b >= 100) return 25;
