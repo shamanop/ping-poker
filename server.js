@@ -1612,7 +1612,7 @@ io.on('connection', socket => {
 
     const t = room.settings, legacy = !room.nightId;
     const startChips = room.startChips || STARTING_CHIPS;
-    const min = legacy ? BIG_BLIND : t.buyIn.min, max = legacy ? Math.max(t ? t.buyIn.max : STARTING_CHIPS, startChips) : t.buyIn.max;
+    const min = t ? t.buyIn.min : BIG_BLIND, max = legacy ? Math.max(t ? t.buyIn.max : STARTING_CHIPS, startChips) : t.buyIn.max;
     const fund = fundOf(room, player.chips > 0 ? player.fund : (reqFund || player.fund));
     const balance = fund === 'chips' ? getBalance(player.name) : fund === 'play' ? playBalance(player.acct || bankKey(player.name)) : Infinity;
     const fundWord = fund === 'play' ? 'Play $' : 'chips in bank';

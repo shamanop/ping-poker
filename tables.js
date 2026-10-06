@@ -17,7 +17,7 @@ const normCode = c => String(c == null ? '' : c).toUpperCase().replace(/[^A-Z0-9
 
 function defaultsFor(mode) {
   return mode === 'chips'
-    ? { buyIn: { min: 500, max: 5000, default: 1500 }, blinds: { sb: 10, bb: 20 } }
+    ? { buyIn: { min: 500, max: 100000, default: 1500 }, blinds: { sb: 10, bb: 20 } }
     : mode === 'play'
       ? { buyIn: { min: 500, max: 50000, default: 2000 }, blinds: { sb: 25, bb: 50 } }
       : { buyIn: { min: 500, max: 50000, default: 10000 }, blinds: { sb: 50, bb: 100 } };
@@ -147,7 +147,7 @@ function createTables(E) {
   }
 
   const LEGACY = () => buildTable({
-    name: 'The Ping', mode: 'chips', unit: 'chips', buyIn: { min: 500, max: 5000, default: 1500 }, blinds: { sb: 10, bb: 20 },
+    name: 'The Ping', mode: 'chips', unit: 'chips', buyIn: { min: 500, max: 100000, default: 1500 }, blinds: { sb: 10, bb: 20 },
     blindIncrease: { enabled: false, everyMin: 15, schedule: 'standard' }, seats: MAX_SEATS, actionTimerSec: 30, rebuys: true, rebuyLimit: 0, isPrivate: false, autoStart: true,
   }, 'chris', LEGACY_ID);
 
