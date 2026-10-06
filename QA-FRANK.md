@@ -7,7 +7,7 @@ Severity: S1 money or stuck table, S2 wrong or misleading, S3 looks. Status: ope
 | id | sev | status | title |
 |---|---|---|---|
 | Q01 | S2 | fixed | Heads-up: SB and BB badges are swapped on the seats |
-| Q02 | S2 | known | Phone width (390): header, lobby buttons and the action bar are off screen; the table cannot be played |
+| Q02 | S2 | fixed (95ad5e7) | Phone width (390): header, lobby buttons and the action bar are off screen; the table cannot be played |
 | Q03 | S2 | fixed | A player who already holds a seat is offered a buy-in form for it; the typed amount is silently ignored; a 0-chip seat shows a dead hand |
 | Q04 | S2 | fixed | Daily bonus window prints raw cents with no unit |
 | Q07 | S2 | fixed | Create-table refusals print amounts as raw cents on a Play $ form |
@@ -26,7 +26,7 @@ Severity: S1 money or stuck table, S2 wrong or misleading, S3 looks. Status: ope
 
 ## Q02 (S2) Phone width (390): header, lobby buttons and the action bar are off screen; the table cannot be played
 
-- Status: known (not started: needs a phone CSS pass with a screenshot critic; s11_phone_geometry.py measures it)
+- Status: fixed in 95ad5e7 (public/phone.css, loaded only at <= 600 px). s11_phone_geometry.py 6 checks 0 failed; fix_c_phone.py 46 checks 0 failed in Chips and in Play $ (sign in, create, join by code, chat drawer, Call and Raise through the real buttons). Notes: tests/e2e/sweep/FIX-C.md. Left over, S3: at 390 px the seat name plate covers the bottom edge of the hole cards (after_phone_table.jpg); only 2-handed was played on a phone.
 - Steps: Open the site at 390x844, sign in. Lobby, then sit at a table and wait for your turn.
 - Expected: Every control reachable; Fold / Call / Raise usable.
 - Actual: Measured by tests/e2e/sweep/s11_phone_geometry.py at 390x844. Lobby: money toggle, daily bonus, account and Sign out sit at x 430-749, CREATE TABLE / code box / JOIN reach x 435 (the page does not scroll). Table: the stage is 98 px wide (chat rail 204 px plus the dock take the rest), FOLD / CALL / RAISE are 22 px wide at x 298-334, emote buttons 3-6, the raise box and presets are off screen, the table is clipped. Moving the rail to the other side only mirrors it. A phone player can neither sign out nor act; the turn clock folds them.
@@ -104,7 +104,8 @@ Severity: S1 money or stuck table, S2 wrong or misleading, S3 looks. Status: ope
 
 ## NOT covered
 
-- Phone (390x844) hands: the layout cannot be played (Q02); phone coverage is geometry on lobby and table only
+- Phone: chromium at 390x844 only, 2-handed only. Not checked: real iOS/Android browsers, landscape, 3+ players at 390 px (seats are 84 px wide and will crowd the cards)
+- s10_misc browser half: the script stalls, so the login-lockout message was not re-checked on 95ad5e7
 - Cold Call: not in v2-core (origin/coldcall)
 - radio and recap: only on the unmerged branch combo-1006
 - Top-up screen: no client UI calls wallet_topup
