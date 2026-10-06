@@ -460,7 +460,7 @@
 
       const capT0 = capT;
       const res = { buy, costTenths: callback ? 0 : buy ? cfg.buyCost[buy] : 10, winTenths: 0, clusterTenths: 0, phoneTenths: 0, bonusTenths: 0, bonusRawTenths: 0, bonusKind: 0, upgraded: false,
-        capped: false, script: null, bells: 0, phoneFired: false, closes: 0, cascades: 0, baseCascades: 0, bonusSpins: 0, bonusCluster: 0, bonusPhone: 0, leads: 0, revealRounds: 0, callback };
+        capped: false, script: null, bells: 0, phoneFired: false, closes: 0, cascades: 0, baseCascades: 0, bonusSpins: 0, bonusCluster: 0, bonusPhone: 0, leads: 0, revealRounds: 0, callback, phones: 0, marked: 0 };
       let capLeft = capT0, spin = null, bonus = null, hotEnd = null;
       const scriptSoFar = (bonusScript) => ({ v: 2, partial: true, buy, callback, bet, costTenths: res.costTenths, spin: spin ? spin.script : null, bonus: bonusScript,
         pull: { leadsBefore: pull.leadsBefore, daily: pull.daily, warmIn: pull.warmIn, decisions: pull.decisions.slice() } });
@@ -480,7 +480,7 @@
         else {
           spin = playSpin(rng, 0, hot, S, { guarantee: buy === 'call', hunt: buy === 'hunt', capLeft, keepHot: !buy });
           res.clusterTenths = spin.cluster; res.phoneTenths = spin.phone; res.bells = spin.bells; res.phoneFired = spin.fired; res.closes = spin.closes; res.cascades = spin.cascades; res.baseCascades = spin.cascades;
-          res.leads = spin.leads; res.revealRounds = spin.revealRounds || 0; hotEnd = spin.hotEnd;
+          res.leads = spin.leads; res.revealRounds = spin.revealRounds || 0; hotEnd = spin.hotEnd; res.phones = spin.phones; res.marked = hotEnd ? hotEnd.length : 0;
           capLeft -= spin.win; if (spin.capped || capLeft <= 0) { res.capped = true; capLeft = 0; }
           if (!res.capped && spin.bells >= 3) res.bonusKind = spin.bells >= 5 ? 3 : spin.bells === 4 ? 2 : 1;
         }
