@@ -5,6 +5,7 @@
 // The engine file stays pure and unchanged; everything with a file, an env var or a clock lives here. Contract: cold-call/PULL-ENGINE.md section 8.
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const Eng = require('./coldcall-engine.js');
 
 const DEFAULT = structuredClone(Eng.CFG);          // the shipped numbers, captured when this file loads
@@ -111,6 +112,9 @@ function relations(c) {
   if (P.pot.oneInPerDollar === 0 && P.pot.feedBps > 0) fail('cfg.pull.pot: oneInPerDollar 0 means the pot never pays, so feedBps must be 0 too');
   if (P.pot.capCents < P.pot.feedBps * P.pot.oneInPerDollar / 100) fail('cfg.pull.pot.capCents: must be >= feedBps x oneInPerDollar / 100 (' + P.pot.feedBps * P.pot.oneInPerDollar / 100 + '), or the pot cannot pay out what it is fed');
   if (P.more.mult >= 2 && P.more.rtp > P.more.mult) fail('cfg.pull.more.rtp: must be <= more.mult (the win chance rtp / mult cannot pass 1)');
+  if (P.more.rtp > 1) fail('cfg.pull.more.rtp: must be <= 1 (it is the payback of the ONE MORE CALL gamble as a fraction: above 1 the gamble pays the player more than it takes)');
+  // D2, the chaser bar: a player who bets only while the pot shows its cap collects capCents / 100 / oneInPerDollar points on top of the game (shipped 5000 / 3000 = 1.667, the bar of LEVERS 8.11 / 8.13). Whole numbers: capCents x 3 <= oneInPerDollar x 5.
+  if (P.pot.oneInPerDollar > 0 && P.pot.capCents * 3 > P.pot.oneInPerDollar * 5) fail('cfg.pull.pot: the chaser bar: capCents / 100 / oneInPerDollar must not pass the shipped 1.667 points (capCents x 3 <= oneInPerDollar x 5; got ' + P.pot.capCents + ' x 3 > ' + P.pot.oneInPerDollar + ' x 5), or a player who bets only on a full pot beats the 98.7 bar');
 }
 
 // ---------------------------------------------------------------------------------------------------------------- smoke test
@@ -211,8 +215,34 @@ function loadLiveConfig(log) {
 
 const deepEq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const isCustom = () => !deepEq(Eng.CFG, DEFAULT);
-// the label that goes with the math in force: the one that came with the overrides, else "custom settings, not measured" when the numbers differ from the shipped ones, else the shipped line
-const rtp = (shipped) => live.rtpLabel || (isCustom() ? CUSTOM_LABEL : shipped);
+
+// FIX D3: an RTP label is a claim about ONE set of numbers. The hash of a full merged config (sha256 of its JSON with every key sorted) identifies those numbers; each preset file carries the
+// `measuredHash` of the config its label was measured on (tools/coldcall-preset-hash.js writes it; tests/coldcall-presets.js recomputes it against the current shipped defaults).
+const stable = (v) => (Array.isArray(v) ? v.map(stable) : isPlain(v) ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, stable(v[k])])) : v);
+const configHash = (cfg) => crypto.createHash('sha256').update(JSON.stringify(stable(cfg))).digest('hex');
+let hashMemo = { json: null, hash: null };
+const liveHash = () => { const j = JSON.stringify(Eng.CFG); if (hashMemo.json !== j) hashMemo = { json: j, hash: configHash(Eng.CFG) }; return hashMemo.hash; };
+const PRESET_DIR = path.join(__dirname, '..', 'cold-call', 'presets');
+let presetCache = null;
+function presets() {                     // [{ name, rtpLabel, measuredHash }]; a missing folder or a damaged file leaves fewer known presets, which only ever makes the label more cautious
+  if (presetCache) return presetCache;
+  const out = [];
+  try {
+    for (const f of fs.readdirSync(PRESET_DIR).filter((x) => x.endsWith('.json')).sort()) {
+      try { const j = JSON.parse(fs.readFileSync(path.join(PRESET_DIR, f), 'utf8')); if (typeof j.rtpLabel === 'string' && /^[0-9a-f]{64}$/.test(j.measuredHash)) out.push({ name: f.replace(/\.json$/, ''), rtpLabel: j.rtpLabel.trim().slice(0, 160), measuredHash: j.measuredHash }); } catch {}
+    }
+  } catch {}
+  return (presetCache = out);
+}
+// the label that goes with the math in force: the shipped line while the numbers are the shipped ones; a label that came with the overrides ONLY when the live merged config is, hash for hash,
+// the one a known preset's label was measured on; anything else (hand-edited preset, a saved file re-merged onto changed defaults, any other number) reads "custom settings, not measured"
+const rtp = (shipped) => {
+  if (!isCustom()) return shipped;
+  const h = liveHash();
+  return live.rtpLabel && presets().some((p) => p.rtpLabel === live.rtpLabel && p.measuredHash === h) ? live.rtpLabel : CUSTOM_LABEL;
+};
+// said in the POST reply: a label that was sent and is not what the room is shown
+const labelWarning = (shipped) => (live.rtpLabel && rtp(shipped) !== live.rtpLabel ? 'rtpLabel not shown: it is not the label of a known preset measured on exactly these numbers (the room reads "' + rtp(shipped) + '")' : null);
 
 // ---------------------------------------------------------------------------------------------------------------- what clients get
 const buyPrices = () => Object.fromEntries(Eng.BET_LEVELS.map((bet) => [bet, Object.fromEntries(Eng.BUYS.map((b) => [b, Eng.buyPrice(Eng.CFG.buyCost[b], bet)]))]));
@@ -225,17 +255,29 @@ function publicCfg() {
 // the payload of `g:coldcall:cfg` (broadcast on every swap) and the fields `g:coldcall:state` carries: a COPY, editing it moves nothing
 function clientCfg(shipped) { return { cfg: publicCfg(), rules: clone(Eng.CFG.pull || null), buyPriceCents: buyPrices(), rtp: rtp(shipped), bets: Eng.BET_LEVELS.slice() }; }
 function liveInfo(shipped) {
-  return { file: cfgFile(), rtpLabel: rtp(shipped), custom: isCustom(), note: live.note, updatedAt: live.updatedAt, overrides: clone(live.overrides), cfg: clone(Eng.CFG), defaults: clone(DEFAULT) };
+  return { file: cfgFile(), rtpLabel: rtp(shipped), warning: labelWarning(shipped), configHash: liveHash(), custom: isCustom(), note: live.note, updatedAt: live.updatedAt, overrides: clone(live.overrides), cfg: clone(Eng.CFG), defaults: clone(DEFAULT) };
 }
 
 // ---------------------------------------------------------------------------------------------------------------- snapshots (item 3)
 // The whole live config at this instant plus an engine built from THAT copy. A round runs, replays, defaults and settles on its snapshot, whatever is swapped meanwhile:
 // every table the engine bakes (weights, pay, reveal, ...) and every knob it reads live comes from the copy. structuredClone keeps Infinity / NaN as they are.
-function snapshot() { const cfg = clone(Eng.CFG); return { cfg, eng: Eng.createEngine(cfg) }; }
+// FIX D6: built ONCE per distinct config, not twice per spin: the snapshot is memoised on the content of Eng.CFG (a swap changes it; so does a test that edits a knob in place) and handed, deep-frozen,
+// to every round, every `state` request and every settle. A round keeps its own reference, so "an open round finishes on the config it started on" still holds after a swap (a new object is built then).
+// Non-finite numbers are named in the key (JSON would turn Infinity / NaN into null and a knob going from one to the other would reuse a stale engine).
+const deepFreeze = (o) => { if (o !== null && typeof o === 'object' && !Object.isFrozen(o)) { Object.freeze(o); for (const k of Object.keys(o)) deepFreeze(o[k]); } return o; };
+const keyOf = (k, v) => (typeof v === 'number' && !Number.isFinite(v) ? '#' + v : v);
+let snapMemo = null;
+function snapshot() {
+  const j = JSON.stringify(Eng.CFG, keyOf);
+  if (snapMemo && snapMemo.json === j) return snapMemo.K;
+  const cfg = deepFreeze(clone(Eng.CFG)), K = { cfg, eng: Eng.createEngine(cfg) };
+  snapMemo = { json: j, K };
+  return K;
+}
 // the stateless round of the old game (pull off, the QA hook) on a snapshot; same shape as Eng.resolveRound
 function resolveRound(K, rng, buy, opts) {
   const r = K.eng.round(rng, buy, { script: true, ...(opts || {}) });
   return { round: r, buy: r.buy, costTenths: r.costTenths, winTenths: r.winTenths, winX: r.winX, capped: r.capped, tier: r.tier, script: r.script };
 }
 
-module.exports = { DEFAULT, CUSTOM_LABEL, RULES, file: cfgFile, merge, validate, smoke, setLiveConfig, loadLiveConfig, liveInfo, clientCfg, publicCfg, buyPrices, rtp, snapshot, resolveRound };
+module.exports = { DEFAULT, CUSTOM_LABEL, RULES, file: cfgFile, configHash, presets, merge, validate, smoke, setLiveConfig, loadLiveConfig, liveInfo, clientCfg, publicCfg, buyPrices, rtp, snapshot, resolveRound };

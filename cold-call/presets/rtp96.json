@@ -13,5 +13,6 @@
     }
   },
   "rtpLabel": "96.1% (200M-spin sim at $1, +-0.20, includes the Callback and the office pot)",
+  "measuredHash": "0c7af6f0ac2f7e8381664401afd23269cf968f90e336ba8c46e21d357a9a3faa",
   "note": "rtp96: pass 1 measured 96.14, in band, kept. LEVERS.md 8.13."
 }

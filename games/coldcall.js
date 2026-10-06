@@ -209,7 +209,7 @@ function settle(rec, r, autoWhy, extraSocket) {
     if (!isInt(winCents) || winCents < 0) throw new Error('bad win cents');
     pot = store.pot(mode, cfg.pot.seed);
     seed = cfg.pot.seed > 0 ? cfg.pot.seed : 0;
-    if (cost > 0) {                 // pot: slice of every paid spin, one hit roll, award (never on a Callback)
+    if (cost > 0 && !rec.buy) {     // pot: slice of every PLAIN paid spin, one hit roll, award (never on a Callback, never on a buy: FIX M1, buys are priced at 98.0 without the pot)
       slice = Eng.potSlice(cfg.pot.feedBps, cost, pot.rem);
       if (!isInt(slice.slice) || !isInt(slice.rem)) throw new Error('bad pot slice');
       const u = (module.exports.potRng || cryptoRng())(), bal = pot.bal + slice.slice;

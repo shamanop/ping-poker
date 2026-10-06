@@ -271,7 +271,7 @@
     if (R.pot) {
       // a hit pays min(pot, capCents): one cap in money for every bet; the chance scales with the bet (1 in N per $1). The pot can hold more than a hit pays: the rest stays for the next winner.
       const o = R.pot.oneInPerDollar, capC = R.pot.capCents, hit = o > 0 ? `each spin has a 1 in ${num(o)} chance per ${plainChips() ? '100 chips' : '$1'} bet of taking the pot${capC > 0 ? `, up to ${dollar(capC)} whatever you bet` : ''}` : 'no one can take it right now';
-      ln.push(['The office pot.', `${+(R.pot.feedBps / 100).toFixed(2)}% of every paid bet goes in; ${hit}${R.pot.minBal > 0 ? `; a pot under ${dollar(R.pot.minBal)} pays nothing yet` : ''}. The pot can hold more than a hit pays: what is left stays for the next winner. Play $ and Chips have separate pots. The pot is extra: it is paid on top of your win and does not count toward the ${cap} max win.`]);
+      ln.push(['The office pot.', `${+(R.pot.feedBps / 100).toFixed(2)}% of every plain paid spin goes in (bonus buys do not feed the pot and cannot win it); ${hit}${R.pot.minBal > 0 ? `; a pot under ${dollar(R.pot.minBal)} pays nothing yet` : ''}. The pot can hold more than a hit pays: what is left stays for the next winner. Play $ and Chips have separate pots. The pot is extra: it is paid on top of your win and does not count toward the ${cap} max win.`]);
     }
     return ln;
   }

@@ -31,7 +31,7 @@ test('the presets folder has rtp98 (shipped) and at least one other preset', () 
 for (const f of files) {
   const j = JSON.parse(fs.readFileSync(path.join(DIR, f), 'utf8'));
   test(f + ': POST body shape, non-empty label', () => {
-    assert.deepStrictEqual(Object.keys(j).sort(), ['note', 'overrides', 'rtpLabel']);
+    assert.deepStrictEqual(Object.keys(j).sort(), ['measuredHash', 'note', 'overrides', 'rtpLabel']);
     assert.ok(j.overrides && typeof j.overrides === 'object' && !Array.isArray(j.overrides));
     assert.ok(typeof j.rtpLabel === 'string' && j.rtpLabel.trim().length > 0 && j.rtpLabel.length <= 160, 'rtpLabel must be 1 to 160 characters (setLiveConfig cuts at 160)');
     assert.ok(typeof j.note === 'string' && j.note.length <= 300);
@@ -40,6 +40,16 @@ for (const f of files) {
     const { next, smoke } = L.validate(j.overrides);
     assert.ok(smoke.rounds > 0 && smoke.pull > 0);
     assert.ok(next.pull.list > 0 && next.buyCost.bonus1 > 0);
+  });
+  test(f + ': FIX D3: measuredHash = sha256 of the full merged config (the CURRENT shipped defaults + its overrides); a mismatch means a shipped default moved under a measured label: re-measure, then node tools/coldcall-preset-hash.js --write', () => {
+    assert.ok(/^[0-9a-f]{64}$/.test(j.measuredHash), 'measuredHash is a sha256 hex string');
+    assert.strictEqual(L.configHash(L.merge(j.overrides)), j.measuredHash, f + ': the numbers this label was measured on are not the numbers the code now ships with');
+  });
+  test(f + ': FIX D3: the label is shown for its own numbers only (the live config hashes to measuredHash), not for one number moved', () => {
+    assert.strictEqual(SRV.setLiveConfig(j).warning, null);
+    const moved = JSON.parse(JSON.stringify(j.overrides)); moved.pull = { ...(moved.pull || {}), cold: { floor: E.CFG.pull.cold.floor + 1 } };
+    const info = SRV.setLiveConfig({ overrides: moved, rtpLabel: j.rtpLabel }); assert.strictEqual(info.rtpLabel, 'custom settings, not measured'); assert.ok(/rtpLabel not shown/.test(info.warning));
+    SRV.setLiveConfig({ overrides: {} });
   });
   test(f + ': moves no knob that changes the hit rate or the natural bonus', () => {
     for (const k of Object.keys(j.overrides)) assert.ok(!MOVES_HIT_RATE.includes(k), k + ' must not be in a preset');

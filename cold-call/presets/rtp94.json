@@ -14,5 +14,6 @@
     }
   },
   "rtpLabel": "94.0% (200M-spin sim at $1, +-0.22, includes the Callback and the office pot)",
+  "measuredHash": "7a9c01d4657bc3e0b05eba2a09a135b406ad85fda19e1b6c044fa3cdecbfcf01",
   "note": "rtp94: pass 2 (call buy 28, hunt bellMult 1.85); flat 94.05. LEVERS.md 8.13."
 }

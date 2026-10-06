@@ -118,7 +118,7 @@ const dayFmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago' })
 const BIG_SWAP = {
   payScale: 3, buyCost: { bonus1: 700, call: 40 }, spins: { bonus1: 5 }, retrigger: { two: 1 }, maxCascades: 20,
   pull: { list: 60, fill: { dead: 2, win: 1, bonus: 1 }, pick: { minLeads: 4, mult: { gold: 9 } }, more: { mult: 3, rtp: 0.9, minTenths: 100 },
-    pot: { feedBps: 300, oneInPerDollar: 400, minBal: 5, capCents: 99999 }, decision: { timeoutMs: 5000 }, feed: { minWinX: 1 } },
+    pot: { feedBps: 150, oneInPerDollar: 400, minBal: 5, capCents: 650 }, decision: { timeoutMs: 5000 }, feed: { minWinX: 1 } },
 };
 
 (async () => {
@@ -150,6 +150,8 @@ const BIG_SWAP = {
     ['fill.dead below fill.win', { pull: { fill: { dead: 0.1, win: 0.9 } } }], ['all weights 0', { weights: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }],
     ['maxSpins absurd', { maxSpins: 1e9 }], ['start spins absurd', { spins: { bonus1: 1e9 } }], ['start spins above maxSpins', { spins: { bonus1: 99 } }], ['adjacency 5', { adjacency: 5 }],
     ['maxWinTenths above the 10,000x cap', { maxWinTenths: 1e9 }], ['payScale 0', { payScale: 0 }], ['ONE MORE CALL rtp above mult', { pull: { more: { mult: 2, rtp: 5 } } }],
+    ['D1: ONE MORE CALL rtp 1.5 (a gamble that pays 150%)', { pull: { more: { rtp: 1.5 } } }], ['D1: ONE MORE CALL rtp 2 with mult 2 (always wins)', { pull: { more: { rtp: 2, mult: 2 } } }],
+    ['D2: three times as many pot hits, cap unchanged (chaser bar)', { pull: { pot: { oneInPerDollar: 1000 } } }], ['D2: oneInPerDollar 100, capCents 1e9 (chaser bar)', { pull: { pot: { oneInPerDollar: 100, capCents: 1e9 } } }],
     ['reveal weight text', { reveal: { base: { gold: 'x' } } }], ['overrides null', null], ['overrides a list', []], ['overrides text', 'x'], ['overrides a number', 7],
   ];
   await test('rejects every bad config (unknown key, text, NaN, Infinity, negative, wrong shape or length, removed block, relationship); nothing changes, no file is written', async () => {
@@ -163,6 +165,24 @@ const BIG_SWAP = {
     assert.throws(() => SRV.setLiveConfig({ overrides: { pull: { list: -1 } } }), /pull\.list/, 'the message names the key');
     assert.throws(() => SRV.setLiveConfig({ overrides: { pull: { pot: { seed: 1 } } } }), /seed/);
     assert.throws(() => SRV.setLiveConfig({ overrides: { pull: { pot: { capCents: 100 } } } }), /capCents/);
+  });
+
+  await test('FIX D1: pull.more.rtp must be <= 1 (and still <= mult): 1.5 and {rtp 2, mult 2} are refused with a message naming the key; the shipped value, 1 and 0.9 pass', async () => {
+    const mustRefuse = (o) => assert.throws(() => need().validate(o), /pull\.more\.rtp/);
+    mustRefuse({ pull: { more: { rtp: 1.5 } } }); mustRefuse({ pull: { more: { rtp: 2, mult: 2 } } }); mustRefuse({ pull: { more: { rtp: 1.0001 } } }); mustRefuse({ pull: { more: { rtp: 3, mult: 5 } } });
+    for (const rtp of [SHIPPED.pull.more.rtp, 1, 0.9, 0]) need().validate({ pull: { more: { rtp } } });
+    need().validate({ pull: { more: { mult: 2, rtp: 1 } } }); need().validate({ pull: { more: { mult: 1, rtp: 1 } } });
+  });
+
+  await test('FIX D2: the chaser bar: capCents x 3 <= oneInPerDollar x 5 (capCents / 100 / oneInPerDollar <= 1.667 points); oneInPerDollar 1000 and {100, capCents 1e9} refused with a message naming the bar; the shipped 5000 / 3000 passes exactly, so do all three presets and a cap or hit chance moved the safe way', async () => {
+    const mustRefuse = (o) => assert.throws(() => need().validate(o), /chaser bar/);
+    mustRefuse({ pull: { pot: { oneInPerDollar: 1000 } } }); mustRefuse({ pull: { pot: { oneInPerDollar: 100, capCents: 1e9 } } });
+    mustRefuse({ pull: { pot: { capCents: 5001 } } }); mustRefuse({ pull: { pot: { oneInPerDollar: 2999 } } });
+    assert.strictEqual(SHIPPED.pull.pot.capCents * 3, SHIPPED.pull.pot.oneInPerDollar * 5, 'the shipped pot sits exactly on the bar'); need().validate({});
+    need().validate({ pull: { pot: { capCents: 5000, oneInPerDollar: 3000 } } }); need().validate({ pull: { pot: { capCents: 4000 } } }); need().validate({ pull: { pot: { oneInPerDollar: 4000 } } }); need().validate({ pull: { pot: { oneInPerDollar: 0, feedBps: 0 } } });
+    const dir = path.join(__dirname, '..', 'cold-call', 'presets'); const files = fs.readdirSync(dir).filter((f) => f.endsWith('.json')); assert.ok(files.length >= 3);
+    for (const f of files) L.validate(JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')).overrides);
+    resetLive(); assert.throws(() => SRV.setLiveConfig({ overrides: { pull: { pot: { oneInPerDollar: 1000 } } } }), /chaser bar/); assert.strictEqual(cfgJson(), JSON.stringify(SHIPPED), 'nothing changed'); assert.ok(!fs.existsSync(CFG_FILE));
   });
 
   await test('accepts a good config; the smoke test plays every buy and full PULL rounds with decisions', async () => {
@@ -214,18 +234,38 @@ const BIG_SWAP = {
   });
 
   // ------------------------------------------------------------------------------------------ item 6: the RTP label
-  await test('RTP label: shipped defaults carry the shipped label; overrides without a label read "custom settings, not measured"; a label that came with them is shown; reset restores', async () => {
-    resetLive(); const s = setup({ rng: E.rngFrom(5) }); const a = s.sock('ann');
-    assert.strictEqual(state(s, a).rtp, SRV.RTP_LABEL); assert.ok(/9[0-9]\.[0-9]+%/.test(SRV.RTP_LABEL), 'the shipped label is the measured line');
-    SRV.setLiveConfig({ overrides: { buyCost: { bonus1: 800 } } });
-    assert.strictEqual(state(s, a).rtp, 'custom settings, not measured'); assert.strictEqual(SRV.clientCfg().rtp, 'custom settings, not measured'); assert.strictEqual(SRV.liveInfo().rtpLabel, 'custom settings, not measured');
-    SRV.setLiveConfig({ overrides: { buyCost: { bonus1: 800 } }, rtpLabel: '94.2% (sim, 10M spins)' });
-    assert.strictEqual(state(s, a).rtp, '94.2% (sim, 10M spins)');
-    SRV.setLiveConfig({ overrides: { pull: { list: 450 } } });      // the same numbers as shipped: the math is the shipped math, the measured label is honest
-    assert.strictEqual(state(s, a).rtp, SRV.RTP_LABEL);
-    SRV.setLiveConfig({ overrides: { buyCost: { bonus1: 800 } }, rtpLabel: 'x'.repeat(500) }); assert.ok(state(s, a).rtp.length <= 160, 'label is capped');
-    SRV.setLiveConfig({ overrides: {} }); assert.strictEqual(state(s, a).rtp, SRV.RTP_LABEL); assert.strictEqual(SRV.liveInfo().rtpLabel, SRV.RTP_LABEL);
-    SRV.setLiveConfig({ overrides: { buyCost: { bonus1: 800 } }, rtpLabel: 'y' }); resetLive(); assert.strictEqual(SRV.liveInfo().rtpLabel, SRV.RTP_LABEL);
+  const PRESET_DIR = path.join(__dirname, '..', 'cold-call', 'presets');
+  const preset = (n) => JSON.parse(fs.readFileSync(path.join(PRESET_DIR, n + '.json'), 'utf8'));
+  await test('RTP label (FIX D3): the shipped line for the shipped numbers; a label is shown only when the live merged config hashes to the measuredHash of a known preset whose label it is; anything else reads "custom settings, not measured" and the reply says so', async () => {
+    resetLive(); const s = setup({ rng: E.rngFrom(5) }); const a = s.sock('ann'); const C = 'custom settings, not measured';
+    assert.strictEqual(state(s, a).rtp, SRV.RTP_LABEL); assert.ok(/9[0-9]\.[0-9]+%/.test(SRV.RTP_LABEL), 'the shipped label is the measured line'); assert.strictEqual(SRV.liveInfo().warning, null);
+    // own numbers with a free-text label: not shown, warned
+    let info = SRV.setLiveConfig({ overrides: { buyCost: { bonus1: 800 } } }); assert.strictEqual(state(s, a).rtp, C); assert.strictEqual(SRV.clientCfg().rtp, C); assert.strictEqual(info.rtpLabel, C); assert.strictEqual(info.warning, null, 'no label sent, nothing to warn about');
+    info = SRV.setLiveConfig({ overrides: { buyCost: { bonus1: 800 } }, rtpLabel: '94.2% (sim, 10M spins)' }); assert.strictEqual(state(s, a).rtp, C); assert.ok(/rtpLabel not shown/.test(info.warning), info.warning);
+    info = SRV.setLiveConfig({ overrides: { buyCost: { bonus1: 800 } }, rtpLabel: 'x'.repeat(500) }); assert.ok(state(s, a).rtp.length <= 160); assert.ok(info.warning);
+    // each preset file with its own label: shown, no warning (the three are what the room is allowed to read)
+    for (const n of ['rtp94', 'rtp96', 'rtp98']) { const j = preset(n); info = SRV.setLiveConfig(j); assert.strictEqual(state(s, a).rtp, n === 'rtp98' ? SRV.RTP_LABEL : j.rtpLabel, n); assert.strictEqual(info.warning, null, n); assert.strictEqual(info.configHash, j.measuredHash, n + ': the live hash is the measured hash'); }
+    // the critic's rows: rtp94 overrides + the rtp98 label, a hand-edited preset with the file's label, payScale 3 + a 94.0% label, no overrides + the rtp94 label
+    const j94 = preset('rtp94'), j98 = preset('rtp98');
+    info = SRV.setLiveConfig({ overrides: j94.overrides, rtpLabel: j98.rtpLabel }); assert.strictEqual(state(s, a).rtp, C, 'rtp94 numbers + the rtp98 label'); assert.ok(info.warning);
+    info = SRV.setLiveConfig({ overrides: { ...j94.overrides, pull: { list: 400 } }, rtpLabel: j94.rtpLabel }); assert.strictEqual(state(s, a).rtp, C, 'a preset edited by hand (list 550 -> 400) with the file label'); assert.ok(info.warning);
+    info = SRV.setLiveConfig({ overrides: { payScale: 3 }, rtpLabel: j94.rtpLabel }); assert.strictEqual(state(s, a).rtp, C, 'payScale 3 + the 94.0% label'); assert.ok(info.warning);
+    info = SRV.setLiveConfig({ overrides: {}, rtpLabel: j94.rtpLabel }); assert.strictEqual(state(s, a).rtp, SRV.RTP_LABEL, 'the shipped numbers + the rtp94 label read the shipped line'); assert.strictEqual(info.custom, false); assert.ok(/rtpLabel not shown/.test(info.warning));
+    info = SRV.setLiveConfig({ overrides: { pull: { list: 450 } } }); assert.strictEqual(state(s, a).rtp, SRV.RTP_LABEL, 'the same numbers as shipped: the shipped label');
+    // reset
+    SRV.setLiveConfig({ overrides: { buyCost: { bonus1: 800 } }, rtpLabel: 'y' }); resetLive(); assert.strictEqual(SRV.liveInfo().rtpLabel, SRV.RTP_LABEL); assert.strictEqual(SRV.liveInfo().warning, null);
+  });
+
+  await test('RTP label (FIX D3): a saved preset re-merged onto CHANGED shipped defaults at boot reads "custom settings, not measured" (the label belongs to the numbers it was measured on); the same file on the same defaults still shows its label', async () => {
+    resetLive(); const s = setup({ rng: E.rngFrom(5) }); const a = s.sock('ann'); const j = preset('rtp96');
+    SRV.setLiveConfig(j); assert.strictEqual(state(s, a).rtp, j.rtpLabel);
+    // boot on the same defaults: the label is back
+    assert.strictEqual(L.loadLiveConfig(() => {}), true); assert.strictEqual(SRV.liveInfo().rtpLabel, j.rtpLabel, 'same defaults, same label');
+    // a deploy moves one shipped number (here the hunt bell weight's neighbour, a number no preset touches): the file is re-merged onto the new defaults
+    const keep = L.DEFAULT.pull.cold.floor; L.DEFAULT.pull.cold.floor = keep + 1;
+    try { assert.strictEqual(L.loadLiveConfig(() => {}), true); assert.strictEqual(E.CFG.pull.cold.floor, keep + 1); assert.strictEqual(SRV.liveInfo().rtpLabel, 'custom settings, not measured', 'the saved file keeps its old label but the numbers moved'); assert.notStrictEqual(SRV.liveInfo().configHash, j.measuredHash); assert.ok(/rtpLabel not shown/.test(SRV.liveInfo().warning)); }
+    finally { L.DEFAULT.pull.cold.floor = keep; resetLive(); }
+    assert.strictEqual(SRV.liveInfo().rtpLabel, SRV.RTP_LABEL);
   });
 
   // ------------------------------------------------------------------------------------------ item 3: an open round keeps the whole config it started on
@@ -251,7 +291,7 @@ const BIG_SWAP = {
       if (kind === 'more') assert.strictEqual(fin.totalWin, bank0, 'banking pays the amount that was shown (whole cents, no pot prize here)');
       let moved; try { const alt = replay(structuredClone(E.CFG)); moved = alt.status !== 'done' || alt.pay.win !== want.pay.win; } catch (e) { moved = true; }
       assert.ok(moved, 'control: the same tape under the NEW config would have paid differently (or not replayed at all)');
-      const slice = E.potSlice(pre.pull.pot.feedBps, r.cost, rem0).slice; assert.strictEqual(s.potOf('play').fed - fed0, slice, 'the pot slice follows the pre-swap feed (100 bps), not the new 300');
+      assert.strictEqual(s.potOf('play').fed - fed0, 0, 'a buy feeds the pot nothing, before or after the swap (FIX M1)'); assert.strictEqual(s.potOf('play').rem, rem0);
       assert.strictEqual(rec.timeoutMs, pre.pull.decision.timeoutMs, 'the open round kept its decision timer length');
       const n = spin(s, a, { bet: 100, mode: 'play', buyBonus: 'bonus1', auto: true });
       assert.strictEqual(n.cost, E.buyPrice(700, 100), 'the next spin is charged the new price'); assert.strictEqual(n.script.bonus.startSpins, 5, 'and plays the new spin count');
@@ -322,10 +362,10 @@ const BIG_SWAP = {
   await test('item 4: pot, feed and decision-timer knobs are read live by settle / spin / pending (runtime swap)', async () => {
     resetLive(); const s = setup({ rng: E.rngFrom(7001), roundRng: E.rngFrom(7002), potRng: E.rngFrom(3) }); const a = s.sock('ann'); rich(s, 'ann');
     SRV.potRng = E.rngFrom(3);
-    SRV.setLiveConfig({ overrides: { pull: { pot: { feedBps: 250, oneInPerDollar: 5, minBal: 1, capCents: 5000 }, feed: { minWinX: 0, minWinCents: 0 }, decision: { timeoutMs: 7000 } } } });
+    SRV.setLiveConfig({ overrides: { pull: { pot: { feedBps: 150, oneInPerDollar: 5, minBal: 1, capCents: 8 }, feed: { minWinX: 0, minWinCents: 0 }, decision: { timeoutMs: 7000 } } } });
     let sumCost = 0, wins = 0, prizes = 0;
-    for (let i = 0; i < 60; i++) { const r = spin(s, a, { bet: 100, mode: 'play', auto: true }); sumCost += r.cost; if (r.totalWin > 0) wins++; if (r.pot) { prizes++; assert.ok(r.pot.amount <= 5000); } }
-    const p = s.potOf('play'); assert.strictEqual(p.fed * 10000 + p.rem, sumCost * 250, 'slice at the live 250 bps'); assert.strictEqual(p.fed + p.seeded, p.paid + p.bal); assert.ok(prizes >= 3, 'the live 1-in-5 per dollar pot paid: ' + prizes);
+    for (let i = 0; i < 60; i++) { const r = spin(s, a, { bet: 100, mode: 'play', auto: true }); sumCost += r.cost; if (r.totalWin > 0) wins++; if (r.pot) { prizes++; assert.ok(r.pot.amount <= 8); } }
+    const p = s.potOf('play'); assert.strictEqual(p.fed * 10000 + p.rem, sumCost * 150, 'slice at the live 150 bps'); assert.strictEqual(p.fed + p.seeded, p.paid + p.bal); assert.ok(prizes >= 3, 'the live 1-in-5 per dollar pot paid: ' + prizes);
     const feedWins = all(a, 'floor:feed').filter((e) => e.kind === 'win').length; assert.ok(wins > 3 && feedWins >= wins, 'live feed threshold 0: every win is an event ' + feedWins + '/' + wins);
     assert.strictEqual(toPending(s, a, 'more').timeoutMs, 7000);
   });
@@ -340,7 +380,7 @@ const BIG_SWAP = {
     resetLive(); const s = setup({ rng: E.rngFrom(8) }); const a = s.sock('ann');
     SRV.setLiveConfig({ overrides: { payScale: 2, buyCost: { call: 50 }, pull: { list: 123, pot: { capCents: 4000 } } }, rtpLabel: '96% (sim)' });
     const st = state(s, a);
-    assert.strictEqual(st.rtp, '96% (sim)'); assert.strictEqual(st.pull.rules.list, 123); assert.strictEqual(st.pull.rules.pot.capCents, 4000); assert.strictEqual(st.pull.list, 123); assert.deepStrictEqual(st.betLevels, E.BET_LEVELS);
+    assert.strictEqual(st.rtp, 'custom settings, not measured', 'FIX D3: a free-text label is not shown for numbers no preset was measured on'); assert.strictEqual(st.pull.rules.list, 123); assert.strictEqual(st.pull.rules.pot.capCents, 4000); assert.strictEqual(st.pull.list, 123); assert.deepStrictEqual(st.betLevels, E.BET_LEVELS);
     assert.strictEqual(st.buyPriceCents[100].call, E.buyPrice(50, 100)); assert.strictEqual(st.buyCostX.call, 5);
     assert.strictEqual(st.cfg.payScale, 2); assert.deepStrictEqual(st.cfg.payTenths.mug, SHIPPED.pay.mug.map((v) => Math.max(1, Math.round(v * 2))), 'effective pay table in tenths of the bet');
     assert.ok(!('pull' in st.cfg), 'the pull rules are in pull.rules, not duplicated'); assert.deepStrictEqual(Object.keys(st.cfg.payTenths), E.SYM.slice(0, 10));
@@ -371,6 +411,21 @@ const BIG_SWAP = {
     try { assert.throws(() => SRV.setLiveConfig({ overrides: { buyCost: { bonus1: 640 } } })); assert.strictEqual(E.CFG.buyCost.bonus1, SHIPPED.buyCost.bonus1, 'memory untouched when the write fails'); assert.deepStrictEqual(SRV.liveInfo().overrides, {}); }
     finally { process.env.COLDCALL_CFG_FILE = keep; }
   });
+  await test('FIX D6: the snapshot is built once per distinct config and handed deep-frozen to every round: the same object between swaps, a new one after a swap, the old one untouched (an open round finishes on its own), nothing can write to it', async () => {
+    resetLive(); const s = setup({ rng: E.rngFrom(88), roundRng: E.rngFrom(89) }); const a = s.sock('ann'); rich(s, 'ann');
+    const K1 = need().snapshot(); assert.strictEqual(L.snapshot(), K1, 'the same snapshot object on the next call'); assert.ok(Object.isFrozen(K1.cfg) && Object.isFrozen(K1.cfg.pull) && Object.isFrozen(K1.cfg.pull.pot) && Object.isFrozen(K1.cfg.pay.mug), 'deep-frozen');
+    assert.throws(() => { K1.cfg.pull.pot.capCents = 1; }, TypeError); assert.deepStrictEqual(K1.cfg, SHIPPED);
+    for (let i = 0; i < 20; i++) spin(s, a, { bet: 100, mode: 'play', auto: true }); a.send('g:coldcall:state');
+    assert.strictEqual(L.snapshot(), K1, 'twenty spins and a state request built nothing new');
+    const r = toPending(s, a, 'more'); const rec = s.open.get(r.roundId); assert.strictEqual(rec.K, L.snapshot(), 'the open round holds the shared snapshot');
+    SRV.setLiveConfig({ overrides: { payScale: 2 } }); const K2 = L.snapshot();
+    assert.notStrictEqual(K2, K1, 'a swap builds a new snapshot'); assert.strictEqual(K2.cfg.payScale, 2); assert.strictEqual(rec.K.cfg.payScale, 1, 'the open round still holds the config it started on'); assert.strictEqual(L.snapshot(), K2);
+    let fin = r; while (fin.status === 'pending') fin = decide(s, a, fin, fin.pending.k === 'pick' ? { k: 'pick', p: fin.pending.choices[0] } : { k: 'more', take: false }); assert.strictEqual(fin.status, 'done');
+    E.CFG.pull.list = 77; const K3 = L.snapshot(); assert.notStrictEqual(K3, K2); assert.strictEqual(K3.cfg.pull.list, 77, 'an in-place edit of a knob (tests only) is seen too');
+    E.CFG.pull.pot.oneInPerDollar = Infinity; const K4 = L.snapshot(); assert.strictEqual(K4.cfg.pull.pot.oneInPerDollar, Infinity, 'Infinity survives the snapshot'); E.CFG.pull.pot.oneInPerDollar = 0; assert.strictEqual(L.snapshot().cfg.pull.pot.oneInPerDollar, 0, 'and a knob moving from Infinity to 0 is not mistaken for the same config');
+    resetLive();
+  });
+
   await test('a swap takes well under a second (smoke test included, measured)', async () => {
     resetLive(); setup({ rng: E.rngFrom(12) }); let worst = 0;
     for (let i = 0; i < 5; i++) { const t0 = process.hrtime.bigint(); SRV.setLiveConfig({ overrides: { buyCost: { bonus1: 900 + i } } }); worst = Math.max(worst, Number(process.hrtime.bigint() - t0) / 1e6); }
@@ -481,6 +536,9 @@ const BIG_SWAP = {
       assert.strictEqual((await call('GET', P, {})).status, 403, 'missing token'); assert.strictEqual((await call('POST', P, {}, { overrides: { buyCost: { bonus1: 640 } } })).status, 403);
       assert.strictEqual((await call('GET', P, { 'x-admin-token': TOKEN + 'x' })).status, 403, 'wrong token (length differs)'); assert.strictEqual((await call('GET', P, { 'x-admin-token': TOKEN.replace(/.$/, (c) => (c === 'a' ? 'b' : 'a')) })).status, 403, 'wrong token (same length)');
       assert.strictEqual(cfgJson(), JSON.stringify(SHIPPED), 'refused calls changed nothing'); assert.ok(!fs.existsSync(CFG_FILE));
+      // FIX D5a: a header of the right LENGTH (in characters) with one byte above 0x7F used to reach timingSafeEqual with buffers of different byte lengths and throw: a 500 with a stack for an unauthenticated caller. Now 403, on both games' routes.
+      for (const route of [P, '/api/admin/bender-config']) for (const m of ['GET']) { const r = await call(m, route, { 'x-admin-token': TOKEN.slice(0, -1) + '\u00e9' }); assert.strictEqual(r.status, 403, route + ' non-ASCII token of the same length: ' + r.status + ' ' + r.text.slice(0, 80)); assert.ok(!/RangeError|at /.test(r.text), 'no stack in the reply'); }
+      assert.strictEqual((await call('GET', P, { 'x-admin-token': '\u00e9'.repeat(TOKEN.length) })).status, 403); assert.strictEqual((await call('GET', P, good)).status, 200, 'the real token still works');
       const g = await call('GET', P, good); assert.strictEqual(g.status, 200); assert.strictEqual(g.json.cfg.buyCost.bonus1, SHIPPED.buyCost.bonus1); assert.deepStrictEqual(g.json.overrides, {}); assert.strictEqual(g.json.rtpLabel, SRV.RTP_LABEL); assert.ok(g.json.defaults && g.json.defaults.pull.pot.seed === 0);
       assert.ok(!JSON.stringify(g.json).includes(TOKEN), 'the token is never echoed');
       const n0 = emitted.length;
@@ -488,15 +546,21 @@ const BIG_SWAP = {
       assert.strictEqual((await call('POST', P, good, { overrides: { nope: 1 } })).status, 400); assert.strictEqual((await call('POST', P, good, {})).status, 400, 'no overrides and no reset: refused (an empty body must not reset)'); assert.strictEqual((await call('POST', P, good, { overrides: null })).status, 400); assert.strictEqual((await call('POST', P, good, [1])).status, 400);
       assert.strictEqual(emitted.length, n0, 'no event on a bad config'); assert.strictEqual(cfgJson(), JSON.stringify(SHIPPED)); assert.ok(!fs.existsSync(CFG_FILE));
       const ok = await call('POST', P, good, { overrides: { buyCost: { bonus1: 640 }, pull: { list: 321 } }, rtpLabel: '95.5% (test)', note: 'api-note-1' });
-      assert.strictEqual(ok.status, 200, ok.text); assert.strictEqual(ok.json.ok, true); assert.strictEqual(ok.json.cfg.buyCost.bonus1, 640); assert.strictEqual(ok.json.rtpLabel, '95.5% (test)'); assert.strictEqual(ok.json.note, 'api-note-1');
+      assert.strictEqual(ok.status, 200, ok.text); assert.strictEqual(ok.json.ok, true); assert.strictEqual(ok.json.cfg.buyCost.bonus1, 640); assert.strictEqual(ok.json.rtpLabel, 'custom settings, not measured'); assert.ok(/rtpLabel not shown/.test(ok.json.warning), 'FIX D3: the reply says the label was not honoured: ' + ok.json.warning); assert.strictEqual(ok.json.note, 'api-note-1');
       assert.strictEqual(E.CFG.buyCost.bonus1, 640); assert.strictEqual(JSON.parse(fs.readFileSync(CFG_FILE, 'utf8')).overrides.pull.list, 321);
       const ev = emitted.filter((e) => e[0] === 'g:coldcall:cfg'); assert.strictEqual(ev.length, 1, 'one broadcast'); const p = ev[0][1];
-      assert.strictEqual(p.cfg.buyCost.bonus1, 640); assert.strictEqual(p.rules.list, 321); assert.strictEqual(p.rtp, '95.5% (test)'); assert.strictEqual(p.buyPriceCents[100].bonus1, 6400); assert.deepStrictEqual(p.bets, E.BET_LEVELS);
+      assert.strictEqual(p.cfg.buyCost.bonus1, 640); assert.strictEqual(p.rules.list, 321); assert.strictEqual(p.rtp, 'custom settings, not measured'); assert.strictEqual(p.buyPriceCents[100].bonus1, 6400); assert.deepStrictEqual(p.bets, E.BET_LEVELS);
       assert.ok(logs.some((l) => l.includes('api-note-1') && /coldcall/.test(l)), 'a console line with the note'); assert.ok(!logs.some((l) => l.includes(TOKEN)), 'the token is never logged');
       const g2 = await call('GET', P, good); assert.strictEqual(g2.json.overrides.pull.list, 321);
       const rs = await call('POST', P, good, { reset: true }); assert.strictEqual(rs.status, 200); assert.strictEqual(cfgJson(), JSON.stringify(SHIPPED)); assert.strictEqual(rs.json.rtpLabel, SRV.RTP_LABEL);
       assert.strictEqual(emitted.filter((e) => e[0] === 'g:coldcall:cfg').length, 2, 'the reset is broadcast too'); assert.ok(emitted.filter((e) => e[0] === 'g:coldcall:cfg')[1][1].rules.list === SHIPPED.pull.list);
       assert.strictEqual((await call('GET', '/api/admin/bender-config', good)).status, 200, 'the Bender route is untouched'); assert.strictEqual((await call('GET', '/api/admin/bender-config', {})).status, 403);
+      // FIX D5c: only reset === true resets; "false" / 1 / "yes" are not a reset (they used to wipe the overrides sent with them)
+      const nr = await call('POST', P, good, { reset: 'false', overrides: { payScale: 2 }, note: 'not a reset' }); assert.strictEqual(nr.status, 200, nr.text); assert.strictEqual(E.CFG.payScale, 2, 'reset:"false" applied the overrides instead of resetting'); assert.strictEqual(nr.json.overrides.payScale, 2);
+      assert.strictEqual((await call('POST', P, good, { reset: 1 })).status, 400, 'reset: 1 with no overrides is neither a reset nor a config'); assert.strictEqual((await call('POST', P, good, { reset: 'true' })).status, 400); assert.strictEqual(E.CFG.payScale, 2, 'nothing changed');
+      const rt = await call('POST', P, good, { reset: true, overrides: { payScale: 3 } }); assert.strictEqual(rt.status, 200); assert.strictEqual(E.CFG.payScale, SHIPPED.payScale, 'reset:true resets (the overrides sent with it are dropped, as before)');
+      const lab = await call('POST', P, good, preset('rtp96')); assert.strictEqual(lab.status, 200, lab.text); assert.strictEqual(lab.json.warning, null); assert.strictEqual(lab.json.rtpLabel, preset('rtp96').rtpLabel, 'a preset file POSTed as it is keeps its label'); assert.ok(typeof lab.json.configHash === 'string');
+      await call('POST', P, good, { reset: true });
     } finally {
       console.log = logOrig; srv.io.emit = ioEmit; delete process.env.BENDER_ADMIN_TOKEN; await new Promise((r) => srv.server.close(r));
     }
