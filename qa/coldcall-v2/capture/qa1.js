@@ -127,7 +127,8 @@ async function fastClicks() {
   // 4. click during a bonus (free spins), normal speed
   s0 = await stState(); await page.evaluate(() => { window.__qaForce = 'bonus1'; }); await mclick('#spin');
   const t1 = Date.now(); let inb = false; let lt = 0; while (Date.now() - t1 < 90000) { inb = await G(() => !document.getElementById('bh').hidden); if (inb) break; if (Date.now() - lt > 1500) { lt = Date.now(); await tapper(); } await sleep(150); }
-  for (let i = 0; i < 5; i++) { await mclick('#spin'); await sleep(900); }
+  // a zero-pay bonus can end inside the 4.5 s of clicking; a click on the idle button is a legitimate new round, so stop clicking once the round is over
+  for (let i = 0; i < 5; i++) { if (!(await G(() => CC.core.st.busy))) break; await mclick('#spin'); await sleep(900); }
   s = await waitRound(s0.spins, 'during-bonus', { limit: 400000 }); await sleep(300); s1 = await stState();
   T.push({ t: 'clicks during bonus free spins (5 real clicks)', sawBonus: inb, started: s1.started - s0.started, results: s1.spins - s0.spins }); if (s1.spins - s0.spins !== 1) fail('clicks during bonus made ' + (s1.spins - s0.spins) + ' rounds', {});
   await verify('during-bonus', s0.spins);
