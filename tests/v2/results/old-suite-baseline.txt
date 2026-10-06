@@ -1,0 +1,24 @@
+preselect exit=1 49s  PASS no pre-select survives into the next hand
+allin exit=0 9s  PASS chips total 20000
+mp exit=0 167s  - [low] S13 rebuy after bust: Could not force a bust in 8 attempts (inconclusive)
+rejoin exit=0 11s  ALL PASS
+bankfix exit=0 22s  ALL PASS
+bankedit exit=0 6s  ALL PASS
+pause exit=0 15s  PASS pause clears when Chris disconnects
+persist exit=0 7s  ALL PASS
+reset exit=0 7s  PASS money conserved after new deal
+migrate exit=1 1s  1 FAILED
+labels.test exit=0 219s  52033 checks, 0 failures
+clientlabels.test exit=0 10s  clientlabels: 19 scenarios, 135000 random boards, 2652 preflop combos OK
+accounts exit=0 4s  ALL PASS
+tables exit=0 29s  ALL PASS
+profile exit=0 7s  ALL PASS
+social exit=0 0s  PASS no push when record unchanged
+done
+
+# Old suite on 9440541 (rigged worktree, RIG unset; tests run one by one, NODE_OPTIONS=--require tests/v2/baseline/remap-isabelle-path.js because
+# the old tests require socket.io-client from /home/isabelle/.cache/node_modules). npm test itself stops at the first failure (preselect), so each file was run alone.
+# Result: 15 of 16 files exit 0. tests/preselect.js exits 1 (5 FAIL lines: "call 10 accepted and echoed back privately", "small blind auto-called 10 when it came round",
+# "flop reached, small blind on turn", "dealer queued call 60", "dealer was NOT auto-called ..."): a pre-existing failure on 9440541.
+# tests/migrate.js says "1 FAILED: no accounts.json written in the repo" when an earlier run left accounts.json in the repo root; on a clean tree it passes (ALL PASS).
+# tests/mp.js exits 0 but one low-severity scenario was inconclusive (S13 rebuy after bust: could not force a bust).
