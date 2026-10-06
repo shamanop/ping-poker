@@ -1,12 +1,12 @@
 'use strict';
-const { authJoin } = require('./authjoin');
+const { authJoin } = require('../authjoin');
 // Ping Poker multi-client stress test. REPORT-ONLY: runs a patched-free COPY of server.js
 // in a temp dir with a throwaway bank.json. Usage: node tests/mp.js [groupName ...]
 const path = require('path'), fs = require('fs'), os = require('os');
 const { spawn } = require('child_process');
 const { io } = require(process.env.SIO_CLIENT || '/home/isabelle/.cache/node_modules/socket.io-client');
 
-const ROOT = path.join(__dirname, '..');
+const ROOT = path.join(__dirname, '..', '..');
 const ROOM = 'POKERPING', PASS = 'ping';
 let portCounter = Number(process.env.BASE_PORT || 4012);
 const nextPort = () => portCounter++;
@@ -271,7 +271,7 @@ async function soak() {
   await waitFor(() => doneHands >= 30 || Date.now() - t0 > 400000 || srv.exited, 420000);
   clearInterval(stallTimer);
   log(`soak: ${doneHands} hands, showdown checks ${sdChecked} (bad ${sdBad}), rotation mismatches ${rotBad}, blind mismatches ${blindBad}`);
-  fs.writeFileSync(path.join(__dirname, 'soak-hands.json'), JSON.stringify(hands, null, 1));
+  fs.writeFileSync(path.join(__dirname, '..', 'soak-hands.json'), JSON.stringify(hands, null, 1));
   if (doneHands < 30) rec(scn, 'high', 'Soak did not reach 30 hands', '30 hands', `${doneHands} hands (status ${obs.gs && obs.gs.status})`, 'see log');
   srv.stop();
   return { doneHands, sdChecked, sdBad, rotBad, blindBad };
@@ -376,7 +376,7 @@ async function badInputs() {
     if (srv.exited) rec(scn, 'critical', `Server crashed on ${label}`, 'server survives', srv.out.slice(-400), 'n/a');
     srv.stop();
   }
-  fs.writeFileSync(path.join(__dirname, 'badinputs.json'), JSON.stringify(out, null, 1));
+  fs.writeFileSync(path.join(__dirname, '..', 'badinputs.json'), JSON.stringify(out, null, 1));
   return out;
 }
 
@@ -811,7 +811,7 @@ if (require.main !== module) { module.exports = { startServer, Client, makeTable
   }));
   const sev = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
   FINDINGS.sort((a, b) => sev[a.sev] - sev[b.sev]);
-  fs.writeFileSync(want.length ? '/tmp/ppmp-partial.json' : path.join(__dirname, 'results.json'), JSON.stringify({ hands: HANDS, seconds: (Date.now() - t0) / 1000, findings: FINDINGS }, null, 1));
+  fs.writeFileSync(want.length ? '/tmp/ppmp-partial.json' : path.join(__dirname, '..', 'results.json'), JSON.stringify({ hands: HANDS, seconds: (Date.now() - t0) / 1000, findings: FINDINGS }, null, 1));
   log(`DONE: ${HANDS} hands completed, ${FINDINGS.length} findings, ${((Date.now() - t0) / 1000).toFixed(0)}s`);
   for (const f of FINDINGS) console.log(`- [${f.sev}] ${f.scenario}: ${f.title}`);
   process.exit(0);

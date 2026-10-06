@@ -1,11 +1,11 @@
-const { authJoin } = require('./authjoin');
+const { authJoin } = require('../authjoin');
 // Server restart (deploy): balances + chips on the table must come back as bank.
 const { spawn } = require('child_process');
 const fs = require('fs'), os = require('os'), path = require('path');
 const { io } = require(process.env.SIO_CLIENT || '/home/isabelle/.cache/node_modules/socket.io-client');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ppps-'));
-const PORT = 4781, ROOT = path.join(__dirname, '..');
+const PORT = 4781, ROOT = path.join(__dirname, '..', '..');
 const env = { ...process.env, PORT: String(PORT), AUTO_START_MS: '600000', BANK_FILE: path.join(dir, 'bank.json'), LEDGER_FILE: path.join(dir, 'ledger.json') };
 const boot = async () => { const p = spawn('node', ['server.js'], { cwd: ROOT, env }); for (let i = 0; i < 60; i++) { try { await fetch(`http://localhost:${PORT}/`); break; } catch { await sleep(100); } } return p; };
 let fails = 0; const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails++; };

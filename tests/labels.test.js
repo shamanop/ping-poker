@@ -147,6 +147,10 @@ for (let i = 0; i < 10000; i++) { // consecutive ranks (straights / wheels)
 }
 
 // ── Showdown winners / splits via the real showdown() ──
+// v2: server.js re-exports only bestHand/compareHands/evaluate5; showdown()/makeRoom() died with the old room code. Showdown winners, splits and side
+// pots are pinned by tests/v2 (01-06, 26) and tests/v2-unit/run-engine.js, so this section is skipped on purpose.
+if (typeof srv.showdown !== 'function' || typeof srv.makeRoom !== 'function') console.log('labels.test: showdown()/makeRoom() section SKIPPED (stale by design in v2; covered by tests/v2 and run-engine.js)');
+else {
 const emitted = [];
 srv.io.to = () => ({ emit: (ev, payload) => emitted.push([ev, payload]) });
 
@@ -209,6 +213,8 @@ for (let i = 0; i < 3000; i++) {
   const chips = room.players.map(p => p.chips);
   checks++;
   if (JSON.stringify(chips) !== JSON.stringify([300, 800, 0])) fail(`side pot chips ${chips} want 300,800,0`);
+}
+
 }
 
 console.log(`${checks} checks, ${failures} failures`);

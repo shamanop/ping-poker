@@ -1,6 +1,6 @@
 'use strict';
 // Pre-select: fires once, clears on a raise, never auto-acts for a different amount.
-const { startServer, mk, waitFor, sleep } = require('../qa/finaltest/D/lib.js');
+const { startServer, mk, waitFor, sleep } = require('./lib.js');
 
 (async () => {
   const srv = await startServer(3218, { ann: 10000, bob: 10000, cat: 10000 });
@@ -66,8 +66,9 @@ const { startServer, mk, waitFor, sleep } = require('../qa/finaltest/D/lib.js');
     sbC.act('check');
     await waitFor(() => cur() === bb, 2000);
     bbC.act('check');
-    await waitFor(() => gs().players[dealer].lastAction === 'CHECK' && gs().street === 'turn', 3000);
-    check(gs().players[dealer].lastAction === 'CHECK' && !gs().players[dealer].folded, 'check/fold auto-checked when nothing was owed');
+    // v2: the street closes the moment the dealer's auto-check lands and lastAction is cleared with it, so the transient CHECK on the turn is never visible: the proof is the river arriving with the dealer still in
+    await waitFor(() => gs().street === 'river', 3000);
+    check(gs().street === 'river' && !gs().players[dealer].folded, 'check/fold auto-checked when nothing was owed');
 
     // d) river: SB bets 40, dealer check/fold with a bet outstanding -> auto-fold
     await waitFor(() => gs().street === 'river' && cur() === sb, 4000);

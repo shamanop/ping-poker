@@ -1,5 +1,5 @@
 'use strict';
-const { startServer, mk, waitFor, sleep } = require('./lib.js');
+const { startServer, mk, waitFor, sleep } = require('../lib.js');
 (async () => {
   const srv = await startServer(3142, { chris: 10000, liam: 10000 });
   let fail = 0;

@@ -107,10 +107,12 @@ const settings = () => ({ name: 'Profile Night', mode: 'play', buyIn: { min: 500
     ok(e === 'auth_ok', 'normal signup still works');
 
     // ── money stays on the account key ──
-    const [, d2] = await B.call('check_balance', { name: 'alice' }, 'balance_data');
+    // v2: check_balance is deleted, the account's money arrives as the `money` event right after auth_ok
+    const [, d2] = await client().call('auth_login', { name: 'alice', pin: '1234' }, 'money');
+    await sleep(400); // v2: bank.json is a debounced (250 ms) write-only mirror
     const bankBefore = JSON.parse(fs.readFileSync(F.bank, 'utf8'));
-    [e, d] = await B.call('check_balance', { name: 'ALICIA' }, 'balance_data');
-    ok(d.balance === d2.balance, 'bank balance by new display equals balance by key');
+    [e, d] = await client().call('auth_login', { name: 'ALICIA', pin: '1234' }, 'money');
+    ok(d && d2 && d.chips === d2.chips, 'bank balance by new display equals balance by key');
     await sleep(200);
     const bankAfter = JSON.parse(fs.readFileSync(F.bank, 'utf8'));
     ok(!('alicia' in bankAfter) && Object.keys(bankAfter).length === Object.keys(bankBefore).length, 'no second bank entry created for the new name');

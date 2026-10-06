@@ -11,9 +11,11 @@ const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
 let runN = 0;
 async function startServer(port, seed = {}) {
   const dir = path.join(require('os').tmpdir(), 'pp_run' + (++runN) + '_' + port);
+  fs.rmSync(dir, { recursive: true, force: true }); // v2 keeps money.jsonl, accounts.json and tables.json here: a leftover dir from the last run would carry hand numbers and balances over
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'bank.json'), JSON.stringify(seed));
   fs.writeFileSync(path.join(dir, 'ledger.json'), '[]');
+  fs.writeFileSync(path.join(dir, 'tables.json'), JSON.stringify({ version: 1, tables: [], legacyBlinds: { sb: 10, bb: 20 } })); // v2: POKERPING defaults to 25/50, the old server started at 10/20 (BLIND_SCHEDULE[0]) and the old suites assume it
   const out = fs.openSync(path.join(dir, 'server.log'), 'w');
   const proc = spawn('node', ['server.js'], { cwd: ROOT, stdio: ['ignore', out, out],
     env: { ...process.env, PORT: String(port), BANK_FILE: path.join(dir, 'bank.json'), LEDGER_FILE: path.join(dir, 'ledger.json') } });

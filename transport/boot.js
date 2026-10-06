@@ -46,6 +46,11 @@ function prepareDataDir(p, env, log) {
       try { if (!fs.existsSync(p.BANK_FILE) && fs.existsSync(path.join(p.root, 'bank.json'))) fs.copyFileSync(path.join(p.root, 'bank.json'), p.BANK_FILE); } catch {}
     }
   }
+  // 9440541 behaviour kept: one-time safety copies of bank.json and ledger.json before the first run that creates accounts.json.
+  if (!fs.existsSync(p.ACCOUNTS_FILE)) {
+    const stamp = Date.now();
+    for (const f of [p.BANK_FILE, p.LEDGER_FILE]) { try { if (fs.existsSync(f) && !fs.existsSync(`${f}.bak-${stamp}`)) fs.copyFileSync(f, `${f}.bak-${stamp}`); } catch {} }
+  }
 }
 
 // Step 4 of the boot order. The four old stores are copied ONCE to <name>.pre-v2 (never overwritten; a missing store becomes '{}', so the
