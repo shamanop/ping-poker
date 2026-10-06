@@ -52,6 +52,16 @@ async function startServer(portArg = 0, opts = {}) {
   }
   if (!up) { const tail = (() => { try { return fs.readFileSync(f('server.log'), 'utf8').split('\n').slice(-6).join(' | '); } catch { return ''; } })(); try { proc.kill('SIGKILL'); } catch {} throw new Error('server did not start on ' + port + ': ' + tail.slice(0, 300)); }
   await sleep(60);
+  if (opts.rig !== false) {                 // fail fast and clearly when the target has no RIG hooks
+    const ok = await new Promise(res => {
+      const s = io(`http://127.0.0.1:${port}`, { transports: ['websocket'], forceNew: true, reconnection: false });
+      const t = setTimeout(() => { s.close(); res(false); }, 2500);
+      s.on('__audit', () => { clearTimeout(t); s.close(); res(true); });
+      s.on('connect', () => s.emit('__audit', {}));
+      s.on('connect_error', () => { clearTimeout(t); res(false); });
+    });
+    if (!ok) { try { proc.kill('SIGKILL'); } catch {} throw new Error(`target ${TARGET_DIR} answers no __audit: it needs the RIG=1 test hooks (baseline/rig.patch on 9440541, built in on v2)`); }
+  }
   const srv = {
     port, dir, proc, clients: [], f, target: TARGET_DIR,
     read: n => { try { return JSON.parse(fs.readFileSync(f(n), 'utf8')); } catch { return null; } },

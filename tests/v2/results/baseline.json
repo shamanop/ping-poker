@@ -2,11 +2,11 @@
  "label": "baseline",
  "target": "/home/frank/.openclaw/workspace/projects/ping-v2-core/baseline-9440541",
  "commit": "9440541",
- "date": "2026-10-06T08:02:45.232Z",
- "seconds": 147,
- "total": 139,
- "pass": 84,
- "fail": 55,
+ "date": "2026-10-06T08:23:13.877Z",
+ "seconds": 161,
+ "total": 147,
+ "pass": 86,
+ "fail": 61,
  "checks": [
   {
    "test": "01",
@@ -17,7 +17,7 @@
    "status": "FAIL",
    "detail": "button posts BIG blind in hands 1,2,3: {\"hand\":1,\"dealer\":\"Alice\",\"sb\":\"Bobby\",\"bb\":\"Alice\",\"firstPre\":\"Bobby\",\"firstFlop\":\"Bobby\"}",
    "error": false,
-   "ms": 2014
+   "ms": 2156
   },
   {
    "test": "01",
@@ -28,7 +28,7 @@
    "status": "FAIL",
    "detail": "first to act preflop is not the button: {\"hand\":1,\"dealer\":\"Alice\",\"sb\":\"Bobby\",\"bb\":\"Alice\",\"firstPre\":\"Bobby\",\"firstFlop\":\"Bobby\"}",
    "error": false,
-   "ms": 1
+   "ms": 0
   },
   {
    "test": "01",
@@ -50,7 +50,7 @@
    "status": "FAIL",
    "detail": "raise to 350 over a raise to 300 (min is 550) left currentBet at 350",
    "error": false,
-   "ms": 1155
+   "ms": 1150
   },
   {
    "test": "02",
@@ -61,7 +61,7 @@
    "status": "FAIL",
    "detail": "raise to 60 (min 100) changed state: {\"cb\":50,\"idx\":0,\"pot\":75,\"street\":\"preflop\",\"hand\":1} -> {\"cb\":100,\"idx\":1,\"pot\":175,\"street\":\"preflop\",\"hand\":1} (server rewrote the amount)",
    "error": false,
-   "ms": 1037
+   "ms": 1126
   },
   {
    "test": "02",
@@ -72,7 +72,7 @@
    "status": "FAIL",
    "detail": "raise to 90000 with 5000 stacks changed state: {\"cb\":50,\"idx\":0,\"pot\":75,\"street\":\"preflop\",\"hand\":1} -> {\"cb\":5000,\"idx\":1,\"pot\":5075,\"street\":\"preflop\",\"hand\":1} (server turned it into an all-in)",
    "error": false,
-   "ms": 1079
+   "ms": 1152
   },
   {
    "test": "02",
@@ -83,7 +83,7 @@
    "status": "PASS",
    "detail": "",
    "error": false,
-   "ms": 1230
+   "ms": 1175
   },
   {
    "test": "02",
@@ -94,7 +94,7 @@
    "status": "FAIL",
    "detail": "short all-in reopened betting: currentBet 400 -> 1500 after Dan re-raised to 1500",
    "error": false,
-   "ms": 1
+   "ms": 0
   },
   {
    "test": "03",
@@ -103,7 +103,7 @@
    "status": "PASS",
    "detail": "",
    "error": false,
-   "ms": 580
+   "ms": 549
   },
   {
    "test": "03",
@@ -112,7 +112,7 @@
    "status": "PASS",
    "detail": "",
    "error": false,
-   "ms": 496
+   "ms": 532
   },
   {
    "test": "03",
@@ -121,7 +121,7 @@
    "status": "PASS",
    "detail": "",
    "error": false,
-   "ms": 460
+   "ms": 590
   },
   {
    "test": "03",
@@ -130,7 +130,7 @@
    "status": "PASS",
    "detail": "",
    "error": false,
-   "ms": 532
+   "ms": 483
   },
   {
    "test": "03",
@@ -139,7 +139,7 @@
    "status": "PASS",
    "detail": "",
    "error": false,
-   "ms": 472
+   "ms": 542
   },
   {
    "test": "03",
@@ -148,7 +148,7 @@
    "status": "PASS",
    "detail": "",
    "error": false,
-   "ms": 510
+   "ms": 473
   },
   {
    "test": "03",
@@ -157,7 +157,7 @@
    "status": "PASS",
    "detail": "",
    "error": false,
-   "ms": 553
+   "ms": 497
   },
   {
    "test": "03",
@@ -166,7 +166,7 @@
    "status": "PASS",
    "detail": "",
    "error": false,
-   "ms": 487
+   "ms": 496
   },
   {
    "test": "03",
@@ -175,7 +175,7 @@
    "status": "PASS",
    "detail": "",
    "error": false,
-   "ms": 539
+   "ms": 469
   },
   {
    "test": "03",
@@ -184,7 +184,7 @@
    "status": "PASS",
    "detail": "",
    "error": false,
-   "ms": 449
+   "ms": 558
   },
   {
    "test": "03",
@@ -193,7 +193,7 @@
    "status": "PASS",
    "detail": "",
    "error": false,
-   "ms": 431
+   "ms": 453
   },
   {
    "test": "04",
@@ -202,7 +202,7 @@
    "status": "PASS",
    "detail": "",
    "error": false,
-   "ms": 5152
+   "ms": 5185
   },
   {
    "test": "04",
@@ -213,7 +213,7 @@
    "status": "FAIL",
    "detail": "Kim got 1013 want 1012; Max got 1012 want 1013 (button Kim)",
    "error": false,
-   "ms": 541
+   "ms": 548
   },
   {
    "test": "05",
@@ -224,7 +224,7 @@
    "status": "FAIL",
    "detail": "hand 2 (20 vs 20 at 25/50, both all-in from the blinds) never finished: status playing, street preflop",
    "error": false,
-   "ms": 16663
+   "ms": 16707
   },
   {
    "test": "05",
@@ -233,7 +233,7 @@
    "status": "PASS",
    "detail": "",
    "error": false,
-   "ms": 9922
+   "ms": 9509
   },
   {
    "test": "06",
@@ -244,7 +244,7 @@
    "status": "FAIL",
    "detail": "winners Quin 2000 Everyone folded; the disconnected AA seat must win the 2000 pot against 7-2",
    "error": false,
-   "ms": 629
+   "ms": 687
   },
   {
    "test": "06",
@@ -255,7 +255,7 @@
    "status": "FAIL",
    "detail": "the drop folded the seat out of the hand (game_state {\"folded\":true,\"connected\":false}); only the action timer may fold it, on its turn",
    "error": false,
-   "ms": 975
+   "ms": 1012
   },
   {
    "test": "07",
@@ -266,7 +266,7 @@
    "status": "FAIL",
    "detail": "total money changed by 1000 across the restart (hand voided); per player {\"rex\":500,\"sue\":500}",
    "error": false,
-   "ms": 4137
+   "ms": 4067
   },
   {
    "test": "07",
@@ -275,7 +275,7 @@
    "status": "PASS",
    "detail": "",
    "error": false,
-   "ms": 4071
+   "ms": 4099
   },
   {
    "test": "07",
@@ -286,7 +286,7 @@
    "status": "FAIL",
    "detail": "total money changed by 1000 across the restart (hand voided); per player {\"rex\":500,\"sue\":500}",
    "error": false,
-   "ms": 3904
+   "ms": 3702
   },
   {
    "test": "07",
@@ -295,7 +295,7 @@
    "status": "PASS",
    "detail": "",
    "error": false,
-   "ms": 4027
+   "ms": 3662
   },
   {
    "test": "07",
@@ -304,7 +304,7 @@
    "status": "PASS",
    "detail": "",
    "error": false,
-   "ms": 3840
+   "ms": 3555
   },
   {
    "test": "07",
@@ -315,7 +315,7 @@
    "status": "FAIL",
    "detail": "total money changed by -4000 across the restart (hand voided); per player {\"rex\":-2000,\"sue\":-2000}",
    "error": false,
-   "ms": 3888
+   "ms": 3616
   },
   {
    "test": "08",
@@ -326,7 +326,7 @@
    "status": "PASS",
    "detail": "",
    "error": false,
-   "ms": 1716
+   "ms": 1717
   },
   {
    "test": "08",
@@ -337,7 +337,7 @@
    "status": "PASS",
    "detail": "",
    "error": false,
-   "ms": 327
+   "ms": 315
   },
   {
    "test": "08",
@@ -348,7 +348,7 @@
    "status": "PASS",
    "detail": "",
    "error": false,
-   "ms": 1722
+   "ms": 1718
   },
   {
    "test": "08",
@@ -359,7 +359,7 @@
    "status": "PASS",
    "detail": "",
    "error": false,
-   "ms": 533
+   "ms": 539
   },
   {
    "test": "08",
@@ -371,7 +371,7 @@
    "status": "FAIL",
    "detail": "join_game changed state: bank.evan 10000->8000; bank.evan 10000->8000; room POKERPING changed ([[\"Alice\",2000,0,true],[\"Evan\",2000,0,true]])",
    "error": false,
-   "ms": 1603
+   "ms": 1925
   },
   {
    "test": "08",
@@ -380,9 +380,9 @@
     "C5"
    ],
    "status": "FAIL",
-   "detail": "create_demo changed state: bank.chris 10000->8000; bank.chris 10000->8000; rooms 1->2; room BKTLTY changed ([[\"Chris\",2000,0,true],[\"Apollo\",1990,10,true],[\"Blaze\",1980,20,true],[\"Nova\",2000,0,true]])",
+   "detail": "create_demo changed state: bank.chris 10000->8000; bank.chris 10000->8000; rooms 1->2; room L9WAV4 changed ([[\"Chris\",2000,0,true],[\"Apollo\",1990,10,true],[\"Blaze\",1980,20,true],[\"Nova\",2000,0,true]])",
    "error": false,
-   "ms": 1498
+   "ms": 1613
   },
   {
    "test": "08",
@@ -393,7 +393,7 @@
    "status": "PASS",
    "detail": "",
    "error": false,
-   "ms": 1447
+   "ms": 1787
   },
   {
    "test": "08",
@@ -404,7 +404,7 @@
    "status": "FAIL",
    "detail": "start_game changed state: room POKERPING changed ([[\"Alice\",1950,50,true],[\"Olga\",1975,25,true]])",
    "error": false,
-   "ms": 1526
+   "ms": 1617
   },
   {
    "test": "08",
@@ -415,7 +415,7 @@
    "status": "FAIL",
    "detail": "set_pause paused the table",
    "error": false,
-   "ms": 2137
+   "ms": 1510
   },
   {
    "test": "08",
@@ -426,7 +426,7 @@
    "status": "FAIL",
    "detail": "reset_table changed state: bank.alice 8000->0; bank.alice 8000->0; room POKERPING changed ([[\"Alice\",12345,0,true]])",
    "error": false,
-   "ms": 2216
+   "ms": 1895
   },
   {
    "test": "08",
@@ -437,7 +437,7 @@
    "status": "FAIL",
    "detail": "bank_set changed state: bank.evan 10000->99999999; bank.evan 10000->99999999",
    "error": false,
-   "ms": 2017
+   "ms": 1585
   },
   {
    "test": "09",
@@ -448,7 +448,7 @@
    "status": "PASS",
    "detail": "",
    "error": false,
-   "ms": 951
+   "ms": 963
   },
   {
    "test": "09",
@@ -459,7 +459,7 @@
    "status": "FAIL",
    "detail": "3 of 3 create_demo calls seated the caller at a demo table",
    "error": false,
-   "ms": 930
+   "ms": 935
   },
   {
    "test": "10",
@@ -468,7 +468,7 @@
     "C2"
    ],
    "status": "PASS",
-   "detail": "79 hands, 446 audits, 91s",
+   "detail": "75 hands, 449 audits, 91s",
    "error": false,
    "ms": 0
   },
@@ -508,7 +508,7 @@
    "status": "FAIL",
    "detail": "winner stack at the table 0 (bank 12000, was 10000); the whole stack was cashed out instead of staying seated",
    "error": false,
-   "ms": 6430
+   "ms": 6413
   },
   {
    "test": "11",
@@ -530,7 +530,7 @@
    "status": "FAIL",
    "detail": "the queued check/fold acted while the table was paused",
    "error": false,
-   "ms": 1378
+   "ms": 1492
   },
   {
    "test": "11",
@@ -541,7 +541,7 @@
    "status": "FAIL",
    "detail": "the action timer folded the big blind who could check for free",
    "error": false,
-   "ms": 15499
+   "ms": 15590
   },
   {
    "test": "11",
@@ -552,7 +552,7 @@
    "status": "FAIL",
    "detail": "after Cy (button) left, the button went to Ed, expected Di (next seat)",
    "error": false,
-   "ms": 2597
+   "ms": 2701
   },
   {
    "test": "12",
@@ -563,7 +563,7 @@
    "status": "PASS",
    "detail": "",
    "error": false,
-   "ms": 2097
+   "ms": 2042
   },
   {
    "test": "13",
@@ -614,7 +614,7 @@
    "status": "PASS",
    "detail": "",
    "error": false,
-   "ms": 1806
+   "ms": 1826
   },
   {
    "test": "13",
@@ -625,7 +625,7 @@
    "status": "FAIL",
    "detail": "the same account sat at a second table",
    "error": false,
-   "ms": 14
+   "ms": 11
   },
   {
    "test": "13",
@@ -636,7 +636,7 @@
    "status": "FAIL",
    "detail": "1 seat(s) of the disconnected account still marked connected",
    "error": false,
-   "ms": 503
+   "ms": 505
   },
   {
    "test": "13",
@@ -647,7 +647,7 @@
    "status": "FAIL",
    "detail": "the total Raj is shown with went 10025 -> 13025 after saving the same value",
    "error": false,
-   "ms": 372
+   "ms": 408
   },
   {
    "test": "14",
@@ -658,7 +658,7 @@
    "status": "FAIL",
    "detail": "blinds dropped: blinds_up 15/30, table showed 15/30",
    "error": false,
-   "ms": 68405
+   "ms": 68315
   },
   {
    "test": "15",
@@ -669,7 +669,7 @@
    "status": "FAIL",
    "detail": "Play $ went 1000000 -> 1995000 (+995000) after sit, top-up (granted) and stand-up",
    "error": false,
-   "ms": 314
+   "ms": 310
   },
   {
    "test": "15",
@@ -680,7 +680,7 @@
    "status": "FAIL",
    "detail": "rebuyLimit 1 but 5 fresh buy-ins were accepted (a buy-in plus one rebuy is the most a night allows)",
    "error": false,
-   "ms": 114
+   "ms": 146
   },
   {
    "test": "17",
@@ -691,7 +691,7 @@
    "status": "FAIL",
    "detail": "nets after the restart {\"Opal\":-2000,\"Penn\":-2000} (want the one folded hand: opposite +-25)",
    "error": false,
-   "ms": 3693
+   "ms": 4054
   },
   {
    "test": "17",
@@ -702,7 +702,7 @@
    "status": "PASS",
    "detail": "",
    "error": false,
-   "ms": 3686
+   "ms": 3684
   },
   {
    "test": "17",
@@ -713,7 +713,7 @@
    "status": "FAIL",
    "detail": "night is empty after the restart: {}",
    "error": false,
-   "ms": 3851
+   "ms": 3590
   },
   {
    "test": "17",
@@ -724,7 +724,7 @@
    "status": "FAIL",
    "detail": "night is empty after the restart: {}",
    "error": false,
-   "ms": 3498
+   "ms": 3675
   },
   {
    "test": "20",
@@ -735,7 +735,7 @@
    "status": "FAIL",
    "detail": "S1p0 got 1009 want 1008; S1p2 got 1008 want 1009 (start {\"S1p0\":1000,\"S1p1\":1000,\"S1p2\":1000,\"S1p3\":1000}, button S1p0)",
    "error": false,
-   "ms": 1153
+   "ms": 889
   },
   {
    "test": "20",
@@ -746,7 +746,7 @@
    "status": "FAIL",
    "detail": "S2p0 got 1007 want 1006; S2p2 got 1006 want 1007 (start {\"S2p0\":1000,\"S2p1\":1000,\"S2p2\":1000,\"S2p3\":1000,\"S2p4\":1000,\"S2p5\":1000}, button S2p0)",
    "error": false,
-   "ms": 1026
+   "ms": 1050
   },
   {
    "test": "20",
@@ -755,7 +755,7 @@
    "status": "PASS",
    "detail": "",
    "error": false,
-   "ms": 3424
+   "ms": 3556
   },
   {
    "test": "20",
@@ -764,7 +764,7 @@
    "status": "PASS",
    "detail": "",
    "error": false,
-   "ms": 4816
+   "ms": 4956
   },
   {
    "test": "20",
@@ -773,7 +773,7 @@
    "status": "PASS",
    "detail": "",
    "error": false,
-   "ms": 443
+   "ms": 424
   },
   {
    "test": "20",
@@ -782,7 +782,7 @@
    "status": "PASS",
    "detail": "",
    "error": false,
-   "ms": 707
+   "ms": 637
   },
   {
    "test": "20",
@@ -791,7 +791,7 @@
    "status": "PASS",
    "detail": "",
    "error": false,
-   "ms": 4965
+   "ms": 4890
   },
   {
    "test": "20",
@@ -802,7 +802,7 @@
    "status": "FAIL",
    "detail": "S10p0 got 1001 want 1000; S10p2 got 1000 want 1001 (start {\"S10p0\":1000,\"S10p1\":333,\"S10p2\":1000,\"S10p3\":1000}, button S10p0)",
    "error": false,
-   "ms": 4996
+   "ms": 4979
   },
   {
    "test": "20",
@@ -813,7 +813,7 @@
    "status": "FAIL",
    "detail": "S5ap0 got 6500 want 5000; S5ap1 got 0 want 1500 (start {\"S5ap0\":3000,\"S5ap1\":500,\"S5ap2\":3000}, button S5ap0)",
    "error": false,
-   "ms": 4971
+   "ms": 4967
   },
   {
    "test": "20",
@@ -824,7 +824,7 @@
    "status": "FAIL",
    "detail": "S5bp0 got 0 want 5500; S5bp1 got 2500 want 0; S5bp2 got 3000 want 0 (start {\"S5bp0\":3000,\"S5bp1\":500,\"S5bp2\":2000}, button S5bp0)",
    "error": false,
-   "ms": 4879
+   "ms": 4940
   },
   {
    "test": "20",
@@ -833,7 +833,7 @@
    "status": "PASS",
    "detail": "",
    "error": false,
-   "ms": 842
+   "ms": 899
   },
   {
    "test": "20",
@@ -844,7 +844,7 @@
    "status": "FAIL",
    "detail": "S8bp0 got 4600 want 2600; S8bp1 got 0 want 2000 (start {\"S8bp0\":1000,\"S8bp1\":3000,\"S8bp2\":600}, button S8bp0)",
    "error": false,
-   "ms": 4917
+   "ms": 5051
   },
   {
    "test": "20",
@@ -855,7 +855,7 @@
    "status": "FAIL",
    "detail": "S8cp0 got 4600 want 2600; S8cp1 got 0 want 2000 (start {\"S8cp0\":1000,\"S8cp1\":3000,\"S8cp2\":600}, button S8cp0)",
    "error": false,
-   "ms": 4892
+   "ms": 4888
   },
   {
    "test": "20",
@@ -869,6 +869,59 @@
    "ms": 1
   },
   {
+   "test": "21",
+   "check": "mixed-session-money-total-constant-while-idle-and-with-hands-live",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 0
+  },
+  {
+   "test": "21",
+   "check": "mixed-session-sigterm-midhand-restart-conserves-money-and-empties-seats",
+   "bugs": [
+    "C3",
+    "C4"
+   ],
+   "status": "FAIL",
+   "detail": "total money 5050000 -> 5061000 (11000) across SIGTERM with live hands POKERPING,9H4Q3E,V6WENW; per player ann 1022325->1028300, bob 1029600->1033650, dee 1017674->1018649",
+   "error": false,
+   "ms": 0
+  },
+  {
+   "test": "21",
+   "check": "mixed-session-sigkill-after-showdown-keeps-every-players-holdings",
+   "bugs": [
+    "N3",
+    "C4"
+   ],
+   "status": "FAIL",
+   "detail": "total 5061000 -> 5059000; per player bob 1045450->1043450",
+   "error": false,
+   "ms": 0
+  },
+  {
+   "test": "21",
+   "check": "mixed-session-end-night-settle-ups-are-zero-sum",
+   "bugs": [
+    "M6"
+   ],
+   "status": "FAIL",
+   "detail": "T1 settle_up zeroSum=false drift=-3000",
+   "error": false,
+   "ms": 0
+  },
+  {
+   "test": "21",
+   "check": "mixed-session-final-total-equals-total-before-the-restarts",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 1
+  },
+  {
    "test": "22",
    "check": "show-cards-at-a-created-table-with-room-id",
    "bugs": [
@@ -877,7 +930,7 @@
    "status": "PASS",
    "detail": "",
    "error": false,
-   "ms": 499
+   "ms": 440
   },
   {
    "test": "22",
@@ -888,7 +941,7 @@
    "status": "PASS",
    "detail": "",
    "error": false,
-   "ms": 575
+   "ms": 414
   },
   {
    "test": "23",
@@ -899,7 +952,7 @@
    "status": "FAIL",
    "detail": "after the restart winner holds 10000, loser 10000 (want 12000 / 8000)",
    "error": false,
-   "ms": 6795
+   "ms": 5857
   },
   {
    "test": "23",
@@ -910,7 +963,7 @@
    "status": "FAIL",
    "detail": "after the restart winner holds 10000, loser 10000 (want 12000 / 8000)",
    "error": false,
-   "ms": 6298
+   "ms": 6228
   },
   {
    "test": "23",
@@ -921,7 +974,7 @@
    "status": "FAIL",
    "detail": "after the restart winner holds 10000, loser 10000 (want 12000 / 8000)",
    "error": false,
-   "ms": 6518
+   "ms": 6657
   },
   {
    "test": "23",
@@ -932,7 +985,7 @@
    "status": "PASS",
    "detail": "",
    "error": false,
-   "ms": 8587
+   "ms": 8435
   },
   {
    "test": "24",
@@ -941,7 +994,7 @@
    "status": "PASS",
    "detail": "",
    "error": false,
-   "ms": 1171
+   "ms": 1005
   },
   {
    "test": "24",
@@ -952,7 +1005,7 @@
    "status": "FAIL",
    "detail": "Kja got 2500 want 2050; Kjb got 1500 want 1950 (the kicked player gets his uncalled 450 back; the host wins the matched 100)",
    "error": false,
-   "ms": 829
+   "ms": 736
   },
   {
    "test": "25",
@@ -963,7 +1016,7 @@
    "status": "FAIL",
    "detail": "night data empty or missing after the restart: {\"zeroSum\":true,\"nets\":{}}",
    "error": false,
-   "ms": 8582
+   "ms": 8215
   },
   {
    "test": "25",
@@ -974,7 +1027,7 @@
    "status": "FAIL",
    "detail": "night data empty or missing after the restart: {\"zeroSum\":true,\"nets\":{}}",
    "error": false,
-   "ms": 8232
+   "ms": 8157
   },
   {
    "test": "26",
@@ -985,7 +1038,7 @@
    "status": "FAIL",
    "detail": "winners listed: Hla,Hlb; Hla only got 4000 of his own back",
    "error": false,
-   "ms": 4997
+   "ms": 4941
   },
   {
    "test": "26",
@@ -996,7 +1049,7 @@
    "status": "FAIL",
    "detail": "winner amount 375, want 125 (the pot he won; his own 250 above the matched part is a return, not a win)",
    "error": false,
-   "ms": 451
+   "ms": 392
   },
   {
    "test": "26",
@@ -1007,7 +1060,7 @@
    "status": "FAIL",
    "detail": "showdown_result has no per-player net: keys winners,pot,reveals,nextMs",
    "error": false,
-   "ms": 1
+   "ms": 0
   },
   {
    "test": "26",
@@ -1019,6 +1072,40 @@
    "detail": "showdown_result has no per-player net: keys winners,pot,nextMs",
    "error": false,
    "ms": 0
+  },
+  {
+   "test": "27",
+   "check": "v2-buyin-out-of-range-is-a-structured-error-without-amounts-in-the-text",
+   "bugs": [
+    "L7",
+    "S3-5"
+   ],
+   "status": "FAIL",
+   "detail": "table_join below the minimum: error lacks integer min/max/have: {\"message\":\"Buy-in must be between $5 and $50\",\"code\":\"range\"}",
+   "error": false,
+   "ms": 328
+  },
+  {
+   "test": "27",
+   "check": "v2-rebuy-out-of-range-is-a-structured-error-without-amounts-in-the-text",
+   "bugs": [
+    "S3-5"
+   ],
+   "status": "FAIL",
+   "detail": "rebuy of 1 (min 500): error lacks integer min/max/have: {\"message\":\"Rebuy must be between 500 and 5000\",\"code\":\"range\"}",
+   "error": false,
+   "ms": 5113
+  },
+  {
+   "test": "27",
+   "check": "v2-raise-out-of-range-is-a-structured-error",
+   "bugs": [
+    "L5"
+   ],
+   "status": "FAIL",
+   "detail": "raise to 60 (min 100): no error event arrived",
+   "error": false,
+   "ms": 2317
   },
   {
    "test": "30",
@@ -1117,7 +1204,7 @@
    "status": "PASS",
    "detail": "",
    "error": false,
-   "ms": 0
+   "ms": 1
   },
   {
    "test": "30",
@@ -1198,7 +1285,7 @@
    "status": "PASS",
    "detail": "",
    "error": false,
-   "ms": 3
+   "ms": 0
   },
   {
    "test": "30",
@@ -1216,7 +1303,7 @@
    "status": "PASS",
    "detail": "",
    "error": false,
-   "ms": 0
+   "ms": 1
   },
   {
    "test": "30",
@@ -1270,7 +1357,7 @@
    "status": "PASS",
    "detail": "",
    "error": false,
-   "ms": 1
+   "ms": 0
   },
   {
    "test": "30",
@@ -1360,7 +1447,7 @@
    "status": "PASS",
    "detail": "",
    "error": false,
-   "ms": 0
+   "ms": 1
   },
   {
    "test": "30",

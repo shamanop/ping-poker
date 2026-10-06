@@ -1,2 +1,6 @@
 runs/
 results/*.log
+results/.tmp-*
+results/baseline-run*.json
+results/baseline-final.json
+results/repo-root-check.json

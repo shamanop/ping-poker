@@ -15,7 +15,8 @@
   "baseline": "pass",
   "bugs": [
    "H4"
-  ]
+  ],
+  "reason": "the non-button already acts first on the flop on 9440541; only the blind posting and the preflop order are reversed"
  },
  "02/minraise-is-previous-raise-size": {
   "baseline": "fail",
@@ -39,7 +40,8 @@
   "baseline": "pass",
   "bugs": [
    "M8"
-  ]
+  ],
+  "reason": "M8 is a client rule (game.js blocks the shove); the 9440541 server already accepts a short all-in shove. Kept so v2 keeps it legal"
  },
  "02/short-allin-does-not-reopen-betting": {
   "baseline": "fail",
@@ -157,25 +159,29 @@
   "baseline": "pass",
   "bugs": [
    "C1"
-  ]
+  ],
+  "reason": "9440541 (commit 0407c19) needs a signed-in account for join_game; the unauthenticated takeover no longer works"
  },
  "08/unauthenticated-bank-set-does-not-edit-the-bank": {
   "baseline": "pass",
   "bugs": [
    "C1"
-  ]
+  ],
+  "reason": "bank_set checks the account on 9440541; an unauthenticated socket cannot edit the bank"
  },
  "08/unauthenticated-join-game-with-a-seated-name-cannot-take-the-seat": {
   "baseline": "pass",
   "bugs": [
    "C1"
-  ]
+  ],
+  "reason": "join_game uses the signed-in account, not the typed name, on 9440541; no seat takeover"
  },
  "08/unauthenticated-check-balance-and-create-demo-mint-nothing": {
   "baseline": "pass",
   "bugs": [
    "C5"
-  ]
+  ],
+  "reason": "check_balance and create_demo refuse unauthenticated sockets on 9440541 (create_demo is admin-only); nothing is minted"
  },
  "08/v2-legacy-event-join_game-is-ignored-and-changes-nothing": {
   "baseline": "fail",
@@ -194,7 +200,8 @@
   "baseline": "pass",
   "bugs": [
    "C5"
-  ]
+  ],
+  "reason": "a signed-in check_balance on 9440541 only reads the caller's own balance; no state change (the creating-rows-by-name mint is gone)"
  },
  "08/v2-legacy-event-start_game-is-ignored-and-changes-nothing": {
   "baseline": "fail",
@@ -224,7 +231,8 @@
   "baseline": "pass",
   "bugs": [
    "C5"
-  ]
+  ],
+  "reason": "create_demo is admin-only on 9440541 (the admin variant still fails)"
  },
  "09/create-demo-admin-makes-no-room-and-no-money": {
   "baseline": "fail",
@@ -236,7 +244,8 @@
   "baseline": "pass",
   "bugs": [
    "C2"
-  ]
+  ],
+  "reason": "C2: startHand clamps dealerIdx on 9440541, the crash no longer happens"
  },
  "10/fuzz-money-conserved-at-every-audit": {
   "baseline": "pass",
@@ -284,7 +293,8 @@
   "baseline": "pass",
   "bugs": [
    "C2"
-  ]
+  ],
+  "reason": "C2: startHand clamps dealerIdx on 9440541 (regression guard for the stable-seat rewrite)"
  },
  "13/table-create-rejects-big-blind-above-the-max-buy-in": {
   "baseline": "fail",
@@ -358,7 +368,8 @@
   "baseline": "pass",
   "bugs": [
    "M6"
-  ]
+  ],
+  "reason": "the SIGTERM path writes the cash-out rows with night metadata, so a chips night survives a deploy; only a crash (SIGKILL) and Play $ nights break"
  },
  "17/night-results-survive-sigterm-restart-play": {
   "baseline": "fail",
@@ -444,17 +455,47 @@
    "L3"
   ]
  },
+ "21/mixed-session-money-total-constant-while-idle-and-with-hands-live": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "21/mixed-session-sigterm-midhand-restart-conserves-money-and-empties-seats": {
+  "baseline": "fail",
+  "bugs": [
+   "C3",
+   "C4"
+  ]
+ },
+ "21/mixed-session-sigkill-after-showdown-keeps-every-players-holdings": {
+  "baseline": "fail",
+  "bugs": [
+   "N3",
+   "C4"
+  ]
+ },
+ "21/mixed-session-end-night-settle-ups-are-zero-sum": {
+  "baseline": "fail",
+  "bugs": [
+   "M6"
+  ]
+ },
+ "21/mixed-session-final-total-equals-total-before-the-restarts": {
+  "baseline": "pass",
+  "bugs": []
+ },
  "22/show-cards-at-a-created-table-with-room-id": {
   "baseline": "pass",
   "bugs": [
    "M9"
-  ]
+  ],
+  "reason": "M9 fixed on 9440541: show_cards finds the socket's seat at any table"
  },
  "22/show-cards-at-a-created-table-without-room-id": {
   "baseline": "pass",
   "bugs": [
    "M9"
-  ]
+  ],
+  "reason": "M9 fixed on 9440541: show_cards finds the socket's seat at any table"
  },
  "23/sigkill-100ms-after-showdown-keeps-the-hand-result": {
   "baseline": "fail",
@@ -478,7 +519,8 @@
   "baseline": "pass",
   "bugs": [
    "N3"
-  ]
+  ],
+  "reason": "the 2 s stacks mirror has already run by 2.5 s; the loss window is under 2 s (same as the repro table)"
  },
  "24/kick-midhand-the-kicked-best-hand-does-not-take-the-pot": {
   "baseline": "pass",
@@ -524,6 +566,25 @@
   "baseline": "fail",
   "bugs": [
    "HL"
+  ]
+ },
+ "27/v2-buyin-out-of-range-is-a-structured-error-without-amounts-in-the-text": {
+  "baseline": "fail",
+  "bugs": [
+   "L7",
+   "S3-5"
+  ]
+ },
+ "27/v2-rebuy-out-of-range-is-a-structured-error-without-amounts-in-the-text": {
+  "baseline": "fail",
+  "bugs": [
+   "S3-5"
+  ]
+ },
+ "27/v2-raise-out-of-range-is-a-structured-error": {
+  "baseline": "fail",
+  "bugs": [
+   "L5"
   ]
  },
  "30/shapes-session-ran-to-the-end": {
