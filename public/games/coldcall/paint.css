@@ -64,7 +64,7 @@
 .dec2 .hang,.dec2 .more{--bw:10px 14px 13px 14px;padding:8px 5px 10.6px;gap:2px}
 .dec2 .more b{line-height:1.04}.dec2 .more span{font-size:12.5px;line-height:1.06}.dec2.s .more span{font-size:12px}.dec2 .hang small{line-height:1}
 .dec2.s .hang b{font-size:24px}.dec2.xs .hang b{font-size:20px}.dec2.s .more b{font-size:15px}.dec2.xs .more b{font-size:13.5px}.dec2.xs .hang small{font-size:11px}
-@media (max-width:420px){.dec2 .hang,.dec2 .more{--bw:8px 12px 9px 12px;padding:6px 4px 13.6px}.dec2 .more span,.dec2.xs .more span{font-size:11.5px;line-height:1.12}.dec2.xs .more b{font-size:12.5px}}
+@media (max-width:420px){.dec2 .hang,.dec2 .more{--bw:8px 12px 9px 12px;padding:7.5px 4px 16.5px}.dec2 .more span,.dec2.xs .more span{font-size:11.5px;line-height:1.12}.dec2.xs .more b{font-size:12.5px}}
 /* (r1) critic r0: 'BUY BONUS: label pokes above the top of the painted pill; the greyed sub-label (n/a, Callback first) is unreadable' */
 #buy{padding:2px 3px 3px}
 #buy b{font-size:12px;line-height:1}#buy span{font-size:9px;margin-top:1px;line-height:1;color:#fff0c0;text-shadow:0 1px 0 #3a0a04}
@@ -98,3 +98,23 @@
 #plPot,#bh .chip{border-image-width:6px}
 .scn .chip small{position:relative;top:3px}
 #plNote b{font-size:19px}
+
+/* ---- FIX ROUND r2 (chris 10-06 FB4): CSS only, no new paint, no box changes size ---- */
+/* (r2) critic r1: 'Gold bottom corner ornaments sit on the info content: 202 cut to 20, 143 cut, sticky-note icon covered' / 'NOT NOW overlaps the frame's bottom corners; bottom rail thinner than the sides' */
+.scn,.card{border-image-slice:56 fill;border-image-width:18px}
+/* (r2) critic r1: 'Plate labels pushed onto the brass top lip: SPINS LEFT / BONUS TOTAL labels unreadable at 360' */
+#bh .chip small{position:relative;top:2px;color:#c9d8ee;text-shadow:0 1px 0 #000}
+#bh .chip b{position:relative;top:1px}
+/* (r2) critic r1: 'Faint vertical slice line inside the i and MUSIC pills': the horizontal slice moves past the painted inner line so it is not squeezed into a seam */
+.sq,.btns button,.dec2 .hang,.buyopt,.btn.alt,.btn.alt:active{border-image-slice:20 38 36 38 fill}
+/* (r2) critic r1: 'BUY BONUS label still rides the pill's top rim, greyed n/a still a smear' */
+#buy{padding:6px 3px 1px;gap:0}
+#buy b{font-size:11.5px}#buy span{font-size:8.5px;margin-top:0}
+#buy:disabled{filter:saturate(.55)}
+#buy:disabled span{color:#fff;text-shadow:-1px 0 #3a0a04,1px 0 #3a0a04,0 -1px #3a0a04,0 1px #3a0a04}
+/* (r2) critic r1: '312 still crests the strip's top edge' (the strip is 20 px high at 360) */
+@media (max-width:420px){#plNote b{font-size:14px}#plNote small{font-size:12px}
+/* (r2) critic r1: '50% you leave with 0 runs edge to edge of the red plate' / 'BANK 3,584 chips wraps' */
+.dec2 .more{padding-left:9px;padding-right:9px}.dec2 .more span,.dec2.xs .more span{font-size:10.5px}.dec2 .hang em{font-size:12.5px;letter-spacing:0}}
+/* ... and on the 360 phone the small toggle pills use the blank as ONE image (no 9-slice, so no seam to show) */
+@media (max-width:420px){.btns button:not(#buy){border-image:none;background:var(--img-ui_key_cream) center/100% 100% no-repeat}.btns button.on:not(#buy){background-image:var(--img-ui_key_gold)}}
