@@ -87,12 +87,25 @@ async function main() {
     bot.on('showdown_result', d => W.onShowdown(bot, d));
     bot.on('bonus:claimed', d => { if (d && d.ok) { if (!W.model.applyMint('bonus', bot.key, d.amountCents, `bonus:${bot.key}:${chicagoDay(Date.now())}`)) W.warn('bonus_ok_again', `${bot.key} was told ok for a bonus already counted today`); } });
     bot.on('achv:unlocked', d => { if (d && d.id) W.model.applyMint('achv', bot.key, d.rewardCents, `achv:${bot.key}:${d.id}`); });
-    bot.on('achv:state', d => { if (d && d.list) for (const a of d.list) W.achvReward.set(a.id, a.rewardCents); });
+    // achievements: the server tells a client about every unlock it earned, either live (achv:unlocked) or in the achv:state it sends at sign-in.
+    // A player whose socket was down when one fired learns it there. Same dedupe key, so it counts once.
+    bot.on('achv:state', d => { if (d && d.list) for (const a of d.list) { W.achvReward.set(a.id, a.rewardCents); if (a.done && W.model.hasPlayer(bot.key)) W.model.applyMint('achv', bot.key, a.rewardCents, `achv:${bot.key}:${a.id}`); } });
     bot.on('bonus:status', d => { if (d && Array.isArray(d.schedule)) W.bonusSchedule = d.schedule; });
   }
+  // showdown_result carries no table id. A socket can stay in a room after its seat is gone (see PROGRESS: leaving seat re-joined and swept), so the
+  // receiver's own table is not proof: the table is where the players named in the result sit (majority of their bots' tables).
+  W.tableOfResult = (bot, d) => {
+    const votes = new Map();
+    for (const name of Object.keys(d.net || {})) { const b = W.bots.get(name.toLowerCase()); if (b && b.tableId && b !== bot) votes.set(b.tableId, (votes.get(b.tableId) || 0) + 1); }
+    if (bot.tableId) votes.set(bot.tableId, (votes.get(bot.tableId) || 0) + (d.net && bot.name.toLowerCase() in Object.fromEntries(Object.keys(d.net).map(n => [n.toLowerCase(), 1])) ? 1 : 0));
+    let best = null, n = 0;
+    for (const [t, c] of votes) if (c > n) { best = t; n = c; }
+    return best;
+  };
   W.onShowdown = (bot, d) => {
-    const tableId = bot.tableId;
-    if (!tableId || !d || !Number.isInteger(d.handNo) || !d.net) return;
+    if (!d || !Number.isInteger(d.handNo) || !d.net) return;
+    const tableId = W.tableOfResult(bot, d);
+    if (!tableId) return;
     const nets = {}, cur = {};
     for (const [name, n] of Object.entries(d.net)) {
       const key = name.toLowerCase();
@@ -141,8 +154,10 @@ async function main() {
       bot.sock.emit('achv:state', {});
     });
   }
+  // who could have heard a hand settle: connected bots in that table's room when the line first showed up
+  function noteNewLines(n) { if (!n) return; for (const L of W.checker.lines.slice(-n)) if (L.hand) L.listeners = W.botList().filter(b => b.connected() && b.tableId === L.hand.tableId).length; }
   async function pollSettled() {
-    for (let i = 0; i < 4; i++) { const r = W.checker.poll(); if (!r.torn) return r; await sleep(20); }
+    for (let i = 0; i < 4; i++) { const r = W.checker.poll(); noteNewLines(r.added); if (!r.torn) return r; await sleep(20); }
     if (W.ctl.alive()) W.violate('I1', 'money.jsonl ends in a partial line while the server is running', { file: W.checker.file }, 'whole lines', W.checker.tornBytes + ' stray bytes');
     return { torn: true };
   }
@@ -182,6 +197,17 @@ async function main() {
   };
   // Check after a step. Ledger-only violations are final; the rest may be a message still in flight, so they get STAB_MS to clear.
   const STAB_MS = 1500;
+  // A hand that settled while nobody was in its room cannot have been told to anyone (every seated player's socket was down): count it from the ledger,
+  // with the same sanity checks as a hand cut off by a kill. A hand somebody WAS listening to must reach the model through a showdown_result.
+  function adoptUnheardHands() {
+    for (const L of W.checker.lines) {
+      if (!L.hand || L.listeners !== 0 || W.model.hasHand(L.hand.tableId, L.hand.handNo) || Date.now() - L.seenAt < 1200) continue;
+      const unknown = Object.keys(L.hand.nets).filter(k => !W.model.hasPlayer(k));
+      if (unknown.length) { W.violate('I7', `hand ${L.ref} pays an account the harness never created: ${unknown}`, { ref: L.ref }, 'known players', unknown.join(',')); continue; }
+      const r = W.model.applyHand(L.hand.tableId, L.hand.handNo, L.hand.nets, L.hand.fund, 'unacked');
+      if (r.notZeroSum) W.violate('I7', `unheard hand ${L.ref} is not zero-sum`, { ref: L.ref }, 0, r.sum);
+    }
+  }
   W.check = async (opts = {}) => {
     W.counters.checks++;
     const t0 = Date.now();
@@ -191,6 +217,7 @@ async function main() {
       const hard = W.checker.take();
       if (hard.length) throw new Violations(hard.map(v => ({ step: W.stepNo, ...v })));
       if (W.fatal.length) throw new Violations(W.fatal.splice(0));
+      adoptUnheardHands();
       last = W.evaluate(snap, opts);
       if (!last.length) return snap;
       if (Date.now() - t0 > STAB_MS) throw new Violations(last);
@@ -199,18 +226,20 @@ async function main() {
   };
 
   // ---------------- kill + restart + reconcile (the "unacked" rules) ----------------
+  W.settlePoll = pollSettled;
   W.noteLiveHands = () => {
     W.killLive = new Map();
     for (const b of W.connectedBots()) if (b.tableId && b.gs && b.gs.status === 'playing') W.killLive.set(b.tableId, b.gs.handNum);
   };
-  W.killAndRestart = async (sig) => {
+  // opts.marked: the caller already polled and called checker.markKill() just before it started the operation that the kill interrupts
+  W.killAndRestart = async (sig, opts = {}) => {
     W.noteLiveHands();
-    await pollSettled();
-    W.checker.markKill();
-    const sentSpins = W.inflightSpins.slice();
-    for (const b of W.botList()) b.close();
+    if (!opts.marked) { await pollSettled(); W.checker.markKill(); }
     W.counters.kills++; if (sig === 'SIGTERM') W.counters.sigterm++;
     await W.ctl.kill(sig);
+    await sleep(150);                                    // answers already on the wire still reach the clients (and the model)
+    const sentSpins = W.inflightSpins.slice();           // spins sent whose answer never came
+    for (const b of W.botList()) b.close();
     await W.ctl.start();
     W.counters.restarts++;
     await openAuditSock();
@@ -218,7 +247,8 @@ async function main() {
     await reconcile(sentSpins);
     W.inflightSpins = [];
     for (const b of W.botList()) { b.spinsInFlight = 0; }
-    W.fundAt = new Map(); for (const t of W.tables.values()) t.seated = 0;
+    W.fundAt = new Map();
+    for (const a of ACTORS) if (a.afterRestart) await a.afterRestart(W);
     await W.check({ afterRestart: true });
     W.checker.killMark = null;
   };

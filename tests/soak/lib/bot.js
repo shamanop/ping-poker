@@ -9,6 +9,7 @@ class Bot {
     this.ctl = ctl; this.name = name; this.key = name.toLowerCase(); this.token = null; this.pin = '1234';
     this.sock = null; this.authed = false; this.gen = 0;
     this.gs = null; this.wallet = null; this.moneyView = null; this.achvList = null; this.bonusStatus = null;
+    this.wantTable = null;                  // the table to rejoin after a reconnect
     this.tableId = null;                    // the room this socket is in (table_joined .. table_left)
     this.seatFund = null;                   // fund of the seat at tableId, as requested by us
     this.busted = false; this.errors = []; this.waiters = []; this.listeners = new Map();
@@ -23,7 +24,7 @@ class Bot {
     this.tableId = null; this.seatFund = null;
     const evs = ['auth_ok', 'auth_error', 'game_state', 'your_cards', 'showdown_result', 'bust_out', 'wallet', 'money', 'table_joined', 'table_left', 'table_created',
       'g:bender:result', 'g:bender:state', 'bonus:claimed', 'bonus:status', 'achv:unlocked', 'achv:state', 'admin_result', 'admin_overview', 'table_event', '__audit', 'error',
-      'room_update', 'balance_update', 'ok'];
+      'room_update', 'balance_update', 'settle_up', 'ok'];
     for (const ev of evs) sock.on(ev, d => { if (gen === this.gen) this._recv(ev, d); });
     sock.on('disconnect', () => { if (gen === this.gen) { this.authed = false; this.tableId = null; this.seatFund = null; } });
     return new Promise((res, rej) => {
@@ -42,6 +43,7 @@ class Bot {
     else if (ev === 'table_joined') { this.tableId = d.tableId; this.busted = false; }
     else if (ev === 'table_left') { if (this.tableId === d.tableId) { this.tableId = null; this.seatFund = null; } }
     else if (ev === 'bust_out') this.busted = true;
+    else if (ev === 'settle_up') { if (d && this.tableId === d.tableId) { this.tableId = null; this.seatFund = null; } }
     else if (ev === 'auth_ok') this.authed = true;
     else if (ev === 'error') this.errors.push({ t: Date.now(), code: d && d.code, message: d && d.message });
     this._fire(ev, d);

@@ -34,6 +34,7 @@ class Checker {
     this.buyFund = new Map();                   // seat account -> fund of the latest buyin:<fund> line into it
     this.hist = [{ idx: -1, seenAt: 0, sig: this._sig() }];
     this.pending = [];                          // violations found by poll() not yet returned
+    this.opLines = new Map();                   // 'kind:table:key' -> lines (buyin|rebuy|leave|kick|sweep|grace|night)
     this.killMark = null;
     this.stat = { lines: 0, checks: 0 };
   }
@@ -95,6 +96,7 @@ class Checker {
     this.lines.push(L);
     if (Number.isSafeInteger(rec.id) && rec.id > this.lastId) this.lastId = rec.id;
     if (typeof rec.ref === 'string' && !this.refs.has(rec.ref)) this.refs.set(rec.ref, L);
+    if (typeof rec.ref === 'string') { const p = rec.ref.split(':'); if (p.length >= 4 && /^(buyin|rebuy|leave|kick|sweep|grace|night)$/.test(p[0])) { const k = p.slice(0, 3).join(':'); if (!this.opLines.has(k)) this.opLines.set(k, []); this.opLines.get(k).push(L); } }
     this.stat.lines++;
     if (bad) { this.hist.push({ idx: L.idx, seenAt: now, sig: this._sig() }); return; }
     const touchedPots = new Set();
@@ -131,6 +133,7 @@ class Checker {
   // ---------- derived ----------
   balance(cur, account) { return this.bal[cur].get(account) || 0; }
   fundOfSeat(seatAcct, seatCur) { return this.buyFund.get(seatAcct) || seatCur; }
+  opsOf(kind, tableId, key) { return this.opLines.get(`${kind}:${tableId}:${key}`) || []; }
   lineByRef(ref) { return this.refs.get(ref) || null; }
   // The write-only mirror as the brief defines it: bank[k] = bank:k + chips seats + orphans, wallet[k] = play:k + play seats + orphans, every known key present.
   mirrorState() {
@@ -148,6 +151,12 @@ class Checker {
   heldOf(key, cur) {
     let n = this.balance(cur, (cur === 'chips' ? 'bank:' : 'play:') + key);
     for (const sc of CURS) for (const [a, v] of this.bal[sc]) if (a.startsWith('seat:') && seatParts(a).key === key && this.fundOfSeat(a, sc) === cur) n += v;
+    return n;
+  }
+  // The top-up rule (H7): Play $ held = wallet + every seat at a Play table (by the seat's table currency).
+  playHeldRule(key) {
+    let n = this.balance('play', 'play:' + key);
+    for (const [a, v] of this.bal.play) if (a.startsWith('seat:') && seatParts(a).key === key) n += v;
     return n;
   }
   seats() { const out = []; for (const c of CURS) for (const [a, v] of this.bal[c]) if (a.startsWith('seat:')) out.push({ account: a, cur: c, balance: v, ...seatParts(a) }); return out; }

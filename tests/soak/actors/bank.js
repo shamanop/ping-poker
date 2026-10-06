@@ -27,36 +27,43 @@ async function adminCall(W, ev, payload, op) {
   return r;
 }
 
+// what the ledger says the player's wallet / bank holds right now (the account an admin edit or a spin acts on)
+const walletOf = (W, key, cur) => { W.checker.poll(); return W.checker.balance(cur, (cur === 'chips' ? 'bank:' : 'play:') + key); };
+
 async function topup(W) {
   const cand = unseated(W);
   if (!cand.length) return null;
   const b = W.rng.pick(cand), key = b.key;
   let note = '';
-  if (W.model.held(key, 'play') >= TOPUP_BELOW && W.rng.chance(0.7)) {
+  W.checker.poll();
+  if (W.checker.playHeldRule(key) >= TOPUP_BELOW && W.rng.chance(0.7)) {
     const cents = W.rng.range(0, TOPUP_BELOW - 1);
-    const delta = cents - W.model.held(key, 'play');
+    const delta = cents - walletOf(W, key, 'play');
     const r = await adminCall(W, 'admin_set_play', { key, cents }, 'set_play');
     if (!(r.data && r.data.ok)) { W.violate('I7', `admin_set_play to ${cents} for ${key} was refused`, { key }, 'ok', JSON.stringify(r.data || r.error)); return null; }
-    W.model.applyAdmin(key, 'play', delta);
+    if (delta !== 0) W.model.applyAdmin(key, 'play', delta);
     note = `set_play ${cents}; `;
   }
-  const before = W.model.held(key, 'play');
+  W.checker.poll();
+  const walletBefore = W.checker.balance('play', 'play:' + key), heldBefore = W.checker.playHeldRule(key);
+  const seatPart = heldBefore - walletBefore;                 // a player who just left mid-hand still has this hand's chips in a seat
   const recent = lastTopup.has(key) && Date.now() - lastTopup.get(key) < COOLDOWN_MS;
-  const eligible = before < TOPUP_BELOW && !recent;
-  const wantErr = before >= TOPUP_BELOW ? 'not_needed' : 'cooldown';
-  const r = await b.req('wallet_topup', {}, 'wallet', 3000, { pred: d => d.play !== before });
+  const eligible = heldBefore < TOPUP_BELOW && !recent;
+  const wantErr = heldBefore >= TOPUP_BELOW ? 'not_needed' : 'cooldown';
+  const r = await b.req('wallet_topup', {}, 'wallet', 3000, { pred: d => d.play !== walletBefore });
   if (r.timeout && !eligible) return { what: 'topup', who: key, note: note + 'no answer (ok: nothing to add)' };
-  if (r.timeout) { W.violate('I7', `${key} was eligible for a top-up (Play $ ${before}) and got no answer`, { key }, 'wallet event', 'timeout'); return null; }
+  if (r.timeout) { W.violate('I7', `${key} was eligible for a top-up (Play $ ${heldBefore}) and got no answer`, { key }, 'wallet event', 'timeout'); return null; }
   if (r.error) {
-    if (eligible) W.violate('I7', `top-up refused with ${r.error.code} though ${key} holds ${before} and had no top-up in the last hour`, { key }, 'granted', r.error.code);
+    if (eligible) W.violate('I7', `top-up refused with ${r.error.code} though ${key} holds ${heldBefore} and had no top-up in the last hour`, { key }, 'granted', r.error.code);
     else if (r.error.code !== wantErr) W.violate('I7', `top-up refused with ${r.error.code}, expected ${wantErr}`, { key }, wantErr, r.error.code);
     return { what: 'topup', who: key, note: note + 'refused ' + r.error.code };
   }
-  if (!eligible) { W.violate('I7', `top-up granted to ${key} who holds ${before} (recent top-up: ${recent})`, { key }, wantErr, 'granted'); return null; }
-  const minted = r.data.play - before;
-  if (r.data.play !== START_PLAY) W.violate('I7', `top-up brought ${key} to ${r.data.play}, the rule says ${START_PLAY}`, { key }, START_PLAY, r.data.play);
+  if (!eligible) { W.violate('I7', `top-up granted to ${key} who holds ${heldBefore} (recent top-up: ${recent})`, { key }, wantErr, 'granted'); return null; }
+  const minted = r.data.play - walletBefore;
+  if (minted !== START_PLAY - heldBefore) W.violate('I7', `top-up minted ${minted} for ${key}, the rule (bring wallet + Play seats to ${START_PLAY}) says ${START_PLAY - heldBefore}`, { key }, START_PLAY - heldBefore, minted);
   W.model.applyMint('topup', key, minted, `topup:${key}:${++topupSeq}`);
   lastTopup.set(key, Date.now());
+  void seatPart;
   return { what: 'topup', who: key, note: note + 'granted', amount: minted };
 }
 
@@ -90,7 +97,7 @@ async function admin(W) {
   }
   if (op === 'minus') {
     if (t.tableId) return null;
-    const cur = W.rng.pick(['chips', 'play']), held = W.model.held(key, cur);
+    const cur = W.rng.pick(['chips', 'play']), held = walletOf(W, key, cur);
     if (held < 1) return null;
     const delta = -W.rng.range(1, Math.min(held, 40000));
     const r = await adminCall(W, 'admin_adjust', { key, delta, cur, reason: 'soak minus' }, 'adjust');
@@ -100,7 +107,7 @@ async function admin(W) {
   }
   if (op === 'toobig') {
     const cur = W.rng.pick(['chips', 'play']);
-    const delta = -(W.model.held(key, cur) + W.rng.range(1, 1000));    // more than everything the player holds, so more than the wallet
+    const delta = -(W.model.held(key, cur) + W.rng.range(1, 1000));    // more than everything the player holds (wallet and seats), so more than the wallet
     const r = await adminCall(W, 'admin_adjust', { key, delta, cur, reason: 'soak too big' }, 'adjust');
     if (!r.data || r.data.ok || r.data.code !== 'insufficient') { W.violate('I7', `admin minus ${-delta} ${cur} from ${key} was not refused with insufficient`, { key }, 'insufficient', JSON.stringify(r.data || r.error)); return null; }
     W.model.count.adminRefused++;
@@ -108,11 +115,12 @@ async function admin(W) {
   }
   if (op === 'setplay') {
     if (t.tableId) return null;
-    const cents = W.rng.chance(0.3) ? W.model.held(key, 'play') : W.rng.range(0, 3000000);
-    const delta = cents - W.model.held(key, 'play');
+    const cents = W.rng.chance(0.3) ? walletOf(W, key, 'play') : W.rng.range(0, 3000000);
+    const delta = cents - walletOf(W, key, 'play');
     const r = await adminCall(W, 'admin_set_play', { key, cents }, 'set_play');
     if (!(r.data && r.data.ok)) { W.violate('I7', `admin_set_play ${cents} for ${key} refused`, { key }, 'ok', JSON.stringify(r.data || r.error)); return null; }
     if (delta !== 0) W.model.applyAdmin(key, 'play', delta);
+    if (walletOf(W, key, 'play') !== cents && !t.tableId) W.warn('setplay_landed_elsewhere', `${key}: wallet ${walletOf(W, key, 'play')} after set_play ${cents}`);
     return { what: 'admin_setplay', who: key, cents, delta };
   }
   // a non-admin sending an admin event must be refused and move nothing (the ledger checks would show it)
