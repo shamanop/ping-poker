@@ -50,3 +50,10 @@
 #winbox{background:none;border-color:transparent;box-shadow:none;border-image:var(--img-ui_plate_win) 36 fill/12px/0 stretch}
 #plPot,.chip{background:none;border-color:transparent;box-shadow:none;border-image:var(--img-ui_plate_chip) 30 fill/10px/0 stretch}
 .chip.set{box-shadow:0 0 14px 2px rgba(255,208,88,.7)}
+/* sticky banners (+N LEADS, ONE MORE CALL result): the S1 sticky as a 9-slice (its curled corner is the bottom-right slice), the CSS fold triangle goes. Stage cards (.scn: pot win, bonus cards) take the modal panel. */
+#plBn,#plmo{background:none;box-shadow:none;border:solid transparent;border-width:0;border-image:var(--img-ui_sticky) 64 fill/20px/0 stretch;filter:drop-shadow(0 6px 8px rgba(0,0,0,.55))}
+#plBn::after,#plmo::after{content:none}
+.scn{border-color:transparent;outline:0;background:none;box-shadow:none;border-image:var(--img-ui_card_panel) 40 fill/16px/0 stretch}
+
+/* ---- S4 (chris 10-06 FB4): big-win backdrop. The painted sunburst (centre at 50% 45% like the conic one it replaces) is the #tierbg layer, no box changes. ---- */
+#tierbg{background:var(--img-ui_burst) 50% 45%/cover no-repeat}

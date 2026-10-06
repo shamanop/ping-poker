@@ -98,7 +98,8 @@
     "ui_card_panel": "img/ui/ui_card_panel.webp",
     "ui_plate_chip": "img/ui/ui_plate_chip.webp",
     "ui_plate_win": "img/ui/ui_plate_win.webp",
-    "ui_toast": "img/ui/ui_toast.webp"
+    "ui_toast": "img/ui/ui_toast.webp",
+    "ui_burst": "img/ui/ui_burst.webp"
   },
   "textures": {},
   "fonts": [

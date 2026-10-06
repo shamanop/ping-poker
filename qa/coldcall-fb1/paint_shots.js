@@ -18,7 +18,7 @@ const buyStub = (page) => page.evaluate((x) => { const s = CC.core.st; if (!s.se
 const S = {
   idle: { q: 'shot=idle', run: async (p) => { await sleep(900); } },
   small_win: { q: 'shot=spin', seed: SEED.small, run: async (p) => { await settled(p); await sleep(900); } },
-  big_win: { q: 'shot=bigwin', run: async (p) => { await sleep(1800); } },
+  big_win: { q: 'shot=bigwin', run: async (p) => { await sleep(1800); await p.evaluate(() => document.getAnimations().forEach((a) => { try { a.finish(); } catch (e) {} })); await sleep(300); } },
   keypad: { q: 'shot=spin&force=bonus1', seed: SEED.bonus, run: async (p) => { await p.waitForSelector('.dial', { timeout: 60000 }); await sleep(1200); } },
   keypad_lit: { q: 'shot=spin&force=bonus1', seed: SEED.bonus, run: async (p) => { await p.waitForSelector('.dial', { timeout: 60000 }); await sleep(800); await p.evaluate(() => document.querySelector('.dial .key[data-k="5"]').click()); await sleep(500); } },
   pick: { q: mock('pick'), chips: 1, run: async (p) => { await sleep(1500); } },
@@ -30,9 +30,12 @@ const S = {
       await p.waitForFunction(() => { const e = document.getElementById('bhLeft'); return e && e.textContent !== '' && +e.textContent <= 4 && +e.textContent > 0; }, null, { timeout: 90000 }); await sleep(250); } },
   hot_leads: { q: mock('idle'), chips: 1, run: async (p) => { await sleep(1200); } },
   callback: { q: mock('callback'), chips: 1, run: async (p) => { await sleep(1200); } },
-  gain: { q: mock('gain'), chips: 1, run: async (p) => { await sleep(700); } },
+  gain: { q: mock('gain'), chips: 1, run: async (p) => { await p.waitForFunction(() => { const e = document.getElementById('plBn'); return e && !e.hidden && e.textContent.length > 2; }, null, { timeout: 8000 }).catch(() => {}); await p.evaluate(() => document.getAnimations().forEach((a) => { try { a.finish(); } catch (e) {} })); await sleep(200); } },
   ghost: { q: mock('ghost'), chips: 1, run: async (p) => { await sleep(1200); } },
   pot: { q: mock('pot'), chips: 1, run: async (p) => { await sleep(1200); } },
+  more_won: { q: mock('more_won'), chips: 1, run: async (p) => { await sleep(900); await p.evaluate(() => document.getAnimations().forEach((a) => { try { a.finish(); } catch (e) {} })); await sleep(150); } },
+  more_lost: { q: mock('more_lost'), chips: 1, run: async (p) => { await sleep(900); await p.evaluate(() => document.getAnimations().forEach((a) => { try { a.finish(); } catch (e) {} })); await sleep(150); } },
+  banner: { q: mock('idle'), chips: 1, run: async (p) => { await sleep(800); await p.evaluate(() => { const b = document.getElementById('plBn'); b.innerHTML = '<b>APPOINTMENT</b>+0.3 lead, day 4 kept.'; b.hidden = false; document.getElementById('head').classList.add('plbn'); }); await sleep(300); } },
   disabled: { q: 'shot=idle', run: async (p) => { await sleep(600); await p.evaluate(() => { document.querySelectorAll('#hud button,.btns button').forEach((b) => { if (b.id !== 'spin') b.disabled = true; }); }); await sleep(300); } },
   pressed: { q: 'shot=idle', run: async (p) => { await sleep(600); const r = await p.evaluate(() => { const b = document.getElementById('auto').getBoundingClientRect(); return [b.x + b.width / 2, b.y + b.height / 2]; }); await p.mouse.move(r[0], r[1]); await p.mouse.down(); await sleep(300); } }
 };
