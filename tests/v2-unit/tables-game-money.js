@@ -7,6 +7,8 @@ const { open, MoneyError } = require('../../money/ledger');
 const { createService, START_CHIPS, START_PLAY } = require('../../money/service');
 const { createGameMoney } = require('../../transport/game-money');
 const games = require('../../games');
+const { createViews } = require('../../transport/views');
+const { mapError } = require('../../transport/game-money');
 
 let pass = 0, fail = 0;
 function t(name, fn) {
@@ -108,7 +110,7 @@ t('onChange fires after every write call that did not throw, with the lower-case
 });
 
 // ---- the registry ----
-t('each module gets its OWN ctx.money, the same object in init and in handlers; ctx.wallet stays; the raw service never reaches a module', () => {
+t('each module gets its OWN ctx.money, the same object in init and in handlers; only Bender keeps ctx.wallet; the raw service never reaches a module', () => {
   const e = env(); const seen = {};
   const mk = (id) => ({ id, name: id, kind: 'solo', init(ctx) { seen[id] = { init: ctx }; }, handlers: { ping(sock, p, ctx) { seen[id].handler = ctx; } } });
   const reg = registry(e, [mk('coldcall'), mk('bender')]);
@@ -117,7 +119,8 @@ t('each module gets its OWN ctx.money, the same object in init and in handlers; 
   reg.onConnection({ data: { acct: { key: 'ann' } }, on: (ev, fn) => { handlers[ev] = fn; }, emit() {} });
   handlers['g:coldcall:ping']({}); handlers['g:bender:ping']({});
   ok(seen.coldcall.handler === seen.coldcall.init && seen.bender.handler === seen.bender.init, 'init ctx and handler ctx differ');
-  ok(seen.coldcall.init.wallet === wallet && seen.bender.init.wallet === wallet);
+  ok(seen.bender.init.wallet === wallet && seen.bender.handler.wallet === wallet, 'Bender keeps ctx.wallet');
+  ok(!('wallet' in seen.coldcall.init) && !('wallet' in seen.coldcall.handler), 'W2-b F1: another module has no ctx.wallet');
   ok(!('service' in seen.coldcall.init), 'the service must not reach a module');
   seen.coldcall.init.money.open('ann', 'play', 'r1', 10);
   eq(seen.coldcall.init.money.openRounds().length, 1); eq(seen.bender.init.money.openRounds().length, 0);
@@ -211,7 +214,7 @@ t('recover() after a crash during recovery on a freshly reopened ledger: nothing
   eq(e2.ledger.balance('play:bob', 'play'), START_PLAY);
   // timed was closed already: the game dropped it as stale (its :close ref is in the ledger) rather than settling it again
   eq(g2.state.timed, undefined);
-  ok(e2.ledger.lastId >= lines);
+  eq(e2.ledger.lastId, lines, 'the second boot wrote lines: the first boot already finished the sweep and the game dropped the stale round');
   // third boot: nothing left to do, nothing is written
   const e3 = env(e1.f, []); const id = e3.ledger.lastId;
   const g3 = fakeGame('coldcall', { state: { kept: { key: 'ann', cur: 'play', stake: 100 } } });
@@ -263,5 +266,144 @@ t('a module with no audit claims nothing: its escrows are voided; one without re
   eq(registry(e, [bare]).audit(), {});
 });
 
-console.log(`${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+// ---- W2-b fixes (critic report _scratch/p6/w2b/CRITIC-REPORT.md) ----
+const mod = (id, extra = {}) => ({ id, name: id, kind: 'solo', init() {}, handlers: {}, ...extra });
+
+t('F1: with ctx.money only the module bender gets ctx.wallet; without ctx.money every module keeps it (the old tests)', () => {
+  const e = env(); const seen = {};
+  const mk = (id) => mod(id, { init(ctx) { seen[id] = ctx; } });
+  registry(e, [mk('coldcall'), mk('bender'), mk('other')]);
+  ok(seen.bender.wallet === wallet && !('wallet' in seen.coldcall) && !('wallet' in seen.other));
+  const old = {};
+  games({ io: null, wallet, modules: [mod('coldcall', { init(c) { old.cc = c; } }), mod('bender', { init(c) { old.b = c; } })] });
+  ok(old.cc.wallet === wallet && old.b.wallet === wallet);
+});
+
+t('F2: round answers round_closed to a replay of an instant round (other numbers, or all 0 against a stored one); closed() is true for it', () => {
+  const e = env(); const m = e.gm.forGame('coldcall');
+  eq(m.closed('ann', 'cb1'), false);
+  const first = m.round('ann', 'play', 'cb1', { cost: 0, win: 500 });
+  eq(m.closed('ann', 'cb1'), true);
+  const id = e.ledger.lastId;
+  throwsCode(() => m.round('ann', 'play', 'cb1', { cost: 0, win: 300 }), 'round_closed');
+  throwsCode(() => m.round('ann', 'play', 'cb1', { cost: 0, win: 0 }), 'round_closed');
+  eq(m.round('ann', 'play', 'cb1', { cost: 0, win: 500 }), { id: first.id, dup: true, noop: false });
+  eq(e.ledger.lastId, id);
+  // a free round whose whole outcome is 0 writes nothing and leaves no trace (a documented limit, ADD-A-GAME section 4)
+  eq(m.round('ann', 'play', 'cb2', { cost: 0, win: 0 }), { id: null, dup: false, noop: true }); eq(m.closed('ann', 'cb2'), false);
+  // settle: a different outcome on a closed round is round_closed (was ref_conflict)
+  m.open('ann', 'play', 'r1', 100); m.settle('ann', 'play', 'r1', { win: 40 });
+  throwsCode(() => m.settle('ann', 'play', 'r1', { win: 41 }), 'round_closed'); throwsCode(() => m.settle('ann', 'play', 'r1', { win: 0 }), 'round_closed');
+});
+
+t('F3: round / settle / open refuse arguments that are not the round\'s (args), before anything is written or pushed', () => {
+  const e = env(); const m = e.gm.forGame('coldcall');
+  m.open('ann', 'play', 'r1', 1000);
+  const id = e.ledger.lastId, pushes = e.changed.length;
+  const bad = [5000, '5', null, undefined, [], [{ win: 1 }], true, { bet: 1000, win: 5000 }, { win: 5, prise: 3 }, { win: 5, pool: 'office' }, { win: 5, pool: [] }, { win: 5, pool: { name: 'o', feed: 1, bonus: 2 } }];
+  for (const o of bad) throwsCode(() => m.settle('ann', 'play', 'r1', o), 'args');
+  for (const o of [5000, null, undefined, [], { bet: 1000, win: 5000 }, { cost: 1, win: 2, stake: 1 }, { cost: 1, pool: { name: 'o', prise: 1 } }, { pool: 7 }]) throwsCode(() => m.round('bob', 'play', 'i1', o), 'args');
+  for (const c of [{ cost: 5 }, [5], '5', null, undefined, true]) throwsCode(() => m.open('ann', 'play', 'r9', c), 'args');
+  eq(e.ledger.lastId, id); eq(e.changed.length, pushes);
+  // the right shapes still work, a null-prototype object too
+  const o = Object.create(null); o.win = 5;
+  ok(m.settle('ann', 'play', 'r1', o).id > 0);
+  ok(m.round('bob', 'play', 'i1', { cost: 1, win: 2, pool: { name: 'o', feed: 1 } }).id > 0);
+});
+
+t('F3: settle passes stake through (stake_mismatch keeps its code, stake 0 = free round); a resend naming the other currency is round_closed', () => {
+  const e = env(); const m = e.gm.forGame('coldcall');
+  m.open('ann', 'play', 'r1', 1000);
+  const id = e.ledger.lastId;
+  const x = throwsCode(() => m.settle('ann', 'play', 'r1', { win: 3000, stake: 900 }), 'stake_mismatch'); eq([x.cause.have, x.cause.want], [1000, 900]);
+  throwsCode(() => m.settle('ann', 'play', 'R1', { win: 3000, stake: 1000 }), 'stake_mismatch');      // id typo: no escrow
+  throwsCode(() => m.settle('ann', 'play', 'r1', { win: 3000, stake: 0 }), 'stake_mismatch');
+  eq(e.ledger.lastId, id);
+  const s = m.settle('ann', 'play', 'r1', { win: 3000, stake: 1000 }); ok(s.id > 0);
+  eq(m.settle('ann', 'play', 'r1', { win: 3000, stake: 1000 }).dup, true);
+  throwsCode(() => m.settle('ann', 'chips', 'r1', { win: 3000 }), 'round_closed');
+  ok(m.settle('bob', 'chips', 'f1', { win: 700, stake: 0 }).id > 0);
+  throwsCode(() => m.settle('bob', 'play', 'f1', { win: 700 }), 'round_closed');
+  m.open('bob', 'play', 'v1', 5); m.void('bob', 'play', 'v1', 'x');
+  throwsCode(() => m.void('bob', 'chips', 'v1', 'x'), 'round_closed');
+});
+
+t('F4: a pool fed with no stake behind it is refused as amount on both paths; feed up to the stake works', () => {
+  const e = env(); const m = e.gm.forGame('coldcall');
+  const id = e.ledger.lastId;
+  throwsCode(() => m.round('ann', 'play', 'i1', { cost: 0, pool: { name: 'office', feed: 50000 } }), 'amount');
+  throwsCode(() => m.settle('bob', 'play', 'f9', { pool: { name: 'office', feed: 70000, prize: 120000 } }), 'amount');
+  m.open('ann', 'play', 'r2', 10);
+  throwsCode(() => m.settle('ann', 'play', 'r2', { pool: { name: 'office', feed: 9999 } }), 'amount');
+  eq(e.ledger.lastId, id + 1); eq(m.pool('office', 'play'), 0);
+  m.settle('ann', 'play', 'r2', { pool: { name: 'office', feed: 10 } }); eq(m.pool('office', 'play'), 10);
+  ok(m.round('ann', 'play', 'i2', { cost: 4, pool: { name: 'office', feed: 4 } }).id > 0); eq(m.pool('office', 'play'), 14);
+});
+
+t('F6: moneyView adds inRound (the key\'s chips escrows) and counts it in chips, so the total does not drop while a round is open', () => {
+  const e = env(); const m = e.gm.forGame('coldcall');
+  const views = createViews({ registry: {}, accounts: { get: () => null }, presLedger: {}, ledger: e.ledger, service: e.service, wallet: null });
+  eq(views.moneyView('ann'), { bank: START_CHIPS, atTable: 0, inRound: 0, chips: START_CHIPS, wallet: { play: START_PLAY, chips: START_CHIPS } });
+  m.open('ann', 'chips', 'r1', 4000); m.open('ann', 'play', 'r2', 250000); m.open('bob', 'chips', 'r1', 77);
+  const v = views.moneyView('ann');
+  eq([v.bank, v.inRound, v.chips], [START_CHIPS - 4000, 4000, START_CHIPS], 'bank, inRound, chips total');
+  eq(views.moneyView('bob').inRound, 77);
+  m.settle('ann', 'chips', 'r1', { win: 0 });
+  eq([views.moneyView('ann').inRound, views.moneyView('ann').chips], [0, START_CHIPS - 4000]);
+});
+
+const unhandled = []; process.on('unhandledRejection', (err) => unhandled.push(err));
+t('F7: a recover() or audit() that returns a thenable is an error (async) and that game\'s escrows are left alone (a late rejection is checked after the run)', () => {
+  for (const which of ['recover', 'audit']) {
+    const e = env(); const c = e.gm.forGame('coldcall'), b = e.gm.forGame('bender');
+    c.open('ann', 'play', 'a', 100); c.open('bob', 'chips', 'b', 50); b.open('bob', 'play', 'x', 30);
+    const late = new Promise((_, rej) => setTimeout(() => rej(new Error('late boom')), 5));
+    const cold = mod('coldcall', { [which]: () => late });
+    const ben = fakeGame('bender', { state: {} });
+    const r = registry(e, [cold, ben]).recover();
+    eq(r.errors.filter(x => x.game === 'coldcall').map(x => [x.what, x.code]), [[which, 'async']]);
+    eq(e.ledger.balance('escrow:coldcall:ann:a', 'play'), 100, which); eq(e.ledger.balance('escrow:coldcall:bob:b', 'chips'), 50, which);
+    eq(e.ledger.balance('escrow:bender:bob:x', 'play'), 0, 'the other game is still swept');
+    eq(r.voided.map(v => v.game), ['bender']);
+  }
+});
+
+t('F7: a module whose id is not one of the service\'s games is skipped by recover() without an error', () => {
+  const e = env(); e.gm.forGame('coldcall').open('ann', 'play', 'a', 100);
+  eq(typeof e.service.GAMES, 'object'); ok(e.service.GAMES.includes('bender') && e.service.GAMES.includes('coldcall'));
+  const r = registry(e, [mod('trivia'), fakeGame('coldcall', { state: { a: { key: 'ann', cur: 'play', stake: 100 } } })]).recover();
+  eq(r.errors, []); eq(Object.keys(r.games), ['coldcall']); eq(r.games.coldcall.kept, 1);
+});
+
+// ---- gaps the critic's mutants found: the same round id under two keys, two currencies and two games ----
+t('registry claim is per key, per currency, key case folded, per game; recover() is handed this game\'s rounds', () => {
+  const e = env(); const c = e.gm.forGame('coldcall'), b = e.gm.forGame('bender');
+  c.open('ann', 'play', 'r1', 100); c.open('bob', 'play', 'r1', 200); b.open('ann', 'play', 'r1', 300);
+  c.open('bob', 'chips', 'r2', 40);
+  const handed = {};
+  const cold = mod('coldcall', { recover(rounds) { handed.coldcall = rounds.map(r => `${r.key}/${r.cur}/${r.roundId}/${r.amount}`).sort(); }, audit() { return { openRounds: [{ key: ' ANN', cur: 'play', roundId: 'r1' }, { key: 'bob', cur: 'play', roundId: 'r2' }] }; } });   // bob's r2 escrow is in chips: a claim in the wrong currency
+  const ben = mod('bender', { recover(rounds) { handed.bender = rounds.map(r => `${r.key}/${r.cur}/${r.roundId}/${r.amount}`); } });   // claims nothing
+  const r = registry(e, [cold, ben]).recover();
+  eq(r.errors, []);
+  eq(handed.coldcall, ['ann/play/r1/100', 'bob/chips/r2/40', 'bob/play/r1/200']); eq(handed.bender, ['ann/play/r1/300']);
+  eq(e.ledger.balance('escrow:coldcall:ann:r1', 'play'), 100, 'the claimed round (other key case) is kept');
+  eq(e.ledger.balance('escrow:coldcall:bob:r2', 'chips'), 0, 'a claim naming the other currency does not keep the round');
+  eq(e.ledger.balance('escrow:coldcall:bob:r1', 'play'), 0, 'another key with the same id is not claimed');
+  eq(e.ledger.balance('escrow:bender:ann:r1', 'play'), 0, 'another game\'s claim does not cover this game');
+  eq(r.voided.map(v => `${v.game}/${v.key}/${v.cur}`).sort(), ['bender/ann/play', 'coldcall/bob/chips', 'coldcall/bob/play']);
+  eq(r.games.coldcall, { found: 3, settledOrVoidedByGame: 0, kept: 1 });
+});
+
+t('mapError: an insufficient that is not on the player\'s bank:/play: account is not `funds`', () => {
+  const mk = (account) => new MoneyError('insufficient', { account, have: 1, need: 2, cur: 'play' });
+  eq(mapError(mk('play:ann')).code, 'funds'); eq(mapError(mk('bank:ann')).code, 'funds');
+  for (const a of ['pool:coldcall:office', 'escrow:coldcall:ann:r1', 'seat:t1:ann', undefined]) eq(mapError(mk(a)).code, 'internal', String(a));
+  eq(mapError(new MoneyError('stake_mismatch', { have: 1, want: 2 })).code, 'stake_mismatch');
+});
+
+// the late rejections of the F7 test have fired by now: none may be unhandled
+setTimeout(() => {
+  t('F7: the late rejection of an async recover() / audit() is caught (no unhandledRejection)', () => eq(unhandled.map(x => String(x && x.message)), []));
+  console.log(`${pass} passed, ${fail} failed`);
+  process.exit(fail ? 1 : 0);
+}, 60);

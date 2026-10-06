@@ -44,6 +44,9 @@ async function scenario() {
   const ledger = open(file, { fsync: 'all', log: () => {} });
   const svc = createService(ledger);
   svc.ensureAccount(key);
+  // balances that differ from the signup default, so the mirror and audit checks below cannot pass on a default row
+  svc.mint('bonus', key, 777, 'chips', 'seed-bonus-c');
+  svc.mint('bonus', key, 12345, 'play', 'seed-bonus-p');
   svc.houseRound('coldcall', key, 1000, 0, 'chips', `coldcall:${key}:seedpool-c`, { name: 'office', feed: 600 });
   svc.houseRound('coldcall', key, 400, 0, 'play', `coldcall:${key}:seedpool-p`, { name: 'office', feed: 250 });
   svc.openRound('coldcall', key, 'chips', 'rc1', 700);
@@ -114,8 +117,10 @@ async function scenario() {
   }));
 
   await T.check('audit-and-mirrors-show-the-full-balances', ['P6'], () => need(async () => {
-    const { key, seeded, audit: a, mirror } = o;
+    const { key, seeded, audit: a, mirror, after } = o;
     const wantBank = seeded.bank + seeded.escChips, wantWallet = seeded.wallet + seeded.escPlay;
+    expect(wantBank !== 10000 && wantWallet !== 1000000, 'the seeded balances must differ from the signup default or this check proves nothing: ' + [wantBank, wantWallet]);
+    expectEq([after.get('chips', 'bank:' + key), after.get('play', 'play:' + key)], [wantBank, wantWallet], 'balances computed from the ledger lines');
     expectEq([a.bank[key], a.wallet[key]], [wantBank, wantWallet], '__audit bank / wallet');
     expectEq([mirror.bank && mirror.bank[key], mirror.wallet && mirror.wallet[key]], [wantBank, wantWallet], 'bank.json / wallet.json mirrors');
   }));

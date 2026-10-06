@@ -163,7 +163,7 @@ t('settleRound: loss only (win 0), win only, feed only each write the right legs
   booksOk(ledger);
 });
 
-t('close once: the same settle again is dup (no line, balances unchanged); other numbers are ref_conflict (no line)', () => {
+t('close once: the same settle again is dup (no line, balances unchanged); other numbers are round_closed (no line)', () => {
   const e = player(); const { svc, ledger } = e;
   seedPool(e, 'office', 300);
   svc.openRound('coldcall', 'ann', 'play', 'r1', 200);
@@ -173,18 +173,18 @@ t('close once: the same settle again is dup (no line, balances unchanged); other
   eq(svc.settleRound('coldcall', 'ann', 'play', 'r1', { win: 50, pool }), { id: first.id, dup: true });
   eq(svc.settleRound('coldcall', 'ann', 'play', 'r1', { win: 50, pool: { ...pool } }).dup, true);
   for (const bad of [{ win: 51, pool }, { win: 50, pool: { ...pool, prize: 101 } }, { win: 50, pool: { ...pool, feed: 21 } }, { win: 50 }, { win: 50, pool: { ...pool, name: 'other' } }]) {
-    throwsCode(() => svc.settleRound('coldcall', 'ann', 'play', 'r1', bad), 'ref_conflict');
+    throwsCode(() => svc.settleRound('coldcall', 'ann', 'play', 'r1', bad), 'round_closed');   // W2-b F2: was ref_conflict
   }
   still({ ledger }, id); eq(ledger.balance('play:ann', 'play'), bal); eq(svc.poolBalance('coldcall', 'office', 'play'), poolBal);
 });
 
-t('close once: a win-only settle resend is dup, a pool-less resend of a pool settle is ref_conflict', () => {
+t('close once: a win-only settle resend is dup, a pool-less resend of a pool settle is round_closed', () => {
   const { svc, ledger } = player();
   svc.openRound('coldcall', 'ann', 'play', 'r1', 100);
   svc.settleRound('coldcall', 'ann', 'play', 'r1', { win: 70 });
   const id = ledger.lastId;
   eq(svc.settleRound('coldcall', 'ann', 'play', 'r1', { win: 70, pool: { name: 'office', feed: 0, prize: 0 } }).dup, true);
-  throwsCode(() => svc.settleRound('coldcall', 'ann', 'play', 'r1', { win: 70, pool: { name: 'office', feed: 1 } }), 'ref_conflict');
+  throwsCode(() => svc.settleRound('coldcall', 'ann', 'play', 'r1', { win: 70, pool: { name: 'office', feed: 1 } }), 'round_closed');   // W2-b F2: was ref_conflict
   still({ ledger }, id);
 });
 
@@ -458,12 +458,13 @@ t('random walk: 4000 ops over open / settle / void / round / resends / wrong clo
       else if (rd.state === 'closed') {
         if (rd.close.kind === 'void') eq(got.code, 'round_closed');
         else if (rd.close.win === win && rd.close.feed === pw.feed && rd.close.prize === pw.prize) ok(got.r && got.r.dup, 'settle resend should be dup');
-        else eq(got.code, 'ref_conflict');
+        else eq(got.code, 'round_closed');   // W2-b F2: a different outcome on a closed round is "already played"
         noLine(id0, 'settle on a closed round');
       } else {
         const stake = rd.state === 'open' ? rd.stake : 0;
         const L = outcomeLegs(stake > 0 ? esc : null, player, cur, win, pw, stake);
-        if (!L.length) { eq(got.r, { id: null, dup: false, noop: true }); noLine(id0, 'settle noop'); }
+        if (pw.feed > stake) { eq(got.code, 'bad_amount'); noLine(id0, 'settle feed above the stake'); }   // W2-b F4
+        else if (!L.length) { eq(got.r, { id: null, dup: false, noop: true }); noLine(id0, 'settle noop'); }
         else {
           const bad = shortCheck(cur, L, player);
           if (bad) { eq(got.code, bad); noLine(id0, 'settle ' + bad); }
@@ -488,7 +489,8 @@ t('random walk: 4000 ops over open / settle / void / round / resends / wrong clo
       const pool = same ? ir.params.pool : poolArg(), pw = pv(pool);
       const got = attempt(() => svc.houseRound('coldcall', ir.key, cost, win, ir.cur, `coldcall:${ir.key}:${iid}`, pool)); bump('round');
       const L = outcomeLegs(null, ipl, ir.cur, win, pw, cost);
-      if (!L.length) { eq(got.r, { id: null, dup: false, noop: true }); noLine(id0, 'round noop'); }   // all zero is a noop before the ref is looked at, as it always was
+      if (pw.feed > cost) { eq(got.code, 'bad_amount'); noLine(id0, 'round feed above the cost'); }   // W2-b F4: checked before the noop and the ref
+      else if (!L.length) { eq(got.r, { id: null, dup: false, noop: true }); noLine(id0, 'round noop'); }   // all zero is a noop before the ref is looked at, as it always was
       else if (ir.params) {
         const p = ir.params;
         if (p.cost === cost && p.win === win && p.feed === pw.feed && p.prize === pw.prize) ok(got.r && got.r.dup, 'round resend should be dup ' + ip); else eq(got.code, 'ref_conflict');
@@ -526,11 +528,127 @@ t('random walk: 4000 ops over open / settle / void / round / resends / wrong clo
   const want = [...rounds].filter(([, r]) => r.state === 'open').map(([id, r]) => `${r.key}/${r.cur}/${id}/${r.stake}`).sort();
   eq(svc.openRounds('coldcall').map(r => `${r.key}/${r.cur}/${r.roundId}/${r.amount}`).sort(), want);
   for (const k of ['open', 'settle', 'void', 'round', 'resend']) ok((counts[k] || 0) > 100, 'op mix too thin: ' + JSON.stringify(counts));
-  for (const k of ['wrote', 'dup', 'noop', 'insufficient', 'pool_short', 'round_closed', 'ref_conflict', 'bad_cur']) ok((counts[k] || 0) >= 20, 'outcome mix too thin for ' + k + ': ' + JSON.stringify(counts));
+  for (const k of ['wrote', 'dup', 'noop', 'insufficient', 'pool_short', 'round_closed', 'ref_conflict', 'bad_cur', 'bad_amount']) ok((counts[k] || 0) >= 20, 'outcome mix too thin for ' + k + ': ' + JSON.stringify(counts));
   // and a sweep of everything left open returns every stake
   const sw = svc.sweepEscrows(() => false);
   eq(sw.errors, []); eq(svc.openRounds('coldcall'), []);
   const c = ledger.check(); ok(c.chips.ok && c.play.ok);
+});
+
+// ---- W2-b fixes (critic report _scratch/p6/w2b/CRITIC-REPORT.md) ----
+
+t('F1: houseRound / houseSpend / houseCredit refuse a ref ending in :open or :close (bad_ref, nothing written); other refs are fine', () => {
+  const { svc, ledger } = player();
+  svc.openRound('coldcall', 'ann', 'chips', 'r7', 700);
+  const id = ledger.lastId;
+  for (const ref of ['coldcall:ann:r7:close', 'coldcall:ann:r7:open', 'x:open', 'x:close']) {
+    throwsCode(() => svc.houseSpend('coldcall', 'ann', 1, 'chips', ref), 'bad_ref');
+    throwsCode(() => svc.houseCredit('coldcall', 'ann', 1, 'chips', ref), 'bad_ref');
+    throwsCode(() => svc.houseRound('coldcall', 'ann', 1, 0, 'chips', ref), 'bad_ref');
+    throwsCode(() => svc.houseRound('coldcall', 'ann', 0, 0, 'chips', ref), 'bad_ref');   // refused before the all-zero noop
+  }
+  still({ ledger }, id);
+  // the escrow is not stranded: its close is still free
+  const w = svc.settleRound('coldcall', 'ann', 'chips', 'r7', { win: 0 }); ok(w.id > 0 && !w.dup);
+  eq(ledger.balance('escrow:coldcall:ann:r7', 'chips'), 0);
+  for (const ref of ['coldcall:ann:r8', 'coldcall:ann:r8:closed', 'coldcall:ann:r8:opening']) ok(svc.houseSpend('coldcall', 'ann', 1, 'chips', ref).id > 0, ref);
+});
+
+t('F2: a replayed settle with other numbers (or a free round that won, replayed with 0) is round_closed, the identical one is dup, and nothing is written', () => {
+  const { svc, ledger } = player();
+  const first = svc.settleRound('coldcall', 'ann', 'play', 'cb-41', { win: 500 });   // free round: no escrow
+  const id = ledger.lastId, bal = ledger.balance('play:ann', 'play');
+  eq(svc.settleRound('coldcall', 'ann', 'play', 'cb-41', { win: 500 }), { id: first.id, dup: true });
+  for (const win of [300, 0, 501]) throwsCode(() => svc.settleRound('coldcall', 'ann', 'play', 'cb-41', { win }), 'round_closed');
+  throwsCode(() => svc.settleRound('coldcall', 'ann', 'play', 'cb-41', {}), 'round_closed');
+  still({ ledger }, id); eq(ledger.balance('play:ann', 'play'), bal);
+});
+
+t('F2: roundClosed is true for a settled or voided round AND for an instant round whose own ref is in the ledger', () => {
+  const { svc } = player();
+  eq(svc.roundClosed('coldcall', 'ann', 'i1'), false);
+  svc.houseRound('coldcall', 'ann', 10, 25, 'play', 'coldcall:ann:i1');
+  eq(svc.roundClosed('coldcall', 'ann', 'i1'), true);
+  eq(svc.roundClosed('coldcall', 'bob', 'i1'), false); eq(svc.roundClosed('coldcall', 'ann', 'i2'), false); eq(svc.roundClosed('bender', 'ann', 'i1'), false);
+  svc.openRound('coldcall', 'ann', 'play', 'r1', 10); eq(svc.roundClosed('coldcall', 'ann', 'r1'), false);
+  svc.voidRound('coldcall', 'ann', 'play', 'r1'); eq(svc.roundClosed('coldcall', 'ann', 'r1'), true);
+});
+
+t('F3: settleRound refuses an outcome that is not an object (bad_amount); stake: exact escrow or stake_mismatch { have, want }, nothing written', () => {
+  const { svc, ledger } = player();
+  svc.openRound('coldcall', 'ann', 'play', 'r1', 1000);
+  const id = ledger.lastId;
+  for (const bad of [5000, '5', null, [], true]) throwsCode(() => svc.settleRound('coldcall', 'ann', 'play', 'r1', bad), 'bad_amount');
+  for (const stake of [999, 1001, 0]) { const e = throwsCode(() => svc.settleRound('coldcall', 'ann', 'play', 'r1', { win: 5, stake }), 'stake_mismatch'); eq([e.have, e.want], [1000, stake]); }
+  throwsCode(() => svc.settleRound('coldcall', 'ann', 'play', 'r1', { win: 5, stake: -1 }), 'bad_amount');
+  throwsCode(() => svc.settleRound('coldcall', 'ann', 'play', 'r1', { win: 5, stake: 1.5 }), 'bad_amount');
+  still({ ledger }, id); eq(ledger.balance('escrow:coldcall:ann:r1', 'play'), 1000);
+  // a typo in the round id finds no escrow: with stake the settle is refused instead of paying a free round
+  const e2 = throwsCode(() => svc.settleRound('coldcall', 'ann', 'play', 'R1', { win: 3000, stake: 1000 }), 'stake_mismatch'); eq([e2.have, e2.want], [0, 1000]);
+  still({ ledger }, id);
+  const w = svc.settleRound('coldcall', 'ann', 'play', 'r1', { win: 5, stake: 1000 }); ok(w.id > 0);
+  // stake 0 is how a game says "free round": it settles when there is no escrow
+  const f = svc.settleRound('coldcall', 'ann', 'play', 'free1', { win: 9, stake: 0 }); ok(f.id > 0);
+  // not given = today's behaviour
+  svc.openRound('coldcall', 'ann', 'play', 'r2', 40); ok(svc.settleRound('coldcall', 'ann', 'play', 'r2', { win: 0 }).id > 0);
+});
+
+t('F3: a resend of a stored close names the same stake (when given) and the same currency, else round_closed', () => {
+  const { svc, ledger } = player();
+  svc.openRound('coldcall', 'ann', 'chips', 's1', 100); const s = svc.settleRound('coldcall', 'ann', 'chips', 's1', { win: 40 });
+  const id = ledger.lastId;
+  eq(svc.settleRound('coldcall', 'ann', 'chips', 's1', { win: 40, stake: 100 }), { id: s.id, dup: true });
+  eq(svc.settleRound('coldcall', 'ann', 'chips', 's1', { win: 40 }).dup, true);
+  throwsCode(() => svc.settleRound('coldcall', 'ann', 'chips', 's1', { win: 40, stake: 90 }), 'round_closed');
+  throwsCode(() => svc.settleRound('coldcall', 'ann', 'chips', 's1', { win: 40, stake: 0 }), 'round_closed');
+  throwsCode(() => svc.settleRound('coldcall', 'ann', 'play', 's1', { win: 40 }), 'round_closed');       // the other currency was dup
+  svc.settleRound('coldcall', 'ann', 'chips', 'f1', { win: 700 });
+  throwsCode(() => svc.settleRound('coldcall', 'ann', 'play', 'f1', { win: 700 }), 'round_closed');
+  eq(svc.settleRound('coldcall', 'ann', 'chips', 'f1', { win: 700, stake: 0 }).dup, true);
+  // a void stored in one currency, the same void named in the other
+  svc.openRound('coldcall', 'ann', 'play', 'v1', 50); const v = svc.voidRound('coldcall', 'ann', 'play', 'v1', 'timeout');
+  eq(svc.voidRound('coldcall', 'ann', 'play', 'v1', 'again'), { id: v.id, dup: true });
+  throwsCode(() => svc.voidRound('coldcall', 'ann', 'chips', 'v1', 'timeout'), 'round_closed');
+  eq(ledger.lastId, id + 3, 'only the f1 settle, the v1 open and the v1 void were written');
+});
+
+t('F4: feed may not exceed the stake of the same batch: houseRound (cost) and settleRound (escrow), free rounds cannot feed, they can still win a prize', () => {
+  const e = player(); const { svc, ledger } = e;
+  seedPool(e, 'office', 300);
+  const id = ledger.lastId;
+  throwsCode(() => svc.houseRound('coldcall', 'ann', 0, 0, 'play', 'coldcall:ann:i1', { name: 'office', feed: 50000 }), 'bad_amount');
+  const x = throwsCode(() => svc.houseRound('coldcall', 'ann', 10, 0, 'play', 'coldcall:ann:i2', { name: 'office', feed: 11 }), 'bad_amount'); eq(x.field, 'feed');
+  throwsCode(() => svc.settleRound('coldcall', 'ann', 'play', 'free9', { pool: { name: 'office', feed: 70000, prize: 120 } }), 'bad_amount');
+  svc.openRound('coldcall', 'ann', 'play', 'r2', 10);
+  throwsCode(() => svc.settleRound('coldcall', 'ann', 'play', 'r2', { pool: { name: 'office', feed: 9999 } }), 'bad_amount');
+  throwsCode(() => svc.settleRound('coldcall', 'ann', 'play', 'r2', { pool: { name: 'office', feed: 11 } }), 'bad_amount');
+  eq(ledger.lastId, id + 1, 'only the r2 open was written'); eq(svc.poolBalance('coldcall', 'office', 'play'), 300);
+  // exactly the stake is allowed, on both paths; a free round still wins a prize
+  ok(svc.houseRound('coldcall', 'ann', 10, 0, 'play', 'coldcall:ann:i3', { name: 'office', feed: 10 }).id > 0);
+  ok(svc.settleRound('coldcall', 'ann', 'play', 'r2', { pool: { name: 'office', feed: 10 } }).id > 0);
+  ok(svc.settleRound('coldcall', 'ann', 'play', 'free10', { pool: { name: 'office', prize: 120 } }).id > 0);
+  eq(svc.poolBalance('coldcall', 'office', 'play'), 300 + 10 + 10 - 120);
+  booksOk(ledger);
+});
+
+t('F5: escrows that share a round id across keys, currencies and games: playHeld, balances().inRound, escrows and openRounds stay per key / game / currency', () => {
+  const { svc, ledger } = player(null, ['ann', 'bob']);
+  svc.openRound('coldcall', 'ann', 'play', 'r1', 300);
+  svc.openRound('bender', 'ann', 'play', 'r1', 200);                       // same round id, other game
+  ledger.transfer('bank:ann', 'escrow:coldcall:ann:r1', 40, 'chips', 'coldcall:open', 'seed-ann-chips-r1');   // same round id, other currency (the open ref has no currency, so it is written by hand)
+  svc.openRound('coldcall', 'bob', 'play', 'r1', 7000);                    // same round id, other key
+  ledger.transfer('bank:bob', 'escrow:coldcall:bob:r1', 9, 'chips', 'coldcall:open', 'seed-bob-chips-r1');
+  const a = svc.balances('ann'), b = svc.balances('bob');
+  eq(a.inRound, { chips: 40, play: 500 }); eq(b.inRound, { chips: 9, play: 7000 });
+  eq(a.escrows.map(x => `${x.game}/${x.roundId}/${x.cur}/${x.balance}`).sort(), ['bender/r1/play/200', 'coldcall/r1/chips/40', 'coldcall/r1/play/300']);
+  eq(b.escrows.length, 2);
+  eq(svc.openRounds('coldcall').map(r => `${r.key}/${r.cur}/${r.amount}`).sort(), ['ann/chips/40', 'ann/play/300', 'bob/chips/9', 'bob/play/7000']);
+  eq(svc.openRounds('bender'), [{ key: 'ann', cur: 'play', roundId: 'r1', amount: 200 }]);
+  // top-up eligibility counts the key's own Play escrows (all games) and nobody else's
+  const ea = svc.topUpEligible('ann'), eb = svc.topUpEligible('bob');
+  eq([ea.escrow, ea.total], [500, START_PLAY]);
+  eq([eb.escrow, eb.total], [7000, START_PLAY]);
+  eq(svc.mirror().wallet.ann, START_PLAY); eq(svc.mirror().wallet.bob, START_PLAY); eq(svc.mirror().bank.ann, START_CHIPS); eq(svc.mirror().bank.bob, START_CHIPS);
 });
 
 console.log(`${pass} passed, ${fail} failed`);
