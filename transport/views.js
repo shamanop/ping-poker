@@ -59,7 +59,7 @@ function createViews({ registry, accounts, presLedger, ledger, service, wallet }
     const sittingOut = midHand ? !s.dealt : (s.stack === 0 || s.sitOutNext || !s.connected);
     return {
       name: nameOf(s.key), avatar: emojiOf(a && a.avatar), profilePic: picOf(s.key),
-      chips, roundBet: live && hs ? (hs.bet || 0) : 0, folded: !!(inHand && (hs.folded || s.folded)), allIn: !!(live && hs && hs.allIn),
+      chips, roundBet: live && hs ? (hs.bet || 0) : 0, folded: !!(inHand && (hs.folded || s.folded)), allIn: !!(live && hs && !hs.folded && (hs.allIn || t.phase === 'runout')),   // run-out: nobody can act, so every live seat reads as all-in (the uncalled layer already sits back in chips)
       sittingOut: !!sittingOut, sitOutRequest: !!s.sitOutNext, connected: !!s.connected, isBot: false,
       isDealer: i === dealerIdx, isActive: curIdx === i, cardCount: inHand && !(hs.folded) ? 2 : (inHand ? 2 : 0), chipsBought: 0, lastAction: s.lastAction || null,
       seatNo: s.seat, leaving: !!s.leaving,
