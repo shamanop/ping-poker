@@ -291,6 +291,25 @@ app.post('/api/admin/bender-config', express.json({ limit: '64kb' }), (req, res)
     res.json({ ok: true, ...info });
   } catch (e) { res.status(400).json({ ok: false, error: e.message }); }
 });
+// Same switch for COLD CALL (same token, same header). GET current; POST {overrides, rtpLabel?, note?} swaps (400 + the reason on a bad config, nothing changes); POST {reset:true} restores the shipped math.
+function coldcallMod() { try { return require('./games/coldcall.js'); } catch { return null; } }
+app.get('/api/admin/coldcall-config', (req, res) => {
+  if (!benderAdminOk(req)) return res.status(403).json({ error: 'forbidden' });
+  const m = coldcallMod(); if (!m) return res.status(404).json({ error: 'no slot' });
+  res.json(m.liveInfo());
+});
+app.post('/api/admin/coldcall-config', express.json({ limit: '64kb' }), (req, res) => {
+  if (!benderAdminOk(req)) return res.status(403).json({ error: 'forbidden' });
+  const m = coldcallMod(); if (!m) return res.status(404).json({ error: 'no slot' });
+  const b = req.body;
+  if (!b || typeof b !== 'object' || Array.isArray(b) || (!b.reset && (!b.overrides || typeof b.overrides !== 'object' || Array.isArray(b.overrides)))) return res.status(400).json({ ok: false, error: 'send {overrides: {...}} or {reset: true}' });
+  try {
+    const info = m.setLiveConfig(b.reset ? { overrides: {}, note: b.note || 'reset to defaults' } : { overrides: b.overrides, rtpLabel: b.rtpLabel, note: b.note });
+    io.emit('g:coldcall:cfg', m.cfgEvent());
+    console.log('[coldcall] live config updated:', info.note || '(no note)');
+    res.json({ ok: true, ...info });
+  } catch (e) { res.status(400).json({ ok: false, error: e.message }); }
+});
 
 app.get('/api/bank-summary', (req, res) => {
   if (req.query.password !== ROOM_PASSWORD) return res.status(403).json({ error: 'Incorrect password' });

@@ -4,12 +4,14 @@ const crypto = require('crypto');
 const path = require('path');
 const Eng = require('./coldcall-engine.js');
 const { createStore } = require('./coldcall-store.js');
+const L = require('./coldcall-livecfg.js');   // live config: validate / smoke / swap / persist, and the per-round snapshot (config + an engine built from it)
 
 const BET_LEVELS = Eng.BET_LEVELS;   // cents: 1, 2, 5 (DENOMS), then 10 and up
 const BUYS = Eng.BUYS;   // call, bonus1, bonus2, hunt (prices in Eng.CFG.buyCost, tenths of the bet; whole cents at every bet through Eng.buyPrice)
 const RATE_MS = 150;
 const HISTORY_MAX = 20;
 const RTP_LABEL = '97.93% (long-run, 450M-spin stratified sim, +-0.11)';
+const rtpLabel = () => L.rtp(RTP_LABEL);   // the label that goes with the math in force: the shipped line, the one that came with the overrides, or "custom settings, not measured"
 
 // QA hook: forces a feature so the front end can be driven by a test. It runs ONLY when the server process was started
 // with COLDCALL_TEST=1 (and NODE_ENV is not 'production'); otherwise `force` in a spin payload is ignored. Forced rounds are paid and
@@ -18,7 +20,7 @@ const RTP_LABEL = '97.93% (long-run, 450M-spin stratified sim, +-0.11)';
 //   big = round pays >= 25x; tease = exactly 2 bells, no bonus.
 const FORCES = Eng.FORCES;
 const testHookOn = () => process.env.COLDCALL_TEST === '1' && process.env.NODE_ENV !== 'production';
-const resolveForced = (rng, force) => Eng.resolveRound(rng, null, { force });
+const resolveForced = (K, rng, force) => L.resolveRound(K, rng, null, { force });
 
 function cryptoRng() {
   return () => crypto.randomBytes(6).readUIntBE(0, 6) / 281474976710656; // 48-bit uniform in [0,1)
@@ -29,10 +31,8 @@ const keyOf = (socket) => { const a = socket.data && socket.data.acct; return St
 const nkey = (k) => String(k).toLowerCase().trim();   // same normalisation as wallet.js
 const whoOf = (socket) => { const a = socket.data && socket.data.acct; return String((a && typeof a === 'object' ? (a.display || a.key) : a) || ''); };
 const clone = (o) => JSON.parse(JSON.stringify(o));
-// knob snapshots keep every value as it is: Infinity ("never" / "no cap") must stay Infinity, JSON would turn it into null, which every knob reads as 0 / "always" (W1B N3)
-const snap = (o) => structuredClone(o);
-// knobs outside CFG.pull that a replay reads live: frozen into the record beside CFG.pull, so an edit while a decision is open cannot change the bonus the player was shown (W1B N6)
-const SNAP_KNOBS = ['spins', 'retrigger', 'maxSpins', 'maxRevealRounds', 'maxCascades', 'buyCost'];
+// LIVECFG: a round is played on a SNAPSHOT of the whole live config (L.snapshot(): a structuredClone of Eng.CFG, so Infinity survives, W1B N3, plus an engine built from that copy, so
+// the baked tables and every live-read knob come from it, W1B N6). The live config can be swapped (setLiveConfig) between any two rounds: an open round never notices.
 const CEILING_MS = 180000;           // a decision's timer is armed to max(timeoutMs, this) when the pending result is sent; the first `ready` brings it down to timeoutMs from then (U4)
 const DEFAULT_TIMEOUT_MS = 20000;   // armTimer's fallback when decision.timeoutMs is missing or not a finite positive number (W1B N4)
 // names that would address Object.prototype if they ever became a plain-object key (wallet.js still keys a plain object)
@@ -99,23 +99,24 @@ const dayAfter = (d) => chicagoDay(Date.parse(d + 'T12:00:00Z') + 86400000);
 // How many leads the next daily claim gives. One source of truth: the claim itself. The engine plays a throwaway paid spin on a copy of the state on the
 // day the claim would happen (today if unclaimed, else the next day: the streak continues) and reports what it granted; nothing is stored or charged.
 const PROBE_BET = 10;   // the probe spin only reads the daily grant (the same leads at any bet): a whole-cent bet, so it needs no rounding source
-function dailyNext(st, now, day, P) {
-  const live = Eng.CFG.pull;
+function dailyNext(st, now, day, K) {
   let claimDay;
   try { claimDay = !st.day || day > st.day ? day : dayAfter(st.day); } catch (e) { return null; }   // a day the clock cannot add to: no number, never a throw
-  Eng.CFG.pull = P;                          // synchronous: the probe runs under the knobs the view is for
-  try {
-    const r = Eng.playRound(Eng.rngFrom(1), { buy: null, bet: PROBE_BET, state: { ...clone(st), cb: null }, now, day: claimDay, script: false, auto: true });
+  try {                                       // the probe runs on the config the view is for (K)
+    const r = K.eng.playRound(Eng.rngFrom(1), { buy: null, bet: PROBE_BET, state: { ...clone(st), cb: null }, now, day: claimDay, script: false, auto: true });
     return r.pull && r.pull.daily ? r.pull.daily.leads : null;
-  } catch (e) { return null; } finally { Eng.CFG.pull = live; }
+  } catch (e) { return null; }
 }
 
+// the config a settled round's state view is shown on: the LIVE one (the next spin runs on it), or the round's own snapshot if the live one has no pull block at all
+function viewK(rec) { const K = L.snapshot(); return K.cfg.pull ? K : rec.K; }
+
 // the player's state as the screen shows it (cold clock applied)
-function stateView(state, now, day, cfg) {
-  const P = cfg || pullCfg(), st = Eng.tickState(state, now, P);
+function stateView(state, now, day, K) {
+  K = K || L.snapshot(); const P = K.cfg.pull, st = Eng.tickState(state, now, P);
   return {
     leads: Math.floor(st.lt / 10), lt: st.lt, list: P.list, cb: st.cb, warm: st.warm, warmBet: st.warmBet || 0,
-    cold: Eng.coldInfo(st, now, P), daily: { claimed: st.day === day, streak: st.streak, next: dailyNext(st, now, day, P) },
+    cold: Eng.coldInfo(st, now, P), daily: { claimed: st.day === day, streak: st.streak, next: dailyNext(st, now, day, K) },
   };
 }
 const potView = (mode) => { const p = store.pot(mode, pullCfg().pot.seed); return { bal: p.bal, last: p.last }; };
@@ -145,7 +146,7 @@ function emitAcct(rec, ev, payload, extra) {
 }
 
 // a recording rng over the module rng: replays the tape first, then draws (and records) fresh values.
-// The round runs under the knobs it was spun with (rec.cfg): a knob edit or a pull.on flip while a decision is open cannot change or void it.
+// The round runs on the config it was spun with (rec.K: the whole snapshot and an engine built from it): a swap, a knob edit or a pull.on flip while a decision is open cannot change or void it.
 function runRound(rec, decisions, auto) {
   const base = module.exports.rng || cryptoRng();
   let i = 0;
@@ -155,22 +156,17 @@ function runRound(rec, decisions, auto) {
   const rbase = module.exports.roundRng || cryptoRng();
   let j = 0;
   const rnd = () => { if (j < rec.rtape.length) return rec.rtape[j++]; const v = rbase(); rec.rtape.push(v); j++; return v; };
-  const len = rec.tape.length, rlen = rec.rtape.length, live = Eng.CFG.pull, liveX = {};
-  Eng.CFG.pull = rec.cfg;                    // synchronous: nothing else runs while the snapshot is in place
-  for (const k of SNAP_KNOBS) { liveX[k] = Object.prototype.hasOwnProperty.call(Eng.CFG, k) ? { v: Eng.CFG[k] } : null; if (rec.cfgx && k in rec.cfgx) Eng.CFG[k] = rec.cfgx[k]; }
+  const len = rec.tape.length, rlen = rec.rtape.length;
   try {
-    return Eng.playRound(rng, { buy: rec.buy, bet: rec.bet, state: clone(rec.state), now: rec.now, day: rec.day, script: true, auto: !!auto, rnd, ...(rec.force ? { force: rec.force } : {}) }, decisions);
-  } catch (e) { rec.tape.length = len; rec.rtape.length = rlen; throw e; } finally {
-    Eng.CFG.pull = live;
-    for (const k of SNAP_KNOBS) { if (liveX[k]) Eng.CFG[k] = liveX[k].v; else delete Eng.CFG[k]; }
-  }
+    return rec.K.eng.playRound(rng, { buy: rec.buy, bet: rec.bet, state: clone(rec.state), now: rec.now, day: rec.day, script: true, auto: !!auto, rnd, ...(rec.force ? { force: rec.force } : {}) }, decisions);
+  } catch (e) { rec.tape.length = len; rec.rtape.length = rlen; throw e; }
 }
 
 function pendingView(rec) {
   return {
     roundId: rec.id, status: 'pending', pending: rec.pending, partial: rec.partial, mode: rec.mode, bet: rec.betCents, betCents: rec.betCents,
     cost: rec.cost, costTenths: rec.costTenths, buyBonus: rec.buy, callback: rec.callback, timeoutMs: rec.timeoutMs, expiresAt: rec.expiresAt,
-    pull: { state: stateView(rec.state, rec.now, rec.day, rec.cfg) }, pot: null,
+    pull: { state: stateView(rec.state, rec.now, rec.day, rec.K) }, pot: null,
   };
 }
 
@@ -224,7 +220,7 @@ function settle(rec, r, autoWhy, extraSocket) {
       }
     }
     minWinX = cfg.feed.minWinX; minWinCents = Number.isFinite(cfg.feed.minWinCents) && cfg.feed.minWinCents >= 0 ? cfg.feed.minWinCents : FEED_MIN_CENTS;
-    view = stateView(r.newState, rec.now, rec.day, cfg);
+    view = stateView(r.newState, rec.now, rec.day, viewK(rec));
   } catch (e) { logf('coldcall: settle failed, voiding', rec.id, e && e.message); return voidRound(rec, 'settle_error'); }
 
   rec.settled = true;
@@ -328,8 +324,8 @@ function pullSpin(socket, p, buy, now) {
     betCents: callback ? state.cb.bet : p.bet, callback, state, now, day, t: now, tape: [], rtape: [], decisions: [], force, forced: force,
   };
   try {
-    rec.cfg = snap(pullCfg());             // the knobs this round is played, defaulted and settled under (Infinity preserved)
-    rec.cfgx = {}; for (const k of SNAP_KNOBS) if (Object.prototype.hasOwnProperty.call(Eng.CFG, k)) rec.cfgx[k] = snap(Eng.CFG[k]);
+    rec.K = L.snapshot();                  // the whole config this round is played, defaulted and settled on (Infinity preserved), and an engine built from it
+    rec.cfg = rec.K.cfg.pull;              // its PULL knobs (pot, feed, decision timer: read at settle and by armTimer)
   } catch (e) { return err(socket, 'bad_request', 'Could not place that bet'); }
   const auto = p.auto === true;
   let r, cost;
@@ -367,8 +363,12 @@ module.exports = {
   kind: 'solo',
   betLevels: BET_LEVELS,
   RTP_LABEL,
+  // LIVECFG (PULL-ENGINE.md section 8): the admin block in server.js calls these; the shipped label comes with the code, the live one with the config
+  setLiveConfig: (arg) => { L.setLiveConfig(arg); return L.liveInfo(RTP_LABEL); }, loadLiveConfig: (log) => L.loadLiveConfig(log), liveInfo: () => L.liveInfo(RTP_LABEL),
+  clientCfg: () => L.clientCfg(RTP_LABEL), cfgEvent: () => L.clientCfg(RTP_LABEL),
   init(ctx) {
     this.rng = ctx.rng || cryptoRng();
+    L.loadLiveConfig();                                   // the saved live config (coldcall-config.json), if any; a damaged file is logged once and the defaults stay
     clearTimers(); open.clear(); openByKey.clear(); rateLast.clear(); readyLast.clear();
     if (store) store.close();
     C = ctx; feed = []; feedSeq = 0;
@@ -383,17 +383,18 @@ module.exports = {
     state(socket, payload, ctx) {
       const w = ctx.wallet.get(keyOf(socket));
       const extra = {};
+      const K = L.snapshot();
       if (pullOn() && store) {
         const now = ctx.now(), day = chicagoDay(now), nk = nkey(keyOf(socket));
         const opens = ['play', 'chips'].map((m) => openByKey.get(nk + '|' + m)).filter(Boolean).map(pendingView);
-        extra.pull = { on: true, rules: clone(pullCfg()), list: pullCfg().list, decisionMs: pullCfg().decision.timeoutMs, play: stateView(loadState(nk, 'play'), now, day), chips: stateView(loadState(nk, 'chips'), now, day) };
+        extra.pull = { on: true, rules: clone(pullCfg()), list: pullCfg().list, decisionMs: pullCfg().decision.timeoutMs, play: stateView(loadState(nk, 'play'), now, day, K), chips: stateView(loadState(nk, 'chips'), now, day, K) };
         extra.pot = potsView(); extra.feed = feed.slice(-FEED_STATE); extra.open = opens[0] || null; extra.opens = opens;
       }
       socket.emit('g:coldcall:state', {
         engine: 2, grid: { cols: Eng.COLS, rows: Eng.ROWS },
-        betLevels: BET_LEVELS, modes: ['play', 'chips'], rtp: RTP_LABEL, maxWinX: Eng.MAX_WIN_X,
+        betLevels: BET_LEVELS, modes: ['play', 'chips'], rtp: rtpLabel(), maxWinX: Eng.CFG.maxWinTenths / 10,
         buyCostX: Object.fromEntries(BUYS.map((b) => [b, Eng.CFG.buyCost[b] / 10])),
-        buyPriceCents: Object.fromEntries(BET_LEVELS.map((bet) => [bet, Object.fromEntries(BUYS.map((b) => [b, Eng.buyPrice(Eng.CFG.buyCost[b], bet)]))])),
+        buyPriceCents: L.buyPrices(), cfg: L.publicCfg(),     // LIVECFG: the live pay table, weights and prices (PULL-UI.md 0c); pull.rules above carries the PULL knobs
         wallet: w, balances: w, bets: BET_LEVELS,
         ...(testHookOn() ? { qaHook: true } : {}),
         ...extra,
@@ -470,9 +471,10 @@ module.exports = {
       const rng = module.exports.rng || cryptoRng();
       const roundId = crypto.randomBytes(6).toString('hex');
       const force = testHookOn() && buy === null && FORCES.includes(p.force) ? p.force : null;
-      const r = force ? resolveForced(rng, force) : Eng.resolveRound(rng, buy);   // pure; nothing touched yet
+      const K = L.snapshot();                     // the live config, whole (a stateless round; nothing is open)
+      const r = force ? resolveForced(K, rng, force) : L.resolveRound(K, rng, buy);   // pure; nothing touched yet
       let cost, totalWin, pay;
-      try { pay = Eng.payRound(r.round, p.bet, module.exports.roundRng || cryptoRng(), Eng.CFG.maxWinTenths); cost = pay.price; totalWin = pay.win; } catch (e) { return err(socket, 'bad_request', 'Could not place that bet'); }
+      try { pay = Eng.payRound(r.round, p.bet, module.exports.roundRng || cryptoRng(), K.cfg.maxWinTenths); cost = pay.price; totalWin = pay.win; } catch (e) { return err(socket, 'bad_request', 'Could not place that bet'); }
       const ref = { game: 'coldcall', round: roundId };
       let w;
       try { ctx.wallet.spend(key, p.mode, cost, ref); } catch (e) { return walletErr(socket, e); }
