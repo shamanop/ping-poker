@@ -211,7 +211,7 @@ function settle(rec, r, autoWhy, extraSocket) {
       if (!isInt(slice.slice) || !isInt(slice.rem)) throw new Error('bad pot slice');
       const u = (module.exports.potRng || cryptoRng())(), bal = pot.bal + slice.slice;
       if (u < Eng.potHitChance(cfg, cost) && bal >= cfg.pot.minBal && bal > 0) {
-        prize = Math.min(bal, cfg.pot.maxPayX * betCents);
+        prize = Eng.potPrize(cfg, bal);
         if (!isInt(prize) || prize < 0) throw new Error('bad pot prize');
         wonAt = C.now();
       }

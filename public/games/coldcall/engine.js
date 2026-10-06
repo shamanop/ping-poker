@@ -83,7 +83,7 @@
       pick: { on: true, minLeads: 2, mult: { bronze: 0.3, silver: 2, gold: 3, upsell: 1, close: 1 } },   // PICK YOUR LEAD: tier weights of the picked square x mult
       more: { on: true, mult: 2, rtp: 1.0, minTenths: 50 },   // ONE MORE CALL: a fair coin, wins with probability rtp / mult = 1/2, pays bonus x mult, else 0; offered from a 5x bonus up
       daily: { base: 0.2, perStreak: 0.05, streakMax: 4, stakeCap: 10 },   // free leads on the first paid spin of a day: 0.2 to 0.4 of a lead, worked at 10 cents: a ritual, not money (critic N2: 8 to 24 leads paid a once-a-day $1 player about $5 a day; this pays about a cent), LEVERS.md 8.8
-      pot: { feedBps: 100, oneInPerDollar: 3000, seed: 0, minBal: 1000, maxPayX: 50 },   // server only (cents, basis points); seed stays 0 (W9); maxPayX / oneInPerDollar = 1.67%: the most a pot chaser can add (W8)
+      pot: { feedBps: 100, oneInPerDollar: 3000, seed: 0, minBal: 1000, capCents: 5000 },   // server only (cents, basis points); seed stays 0 (W9); capCents = the most one hit pays, in money, the same for every bet: capCents / 100 / oneInPerDollar = 1.67% is the most a pot chaser can add at ANY bet (W8, 8.11); keep capCents >= feedBps x oneInPerDollar / 100 (3000), or the pot cannot pay out what it is fed
       feed: { minWinX: 100 },                       // server only
       decision: { timeoutMs: 20000 },               // server only
     },
@@ -172,6 +172,11 @@
   // chance that one paid spin takes the pot: one in `oneInPerDollar` per dollar of cost
   // oneInPerDollar <= 0 (or not a number) switches the pot off: chance 0, never 1
   function potHitChance(pullCfg, costCents) { const o = (pullCfg || CFG.pull).pot.oneInPerDollar; return o > 0 && Number.isFinite(o) ? Math.min(1, (costCents / 100) / o) : 0; }
+  // prize of one pot hit (levers 8.11, FIX POT-CAP): the whole balance up to capCents, the same cap for every bet. The old cap, maxPayX x bet, paid a 10c bettor at most $5 of a pot that
+  // was fed 1% of every bet (the rest piled up) and let a $25 bettor take $1,250 (a chaser's pot EV per dollar is min(pot, cap) / 100 / oneInPerDollar, so it grew with the bet).
+  // A knob that is not a whole number of cents >= 0 (NaN, text, negative, Infinity, missing) falls back to POT_CAP_DEFAULT: never NaN, never above the balance, never a throw.
+  const POT_CAP_DEFAULT = 5000;
+  function potPrize(pullCfg, bal) { const c = (pullCfg || CFG.pull).pot.capCents; return Math.min(bal, typeof c === 'number' && Number.isFinite(c) && c >= 0 ? Math.floor(c) : POT_CAP_DEFAULT); }
 
   function createEngine(cfgIn) {
     const cfg = cfgIn || CFG;
@@ -592,5 +597,5 @@
   // THE PULL round: (rng, { buy, bet, state, now, day, script, auto, decide }, decisions) -> { status: 'done' | 'pending', ... }
   const playRound = (rng, input, decisions) => engine.playRound(rng, input, decisions);
 
-  return { createEngine, engine, resolveRound, rngFrom, playRound, newState, tickState, coldInfo, potSlice, potHitChance, cbBet, cbArm, cbLevel: cbBet, winTier, cents, TIERS, CFG, SYM, MODES, BUYS, FORCES, TIER_NAMES, BET_LEVELS, COLS, ROWS, N, NREG, WILD, BELL, PHONE, MIN_CLUSTER, MAX_WIN_X, MAX_WIN_T };
+  return { createEngine, engine, resolveRound, rngFrom, playRound, newState, tickState, coldInfo, potSlice, potHitChance, potPrize, cbBet, cbArm, cbLevel: cbBet, winTier, cents, TIERS, CFG, SYM, MODES, BUYS, FORCES, TIER_NAMES, BET_LEVELS, COLS, ROWS, N, NREG, WILD, BELL, PHONE, MIN_CLUSTER, MAX_WIN_X, MAX_WIN_T };
 });

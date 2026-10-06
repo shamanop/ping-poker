@@ -372,13 +372,13 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
     }
   });
 
-  await test('pot: seed (tracked house money), minBal, maxPayX cap, no slice and no roll on a Callback, hit chance follows the cost', async () => {
+  await test('pot: seed (tracked house money), minBal, capCents cap (the same for every bet), no slice and no roll on a Callback, hit chance follows the cost', async () => {
     let s = setup({ rng: E.rngFrom(62), potRng: () => 0 }); let a = s.sock('ann');
-    E.CFG.pull.pot.seed = 700; E.CFG.pull.pot.maxPayX = 3;
+    E.CFG.pull.pot.seed = 700; E.CFG.pull.pot.capCents = 300;   // re-pinned (POT-CAP): the cap used to be maxPayX x bet = 3 x 100; it is now money, 300 cents, whatever the bet
     // the pot is created lazily with its seed
     s.potOf('play'); let p = s.potOf('play'); assert.strictEqual(p.bal, 700); assert.strictEqual(p.seeded, 700); potOk(p);
     const r = spin(s, a, { bet: 100, mode: 'play', auto: true });
-    assert.ok(r.pot, 'forced hit on a pot above minBal'); assert.strictEqual(r.pot.amount, 300, 'prize = min(bal, maxPayX x bet) = 3 x 100');
+    assert.ok(r.pot, 'forced hit on a pot above minBal'); assert.strictEqual(r.pot.amount, 300, 'prize = min(bal, capCents) = 300');
     p = s.potOf('play'); potOk(p); assert.strictEqual(p.paid, 300); assert.strictEqual(p.bal, 700 - 300 + 700 + 0, 'the seed is put back after a hit') ;
     assert.strictEqual(p.seeded, 1400);
     // minBal
@@ -394,6 +394,28 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
     assert.strictEqual(rc.totalWin, rc.totalWinTenths * 100 / 10, 'a Callback pays at cb.bet'); assert.strictEqual(rc.pull.state.cb, null, 'Callback consumed');
     // the next paid spin feeds again
     const rn = spin(s, a, { bet: 100, mode: 'play', auto: true }); assert.ok(rn.cost === 100); assert.ok(pot.fed * 10000 + pot.rem === 100 * E.CFG.pull.pot.feedBps + 9000 * 10000);
+  });
+
+  await test('FIX POT-CAP: a hit pays min(balance, capCents) at every bet (a 10c hit on a $40 pot pays the cap, not 50 x 10c), never above the balance, damaged knob -> default cap; invariant holds over 4k scripted spins at mixed bets (the 200k run is in the engine test)', async () => {
+    const hit = (bet, bal, cap, mode = 'play') => {
+      const s = setup({ rng: E.rngFrom(91), potRng: () => 0 }); const a = s.sock('ann'); rich(s, 'ann', mode); E.CFG.pull.pot.minBal = 100; if (cap !== 'keep') E.CFG.pull.pot.capCents = cap;
+      const pot = s.potOf(mode); pot.bal = bal; pot.fed = bal; pot.rem = 0; s.store().potChanged();
+      const r = spin(s, a, { bet, mode, auto: true }); potOk(pot); return { r, pot };
+    };
+    for (const bet of [10, 100, 2500]) { const { r, pot } = hit(bet, 4000, 3000); assert.ok(r.pot, 'hit at ' + bet); assert.strictEqual(r.pot.amount, 3000, 'bet ' + bet + ': prize = capCents, not a multiple of the bet'); assert.strictEqual(pot.paid, 3000); }
+    { const { r, pot } = hit(10, 4000, 5000, 'chips'); assert.strictEqual(r.pot.amount, 4000, 'below the cap the whole balance is paid (chips pot too)'); assert.ok(pot.bal < 5, 'the pot is empty but for a fresh slice'); }
+    { const { r, pot } = hit(100, 700, 5000); assert.strictEqual(r.pot.amount, 700, 'never more than the balance'); assert.ok(pot.bal >= 0 && pot.bal < 5); }
+    for (const bad of [NaN, undefined, -1, 'x', Infinity]) { const { r, pot } = hit(10, 1e7, bad); assert.ok(r.pot && !r.error, 'damaged knob ' + String(bad) + ' still settles'); assert.strictEqual(r.pot.amount, E.potPrize({ pot: {} }, 1e9), 'damaged ' + String(bad) + ' pays the default cap'); assert.ok(pot.bal >= 0); }
+    // 4k scripted spins at mixed bets through the server (each is a wallet + store round trip, 200k take minutes; the 200k loop is in coldcall-pull-engine.js): the hit roll is scripted (a hit about every 30 spins), the pot pays by the cap, fed + seeded = paid + bal at every step that matters and at the end
+    const rolls = E.rngFrom(93); let s = setup({ rng: E.rngFrom(92), potRng: () => (rolls() < 1 / 30 ? 0 : 1) }); const a = s.sock('ann'); rich(s, 'ann'); E.CFG.pull.pot.seed = 0; E.CFG.pull.pot.minBal = 1000; E.CFG.pull.pot.capCents = 3000; E.CFG.pull.pot.feedBps = 10000;   // feed 100%: the pot fills fast so the cap binds
+    const bets = [10, 20, 50, 100, 200, 500, 1000, 2500], pot = s.potOf('play'); let hits = 0, big = 0, paid0 = 0;
+    for (let i = 0; i < 4000; i++) {
+      const r = spin(s, a, { bet: bets[i % 8], mode: 'play', auto: true }); if (r.error) throw new Error('spin ' + i + ' ' + JSON.stringify(r.error));
+      while (r.status === 'pending') throw new Error('auto spin left a decision');
+      if (r.pot) { hits++; assert.ok(r.pot.amount <= 3000, 'prize ' + r.pot.amount); if (r.pot.amount === 3000) big++; paid0 += r.pot.amount; }
+      if (i % 500 === 0) potOk(pot);
+    }
+    potOk(pot); assert.strictEqual(pot.paid, paid0, 'the pot file paid what the results said'); assert.ok(hits > 60 && big > 20, 'hits ' + hits + ' capped ' + big);
   });
 
   await test('pot: the hit roll uses its own rng with chance = (cost / 100) / oneInPerDollar (a roll just below hits, just above misses)', async () => {
@@ -849,7 +871,7 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
     assert.deepStrictEqual(st.pull.rules, JSON.parse(JSON.stringify(E.CFG.pull)));
     assert.strictEqual(JSON.stringify(st.pull.rules), JSON.stringify(JSON.parse(JSON.stringify(st.pull.rules))), 'plain JSON: nothing is lost on a round trip (no functions, no undefined)');
     assert.notStrictEqual(st.pull.rules, E.CFG.pull); assert.notStrictEqual(st.pull.rules.daily, E.CFG.pull.daily);
-    st.pull.rules.daily.base = 999; st.pull.rules.pot.maxPayX = 1; assert.strictEqual(E.CFG.pull.daily.base, 3, 'a copy');
+    st.pull.rules.daily.base = 999; st.pull.rules.pot.capCents = 1; assert.strictEqual(E.CFG.pull.daily.base, 3, 'a copy');
     E.CFG.pull.daily.base = 11; E.CFG.pull.decision.timeoutMs = 7777; E.CFG.pull.pick.mult.gold = 9;
     a.send('g:coldcall:state'); st = last(a, 'g:coldcall:state');
     assert.strictEqual(st.pull.rules.daily.base, 11); assert.strictEqual(st.pull.rules.decision.timeoutMs, 7777); assert.strictEqual(st.pull.rules.pick.mult.gold, 9);

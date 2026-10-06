@@ -8,6 +8,9 @@
 //   nice -n 10 node games/coldcall-sim.js --pull [sessions=20000] [spinsPerSession=2000] [seed=1] [--pickpolicy first|best|none] [--more bank|take] [--bet 100] [--nowarmdiff] [--fresh] [--bet-switch]
 //        THE PULL (cold-call/PULL-ENGINE.md section 5): sequential sessions with state (no idle time): RTP by part per paid spin (money in real cents), spins per Callback, warm, ghost, value per lead, pot.
 //        The state is CARRIED across the sessions of a batch (a returning player); --fresh = every session starts empty (old behaviour). --bet-switch = the F1 attacker: 10c spins, $25 on the spin after >= 3 warm squares exist. --bet-mix lo,hi[,T] = the critic's N1 attacker: bet hi (cents) while the state's lead-weighted average is under T, else lo (T defaults to the first half step over the middle, 15.5 for 10,20).
+//   nice -n 10 node games/coldcall-sim.js --pot-room [ticks=1000000] [seed=1] --feeders 10:40,20:40 [--chase 2500,T[,perTick]] [--batches 20]
+//        POT ONLY (levers 8.11): the office pot of a room, no game. Each tick every feeder (bet:count, cents) spins once; the chaser (bet cents, threshold T cents, spins per tick, default 1) spins only while the pot holds at least T.
+//        Same pot rule and rng as --pull (potSlice, potHitChance, potPrize; separate stream per batch), so a flat one-bettor room reproduces the pot part of a --pull run bit for bit. Per bet class: stake, paid, pot % of stake, average and largest prize in bets; cents left; fed + seeded = paid + left to the cent.
 //   nice -n 10 node games/coldcall-sim.js --bonus [runs=2000000] [seed=1] [--bet 100]     per bonus kind x pick policy x (bank|take): average value, P(cap), tails
 //   add --cfg '{"extra":{"base":{"phone":0.6}}}' (or --cfg @file.json) to override levers (objects merge, arrays and numbers replace); --json for one JSON line; --out file.json also writes the JSON.
 // Seeds are stratified: the run is cut into 1M-spin chunks, each chunk has its own seed (splitmix of base seed + chunk index) and its
@@ -31,6 +34,30 @@ if (!isMainThread) {
   const { cfg, mode, chunks, size, baseSeed, bonusRuns, only } = workerData;
   const eng = Eng.createEngine(cfg);
   const capT = cfg.maxWinTenths;
+  if (mode === 'room') {
+    const R = workerData.room, Pc = cfg.pull, out = [];
+    for (const k of chunks) {
+      const rng = Eng.rngFrom((seedOf(baseSeed, k) ^ 0xA5A5A5A5) >>> 0);
+      const pot = { bal: Pc.pot.seed, rem: 0, fed: 0, seeded: Pc.pot.seed, paid: 0, hits: 0 };
+      const cls = R.classes.map((c) => ({ bet: c.bet, n: c.n, chase: !!c.chase, stake: 0, paid: 0, exp: 0, hits: 0, spins: 0, sumX: 0, maxX: 0 }));
+      const spin = (c) => {
+        const sl = Eng.potSlice(Pc.pot.feedBps, c.bet, pot.rem); pot.rem = sl.rem; pot.bal += sl.slice; pot.fed += sl.slice; c.stake += c.bet; c.spins++;
+        const hc = Eng.potHitChance(Pc, c.bet), live = pot.bal >= Pc.pot.minBal && pot.bal > 0;
+        if (live) c.exp += hc * Eng.potPrize(Pc, pot.bal);          // expected prize of this spin given the pot now: the same mean as the rolled prizes without the roll's noise
+        if (rng() < hc && live) {
+          const prize = Eng.potPrize(Pc, pot.bal); pot.paid += prize; pot.bal -= prize; pot.hits++; c.paid += prize; c.hits++; c.sumX += prize / c.bet; if (prize / c.bet > c.maxX) c.maxX = prize / c.bet;
+          if (Pc.pot.seed > 0) { pot.bal += Pc.pot.seed; pot.seeded += Pc.pot.seed; }
+        }
+      };
+      let potSum = 0, potMax = 0;
+      for (let t = 0; t < R.ticks; t++) {
+        for (const c of cls) { if (c.chase) { for (let j = 0; j < R.perTick; j++) { if (pot.bal < R.threshold) break; spin(c); } } else for (let j = 0; j < c.n; j++) spin(c); }
+        potSum += pot.bal; if (pot.bal > potMax) potMax = pot.bal;
+      }
+      out.push({ k, pot: { ...pot, left: pot.bal, avgBal: potSum / R.ticks, maxBal: potMax }, cls });
+    }
+    return parentPort.postMessage(out);
+  }
   if (mode === 'pull' || mode === 'bonus') {
     const nb4 = (p, set) => { const r = (p / 6) | 0, c = p % 6; let n = 0; if (r > 0 && set.has(p - 6)) n++; if (c > 0 && set.has(p - 1)) n++; if (c < 5 && set.has(p + 1)) n++; if (r < 4 && set.has(p + 6)) n++; return n; };
     // 'best' pick: the hot square with the most hot neighbours (an upsell on it reaches the most leads); ties go to reading order
@@ -89,7 +116,7 @@ if (!isMainThread) {
           // the pot rule of games/coldcall.js settle(): bal kept above the cap, seed added after a hit, hit needs bal >= minBal and bal > 0
           const sl = Eng.potSlice(Pc.pot.feedBps, cur, pot.rem); pot.rem = sl.rem; pot.bal += sl.slice; pot.fed += sl.slice;
           if (potRng() < Eng.potHitChance(Pc, cur) && pot.bal >= Pc.pot.minBal && pot.bal > 0) {
-            const prize = Math.min(pot.bal, Pc.pot.maxPayX * cur); pot.paid += prize; pot.bal -= prize; pot.hits++; pot.balAtHit += pot.bal + prize;
+            const prize = Eng.potPrize(Pc, pot.bal); pot.paid += prize; pot.bal -= prize; pot.hits++; pot.balAtHit += pot.bal + prize;
             if (Pc.pot.seed > 0) { pot.bal += Pc.pot.seed; pot.seeded += Pc.pot.seed; }
           }
         }
@@ -172,6 +199,34 @@ if (!isMainThread) {
   const cfg = merged(Eng.CFG, JSON.parse(cfgText));
   const threads = Math.min(MAX_THREADS, Math.max(1, +thrArg || MAX_THREADS));
 
+  if (bool('--pot-room')) {
+    const feedersArg = flag('--feeders'), chaseArg = flag('--chase'), batchesArg = flag('--batches'), f = (x, d = 2) => (x === null || x === undefined ? 'n/a' : x.toFixed(d)), t0 = Date.now();
+    const ticks = nums[0] || 1000000, seedR = nums[1] || 1, nB = Math.max(1, +batchesArg || 20);
+    const classes = String(feedersArg && feedersArg !== true ? feedersArg : '10:1').split(',').map((x) => { const [b, n] = x.split(':').map(Number); return { bet: b, n: n || 1 }; });
+    let threshold = 0, perTick = 1;
+    if (chaseArg && chaseArg !== true) { const m = String(chaseArg).split(',').map(Number); threshold = m[1] || 0; perTick = m[2] || 1; classes.push({ bet: m[0], n: 1, chase: true }); }
+    if (classes.some((c) => !(c.bet > 0) || !Number.isInteger(c.bet) || !(c.n >= 1))) { console.error('--feeders bet:count,... and --chase bet,threshold[,perTick] in whole cents'); process.exit(1); }
+    const per = Array.from({ length: threads }, () => []); for (let k = 0; k < nB; k++) per[k % threads].push(k);
+    Promise.all(per.filter((c) => c.length).map((chunks) => new Promise((res, rej) => { const w = new Worker(__filename, { workerData: { cfg, chunks, mode: 'room', size: 0, baseSeed: seedR, room: { ticks, classes, threshold, perTick } } }); w.once('message', res); w.once('error', rej); }))).then((parts) => {
+      const bs = parts.flat().sort((a, b) => a.k - b.k), n = bs.length, seedC = cfg.pull.pot.seed;
+      const o = { mode: 'pot-room', ticks, seed: seedR, batches: n, feeders: classes.filter((c) => !c.chase), chase: threshold || classes.some((c) => c.chase) ? { bet: (classes.find((c) => c.chase) || {}).bet, threshold, perTick } : null, rule: { ...cfg.pull.pot }, secs: (Date.now() - t0) / 1000, classes: [] };
+      const conserved = bs.every((b) => b.pot.fed + b.pot.seeded === b.pot.paid + b.pot.left);
+      classes.forEach((c, i) => {
+        const g = (key) => bs.reduce((a, b) => a + b.cls[i][key], 0), stake = g('stake'), paid = g('paid'), R = stake ? paid / stake : 0;
+        const dev = bs.reduce((a, b) => a + Math.pow(b.cls[i].paid - R * b.cls[i].stake, 2), 0), se = stake && n > 1 ? Math.sqrt(dev * n / (n - 1)) / stake : 0;
+        const expC = g('exp'), devE = bs.reduce((a, b) => a + Math.pow(b.cls[i].exp - (stake ? expC / stake : 0) * b.cls[i].stake, 2), 0), seE = stake && n > 1 ? Math.sqrt(devE * n / (n - 1)) / stake : 0;
+        const hits = g('hits'), sumX = g('sumX');
+        o.classes.push({ role: c.chase ? 'chaser' : 'feeder', bet: c.bet, players: c.chase ? 1 : c.n, spins: g('spins'), stakeCents: stake, paidCents: paid, potPct: R * 100, potCi: 196 * se, expPct: stake ? expC / stake * 100 : 0, expCi: 196 * seE, hits, avgPrizeBets: hits ? sumX / hits : null, maxPrizeBets: bs.reduce((a, b) => Math.max(a, b.cls[i].maxX), 0) });
+      });
+      o.pot = { fedCents: bs.reduce((a, b) => a + b.pot.fed, 0), seededCents: bs.reduce((a, b) => a + b.pot.seeded, 0), paidCents: bs.reduce((a, b) => a + b.pot.paid, 0), leftCents: bs.reduce((a, b) => a + b.pot.left, 0), hits: bs.reduce((a, b) => a + b.pot.hits, 0), avgBalCents: bs.reduce((a, b) => a + b.pot.avgBal, 0) / n, maxBalCents: bs.reduce((a, b) => Math.max(a, b.pot.maxBal), 0), conserved };
+      if (outFile) fs.writeFileSync(outFile, JSON.stringify(o));
+      if (asJson) return console.log(JSON.stringify(o));
+      console.log(`COLD CALL --pot-room: ${n} rooms x ${ticks} ticks, feeders ${classes.filter((c) => !c.chase).map((c) => c.n + ' x ' + c.bet + 'c').join(', ')}, ${o.chase ? 'chaser ' + o.chase.bet + 'c while pot >= ' + o.chase.threshold + 'c (' + o.chase.perTick + ' a tick)' : 'no chaser'}, rule ${JSON.stringify(o.rule)}, seed ${seedR}, ${f(o.secs, 1)}s`);
+      for (const c of o.classes) console.log(`  ${c.role.padEnd(7)} ${String(c.bet).padStart(5)}c  spins ${c.spins}  stake ${(c.stakeCents / 100).toFixed(0)}  pot part ${f(c.potPct, 3)}% +- ${f(c.potCi, 3)} (expected-prize estimate ${f(c.expPct, 3)}% +- ${f(c.expCi, 3)})  hits ${c.hits}  prize avg ${f(c.avgPrizeBets, 1)} bets, largest ${f(c.maxPrizeBets, 1)} bets`);
+      console.log(`  pot             fed ${o.pot.fedCents} seed ${o.pot.seededCents} paid ${o.pot.paidCents} left ${o.pot.leftCents} (cents, all rooms); average balance ${f(o.pot.avgBalCents / 100)}  largest ${f(o.pot.maxBalCents / 100)}; fed + seeded = paid + left: ${conserved ? 'YES, to the cent' : 'NO'}`);
+    }).catch((e) => { console.error(e); process.exit(1); });
+    return;
+  }
   if (pullMode || bonusMode) {
     const bet = +betArg || 100, f = (x, d = 2) => (x === null || x === undefined ? 'n/a' : x.toFixed(d)), t0 = Date.now();
     const pickpolicy = pickArg && pickArg !== true ? pickArg : 'first', more = moreArg && moreArg !== true ? moreArg : 'bank';

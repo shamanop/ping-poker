@@ -51,7 +51,7 @@ const NODAY = { day: null };
     assert.deepStrictEqual(P.more, { on: true, mult: 2, rtp: 0.98, minTenths: 20 });
     assert.deepStrictEqual(P.pick.mult, { bronze: 0, silver: 2, gold: 3, upsell: 2, close: 2 });
     assert.deepStrictEqual(PIN.knobNames, ['callback', 'carryOver', 'cold', 'daily', 'decision', 'feed', 'fill', 'ghost', 'list', 'more', 'on', 'pick', 'pot', 'warm'], 'the real CFG.pull has exactly the contract knob names');
-    for (const f of ['newState', 'tickState', 'coldInfo', 'playRound', 'potSlice', 'potHitChance', 'rngFrom', 'cbBet']) assert.strictEqual(typeof E[f], 'function', f);
+    for (const f of ['newState', 'tickState', 'coldInfo', 'playRound', 'potSlice', 'potHitChance', 'potPrize', 'rngFrom', 'cbBet']) assert.strictEqual(typeof E[f], 'function', f);
     assert.ok(fs.readFileSync(path.join(__dirname, '..', 'games', 'coldcall-engine.js')).equals(fs.readFileSync(path.join(__dirname, '..', 'public', 'games', 'coldcall', 'engine.js'))), 'public copy must be byte-identical');
   });
 
@@ -106,6 +106,33 @@ const NODAY = { day: null };
     assert.strictEqual(sum * 10000 + rem, fed * 50, 'slices plus the carried remainder equal the exact feed');
     assert.deepStrictEqual(E.potSlice(50, 100, 0), { slice: 0, rem: 5000 }); assert.deepStrictEqual(E.potSlice(50, 100, 5000), { slice: 1, rem: 0 });
     assert.strictEqual(E.potHitChance(E.CFG.pull, 100), 1 / 20000); assert.strictEqual(E.potHitChance(E.CFG.pull, 2500), 25 / 20000);
+  });
+
+  await test('FIX POT-CAP potPrize: a hit pays the balance up to capCents, the same for every bet; never above the balance, always whole non-negative cents; a damaged knob falls back to the default cap', () => {
+    const cfg = (capCents) => ({ pot: { capCents } });
+    for (const bal of [0, 1, 999, 4000, 5000, 5001, 123456]) assert.strictEqual(E.potPrize(cfg(5000), bal), Math.min(bal, 5000), 'bal ' + bal);
+    assert.strictEqual(E.potPrize(cfg(3000), 4000), 3000, 'a 10c hit on a $40 pot pays the cap, not 50 x 10c and not the pot'); assert.strictEqual(E.potPrize(cfg(3000), 2500), 2500);
+    assert.strictEqual(E.potPrize(cfg(300), 4000), 300); assert.strictEqual(E.potPrize(cfg(0), 4000), 0, 'a cap of 0 pays nothing (no prize, nothing lost)');
+    assert.strictEqual(E.potPrize(cfg(2999.9), 4000), 2999, 'whole cents (floored)');
+    assert.strictEqual(E.potPrize.length, 2, 'the cap does not look at the bet: (pullCfg, bal)');
+    assert.strictEqual(E.CFG.pull.pot.capCents, PIN.PINNED.pot.capCents, 'pinned for the mechanism tests');
+    const live = PIN.real.pot; assert.ok(Number.isInteger(live.capCents) && live.capCents >= 3000, 'the live knob exists and is a whole number of cents, at least feed x oneInPerDollar'); assert.strictEqual(E.potPrize({ pot: live }, 1e9), live.capCents); assert.ok(!('maxPayX' in live), 'the proportional cap is gone');
+    const def = E.potPrize({ pot: {} }, 1e9); assert.ok(Number.isInteger(def) && def > 0 && def <= 100000, 'the fallback is the default cap: ' + def);
+    for (const bad of [NaN, undefined, null, 'x', '5000', -1, -5000, Infinity, -Infinity, {}, []]) for (const bal of [0, 700, 1e9]) { const v = E.potPrize(cfg(bad), bal); assert.ok(Number.isInteger(v) && v >= 0 && v <= bal, String(bad) + ' ' + bal + ' -> ' + v); assert.strictEqual(v, Math.min(bal, def), 'damaged ' + String(bad)); }
+    // the pot rule over 200k scripted spins at mixed bets, the hit roll scripted (a hit about every 60 spins): fed + seeded = paid + left to the cent, no prize above the cap, none above the balance
+    for (const seed of [0, 700]) {
+      const c = { pot: { feedBps: 10000, oneInPerDollar: 3000, seed, minBal: 1000, capCents: 3000 } }, rng = E.rngFrom(77 + seed);
+      let rem = 0, bal = seed, fed = 0, paid = 0, seeded = seed, hits = 0, maxPrize = 0;
+      for (let i = 0; i < 200000; i++) {
+        const cost = [10, 20, 50, 100, 200, 500, 1000, 2500][(rng() * 8) | 0], sl = E.potSlice(c.pot.feedBps, cost, rem); rem = sl.rem; bal += sl.slice; fed += sl.slice;
+        if (rng() < Math.min(1, E.potHitChance(c, cost) * 1000) && bal >= c.pot.minBal && bal > 0) {   // x1000: the roll is scripted to hit about every 60 spins (feed 100%: the pot fills fast) so the cap and the balance both bind
+          const prize = E.potPrize(c, bal); assert.ok(Number.isInteger(prize) && prize >= 0 && prize <= bal && prize <= 3000, 'prize ' + prize + ' bal ' + bal);
+          paid += prize; bal -= prize; hits++; maxPrize = Math.max(maxPrize, prize); if (seed > 0) { bal += seed; seeded += seed; }
+        }
+        assert.ok(bal >= 0);
+      }
+      assert.strictEqual(fed + seeded, paid + bal, 'conservation, seed ' + seed); assert.ok(hits > 1000 && maxPrize === 3000, 'hits ' + hits + ' max ' + maxPrize);
+    }
   });
 
   // ---------------------------------------------------------------- lead list
