@@ -8,7 +8,7 @@
 const fs = require('fs'), path = require('path');
 const { startServer, Bot, waitFor, sleep, drive, P, rigDeck, suite, expect } = require('./lib');
 const T = suite(__filename);
-const SHAPES = path.join(__dirname, 'shapes', '9440541.json');
+const SHAPES = process.env.V2_SHAPES || path.join(__dirname, 'shapes', '9440541.json');
 const ALLOW = path.join(__dirname, 'shapes', 'allowlist.json');
 const SKIP = new Set(['__audit', '__rig_ok', 'connect', 'disconnect', 'connect_error']);
 // map-like objects whose keys are data (names, ids), collapsed to one '*' child

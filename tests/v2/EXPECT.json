@@ -1,0 +1,697 @@
+{
+ "01/hu-button-posts-small-blind": {
+  "baseline": "fail",
+  "bugs": [
+   "H4"
+  ]
+ },
+ "01/hu-button-acts-first-preflop": {
+  "baseline": "fail",
+  "bugs": [
+   "H4"
+  ]
+ },
+ "01/hu-button-acts-last-postflop": {
+  "baseline": "pass",
+  "bugs": [
+   "H4"
+  ]
+ },
+ "02/minraise-is-previous-raise-size": {
+  "baseline": "fail",
+  "bugs": [
+   "H2"
+  ]
+ },
+ "02/raise-below-minimum-rejected-not-rewritten": {
+  "baseline": "fail",
+  "bugs": [
+   "L5"
+  ]
+ },
+ "02/raise-above-stack-rejected-not-allin": {
+  "baseline": "fail",
+  "bugs": [
+   "L5"
+  ]
+ },
+ "02/short-allin-raise-is-legal": {
+  "baseline": "pass",
+  "bugs": [
+   "M8"
+  ]
+ },
+ "02/short-allin-does-not-reopen-betting": {
+  "baseline": "fail",
+  "bugs": [
+   "H3"
+  ]
+ },
+ "03/eval-wheel-loses-to-6-high-straight": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "03/eval-wheel-is-a-straight-beats-trips": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "03/eval-steel-wheel-is-a-straight-flush": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "03/eval-flush-beats-straight": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "03/eval-two-pair-on-board-ace-kicker-beats-queen": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "03/eval-board-plays-tie": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "03/eval-three-pairs-best-two-plus-kicker": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "03/eval-full-house-higher-trips-first": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "03/eval-quads-kicker": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "03/eval-flush-compares-five-cards": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "03/eval-ace-high-straight-beats-king-high": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "04/sidepots-four-stacks-all-in": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "04/odd-chip-of-a-split-pot-goes-to-first-winner-left-of-button": {
+  "baseline": "fail",
+  "bugs": [
+   "L1"
+  ]
+ },
+ "05/hand-runs-out-when-all-dealt-players-are-all-in-from-the-blinds": {
+  "baseline": "fail",
+  "bugs": [
+   "M1"
+  ]
+ },
+ "05/short-blind-all-in-unmatched-part-of-the-other-blind-comes-back": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "06/allin-player-who-drops-still-wins-with-the-best-hand": {
+  "baseline": "fail",
+  "bugs": [
+   "H1"
+  ]
+ },
+ "06/seat-that-drops-mid-hand-stays-in-the-hand-with-its-chips": {
+  "baseline": "fail",
+  "bugs": [
+   "H1"
+  ]
+ },
+ "07/restart-midhand-sigterm-legacy-table-money-unchanged": {
+  "baseline": "fail",
+  "bugs": [
+   "C3"
+  ]
+ },
+ "07/restart-midhand-sigkill-legacy-table-money-unchanged": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "07/restart-midhand-sigterm-chips-table-money-unchanged": {
+  "baseline": "fail",
+  "bugs": [
+   "C3"
+  ]
+ },
+ "07/restart-midhand-sigkill-chips-table-money-unchanged": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "07/restart-midhand-sigterm-play-table-money-unchanged": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "07/restart-midhand-sigkill-play-table-money-unchanged": {
+  "baseline": "fail",
+  "bugs": [
+   "C4"
+  ]
+ },
+ "08/unauthenticated-join-game-as-the-admin-name-does-not-seat": {
+  "baseline": "pass",
+  "bugs": [
+   "C1"
+  ]
+ },
+ "08/unauthenticated-bank-set-does-not-edit-the-bank": {
+  "baseline": "pass",
+  "bugs": [
+   "C1"
+  ]
+ },
+ "08/unauthenticated-join-game-with-a-seated-name-cannot-take-the-seat": {
+  "baseline": "pass",
+  "bugs": [
+   "C1"
+  ]
+ },
+ "08/unauthenticated-check-balance-and-create-demo-mint-nothing": {
+  "baseline": "pass",
+  "bugs": [
+   "C5"
+  ]
+ },
+ "08/v2-legacy-event-join_game-is-ignored-and-changes-nothing": {
+  "baseline": "fail",
+  "bugs": [
+   "C1",
+   "C5"
+  ]
+ },
+ "08/v2-legacy-event-create_demo-is-ignored-and-changes-nothing": {
+  "baseline": "fail",
+  "bugs": [
+   "C5"
+  ]
+ },
+ "08/v2-legacy-event-check_balance-is-ignored-and-changes-nothing": {
+  "baseline": "pass",
+  "bugs": [
+   "C5"
+  ]
+ },
+ "08/v2-legacy-event-start_game-is-ignored-and-changes-nothing": {
+  "baseline": "fail",
+  "bugs": [
+   "M5"
+  ]
+ },
+ "08/v2-legacy-event-set_pause-is-ignored-and-changes-nothing": {
+  "baseline": "fail",
+  "bugs": [
+   "C1"
+  ]
+ },
+ "08/v2-legacy-event-reset_table-is-ignored-and-changes-nothing": {
+  "baseline": "fail",
+  "bugs": [
+   "H8"
+  ]
+ },
+ "08/v2-legacy-event-bank_set-is-ignored-and-changes-nothing": {
+  "baseline": "fail",
+  "bugs": [
+   "H5"
+  ]
+ },
+ "09/create-demo-unauthenticated-makes-no-room-and-no-money": {
+  "baseline": "pass",
+  "bugs": [
+   "C5"
+  ]
+ },
+ "09/create-demo-admin-makes-no-room-and-no-money": {
+  "baseline": "fail",
+  "bugs": [
+   "C5"
+  ]
+ },
+ "10/fuzz-server-survives-random-play": {
+  "baseline": "pass",
+  "bugs": [
+   "C2"
+  ]
+ },
+ "10/fuzz-money-conserved-at-every-audit": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "10/fuzz-no-table-stalls": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "10/fuzz-everyone-standing-up-returns-all-money-to-banks": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "11/pokerping-headsup-allin-winner-keeps-the-stack-at-the-table": {
+  "baseline": "fail",
+  "bugs": [
+   "M4"
+  ]
+ },
+ "11/pokerping-busted-player-gets-bust-out-and-can-rebuy-the-advertised-minimum": {
+  "baseline": "fail",
+  "bugs": [
+   "M4"
+  ]
+ },
+ "11/queued-checkfold-does-not-fire-while-the-table-is-paused": {
+  "baseline": "fail",
+  "bugs": [
+   "M3"
+  ]
+ },
+ "11/action-timer-checks-a-player-who-can-check-for-free": {
+  "baseline": "fail",
+  "bugs": [
+   "M2"
+  ]
+ },
+ "11/button-moves-to-the-next-seat-when-the-dealer-leaves-between-hands": {
+  "baseline": "fail",
+  "bugs": [
+   "L2"
+  ]
+ },
+ "12/button-seat-removed-then-new-player-sits-server-survives-and-deals": {
+  "baseline": "pass",
+  "bugs": [
+   "C2"
+  ]
+ },
+ "13/table-create-rejects-big-blind-above-the-max-buy-in": {
+  "baseline": "fail",
+  "bugs": [
+   "M7"
+  ]
+ },
+ "13/table-create-rejects-min-buy-in-below-the-big-blind": {
+  "baseline": "fail",
+  "bugs": [
+   "M7"
+  ]
+ },
+ "13/table-create-rejects-or-keeps-an-unsupported-seat-count": {
+  "baseline": "fail",
+  "bugs": [
+   "M7"
+  ]
+ },
+ "13/blinds-change-mid-hand-applies-from-the-next-hand": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "13/end-night-mid-hand-waits-for-the-hand-then-settles-and-conserves-money": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "13/one-seat-per-account-across-tables": {
+  "baseline": "fail",
+  "bugs": [
+   "H6"
+  ]
+ },
+ "13/disconnect-leaves-no-connected-ghost-seat": {
+  "baseline": "fail",
+  "bugs": [
+   "H6"
+  ]
+ },
+ "13/admin-saving-the-shown-total-changes-nothing": {
+  "baseline": "fail",
+  "bugs": [
+   "H5"
+  ]
+ },
+ "14/pokerping-blinds-never-drop-below-25-50-when-a-blind-interval-is-requested": {
+  "baseline": "fail",
+  "bugs": [
+   "M5"
+  ]
+ },
+ "15/play-topup-counts-money-parked-at-a-table": {
+  "baseline": "fail",
+  "bugs": [
+   "H7"
+  ]
+ },
+ "15/rebuy-limit-is-not-bypassed-by-leave-and-sit": {
+  "baseline": "fail",
+  "bugs": [
+   "M10"
+  ]
+ },
+ "17/night-results-survive-sigkill-restart-chips": {
+  "baseline": "fail",
+  "bugs": [
+   "M6"
+  ]
+ },
+ "17/night-results-survive-sigterm-restart-chips": {
+  "baseline": "pass",
+  "bugs": [
+   "M6"
+  ]
+ },
+ "17/night-results-survive-sigterm-restart-play": {
+  "baseline": "fail",
+  "bugs": [
+   "M6"
+  ]
+ },
+ "17/night-results-survive-sigkill-restart-play": {
+  "baseline": "fail",
+  "bugs": [
+   "M6"
+  ]
+ },
+ "20/S1-three-way-split-odd-chip-goes-left-of-button": {
+  "baseline": "fail",
+  "bugs": [
+   "L1"
+  ]
+ },
+ "20/S2-four-way-split-odd-chip-goes-left-of-button": {
+  "baseline": "fail",
+  "bugs": [
+   "L1"
+  ]
+ },
+ "20/S3-folded-big-contributor-and-uncalled-bet": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "20/S4-uncalled-bet-returned-to-the-loser-heads-up": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "20/S6-foldwin-totals": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "20/S6b-river-bet-folded": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "20/S9-side-pot-tie": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "20/S10-side-pot-tie-odd-chip-goes-left-of-button": {
+  "baseline": "fail",
+  "bugs": [
+   "L1"
+  ]
+ },
+ "20/S5a-allin-disconnect-short-stack-has-best-hand": {
+  "baseline": "fail",
+  "bugs": [
+   "H1"
+  ]
+ },
+ "20/S5b-allin-disconnect-covering-stack-has-best-hand": {
+  "baseline": "fail",
+  "bugs": [
+   "H1"
+  ]
+ },
+ "20/S8a-kick-midhand-keeps-the-bet-in-the-pot": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "20/S8b-standup-of-biggest-contributor-gets-uncalled-layer-back": {
+  "baseline": "fail",
+  "bugs": [
+   "N1"
+  ]
+ },
+ "20/S8c-kick-of-biggest-contributor-gets-uncalled-layer-back": {
+  "baseline": "fail",
+  "bugs": [
+   "N1"
+  ]
+ },
+ "20/S4-showdown-winners-exclude-the-uncalled-return": {
+  "baseline": "fail",
+  "bugs": [
+   "L3"
+  ]
+ },
+ "22/show-cards-at-a-created-table-with-room-id": {
+  "baseline": "pass",
+  "bugs": [
+   "M9"
+  ]
+ },
+ "22/show-cards-at-a-created-table-without-room-id": {
+  "baseline": "pass",
+  "bugs": [
+   "M9"
+  ]
+ },
+ "23/sigkill-100ms-after-showdown-keeps-the-hand-result": {
+  "baseline": "fail",
+  "bugs": [
+   "N3"
+  ]
+ },
+ "23/sigkill-300ms-after-showdown-keeps-the-hand-result": {
+  "baseline": "fail",
+  "bugs": [
+   "N3"
+  ]
+ },
+ "23/sigkill-700ms-after-showdown-keeps-the-hand-result": {
+  "baseline": "fail",
+  "bugs": [
+   "N3"
+  ]
+ },
+ "23/sigkill-2500ms-after-showdown-keeps-the-hand-result": {
+  "baseline": "pass",
+  "bugs": [
+   "N3"
+  ]
+ },
+ "24/kick-midhand-the-kicked-best-hand-does-not-take-the-pot": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "24/kick-midhand-uncalled-part-of-the-kicked-bet-goes-back-to-him": {
+  "baseline": "fail",
+  "bugs": [
+   "N1"
+  ]
+ },
+ "25/play-night-keeps-its-hand-after-sigterm-restart": {
+  "baseline": "fail",
+  "bugs": [
+   "M6"
+  ]
+ },
+ "25/play-night-keeps-its-hand-after-sigkill-restart": {
+  "baseline": "fail",
+  "bugs": [
+   "M6"
+  ]
+ },
+ "26/showdown-result-lists-only-pot-winners-not-uncalled-returns": {
+  "baseline": "fail",
+  "bugs": [
+   "L3"
+  ]
+ },
+ "26/foldwin-listed-amount-excludes-the-winners-own-uncalled-raise": {
+  "baseline": "fail",
+  "bugs": [
+   "HL"
+  ]
+ },
+ "26/showdown-result-has-net-for-every-dealt-player-summing-to-zero-allin": {
+  "baseline": "fail",
+  "bugs": [
+   "HL"
+  ]
+ },
+ "26/showdown-result-has-net-for-every-dealt-player-summing-to-zero-foldwin": {
+  "baseline": "fail",
+  "bugs": [
+   "HL"
+  ]
+ },
+ "30/shapes-session-ran-to-the-end": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "30/shape-social:feed": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "30/shape-social:biggest": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "30/shape-auth_ok": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "30/shape-money": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "30/shape-account:stats": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "30/shape-achv:state": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "30/shape-social:event": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "30/shape-admin_overview": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "30/shape-bank_summary": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "30/shape-admin_result": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "30/shape-account_changed": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "30/shape-lobby_tables": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "30/shape-table_info": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "30/shape-tables_mine": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "30/shape-wallet": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "30/shape-bonus:status": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "30/shape-leaderboard_data": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "30/shape-profile": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "30/shape-table_created": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "30/shape-achv:unlocked": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "30/shape-table_joined": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "30/shape-room_update": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "30/shape-game_state": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "30/shape-your_cards": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "30/shape-table_event": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "30/shape-showdown_result": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "30/shape-chat_message": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "30/shape-emote": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "30/shape-sticker_dropped": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "30/shape-cards_shown": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "30/shape-item_thrown": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "30/shape-settle_up": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "30/shape-table_left": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "30/shape-bonus:claimed": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "30/shape-error": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "30/shape-g:bender:state": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "30/shape-g:bender:result": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "30/shape-self_changed": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "30/shape-auth_out": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "30/shape-bust_out": {
+  "baseline": "pass",
+  "bugs": []
+ },
+ "30/shape-balance_update": {
+  "baseline": "pass",
+  "bugs": []
+ }
+}

@@ -1,0 +1,1402 @@
+{
+ "label": "baseline",
+ "target": "/home/frank/.openclaw/workspace/projects/ping-v2-core/baseline-9440541",
+ "commit": "9440541",
+ "date": "2026-10-06T08:02:45.232Z",
+ "seconds": 147,
+ "total": 139,
+ "pass": 84,
+ "fail": 55,
+ "checks": [
+  {
+   "test": "01",
+   "check": "hu-button-posts-small-blind",
+   "bugs": [
+    "H4"
+   ],
+   "status": "FAIL",
+   "detail": "button posts BIG blind in hands 1,2,3: {\"hand\":1,\"dealer\":\"Alice\",\"sb\":\"Bobby\",\"bb\":\"Alice\",\"firstPre\":\"Bobby\",\"firstFlop\":\"Bobby\"}",
+   "error": false,
+   "ms": 2014
+  },
+  {
+   "test": "01",
+   "check": "hu-button-acts-first-preflop",
+   "bugs": [
+    "H4"
+   ],
+   "status": "FAIL",
+   "detail": "first to act preflop is not the button: {\"hand\":1,\"dealer\":\"Alice\",\"sb\":\"Bobby\",\"bb\":\"Alice\",\"firstPre\":\"Bobby\",\"firstFlop\":\"Bobby\"}",
+   "error": false,
+   "ms": 1
+  },
+  {
+   "test": "01",
+   "check": "hu-button-acts-last-postflop",
+   "bugs": [
+    "H4"
+   ],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 0
+  },
+  {
+   "test": "02",
+   "check": "minraise-is-previous-raise-size",
+   "bugs": [
+    "H2"
+   ],
+   "status": "FAIL",
+   "detail": "raise to 350 over a raise to 300 (min is 550) left currentBet at 350",
+   "error": false,
+   "ms": 1155
+  },
+  {
+   "test": "02",
+   "check": "raise-below-minimum-rejected-not-rewritten",
+   "bugs": [
+    "L5"
+   ],
+   "status": "FAIL",
+   "detail": "raise to 60 (min 100) changed state: {\"cb\":50,\"idx\":0,\"pot\":75,\"street\":\"preflop\",\"hand\":1} -> {\"cb\":100,\"idx\":1,\"pot\":175,\"street\":\"preflop\",\"hand\":1} (server rewrote the amount)",
+   "error": false,
+   "ms": 1037
+  },
+  {
+   "test": "02",
+   "check": "raise-above-stack-rejected-not-allin",
+   "bugs": [
+    "L5"
+   ],
+   "status": "FAIL",
+   "detail": "raise to 90000 with 5000 stacks changed state: {\"cb\":50,\"idx\":0,\"pot\":75,\"street\":\"preflop\",\"hand\":1} -> {\"cb\":5000,\"idx\":1,\"pot\":5075,\"street\":\"preflop\",\"hand\":1} (server turned it into an all-in)",
+   "error": false,
+   "ms": 1079
+  },
+  {
+   "test": "02",
+   "check": "short-allin-raise-is-legal",
+   "bugs": [
+    "M8"
+   ],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 1230
+  },
+  {
+   "test": "02",
+   "check": "short-allin-does-not-reopen-betting",
+   "bugs": [
+    "H3"
+   ],
+   "status": "FAIL",
+   "detail": "short all-in reopened betting: currentBet 400 -> 1500 after Dan re-raised to 1500",
+   "error": false,
+   "ms": 1
+  },
+  {
+   "test": "03",
+   "check": "eval-wheel-loses-to-6-high-straight",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 580
+  },
+  {
+   "test": "03",
+   "check": "eval-wheel-is-a-straight-beats-trips",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 496
+  },
+  {
+   "test": "03",
+   "check": "eval-steel-wheel-is-a-straight-flush",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 460
+  },
+  {
+   "test": "03",
+   "check": "eval-flush-beats-straight",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 532
+  },
+  {
+   "test": "03",
+   "check": "eval-two-pair-on-board-ace-kicker-beats-queen",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 472
+  },
+  {
+   "test": "03",
+   "check": "eval-board-plays-tie",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 510
+  },
+  {
+   "test": "03",
+   "check": "eval-three-pairs-best-two-plus-kicker",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 553
+  },
+  {
+   "test": "03",
+   "check": "eval-full-house-higher-trips-first",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 487
+  },
+  {
+   "test": "03",
+   "check": "eval-quads-kicker",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 539
+  },
+  {
+   "test": "03",
+   "check": "eval-flush-compares-five-cards",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 449
+  },
+  {
+   "test": "03",
+   "check": "eval-ace-high-straight-beats-king-high",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 431
+  },
+  {
+   "test": "04",
+   "check": "sidepots-four-stacks-all-in",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 5152
+  },
+  {
+   "test": "04",
+   "check": "odd-chip-of-a-split-pot-goes-to-first-winner-left-of-button",
+   "bugs": [
+    "L1"
+   ],
+   "status": "FAIL",
+   "detail": "Kim got 1013 want 1012; Max got 1012 want 1013 (button Kim)",
+   "error": false,
+   "ms": 541
+  },
+  {
+   "test": "05",
+   "check": "hand-runs-out-when-all-dealt-players-are-all-in-from-the-blinds",
+   "bugs": [
+    "M1"
+   ],
+   "status": "FAIL",
+   "detail": "hand 2 (20 vs 20 at 25/50, both all-in from the blinds) never finished: status playing, street preflop",
+   "error": false,
+   "ms": 16663
+  },
+  {
+   "test": "05",
+   "check": "short-blind-all-in-unmatched-part-of-the-other-blind-comes-back",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 9922
+  },
+  {
+   "test": "06",
+   "check": "allin-player-who-drops-still-wins-with-the-best-hand",
+   "bugs": [
+    "H1"
+   ],
+   "status": "FAIL",
+   "detail": "winners Quin 2000 Everyone folded; the disconnected AA seat must win the 2000 pot against 7-2",
+   "error": false,
+   "ms": 629
+  },
+  {
+   "test": "06",
+   "check": "seat-that-drops-mid-hand-stays-in-the-hand-with-its-chips",
+   "bugs": [
+    "H1"
+   ],
+   "status": "FAIL",
+   "detail": "the drop folded the seat out of the hand (game_state {\"folded\":true,\"connected\":false}); only the action timer may fold it, on its turn",
+   "error": false,
+   "ms": 975
+  },
+  {
+   "test": "07",
+   "check": "restart-midhand-sigterm-legacy-table-money-unchanged",
+   "bugs": [
+    "C3"
+   ],
+   "status": "FAIL",
+   "detail": "total money changed by 1000 across the restart (hand voided); per player {\"rex\":500,\"sue\":500}",
+   "error": false,
+   "ms": 4137
+  },
+  {
+   "test": "07",
+   "check": "restart-midhand-sigkill-legacy-table-money-unchanged",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 4071
+  },
+  {
+   "test": "07",
+   "check": "restart-midhand-sigterm-chips-table-money-unchanged",
+   "bugs": [
+    "C3"
+   ],
+   "status": "FAIL",
+   "detail": "total money changed by 1000 across the restart (hand voided); per player {\"rex\":500,\"sue\":500}",
+   "error": false,
+   "ms": 3904
+  },
+  {
+   "test": "07",
+   "check": "restart-midhand-sigkill-chips-table-money-unchanged",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 4027
+  },
+  {
+   "test": "07",
+   "check": "restart-midhand-sigterm-play-table-money-unchanged",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 3840
+  },
+  {
+   "test": "07",
+   "check": "restart-midhand-sigkill-play-table-money-unchanged",
+   "bugs": [
+    "C4"
+   ],
+   "status": "FAIL",
+   "detail": "total money changed by -4000 across the restart (hand voided); per player {\"rex\":-2000,\"sue\":-2000}",
+   "error": false,
+   "ms": 3888
+  },
+  {
+   "test": "08",
+   "check": "unauthenticated-join-game-as-the-admin-name-does-not-seat",
+   "bugs": [
+    "C1"
+   ],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 1716
+  },
+  {
+   "test": "08",
+   "check": "unauthenticated-bank-set-does-not-edit-the-bank",
+   "bugs": [
+    "C1"
+   ],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 327
+  },
+  {
+   "test": "08",
+   "check": "unauthenticated-join-game-with-a-seated-name-cannot-take-the-seat",
+   "bugs": [
+    "C1"
+   ],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 1722
+  },
+  {
+   "test": "08",
+   "check": "unauthenticated-check-balance-and-create-demo-mint-nothing",
+   "bugs": [
+    "C5"
+   ],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 533
+  },
+  {
+   "test": "08",
+   "check": "v2-legacy-event-join_game-is-ignored-and-changes-nothing",
+   "bugs": [
+    "C1",
+    "C5"
+   ],
+   "status": "FAIL",
+   "detail": "join_game changed state: bank.evan 10000->8000; bank.evan 10000->8000; room POKERPING changed ([[\"Alice\",2000,0,true],[\"Evan\",2000,0,true]])",
+   "error": false,
+   "ms": 1603
+  },
+  {
+   "test": "08",
+   "check": "v2-legacy-event-create_demo-is-ignored-and-changes-nothing",
+   "bugs": [
+    "C5"
+   ],
+   "status": "FAIL",
+   "detail": "create_demo changed state: bank.chris 10000->8000; bank.chris 10000->8000; rooms 1->2; room BKTLTY changed ([[\"Chris\",2000,0,true],[\"Apollo\",1990,10,true],[\"Blaze\",1980,20,true],[\"Nova\",2000,0,true]])",
+   "error": false,
+   "ms": 1498
+  },
+  {
+   "test": "08",
+   "check": "v2-legacy-event-check_balance-is-ignored-and-changes-nothing",
+   "bugs": [
+    "C5"
+   ],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 1447
+  },
+  {
+   "test": "08",
+   "check": "v2-legacy-event-start_game-is-ignored-and-changes-nothing",
+   "bugs": [
+    "M5"
+   ],
+   "status": "FAIL",
+   "detail": "start_game changed state: room POKERPING changed ([[\"Alice\",1950,50,true],[\"Olga\",1975,25,true]])",
+   "error": false,
+   "ms": 1526
+  },
+  {
+   "test": "08",
+   "check": "v2-legacy-event-set_pause-is-ignored-and-changes-nothing",
+   "bugs": [
+    "C1"
+   ],
+   "status": "FAIL",
+   "detail": "set_pause paused the table",
+   "error": false,
+   "ms": 2137
+  },
+  {
+   "test": "08",
+   "check": "v2-legacy-event-reset_table-is-ignored-and-changes-nothing",
+   "bugs": [
+    "H8"
+   ],
+   "status": "FAIL",
+   "detail": "reset_table changed state: bank.alice 8000->0; bank.alice 8000->0; room POKERPING changed ([[\"Alice\",12345,0,true]])",
+   "error": false,
+   "ms": 2216
+  },
+  {
+   "test": "08",
+   "check": "v2-legacy-event-bank_set-is-ignored-and-changes-nothing",
+   "bugs": [
+    "H5"
+   ],
+   "status": "FAIL",
+   "detail": "bank_set changed state: bank.evan 10000->99999999; bank.evan 10000->99999999",
+   "error": false,
+   "ms": 2017
+  },
+  {
+   "test": "09",
+   "check": "create-demo-unauthenticated-makes-no-room-and-no-money",
+   "bugs": [
+    "C5"
+   ],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 951
+  },
+  {
+   "test": "09",
+   "check": "create-demo-admin-makes-no-room-and-no-money",
+   "bugs": [
+    "C5"
+   ],
+   "status": "FAIL",
+   "detail": "3 of 3 create_demo calls seated the caller at a demo table",
+   "error": false,
+   "ms": 930
+  },
+  {
+   "test": "10",
+   "check": "fuzz-server-survives-random-play",
+   "bugs": [
+    "C2"
+   ],
+   "status": "PASS",
+   "detail": "79 hands, 446 audits, 91s",
+   "error": false,
+   "ms": 0
+  },
+  {
+   "test": "10",
+   "check": "fuzz-money-conserved-at-every-audit",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 0
+  },
+  {
+   "test": "10",
+   "check": "fuzz-no-table-stalls",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 0
+  },
+  {
+   "test": "10",
+   "check": "fuzz-everyone-standing-up-returns-all-money-to-banks",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 0
+  },
+  {
+   "test": "11",
+   "check": "pokerping-headsup-allin-winner-keeps-the-stack-at-the-table",
+   "bugs": [
+    "M4"
+   ],
+   "status": "FAIL",
+   "detail": "winner stack at the table 0 (bank 12000, was 10000); the whole stack was cashed out instead of staying seated",
+   "error": false,
+   "ms": 6430
+  },
+  {
+   "test": "11",
+   "check": "pokerping-busted-player-gets-bust-out-and-can-rebuy-the-advertised-minimum",
+   "bugs": [
+    "M4"
+   ],
+   "status": "FAIL",
+   "detail": "the busted player never got a bust_out (no rebuy prompt)",
+   "error": false,
+   "ms": 0
+  },
+  {
+   "test": "11",
+   "check": "queued-checkfold-does-not-fire-while-the-table-is-paused",
+   "bugs": [
+    "M3"
+   ],
+   "status": "FAIL",
+   "detail": "the queued check/fold acted while the table was paused",
+   "error": false,
+   "ms": 1378
+  },
+  {
+   "test": "11",
+   "check": "action-timer-checks-a-player-who-can-check-for-free",
+   "bugs": [
+    "M2"
+   ],
+   "status": "FAIL",
+   "detail": "the action timer folded the big blind who could check for free",
+   "error": false,
+   "ms": 15499
+  },
+  {
+   "test": "11",
+   "check": "button-moves-to-the-next-seat-when-the-dealer-leaves-between-hands",
+   "bugs": [
+    "L2"
+   ],
+   "status": "FAIL",
+   "detail": "after Cy (button) left, the button went to Ed, expected Di (next seat)",
+   "error": false,
+   "ms": 2597
+  },
+  {
+   "test": "12",
+   "check": "button-seat-removed-then-new-player-sits-server-survives-and-deals",
+   "bugs": [
+    "C2"
+   ],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 2097
+  },
+  {
+   "test": "13",
+   "check": "table-create-rejects-big-blind-above-the-max-buy-in",
+   "bugs": [
+    "M7"
+   ],
+   "status": "FAIL",
+   "detail": "accepted: every stack would be less than one big blind",
+   "error": false,
+   "ms": 7
+  },
+  {
+   "test": "13",
+   "check": "table-create-rejects-min-buy-in-below-the-big-blind",
+   "bugs": [
+    "M7"
+   ],
+   "status": "FAIL",
+   "detail": "accepted a 1 chip minimum buy-in with a 50 big blind",
+   "error": false,
+   "ms": 4
+  },
+  {
+   "test": "13",
+   "check": "table-create-rejects-or-keeps-an-unsupported-seat-count",
+   "bugs": [
+    "M7"
+   ],
+   "status": "FAIL",
+   "detail": "silently stored seats=8 for a request of 9",
+   "error": false,
+   "ms": 2
+  },
+  {
+   "test": "13",
+   "check": "blinds-change-mid-hand-applies-from-the-next-hand",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 401
+  },
+  {
+   "test": "13",
+   "check": "end-night-mid-hand-waits-for-the-hand-then-settles-and-conserves-money",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 1806
+  },
+  {
+   "test": "13",
+   "check": "one-seat-per-account-across-tables",
+   "bugs": [
+    "H6"
+   ],
+   "status": "FAIL",
+   "detail": "the same account sat at a second table",
+   "error": false,
+   "ms": 14
+  },
+  {
+   "test": "13",
+   "check": "disconnect-leaves-no-connected-ghost-seat",
+   "bugs": [
+    "H6"
+   ],
+   "status": "FAIL",
+   "detail": "1 seat(s) of the disconnected account still marked connected",
+   "error": false,
+   "ms": 503
+  },
+  {
+   "test": "13",
+   "check": "admin-saving-the-shown-total-changes-nothing",
+   "bugs": [
+    "H5"
+   ],
+   "status": "FAIL",
+   "detail": "the total Raj is shown with went 10025 -> 13025 after saving the same value",
+   "error": false,
+   "ms": 372
+  },
+  {
+   "test": "14",
+   "check": "pokerping-blinds-never-drop-below-25-50-when-a-blind-interval-is-requested",
+   "bugs": [
+    "M5"
+   ],
+   "status": "FAIL",
+   "detail": "blinds dropped: blinds_up 15/30, table showed 15/30",
+   "error": false,
+   "ms": 68405
+  },
+  {
+   "test": "15",
+   "check": "play-topup-counts-money-parked-at-a-table",
+   "bugs": [
+    "H7"
+   ],
+   "status": "FAIL",
+   "detail": "Play $ went 1000000 -> 1995000 (+995000) after sit, top-up (granted) and stand-up",
+   "error": false,
+   "ms": 314
+  },
+  {
+   "test": "15",
+   "check": "rebuy-limit-is-not-bypassed-by-leave-and-sit",
+   "bugs": [
+    "M10"
+   ],
+   "status": "FAIL",
+   "detail": "rebuyLimit 1 but 5 fresh buy-ins were accepted (a buy-in plus one rebuy is the most a night allows)",
+   "error": false,
+   "ms": 114
+  },
+  {
+   "test": "17",
+   "check": "night-results-survive-sigkill-restart-chips",
+   "bugs": [
+    "M6"
+   ],
+   "status": "FAIL",
+   "detail": "nets after the restart {\"Opal\":-2000,\"Penn\":-2000} (want the one folded hand: opposite +-25)",
+   "error": false,
+   "ms": 3693
+  },
+  {
+   "test": "17",
+   "check": "night-results-survive-sigterm-restart-chips",
+   "bugs": [
+    "M6"
+   ],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 3686
+  },
+  {
+   "test": "17",
+   "check": "night-results-survive-sigterm-restart-play",
+   "bugs": [
+    "M6"
+   ],
+   "status": "FAIL",
+   "detail": "night is empty after the restart: {}",
+   "error": false,
+   "ms": 3851
+  },
+  {
+   "test": "17",
+   "check": "night-results-survive-sigkill-restart-play",
+   "bugs": [
+    "M6"
+   ],
+   "status": "FAIL",
+   "detail": "night is empty after the restart: {}",
+   "error": false,
+   "ms": 3498
+  },
+  {
+   "test": "20",
+   "check": "S1-three-way-split-odd-chip-goes-left-of-button",
+   "bugs": [
+    "L1"
+   ],
+   "status": "FAIL",
+   "detail": "S1p0 got 1009 want 1008; S1p2 got 1008 want 1009 (start {\"S1p0\":1000,\"S1p1\":1000,\"S1p2\":1000,\"S1p3\":1000}, button S1p0)",
+   "error": false,
+   "ms": 1153
+  },
+  {
+   "test": "20",
+   "check": "S2-four-way-split-odd-chip-goes-left-of-button",
+   "bugs": [
+    "L1"
+   ],
+   "status": "FAIL",
+   "detail": "S2p0 got 1007 want 1006; S2p2 got 1006 want 1007 (start {\"S2p0\":1000,\"S2p1\":1000,\"S2p2\":1000,\"S2p3\":1000,\"S2p4\":1000,\"S2p5\":1000}, button S2p0)",
+   "error": false,
+   "ms": 1026
+  },
+  {
+   "test": "20",
+   "check": "S3-folded-big-contributor-and-uncalled-bet",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 3424
+  },
+  {
+   "test": "20",
+   "check": "S4-uncalled-bet-returned-to-the-loser-heads-up",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 4816
+  },
+  {
+   "test": "20",
+   "check": "S6-foldwin-totals",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 443
+  },
+  {
+   "test": "20",
+   "check": "S6b-river-bet-folded",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 707
+  },
+  {
+   "test": "20",
+   "check": "S9-side-pot-tie",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 4965
+  },
+  {
+   "test": "20",
+   "check": "S10-side-pot-tie-odd-chip-goes-left-of-button",
+   "bugs": [
+    "L1"
+   ],
+   "status": "FAIL",
+   "detail": "S10p0 got 1001 want 1000; S10p2 got 1000 want 1001 (start {\"S10p0\":1000,\"S10p1\":333,\"S10p2\":1000,\"S10p3\":1000}, button S10p0)",
+   "error": false,
+   "ms": 4996
+  },
+  {
+   "test": "20",
+   "check": "S5a-allin-disconnect-short-stack-has-best-hand",
+   "bugs": [
+    "H1"
+   ],
+   "status": "FAIL",
+   "detail": "S5ap0 got 6500 want 5000; S5ap1 got 0 want 1500 (start {\"S5ap0\":3000,\"S5ap1\":500,\"S5ap2\":3000}, button S5ap0)",
+   "error": false,
+   "ms": 4971
+  },
+  {
+   "test": "20",
+   "check": "S5b-allin-disconnect-covering-stack-has-best-hand",
+   "bugs": [
+    "H1"
+   ],
+   "status": "FAIL",
+   "detail": "S5bp0 got 0 want 5500; S5bp1 got 2500 want 0; S5bp2 got 3000 want 0 (start {\"S5bp0\":3000,\"S5bp1\":500,\"S5bp2\":2000}, button S5bp0)",
+   "error": false,
+   "ms": 4879
+  },
+  {
+   "test": "20",
+   "check": "S8a-kick-midhand-keeps-the-bet-in-the-pot",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 842
+  },
+  {
+   "test": "20",
+   "check": "S8b-standup-of-biggest-contributor-gets-uncalled-layer-back",
+   "bugs": [
+    "N1"
+   ],
+   "status": "FAIL",
+   "detail": "S8bp0 got 4600 want 2600; S8bp1 got 0 want 2000 (start {\"S8bp0\":1000,\"S8bp1\":3000,\"S8bp2\":600}, button S8bp0)",
+   "error": false,
+   "ms": 4917
+  },
+  {
+   "test": "20",
+   "check": "S8c-kick-of-biggest-contributor-gets-uncalled-layer-back",
+   "bugs": [
+    "N1"
+   ],
+   "status": "FAIL",
+   "detail": "S8cp0 got 4600 want 2600; S8cp1 got 0 want 2000 (start {\"S8cp0\":1000,\"S8cp1\":3000,\"S8cp2\":600}, button S8cp0)",
+   "error": false,
+   "ms": 4892
+  },
+  {
+   "test": "20",
+   "check": "S4-showdown-winners-exclude-the-uncalled-return",
+   "bugs": [
+    "L3"
+   ],
+   "status": "FAIL",
+   "detail": "showdown_result.winners lists S4p0,S4p1; only the pot winner S4p1 belongs there (the loser only got an uncalled bet back)",
+   "error": false,
+   "ms": 1
+  },
+  {
+   "test": "22",
+   "check": "show-cards-at-a-created-table-with-room-id",
+   "bugs": [
+    "M9"
+   ],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 499
+  },
+  {
+   "test": "22",
+   "check": "show-cards-at-a-created-table-without-room-id",
+   "bugs": [
+    "M9"
+   ],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 575
+  },
+  {
+   "test": "23",
+   "check": "sigkill-100ms-after-showdown-keeps-the-hand-result",
+   "bugs": [
+    "N3"
+   ],
+   "status": "FAIL",
+   "detail": "after the restart winner holds 10000, loser 10000 (want 12000 / 8000)",
+   "error": false,
+   "ms": 6795
+  },
+  {
+   "test": "23",
+   "check": "sigkill-300ms-after-showdown-keeps-the-hand-result",
+   "bugs": [
+    "N3"
+   ],
+   "status": "FAIL",
+   "detail": "after the restart winner holds 10000, loser 10000 (want 12000 / 8000)",
+   "error": false,
+   "ms": 6298
+  },
+  {
+   "test": "23",
+   "check": "sigkill-700ms-after-showdown-keeps-the-hand-result",
+   "bugs": [
+    "N3"
+   ],
+   "status": "FAIL",
+   "detail": "after the restart winner holds 10000, loser 10000 (want 12000 / 8000)",
+   "error": false,
+   "ms": 6518
+  },
+  {
+   "test": "23",
+   "check": "sigkill-2500ms-after-showdown-keeps-the-hand-result",
+   "bugs": [
+    "N3"
+   ],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 8587
+  },
+  {
+   "test": "24",
+   "check": "kick-midhand-the-kicked-best-hand-does-not-take-the-pot",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 1171
+  },
+  {
+   "test": "24",
+   "check": "kick-midhand-uncalled-part-of-the-kicked-bet-goes-back-to-him",
+   "bugs": [
+    "N1"
+   ],
+   "status": "FAIL",
+   "detail": "Kja got 2500 want 2050; Kjb got 1500 want 1950 (the kicked player gets his uncalled 450 back; the host wins the matched 100)",
+   "error": false,
+   "ms": 829
+  },
+  {
+   "test": "25",
+   "check": "play-night-keeps-its-hand-after-sigterm-restart",
+   "bugs": [
+    "M6"
+   ],
+   "status": "FAIL",
+   "detail": "night data empty or missing after the restart: {\"zeroSum\":true,\"nets\":{}}",
+   "error": false,
+   "ms": 8582
+  },
+  {
+   "test": "25",
+   "check": "play-night-keeps-its-hand-after-sigkill-restart",
+   "bugs": [
+    "M6"
+   ],
+   "status": "FAIL",
+   "detail": "night data empty or missing after the restart: {\"zeroSum\":true,\"nets\":{}}",
+   "error": false,
+   "ms": 8232
+  },
+  {
+   "test": "26",
+   "check": "showdown-result-lists-only-pot-winners-not-uncalled-returns",
+   "bugs": [
+    "L3"
+   ],
+   "status": "FAIL",
+   "detail": "winners listed: Hla,Hlb; Hla only got 4000 of his own back",
+   "error": false,
+   "ms": 4997
+  },
+  {
+   "test": "26",
+   "check": "foldwin-listed-amount-excludes-the-winners-own-uncalled-raise",
+   "bugs": [
+    "HL"
+   ],
+   "status": "FAIL",
+   "detail": "winner amount 375, want 125 (the pot he won; his own 250 above the matched part is a return, not a win)",
+   "error": false,
+   "ms": 451
+  },
+  {
+   "test": "26",
+   "check": "showdown-result-has-net-for-every-dealt-player-summing-to-zero-allin",
+   "bugs": [
+    "HL"
+   ],
+   "status": "FAIL",
+   "detail": "showdown_result has no per-player net: keys winners,pot,reveals,nextMs",
+   "error": false,
+   "ms": 1
+  },
+  {
+   "test": "26",
+   "check": "showdown-result-has-net-for-every-dealt-player-summing-to-zero-foldwin",
+   "bugs": [
+    "HL"
+   ],
+   "status": "FAIL",
+   "detail": "showdown_result has no per-player net: keys winners,pot,nextMs",
+   "error": false,
+   "ms": 0
+  },
+  {
+   "test": "30",
+   "check": "shapes-session-ran-to-the-end",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 0
+  },
+  {
+   "test": "30",
+   "check": "shape-social:feed",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 1
+  },
+  {
+   "test": "30",
+   "check": "shape-social:biggest",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 0
+  },
+  {
+   "test": "30",
+   "check": "shape-auth_ok",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 0
+  },
+  {
+   "test": "30",
+   "check": "shape-money",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 0
+  },
+  {
+   "test": "30",
+   "check": "shape-account:stats",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 0
+  },
+  {
+   "test": "30",
+   "check": "shape-achv:state",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 0
+  },
+  {
+   "test": "30",
+   "check": "shape-social:event",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 0
+  },
+  {
+   "test": "30",
+   "check": "shape-admin_overview",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 0
+  },
+  {
+   "test": "30",
+   "check": "shape-bank_summary",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 0
+  },
+  {
+   "test": "30",
+   "check": "shape-admin_result",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 0
+  },
+  {
+   "test": "30",
+   "check": "shape-account_changed",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 0
+  },
+  {
+   "test": "30",
+   "check": "shape-lobby_tables",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 0
+  },
+  {
+   "test": "30",
+   "check": "shape-table_info",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 0
+  },
+  {
+   "test": "30",
+   "check": "shape-tables_mine",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 0
+  },
+  {
+   "test": "30",
+   "check": "shape-wallet",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 0
+  },
+  {
+   "test": "30",
+   "check": "shape-bonus:status",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 0
+  },
+  {
+   "test": "30",
+   "check": "shape-leaderboard_data",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 0
+  },
+  {
+   "test": "30",
+   "check": "shape-profile",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 0
+  },
+  {
+   "test": "30",
+   "check": "shape-table_created",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 3
+  },
+  {
+   "test": "30",
+   "check": "shape-achv:unlocked",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 0
+  },
+  {
+   "test": "30",
+   "check": "shape-table_joined",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 0
+  },
+  {
+   "test": "30",
+   "check": "shape-room_update",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 0
+  },
+  {
+   "test": "30",
+   "check": "shape-game_state",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 0
+  },
+  {
+   "test": "30",
+   "check": "shape-your_cards",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 0
+  },
+  {
+   "test": "30",
+   "check": "shape-table_event",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 0
+  },
+  {
+   "test": "30",
+   "check": "shape-showdown_result",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 0
+  },
+  {
+   "test": "30",
+   "check": "shape-chat_message",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 1
+  },
+  {
+   "test": "30",
+   "check": "shape-emote",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 0
+  },
+  {
+   "test": "30",
+   "check": "shape-sticker_dropped",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 0
+  },
+  {
+   "test": "30",
+   "check": "shape-cards_shown",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 0
+  },
+  {
+   "test": "30",
+   "check": "shape-item_thrown",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 0
+  },
+  {
+   "test": "30",
+   "check": "shape-settle_up",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 0
+  },
+  {
+   "test": "30",
+   "check": "shape-table_left",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 0
+  },
+  {
+   "test": "30",
+   "check": "shape-bonus:claimed",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 0
+  },
+  {
+   "test": "30",
+   "check": "shape-error",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 0
+  },
+  {
+   "test": "30",
+   "check": "shape-g:bender:state",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 0
+  },
+  {
+   "test": "30",
+   "check": "shape-g:bender:result",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 0
+  },
+  {
+   "test": "30",
+   "check": "shape-self_changed",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 0
+  },
+  {
+   "test": "30",
+   "check": "shape-auth_out",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 0
+  },
+  {
+   "test": "30",
+   "check": "shape-bust_out",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 0
+  },
+  {
+   "test": "30",
+   "check": "shape-balance_update",
+   "bugs": [],
+   "status": "PASS",
+   "detail": "",
+   "error": false,
+   "ms": 0
+  }
+ ]
+}
