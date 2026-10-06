@@ -222,8 +222,10 @@ function returnUncalled(hand, events) {
   const second = bets.length > 1 ? bets[1].bet : 0;
   if (bets[0].bet <= second) return;
   const x = hand.seats[bets[0].s];
-  if (x.folded) return; // a seat removed by foldOut keeps its bet in the pot (dead money)
   const back = bets[0].bet - second;
+  // E1: the uncalled layer goes back to the top bettor even if foldOut removed it. Only skip when handing it
+  // back would leave the pot empty (nothing for the live seat to play for).
+  if (totalPot(hand) - back <= 0) return;
   x.bet -= back; x.stack += back; x.returned += back;
   if (x.stack > 0) x.allIn = false;
   events.push({ type: 'returned', seat: bets[0].s, amount: back });
