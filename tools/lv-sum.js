@@ -1,0 +1,11 @@
+// summarise a levers-pull --stream json on stdin (or file arg)
+const fs=require('fs');const j=JSON.parse(fs.readFileSync(process.argv[2]||0,'utf8'));const f=(x,d=2)=>x==null?'n/a':x.toFixed(d);const r=j.rtp,g=j.gaps;
+console.log(`${j.paid/1e6}M paid spins, pick ${j.pick}, more ${j.more}, day ${j.day}, ${f(j.secs,0)}s`);
+console.log(`TOTAL ${f(r.total,2)} +-${f(r.ci,2)} (pot slice NOT in; add feed)  clusters ${f(r.clusters)} basePhone ${f(r.basePhone)} natural ${f(r.natBonus)} Callback ${f(r.callback)} moreNet ${f(r.moreNet)}  bonus share ${f(j.bonusSharePct,1)}%`);
+console.log(`hit ${f(j.hit*100,2)}%  <1x ${f(j.under1*100,2)}%  =1x ${f(j.eq1*100,2)}%  sd ${f(j.sdX,1)}x  cap 1 in ${f(j.capOneIn,0)}`);
+console.log(`natural bonus 1 in ${f(j.natBonus.oneIn,0)} avg ${f(j.natBonus.avgFinalX,1)}x kinds ${j.natBonus.kinds.map(k=>'b'+k.kind+' 1/'+f(k.oneIn,0)+' '+f(k.avgX,0)+'x').join(' ')}  | Callback every ${f(j.callback.spinsPer.mean,0)} (med ${j.callback.spinsPer.median} p90 ${j.callback.spinsPer.p90}) avg ${f(j.callback.avgX,1)}x | any bonus 1 in ${f(j.anyBonusOneIn,0)}`);
+console.log(`nat bonus value bands (<1,<5,<10,<20,<50,<100,<200,<1000,1000+): ${j.natBonus.band.map(x=>f(x*100,1)).join(' ')}  | Callback: ${j.callback.band.map(x=>f(x*100,1)).join(' ')}`);
+console.log(`ladder (paid spin >=): ${j.ladderPaid.map(l=>l.x+'x 1/'+f(l.oneIn,0)).join('  ')}`);
+console.log(`ladder (events incl Callback >=): ${j.ladderEvents.map(l=>l.x+'x 1/'+f(l.oneIn,0)).join('  ')}`);
+console.log(`gaps mean/median/p90/p99/max: `+['dead','bonus','natbonus','win5','win20','tease','phone','any'].map(s=>s+' '+[g[s].mean,g[s].median,g[s].p90,g[s].p99,g[s].max].map((x,i)=>f(x,i?0:1)).join('/')).join('  '));
+console.log(`tease ${f(j.bellsTeasePerSpin*100,2)}% (1 in ${f(1/j.bellsTeasePerSpin,1)})  warm: marked-no-phone ${f(j.warm.markedNoPhonePer100,1)}/100, spins starting warm ${f(j.warm.spinsWithWarmPer100,1)}/100, phone fires on warm ${f(j.warm.phoneOnWarmPer100,2)}/100 avg ${f(j.warm.avgPhonePayOnWarmX,1)}x  ghost ${f(j.ghost.per100,1)}/100 avg ${f(j.ghost.avgX,1)}x >=1x ${f(j.ghost.ge1x*100,0)}%  leads/spin ${f(j.leads.filledPerSpin,3)} daily ${f(j.leads.dailyPerDay,1)}/day  picks ${f(j.decisions.picksPer100,2)}/100 offers ${f(j.decisions.offersPer100,2)}/100`);
