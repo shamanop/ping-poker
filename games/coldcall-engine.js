@@ -533,6 +533,7 @@
           if (Number.isFinite(now)) ns.coldAt = ns.lt <= Math.round(P.cold.floor * 10) && !ns.warm.length ? null : now + P.cold.afterMs;
           pull.leadsAfter = ns.lt;
         }
+        if (dx.i < decs.length) throw badDecision('more decisions than decision points');
         if (S) res.script = { v: 2, buy, callback, bet, costTenths: res.costTenths, winTenths: res.winTenths, tier: res.tier, capped: res.capped, maxWinTenths: capT0,
           parts: { cluster: res.clusterTenths, phone: res.phoneTenths, bonus: finalBonus }, spin: spin ? spin.script : null, bonus: bonus ? bonus.script : null, pull };
         return { status: 'done', round: res, buy, callback, betCents: bet, costTenths: res.costTenths, winTenths: res.winTenths, winX: res.winX, capped: res.capped, tier: res.tier, script: res.script, newState: ns, pull };
@@ -542,12 +543,13 @@
         if (S) {
           if (dx.point.k === 'pick') {      // inside a bonus spin, after the cascades, before the phone feature reveals anything
             const [sc, r, spinNo, mi] = dx.cur;
-            const cur = { ...sc, bells: r.bells, phones: r.phones, cluster: r.cluster, mode: MODES[mi], n: spinNo, pickPending: 1 };
+            const { win, capped, phoneTenths, ...seen } = sc;       // what the player has seen: the board and the cascades, not the phone feature or the spin's total
+            const cur = { ...seen, bells: r.bells, phones: r.phones, cluster: r.cluster, mode: MODES[mi], n: spinNo, pickPending: 1 };
             const kind = MODES[res.bonusKind];
             partial = scriptSoFar({ kind, startSpins: cfg.spins[kind], spins: dx.spins.concat([cur]), partial: true });
           } else partial = scriptSoFar(bonus.script);
         }
-        return { status: 'pending', pending: dx.point, partial, buy, callback, betCents: bet, costTenths: res.costTenths };
+        return { status: 'pending', pending: dx.point, partial, buy, callback, betCents: bet, costTenths: res.costTenths, pull };      // pull: what is known so far (decisions made, daily, warm in, leads before)
       }
     }
 
