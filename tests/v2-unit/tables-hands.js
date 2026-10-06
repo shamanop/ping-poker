@@ -235,6 +235,9 @@ t('grace expiry in a live hand is retried, not applied mid-hand', () => {
 t('every settled hand leaves drift empty and books balanced (mini fuzz, 60 hands)', () => {
   const e = env({ actionTimerSec: 15 }); for (const k of ['ann', 'bob', 'cy']) e.sit(k, 3000); const T = e.table; let seed = 7;
   const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+  // the deck shuffle uses a crypto rng by default: seed it too, otherwise a bad run of hands can bust a player past the 10000 bank and the rebuy throws 'Not enough funds' (flake: 3 of 10 runs)
+  let s2 = 12345; T.rng = () => (s2 = (s2 * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+  {
   for (let i = 0; i < 60; i++) {
     if (T.eligible().length < 2) { for (const s of T.players()) if (s.stack === 0) T.rebuy(s.key, { amount: 3000 }); }
     if (T.phase === 'between') e.clock.advance(7001); else if (T.phase === 'waiting') T.startHand();
@@ -249,6 +252,7 @@ t('every settled hand leaves drift empty and books balanced (mini fuzz, 60 hands
     eq(drift(e), [], 'drift at hand ' + T.handNo); if (T.phase === 'between' || T.phase === 'waiting') books(e);
   }
   ok(T.handNo >= 20, 'played ' + T.handNo);
+  }
 });
 
 console.error = origErr;
