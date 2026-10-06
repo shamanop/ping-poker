@@ -73,8 +73,9 @@ function createRegistry(deps) {
   };
 
   function build(rec) {
-    const t = new Table(rec, {
-      money, clock, out, onError: deps.onError, rng: deps.rng, deckSource: deps.deckSource, constants: deps.constants,
+    let t = null;
+    t = new Table(rec, {
+      money, clock, out, onError: deps.onError ? (e, where) => deps.onError(e, where, t) : null, rng: deps.rng, deckSource: deps.deckSource, constants: deps.constants,
       hooks: { seatOf: key => { const r = seatOf(key); return r && r.tableId !== rec.id ? r : null; }, profileOf },
     });
     t.handNo = Math.max(t.handNo || 0, money.lastHandNo(t.id));      // monotonic across restarts: never reuse hand:<id>:<n>
@@ -104,6 +105,7 @@ function createRegistry(deps) {
     const id = genId(), now = clock.now();
     const rec = { id, hostKey, permanent: false, state: 'open', createdAt: now, nightId: `n_${ymd(now)}_${id}`, nightFromId: ledger.lastId, nightHand0: 0, blindStartAt: 0, ...v.value };
     const t = build(rec);
+    t.emptySince = now;
     save(); pushLobby();
     return t;
   }

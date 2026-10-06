@@ -221,6 +221,7 @@ class Table {
     if (this.liveSeat(seat)) return this.leaveInHand(seat, kind);
     const r = this.money.cashOut(this, key, this.money.seatBalance(this, key), kind);
     this.removeSeat(seat);
+    if (key === this.hostKey && !this.permanent) this.setDeadline('host', 'host', this.K.HOST_GRACE_MS);
     this.out.event(this, 'left', { key, cashedOut: r.noop ? 0 : this.lastCash(r), reason: kind === 'kick' ? 'kicked' : kind }, key);
     this.out.event(this, 'room', {});
     this.checkAutostart(); this.out.state(this);
@@ -270,6 +271,7 @@ class Table {
 
   // Host moves to the first connected seated player (lowest seat). No connected seat: it stays, and the idle sweep decides.
   transferHost() {
+    if (this.permanent) return false;                    // POKERPING keeps its host (old LEGACY behaviour)
     const host = this.seatOfKey(this.hostKey);
     if (host && host.connected) return false;
     const next = this.players().find(s => s.connected && s.key !== this.hostKey);
