@@ -1,0 +1,4359 @@
+{
+ "recordedFrom": "9440541 + rig.patch",
+ "runs": 3,
+ "events": {
+  "social:feed": {
+   "required": true,
+   "shape": {
+    "t": [
+     "object"
+    ],
+    "k": {
+     "list": {
+      "t": [
+       "array"
+      ],
+      "o": 1
+     },
+     "now": {
+      "t": [
+       "number"
+      ]
+     },
+     "event": {
+      "t": [
+       "object"
+      ],
+      "k": {
+       "id": {
+        "t": [
+         "number"
+        ]
+       },
+       "kind": {
+        "t": [
+         "string"
+        ]
+       },
+       "name": {
+        "t": [
+         "string"
+        ]
+       },
+       "ts": {
+        "t": [
+         "number"
+        ]
+       },
+       "level": {
+        "t": [
+         "number"
+        ],
+        "o": 1
+       },
+       "game": {
+        "t": [
+         "string"
+        ],
+        "o": 1
+       },
+       "amountCents": {
+        "t": [
+         "number"
+        ],
+        "o": 1
+       },
+       "tier": {
+        "t": [
+         "string"
+        ],
+        "o": 1
+       },
+       "unit": {
+        "t": [
+         "string"
+        ],
+        "o": 1
+       },
+       "day": {
+        "t": [
+         "number"
+        ],
+        "o": 1
+       },
+       "streak": {
+        "t": [
+         "number"
+        ],
+        "o": 1
+       }
+      },
+      "o": 1
+     }
+    }
+   }
+  },
+  "social:biggest": {
+   "required": true,
+   "shape": {
+    "t": [
+     "object"
+    ],
+    "k": {
+     "win": {
+      "t": [
+       "null"
+      ]
+     },
+     "now": {
+      "t": [
+       "number"
+      ]
+     }
+    }
+   }
+  },
+  "auth_ok": {
+   "required": true,
+   "shape": {
+    "t": [
+     "object"
+    ],
+    "k": {
+     "account": {
+      "t": [
+       "object"
+      ],
+      "k": {
+       "key": {
+        "t": [
+         "string"
+        ]
+       },
+       "display": {
+        "t": [
+         "string"
+        ]
+       },
+       "avatar": {
+        "t": [
+         "string"
+        ]
+       },
+       "pic": {
+        "t": [
+         "null"
+        ]
+       },
+       "isAdmin": {
+        "t": [
+         "boolean"
+        ]
+       },
+       "claimed": {
+        "t": [
+         "boolean"
+        ]
+       },
+       "prefs": {
+        "t": [
+         "object"
+        ],
+        "k": {
+         "currency": {
+          "t": [
+           "string"
+          ]
+         },
+         "sound": {
+          "t": [
+           "boolean"
+          ]
+         }
+        }
+       },
+       "stats": {
+        "t": [
+         "object"
+        ],
+        "k": {
+         "hands": {
+          "t": [
+           "number"
+          ]
+         },
+         "handsWon": {
+          "t": [
+           "number"
+          ]
+         },
+         "netCents": {
+          "t": [
+           "number"
+          ]
+         },
+         "netChips": {
+          "t": [
+           "number"
+          ]
+         },
+         "biggestPot": {
+          "t": [
+           "number"
+          ]
+         },
+         "nights": {
+          "t": [
+           "number"
+          ]
+         },
+         "bestNightCents": {
+          "t": [
+           "number"
+          ]
+         }
+        }
+       }
+      }
+     },
+     "token": {
+      "t": [
+       "string"
+      ]
+     }
+    }
+   }
+  },
+  "money": {
+   "required": true,
+   "shape": {
+    "t": [
+     "object"
+    ],
+    "k": {
+     "bank": {
+      "t": [
+       "null",
+       "number"
+      ]
+     },
+     "atTable": {
+      "t": [
+       "number"
+      ]
+     },
+     "chips": {
+      "t": [
+       "null",
+       "number"
+      ]
+     },
+     "wallet": {
+      "t": [
+       "object"
+      ],
+      "k": {
+       "play": {
+        "t": [
+         "number"
+        ]
+       },
+       "chips": {
+        "t": [
+         "number"
+        ]
+       }
+      }
+     }
+    }
+   }
+  },
+  "account:stats": {
+   "required": true,
+   "shape": {
+    "t": [
+     "object"
+    ],
+    "k": {
+     "hands": {
+      "t": [
+       "number"
+      ]
+     },
+     "handsWon": {
+      "t": [
+       "number"
+      ]
+     },
+     "biggestPotCents": {
+      "t": [
+       "number"
+      ]
+     },
+     "benderSpins": {
+      "t": [
+       "number"
+      ]
+     },
+     "benderBestMult": {
+      "t": [
+       "number"
+      ]
+     },
+     "winStreak": {
+      "t": [
+       "number"
+      ]
+     },
+     "bestStreak": {
+      "t": [
+       "number"
+      ]
+     },
+     "xp": {
+      "t": [
+       "number"
+      ]
+     },
+     "level": {
+      "t": [
+       "number"
+      ]
+     },
+     "xpPct": {
+      "t": [
+       "number"
+      ]
+     },
+     "nextXp": {
+      "t": [
+       "number"
+      ]
+     }
+    }
+   }
+  },
+  "achv:state": {
+   "required": true,
+   "shape": {
+    "t": [
+     "object"
+    ],
+    "k": {
+     "list": {
+      "t": [
+       "array"
+      ],
+      "e": {
+       "t": [
+        "object"
+       ],
+       "k": {
+        "id": {
+         "t": [
+          "string"
+         ]
+        },
+        "name": {
+         "t": [
+          "string"
+         ]
+        },
+        "desc": {
+         "t": [
+          "string"
+         ]
+        },
+        "tier": {
+         "t": [
+          "string"
+         ]
+        },
+        "target": {
+         "t": [
+          "number"
+         ]
+        },
+        "progress": {
+         "t": [
+          "number"
+         ]
+        },
+        "done": {
+         "t": [
+          "boolean"
+         ]
+        },
+        "ts": {
+         "t": [
+          "number"
+         ]
+        },
+        "rewardCents": {
+         "t": [
+          "number"
+         ]
+        },
+        "xp": {
+         "t": [
+          "number"
+         ]
+        },
+        "unit": {
+         "t": [
+          "string"
+         ],
+         "o": 1
+        }
+       }
+      }
+     },
+     "unlocked": {
+      "t": [
+       "number"
+      ]
+     },
+     "total": {
+      "t": [
+       "number"
+      ]
+     },
+     "unseen": {
+      "t": [
+       "number"
+      ]
+     }
+    }
+   }
+  },
+  "social:event": {
+   "required": true,
+   "shape": {
+    "t": [
+     "object"
+    ],
+    "k": {
+     "kind": {
+      "t": [
+       "string"
+      ]
+     },
+     "name": {
+      "t": [
+       "string"
+      ]
+     },
+     "game": {
+      "t": [
+       "string"
+      ]
+     },
+     "amountCents": {
+      "t": [
+       "number"
+      ]
+     },
+     "tier": {
+      "t": [
+       "string"
+      ]
+     },
+     "unit": {
+      "t": [
+       "string"
+      ]
+     }
+    }
+   }
+  },
+  "admin_overview": {
+   "required": true,
+   "shape": {
+    "t": [
+     "object"
+    ],
+    "k": {
+     "accounts": {
+      "t": [
+       "array"
+      ],
+      "e": {
+       "t": [
+        "object"
+       ],
+       "k": {
+        "key": {
+         "t": [
+          "string"
+         ]
+        },
+        "display": {
+         "t": [
+          "string"
+         ]
+        },
+        "isAdmin": {
+         "t": [
+          "boolean"
+         ]
+        },
+        "claimed": {
+         "t": [
+          "boolean"
+         ]
+        },
+        "lastSeen": {
+         "t": [
+          "number"
+         ]
+        },
+        "online": {
+         "t": [
+          "boolean"
+         ]
+        },
+        "balance": {
+         "t": [
+          "null",
+          "number"
+         ]
+        },
+        "play": {
+         "t": [
+          "number"
+         ]
+        }
+       }
+      }
+     },
+     "table": {
+      "t": [
+       "object"
+      ],
+      "k": {
+       "paused": {
+        "t": [
+         "boolean"
+        ]
+       },
+       "status": {
+        "t": [
+         "string"
+        ]
+       },
+       "seated": {
+        "t": [
+         "number"
+        ]
+       },
+       "handNum": {
+        "t": [
+         "number"
+        ]
+       },
+       "startChips": {
+        "t": [
+         "number"
+        ]
+       },
+       "sb": {
+        "t": [
+         "number"
+        ]
+       },
+       "bb": {
+        "t": [
+         "number"
+        ]
+       },
+       "nextSb": {
+        "t": [
+         "null"
+        ]
+       },
+       "nextBb": {
+        "t": [
+         "null"
+        ]
+       }
+      }
+     }
+    }
+   }
+  },
+  "bank_summary": {
+   "required": true,
+   "shape": {
+    "t": [
+     "object"
+    ],
+    "k": {
+     "t": {
+      "t": [
+       "number"
+      ]
+     },
+     "nightId": {
+      "t": [
+       "null",
+       "string"
+      ]
+     },
+     "players": {
+      "t": [
+       "array"
+      ],
+      "e": {
+       "t": [
+        "object"
+       ],
+       "k": {
+        "name": {
+         "t": [
+          "string"
+         ]
+        },
+        "isBot": {
+         "t": [
+          "boolean"
+         ]
+        },
+        "bank": {
+         "t": [
+          "number"
+         ]
+        },
+        "atTable": {
+         "t": [
+          "number"
+         ]
+        },
+        "status": {
+         "t": [
+          "string"
+         ]
+        },
+        "totalBuyIns": {
+         "t": [
+          "number"
+         ]
+        },
+        "buyIns": {
+         "t": [
+          "number"
+         ]
+        },
+        "rebuys": {
+         "t": [
+          "number"
+         ]
+        },
+        "rebuyTotal": {
+         "t": [
+          "number"
+         ]
+        },
+        "cashedOut": {
+         "t": [
+          "number"
+         ]
+        },
+        "net": {
+         "t": [
+          "number"
+         ]
+        },
+        "biggestWin": {
+         "t": [
+          "number"
+         ]
+        },
+        "handsPlayed": {
+         "t": [
+          "number"
+         ]
+        },
+        "lastSeen": {
+         "t": [
+          "number"
+         ]
+        },
+        "startBank": {
+         "t": [
+          "null"
+         ]
+        },
+        "adjusted": {
+         "t": [
+          "number"
+         ]
+        },
+        "netTonight": {
+         "t": [
+          "null",
+          "number"
+         ]
+        }
+       }
+      }
+     },
+     "series": {
+      "t": [
+       "object"
+      ],
+      "k": {
+       "Sue": {
+        "t": [
+         "array"
+        ],
+        "e": {
+         "t": [
+          "array"
+         ],
+         "e": {
+          "t": [
+           "number"
+          ]
+         }
+        },
+        "o": 1
+       },
+       "Tom": {
+        "t": [
+         "array"
+        ],
+        "e": {
+         "t": [
+          "array"
+         ],
+         "e": {
+          "t": [
+           "number"
+          ]
+         }
+        },
+        "o": 1
+       },
+       "Uri": {
+        "t": [
+         "array"
+        ],
+        "e": {
+         "t": [
+          "array"
+         ],
+         "e": {
+          "t": [
+           "number"
+          ]
+         }
+        },
+        "o": 1
+       }
+      }
+     },
+     "events": {
+      "t": [
+       "array"
+      ],
+      "e": {
+       "t": [
+        "object"
+       ],
+       "k": {
+        "t": {
+         "t": [
+          "number"
+         ]
+        },
+        "name": {
+         "t": [
+          "string"
+         ]
+        },
+        "type": {
+         "t": [
+          "string"
+         ]
+        },
+        "amount": {
+         "t": [
+          "number"
+         ]
+        },
+        "delta": {
+         "t": [
+          "null"
+         ]
+        },
+        "balanceAfter": {
+         "t": [
+          "null",
+          "number"
+         ]
+        }
+       }
+      }
+     },
+     "maxHand": {
+      "t": [
+       "number"
+      ]
+     },
+     "view": {
+      "t": [
+       "string"
+      ]
+     },
+     "unit": {
+      "t": [
+       "string"
+      ]
+     }
+    }
+   }
+  },
+  "admin_result": {
+   "required": true,
+   "shape": {
+    "t": [
+     "object"
+    ],
+    "k": {
+     "op": {
+      "t": [
+       "string"
+      ]
+     },
+     "key": {
+      "t": [
+       "string"
+      ]
+     },
+     "ok": {
+      "t": [
+       "boolean"
+      ]
+     },
+     "message": {
+      "t": [
+       "string"
+      ]
+     }
+    }
+   }
+  },
+  "account_changed": {
+   "required": true,
+   "shape": {
+    "t": [
+     "object"
+    ],
+    "k": {
+     "key": {
+      "t": [
+       "string"
+      ]
+     },
+     "display": {
+      "t": [
+       "string"
+      ]
+     },
+     "avatar": {
+      "t": [
+       "string"
+      ]
+     },
+     "pic": {
+      "t": [
+       "null"
+      ]
+     }
+    }
+   }
+  },
+  "lobby_tables": {
+   "required": true,
+   "shape": {
+    "t": [
+     "object"
+    ],
+    "k": {
+     "tables": {
+      "t": [
+       "array"
+      ],
+      "e": {
+       "t": [
+        "object"
+       ],
+       "k": {
+        "id": {
+         "t": [
+          "string"
+         ]
+        },
+        "name": {
+         "t": [
+          "string"
+         ]
+        },
+        "mode": {
+         "t": [
+          "string"
+         ]
+        },
+        "unit": {
+         "t": [
+          "string"
+         ]
+        },
+        "sb": {
+         "t": [
+          "number"
+         ]
+        },
+        "bb": {
+         "t": [
+          "number"
+         ]
+        },
+        "buyIn": {
+         "t": [
+          "object"
+         ],
+         "k": {
+          "min": {
+           "t": [
+            "number"
+           ]
+          },
+          "max": {
+           "t": [
+            "number"
+           ]
+          }
+         }
+        },
+        "seats": {
+         "t": [
+          "number"
+         ]
+        },
+        "seated": {
+         "t": [
+          "number"
+         ]
+        },
+        "host": {
+         "t": [
+          "object"
+         ],
+         "k": {
+          "key": {
+           "t": [
+            "string"
+           ]
+          },
+          "display": {
+           "t": [
+            "string"
+           ]
+          }
+         }
+        },
+        "state": {
+         "t": [
+          "string"
+         ]
+        },
+        "isPrivate": {
+         "t": [
+          "boolean"
+         ]
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "table_info": {
+   "required": true,
+   "shape": {
+    "t": [
+     "object"
+    ],
+    "k": {
+     "table": {
+      "t": [
+       "object"
+      ],
+      "k": {
+       "id": {
+        "t": [
+         "string"
+        ]
+       },
+       "name": {
+        "t": [
+         "string"
+        ]
+       },
+       "mode": {
+        "t": [
+         "string"
+        ]
+       },
+       "unit": {
+        "t": [
+         "string"
+        ]
+       },
+       "buyIn": {
+        "t": [
+         "object"
+        ],
+        "k": {
+         "min": {
+          "t": [
+           "number"
+          ]
+         },
+         "max": {
+          "t": [
+           "number"
+          ]
+         },
+         "default": {
+          "t": [
+           "number"
+          ]
+         }
+        }
+       },
+       "blinds": {
+        "t": [
+         "object"
+        ],
+        "k": {
+         "sb": {
+          "t": [
+           "number"
+          ]
+         },
+         "bb": {
+          "t": [
+           "number"
+          ]
+         }
+        }
+       },
+       "blindIncrease": {
+        "t": [
+         "object"
+        ],
+        "k": {
+         "enabled": {
+          "t": [
+           "boolean"
+          ]
+         },
+         "everyMin": {
+          "t": [
+           "number"
+          ]
+         },
+         "schedule": {
+          "t": [
+           "string"
+          ]
+         }
+        }
+       },
+       "seats": {
+        "t": [
+         "number"
+        ]
+       },
+       "actionTimerSec": {
+        "t": [
+         "number"
+        ]
+       },
+       "rebuys": {
+        "t": [
+         "boolean"
+        ]
+       },
+       "rebuyLimit": {
+        "t": [
+         "number"
+        ]
+       },
+       "isPrivate": {
+        "t": [
+         "boolean"
+        ]
+       },
+       "autoStart": {
+        "t": [
+         "boolean"
+        ]
+       },
+       "hostKey": {
+        "t": [
+         "string"
+        ]
+       },
+       "state": {
+        "t": [
+         "string"
+        ]
+       },
+       "nightId": {
+        "t": [
+         "null",
+         "string"
+        ]
+       },
+       "createdAt": {
+        "t": [
+         "number"
+        ]
+       },
+       "sb": {
+        "t": [
+         "number"
+        ]
+       },
+       "bb": {
+        "t": [
+         "number"
+        ]
+       },
+       "host": {
+        "t": [
+         "object"
+        ],
+        "k": {
+         "key": {
+          "t": [
+           "string"
+          ]
+         },
+         "display": {
+          "t": [
+           "string"
+          ]
+         }
+        }
+       },
+       "moneyMode": {
+        "t": [
+         "string"
+        ]
+       },
+       "emptySince": {
+        "t": [
+         "number"
+        ],
+        "o": 1
+       }
+      }
+     },
+     "seated": {
+      "t": [
+       "array"
+      ]
+     },
+     "openSeats": {
+      "t": [
+       "number"
+      ]
+     }
+    }
+   }
+  },
+  "tables_mine": {
+   "required": true,
+   "shape": {
+    "t": [
+     "object"
+    ],
+    "k": {
+     "tables": {
+      "t": [
+       "array"
+      ],
+      "e": {
+       "t": [
+        "object"
+       ],
+       "k": {
+        "id": {
+         "t": [
+          "string"
+         ]
+        },
+        "name": {
+         "t": [
+          "string"
+         ]
+        },
+        "mode": {
+         "t": [
+          "string"
+         ]
+        },
+        "unit": {
+         "t": [
+          "string"
+         ]
+        },
+        "sb": {
+         "t": [
+          "number"
+         ]
+        },
+        "bb": {
+         "t": [
+          "number"
+         ]
+        },
+        "buyIn": {
+         "t": [
+          "object"
+         ],
+         "k": {
+          "min": {
+           "t": [
+            "number"
+           ]
+          },
+          "max": {
+           "t": [
+            "number"
+           ]
+          }
+         }
+        },
+        "seats": {
+         "t": [
+          "number"
+         ]
+        },
+        "seated": {
+         "t": [
+          "number"
+         ]
+        },
+        "host": {
+         "t": [
+          "object"
+         ],
+         "k": {
+          "key": {
+           "t": [
+            "string"
+           ]
+          },
+          "display": {
+           "t": [
+            "string"
+           ]
+          }
+         }
+        },
+        "state": {
+         "t": [
+          "string"
+         ]
+        },
+        "isPrivate": {
+         "t": [
+          "boolean"
+         ]
+        }
+       }
+      }
+     },
+     "nightNet": {
+      "t": [
+       "object"
+      ],
+      "k": {
+       "*": {
+        "t": [
+         "number"
+        ],
+        "o": 1
+       }
+      }
+     }
+    }
+   }
+  },
+  "wallet": {
+   "required": true,
+   "shape": {
+    "t": [
+     "object"
+    ],
+    "k": {
+     "play": {
+      "t": [
+       "number"
+      ]
+     },
+     "chips": {
+      "t": [
+       "number"
+      ]
+     }
+    }
+   }
+  },
+  "bonus:status": {
+   "required": true,
+   "shape": {
+    "t": [
+     "object"
+    ],
+    "k": {
+     "available": {
+      "t": [
+       "boolean"
+      ]
+     },
+     "amountCents": {
+      "t": [
+       "number"
+      ]
+     },
+     "streak": {
+      "t": [
+       "number"
+      ]
+     },
+     "day": {
+      "t": [
+       "number"
+      ]
+     },
+     "schedule": {
+      "t": [
+       "array"
+      ],
+      "e": {
+       "t": [
+        "number"
+       ]
+      }
+     }
+    }
+   }
+  },
+  "leaderboard_data": {
+   "required": true,
+   "shape": {
+    "t": [
+     "object"
+    ],
+    "k": {
+     "entries": {
+      "t": [
+       "array"
+      ]
+     },
+     "me": {
+      "t": [
+       "null"
+      ]
+     },
+     "total": {
+      "t": [
+       "number"
+      ]
+     }
+    }
+   }
+  },
+  "profile": {
+   "required": true,
+   "shape": {
+    "t": [
+     "object"
+    ],
+    "k": {
+     "key": {
+      "t": [
+       "string"
+      ]
+     },
+     "display": {
+      "t": [
+       "string"
+      ]
+     },
+     "avatar": {
+      "t": [
+       "string"
+      ]
+     },
+     "pic": {
+      "t": [
+       "null"
+      ]
+     },
+     "stats": {
+      "t": [
+       "object"
+      ],
+      "k": {
+       "hands": {
+        "t": [
+         "number"
+        ]
+       },
+       "handsWon": {
+        "t": [
+         "number"
+        ]
+       },
+       "netCents": {
+        "t": [
+         "number"
+        ]
+       },
+       "netChips": {
+        "t": [
+         "number"
+        ]
+       },
+       "biggestPot": {
+        "t": [
+         "number"
+        ]
+       },
+       "nights": {
+        "t": [
+         "number"
+        ]
+       },
+       "bestNightCents": {
+        "t": [
+         "number"
+        ]
+       }
+      }
+     },
+     "netCents": {
+      "t": [
+       "number"
+      ]
+     },
+     "netChips": {
+      "t": [
+       "number"
+      ]
+     },
+     "recent": {
+      "t": [
+       "array"
+      ]
+     },
+     "prefs": {
+      "t": [
+       "object"
+      ],
+      "k": {
+       "currency": {
+        "t": [
+         "string"
+        ]
+       },
+       "sound": {
+        "t": [
+         "boolean"
+        ]
+       }
+      },
+      "o": 1
+     },
+     "isAdmin": {
+      "t": [
+       "boolean"
+      ]
+     }
+    }
+   }
+  },
+  "table_created": {
+   "required": true,
+   "shape": {
+    "t": [
+     "object"
+    ],
+    "k": {
+     "table": {
+      "t": [
+       "object"
+      ],
+      "k": {
+       "id": {
+        "t": [
+         "string"
+        ]
+       },
+       "name": {
+        "t": [
+         "string"
+        ]
+       },
+       "mode": {
+        "t": [
+         "string"
+        ]
+       },
+       "unit": {
+        "t": [
+         "string"
+        ]
+       },
+       "buyIn": {
+        "t": [
+         "object"
+        ],
+        "k": {
+         "min": {
+          "t": [
+           "number"
+          ]
+         },
+         "max": {
+          "t": [
+           "number"
+          ]
+         },
+         "default": {
+          "t": [
+           "number"
+          ]
+         }
+        }
+       },
+       "blinds": {
+        "t": [
+         "object"
+        ],
+        "k": {
+         "sb": {
+          "t": [
+           "number"
+          ]
+         },
+         "bb": {
+          "t": [
+           "number"
+          ]
+         }
+        }
+       },
+       "blindIncrease": {
+        "t": [
+         "object"
+        ],
+        "k": {
+         "enabled": {
+          "t": [
+           "boolean"
+          ]
+         },
+         "everyMin": {
+          "t": [
+           "number"
+          ]
+         },
+         "schedule": {
+          "t": [
+           "string"
+          ]
+         }
+        }
+       },
+       "seats": {
+        "t": [
+         "number"
+        ]
+       },
+       "actionTimerSec": {
+        "t": [
+         "number"
+        ]
+       },
+       "rebuys": {
+        "t": [
+         "boolean"
+        ]
+       },
+       "rebuyLimit": {
+        "t": [
+         "number"
+        ]
+       },
+       "isPrivate": {
+        "t": [
+         "boolean"
+        ]
+       },
+       "autoStart": {
+        "t": [
+         "boolean"
+        ]
+       },
+       "hostKey": {
+        "t": [
+         "string"
+        ]
+       },
+       "state": {
+        "t": [
+         "string"
+        ]
+       },
+       "nightId": {
+        "t": [
+         "string"
+        ]
+       },
+       "createdAt": {
+        "t": [
+         "number"
+        ]
+       },
+       "emptySince": {
+        "t": [
+         "number"
+        ]
+       },
+       "sb": {
+        "t": [
+         "number"
+        ]
+       },
+       "bb": {
+        "t": [
+         "number"
+        ]
+       },
+       "host": {
+        "t": [
+         "object"
+        ],
+        "k": {
+         "key": {
+          "t": [
+           "string"
+          ]
+         },
+         "display": {
+          "t": [
+           "string"
+          ]
+         }
+        }
+       },
+       "moneyMode": {
+        "t": [
+         "string"
+        ]
+       }
+      }
+     }
+    }
+   }
+  },
+  "achv:unlocked": {
+   "required": true,
+   "shape": {
+    "t": [
+     "object"
+    ],
+    "k": {
+     "id": {
+      "t": [
+       "string"
+      ]
+     },
+     "name": {
+      "t": [
+       "string"
+      ]
+     },
+     "desc": {
+      "t": [
+       "string"
+      ]
+     },
+     "tier": {
+      "t": [
+       "string"
+      ]
+     },
+     "rewardCents": {
+      "t": [
+       "number"
+      ]
+     },
+     "xp": {
+      "t": [
+       "number"
+      ]
+     }
+    }
+   }
+  },
+  "table_joined": {
+   "required": true,
+   "shape": {
+    "t": [
+     "object"
+    ],
+    "k": {
+     "tableId": {
+      "t": [
+       "string"
+      ]
+     },
+     "playerIdx": {
+      "t": [
+       "number"
+      ]
+     },
+     "stack": {
+      "t": [
+       "number"
+      ]
+     },
+     "table": {
+      "t": [
+       "object"
+      ],
+      "k": {
+       "id": {
+        "t": [
+         "string"
+        ]
+       },
+       "name": {
+        "t": [
+         "string"
+        ]
+       },
+       "mode": {
+        "t": [
+         "string"
+        ]
+       },
+       "unit": {
+        "t": [
+         "string"
+        ]
+       },
+       "buyIn": {
+        "t": [
+         "object"
+        ],
+        "k": {
+         "min": {
+          "t": [
+           "number"
+          ]
+         },
+         "max": {
+          "t": [
+           "number"
+          ]
+         },
+         "default": {
+          "t": [
+           "number"
+          ]
+         }
+        }
+       },
+       "blinds": {
+        "t": [
+         "object"
+        ],
+        "k": {
+         "sb": {
+          "t": [
+           "number"
+          ]
+         },
+         "bb": {
+          "t": [
+           "number"
+          ]
+         }
+        }
+       },
+       "blindIncrease": {
+        "t": [
+         "object"
+        ],
+        "k": {
+         "enabled": {
+          "t": [
+           "boolean"
+          ]
+         },
+         "everyMin": {
+          "t": [
+           "number"
+          ]
+         },
+         "schedule": {
+          "t": [
+           "string"
+          ]
+         }
+        }
+       },
+       "seats": {
+        "t": [
+         "number"
+        ]
+       },
+       "actionTimerSec": {
+        "t": [
+         "number"
+        ]
+       },
+       "rebuys": {
+        "t": [
+         "boolean"
+        ]
+       },
+       "rebuyLimit": {
+        "t": [
+         "number"
+        ]
+       },
+       "isPrivate": {
+        "t": [
+         "boolean"
+        ]
+       },
+       "autoStart": {
+        "t": [
+         "boolean"
+        ]
+       },
+       "hostKey": {
+        "t": [
+         "string"
+        ]
+       },
+       "state": {
+        "t": [
+         "string"
+        ]
+       },
+       "nightId": {
+        "t": [
+         "string"
+        ]
+       },
+       "createdAt": {
+        "t": [
+         "number"
+        ]
+       },
+       "emptySince": {
+        "t": [
+         "null"
+        ]
+       },
+       "sb": {
+        "t": [
+         "number"
+        ]
+       },
+       "bb": {
+        "t": [
+         "number"
+        ]
+       },
+       "host": {
+        "t": [
+         "object"
+        ],
+        "k": {
+         "key": {
+          "t": [
+           "string"
+          ]
+         },
+         "display": {
+          "t": [
+           "string"
+          ]
+         }
+        }
+       },
+       "moneyMode": {
+        "t": [
+         "string"
+        ]
+       }
+      }
+     },
+     "you": {
+      "t": [
+       "object"
+      ],
+      "k": {
+       "key": {
+        "t": [
+         "string"
+        ]
+       },
+       "display": {
+        "t": [
+         "string"
+        ]
+       }
+      }
+     }
+    }
+   }
+  },
+  "room_update": {
+   "required": true,
+   "shape": {
+    "t": [
+     "object"
+    ],
+    "k": {
+     "mode": {
+      "t": [
+       "string"
+      ]
+     },
+     "unit": {
+      "t": [
+       "string"
+      ]
+     },
+     "moneyMode": {
+      "t": [
+       "string"
+      ]
+     },
+     "table": {
+      "t": [
+       "object"
+      ],
+      "k": {
+       "id": {
+        "t": [
+         "string"
+        ]
+       },
+       "name": {
+        "t": [
+         "string"
+        ]
+       },
+       "mode": {
+        "t": [
+         "string"
+        ]
+       },
+       "unit": {
+        "t": [
+         "string"
+        ]
+       },
+       "sb": {
+        "t": [
+         "number"
+        ]
+       },
+       "bb": {
+        "t": [
+         "number"
+        ]
+       },
+       "maxSeats": {
+        "t": [
+         "number"
+        ]
+       }
+      }
+     },
+     "players": {
+      "t": [
+       "array"
+      ],
+      "e": {
+       "t": [
+        "object"
+       ],
+       "k": {
+        "name": {
+         "t": [
+          "string"
+         ]
+        },
+        "avatar": {
+         "t": [
+          "string"
+         ]
+        },
+        "profilePic": {
+         "t": [
+          "null"
+         ]
+        }
+       }
+      }
+     },
+     "hostName": {
+      "t": [
+       "string"
+      ]
+     }
+    }
+   }
+  },
+  "game_state": {
+   "required": true,
+   "shape": {
+    "t": [
+     "object"
+    ],
+    "k": {
+     "street": {
+      "t": [
+       "null",
+       "string"
+      ]
+     },
+     "pot": {
+      "t": [
+       "number"
+      ]
+     },
+     "currentBet": {
+      "t": [
+       "number"
+      ]
+     },
+     "community": {
+      "t": [
+       "array"
+      ],
+      "e": {
+       "t": [
+        "object"
+       ],
+       "k": {
+        "rank": {
+         "t": [
+          "string"
+         ]
+        },
+        "suit": {
+         "t": [
+          "string"
+         ]
+        }
+       }
+      }
+     },
+     "dealerIdx": {
+      "t": [
+       "number"
+      ]
+     },
+     "currentPlayerIdx": {
+      "t": [
+       "null",
+       "number"
+      ]
+     },
+     "handNum": {
+      "t": [
+       "number"
+      ]
+     },
+     "status": {
+      "t": [
+       "string"
+      ]
+     },
+     "mode": {
+      "t": [
+       "string"
+      ]
+     },
+     "unit": {
+      "t": [
+       "string"
+      ]
+     },
+     "moneyMode": {
+      "t": [
+       "string"
+      ]
+     },
+     "table": {
+      "t": [
+       "object"
+      ],
+      "k": {
+       "id": {
+        "t": [
+         "string"
+        ]
+       },
+       "name": {
+        "t": [
+         "string"
+        ]
+       },
+       "mode": {
+        "t": [
+         "string"
+        ]
+       },
+       "unit": {
+        "t": [
+         "string"
+        ]
+       },
+       "sb": {
+        "t": [
+         "number"
+        ]
+       },
+       "bb": {
+        "t": [
+         "number"
+        ]
+       },
+       "maxSeats": {
+        "t": [
+         "number"
+        ]
+       }
+      }
+     },
+     "paused": {
+      "t": [
+       "boolean"
+      ]
+     },
+     "endingNight": {
+      "t": [
+       "boolean"
+      ]
+     },
+     "startChips": {
+      "t": [
+       "number"
+      ]
+     },
+     "hostName": {
+      "t": [
+       "string"
+      ]
+     },
+     "sb": {
+      "t": [
+       "number"
+      ]
+     },
+     "bb": {
+      "t": [
+       "number"
+      ]
+     },
+     "blindLevel": {
+      "t": [
+       "number"
+      ]
+     },
+     "blindsEnabled": {
+      "t": [
+       "boolean"
+      ]
+     },
+     "blindNextMs": {
+      "t": [
+       "null"
+      ]
+     },
+     "blindMaxLevel": {
+      "t": [
+       "number"
+      ]
+     },
+     "turnRemainingMs": {
+      "t": [
+       "null"
+      ]
+     },
+     "players": {
+      "t": [
+       "array"
+      ],
+      "e": {
+       "t": [
+        "object"
+       ],
+       "k": {
+        "name": {
+         "t": [
+          "string"
+         ]
+        },
+        "avatar": {
+         "t": [
+          "string"
+         ]
+        },
+        "profilePic": {
+         "t": [
+          "null"
+         ]
+        },
+        "chips": {
+         "t": [
+          "number"
+         ]
+        },
+        "roundBet": {
+         "t": [
+          "number"
+         ]
+        },
+        "folded": {
+         "t": [
+          "boolean"
+         ]
+        },
+        "allIn": {
+         "t": [
+          "boolean"
+         ]
+        },
+        "sittingOut": {
+         "t": [
+          "boolean"
+         ]
+        },
+        "sitOutRequest": {
+         "t": [
+          "boolean"
+         ]
+        },
+        "connected": {
+         "t": [
+          "boolean"
+         ]
+        },
+        "isBot": {
+         "t": [
+          "boolean"
+         ]
+        },
+        "isDealer": {
+         "t": [
+          "boolean"
+         ]
+        },
+        "isActive": {
+         "t": [
+          "boolean"
+         ]
+        },
+        "cardCount": {
+         "t": [
+          "number"
+         ]
+        },
+        "chipsBought": {
+         "t": [
+          "number"
+         ]
+        },
+        "lastAction": {
+         "t": [
+          "null",
+          "string"
+         ]
+        }
+       }
+      }
+     },
+     "log": {
+      "t": [
+       "array"
+      ],
+      "e": {
+       "t": [
+        "string"
+       ]
+      }
+     },
+     "handHistory": {
+      "t": [
+       "array"
+      ],
+      "e": {
+       "t": [
+        "object"
+       ],
+       "k": {
+        "handNum": {
+         "t": [
+          "number"
+         ]
+        },
+        "winners": {
+         "t": [
+          "array"
+         ],
+         "e": {
+          "t": [
+           "string"
+          ]
+         }
+        },
+        "handName": {
+         "t": [
+          "string"
+         ]
+        },
+        "pot": {
+         "t": [
+          "number"
+         ]
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "your_cards": {
+   "required": true,
+   "shape": {
+    "t": [
+     "object"
+    ],
+    "k": {
+     "cards": {
+      "t": [
+       "array"
+      ],
+      "e": {
+       "t": [
+        "object"
+       ],
+       "k": {
+        "rank": {
+         "t": [
+          "string"
+         ]
+        },
+        "suit": {
+         "t": [
+          "string"
+         ]
+        }
+       }
+      }
+     },
+     "myIdx": {
+      "t": [
+       "number"
+      ]
+     },
+     "preselect": {
+      "t": [
+       "null"
+      ]
+     }
+    }
+   }
+  },
+  "table_event": {
+   "required": true,
+   "shape": {
+    "t": [
+     "object"
+    ],
+    "k": {
+     "tableId": {
+      "t": [
+       "string"
+      ]
+     },
+     "kind": {
+      "t": [
+       "string"
+      ]
+     },
+     "paused": {
+      "t": [
+       "boolean"
+      ],
+      "o": 1
+     },
+     "by": {
+      "t": [
+       "string"
+      ],
+      "o": 1
+     },
+     "table": {
+      "t": [
+       "object"
+      ],
+      "k": {
+       "id": {
+        "t": [
+         "string"
+        ]
+       },
+       "name": {
+        "t": [
+         "string"
+        ]
+       },
+       "mode": {
+        "t": [
+         "string"
+        ]
+       },
+       "unit": {
+        "t": [
+         "string"
+        ]
+       },
+       "buyIn": {
+        "t": [
+         "object"
+        ],
+        "k": {
+         "min": {
+          "t": [
+           "number"
+          ]
+         },
+         "max": {
+          "t": [
+           "number"
+          ]
+         },
+         "default": {
+          "t": [
+           "number"
+          ]
+         }
+        }
+       },
+       "blinds": {
+        "t": [
+         "object"
+        ],
+        "k": {
+         "sb": {
+          "t": [
+           "number"
+          ]
+         },
+         "bb": {
+          "t": [
+           "number"
+          ]
+         }
+        }
+       },
+       "blindIncrease": {
+        "t": [
+         "object"
+        ],
+        "k": {
+         "enabled": {
+          "t": [
+           "boolean"
+          ]
+         },
+         "everyMin": {
+          "t": [
+           "number"
+          ]
+         },
+         "schedule": {
+          "t": [
+           "string"
+          ]
+         }
+        }
+       },
+       "seats": {
+        "t": [
+         "number"
+        ]
+       },
+       "actionTimerSec": {
+        "t": [
+         "number"
+        ]
+       },
+       "rebuys": {
+        "t": [
+         "boolean"
+        ]
+       },
+       "rebuyLimit": {
+        "t": [
+         "number"
+        ]
+       },
+       "isPrivate": {
+        "t": [
+         "boolean"
+        ]
+       },
+       "autoStart": {
+        "t": [
+         "boolean"
+        ]
+       },
+       "hostKey": {
+        "t": [
+         "string"
+        ]
+       },
+       "state": {
+        "t": [
+         "string"
+        ]
+       },
+       "nightId": {
+        "t": [
+         "string"
+        ]
+       },
+       "createdAt": {
+        "t": [
+         "number"
+        ]
+       },
+       "emptySince": {
+        "t": [
+         "null"
+        ]
+       },
+       "pausedBy": {
+        "t": [
+         "string"
+        ]
+       },
+       "sb": {
+        "t": [
+         "number"
+        ]
+       },
+       "bb": {
+        "t": [
+         "number"
+        ]
+       },
+       "host": {
+        "t": [
+         "object"
+        ],
+        "k": {
+         "key": {
+          "t": [
+           "string"
+          ]
+         },
+         "display": {
+          "t": [
+           "string"
+          ]
+         }
+        }
+       },
+       "moneyMode": {
+        "t": [
+         "string"
+        ]
+       }
+      },
+      "o": 1
+     },
+     "pendingBlinds": {
+      "t": [
+       "object"
+      ],
+      "k": {
+       "sb": {
+        "t": [
+         "number"
+        ]
+       },
+       "bb": {
+        "t": [
+         "number"
+        ]
+       }
+      },
+      "o": 1
+     },
+     "key": {
+      "t": [
+       "string"
+      ],
+      "o": 1
+     },
+     "display": {
+      "t": [
+       "string"
+      ],
+      "o": 1
+     }
+    }
+   }
+  },
+  "showdown_result": {
+   "required": true,
+   "shape": {
+    "t": [
+     "object"
+    ],
+    "k": {
+     "winners": {
+      "t": [
+       "array"
+      ],
+      "e": {
+       "t": [
+        "object"
+       ],
+       "k": {
+        "name": {
+         "t": [
+          "string"
+         ]
+        },
+        "handName": {
+         "t": [
+          "string"
+         ]
+        },
+        "cards": {
+         "t": [
+          "array"
+         ],
+         "e": {
+          "t": [
+           "object"
+          ],
+          "k": {
+           "rank": {
+            "t": [
+             "string"
+            ]
+           },
+           "suit": {
+            "t": [
+             "string"
+            ]
+           }
+          }
+         }
+        },
+        "amount": {
+         "t": [
+          "number"
+         ]
+        },
+        "net": {
+         "t": [
+          "number"
+         ],
+         "o": 1
+        }
+       }
+      }
+     },
+     "pot": {
+      "t": [
+       "number"
+      ]
+     },
+     "reveals": {
+      "t": [
+       "array"
+      ],
+      "e": {
+       "t": [
+        "object"
+       ],
+       "k": {
+        "name": {
+         "t": [
+          "string"
+         ]
+        },
+        "handName": {
+         "t": [
+          "string"
+         ]
+        },
+        "cards": {
+         "t": [
+          "array"
+         ],
+         "e": {
+          "t": [
+           "object"
+          ],
+          "k": {
+           "rank": {
+            "t": [
+             "string"
+            ]
+           },
+           "suit": {
+            "t": [
+             "string"
+            ]
+           }
+          }
+         }
+        }
+       }
+      },
+      "o": 1
+     },
+     "nextMs": {
+      "t": [
+       "number"
+      ]
+     }
+    }
+   }
+  },
+  "chat_message": {
+   "required": true,
+   "shape": {
+    "t": [
+     "object"
+    ],
+    "k": {
+     "name": {
+      "t": [
+       "string"
+      ]
+     },
+     "text": {
+      "t": [
+       "string"
+      ]
+     }
+    }
+   }
+  },
+  "emote": {
+   "required": true,
+   "shape": {
+    "t": [
+     "object"
+    ],
+    "k": {
+     "idx": {
+      "t": [
+       "number"
+      ]
+     },
+     "id": {
+      "t": [
+       "string"
+      ]
+     },
+     "name": {
+      "t": [
+       "string"
+      ]
+     }
+    }
+   }
+  },
+  "sticker_dropped": {
+   "required": true,
+   "shape": {
+    "t": [
+     "object"
+    ],
+    "k": {
+     "emoji": {
+      "t": [
+       "string"
+      ]
+     },
+     "fromName": {
+      "t": [
+       "string"
+      ]
+     }
+    }
+   }
+  },
+  "cards_shown": {
+   "required": true,
+   "shape": {
+    "t": [
+     "object"
+    ],
+    "k": {
+     "handNum": {
+      "t": [
+       "number"
+      ]
+     },
+     "name": {
+      "t": [
+       "string"
+      ]
+     },
+     "cards": {
+      "t": [
+       "array"
+      ],
+      "e": {
+       "t": [
+        "object"
+       ],
+       "k": {
+        "rank": {
+         "t": [
+          "string"
+         ]
+        },
+        "suit": {
+         "t": [
+          "string"
+         ]
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "item_thrown": {
+   "required": true,
+   "shape": {
+    "t": [
+     "object"
+    ],
+    "k": {
+     "fromIdx": {
+      "t": [
+       "number"
+      ]
+     },
+     "targetIdx": {
+      "t": [
+       "number"
+      ]
+     },
+     "item": {
+      "t": [
+       "string"
+      ]
+     },
+     "fromName": {
+      "t": [
+       "string"
+      ]
+     }
+    }
+   }
+  },
+  "settle_up": {
+   "required": true,
+   "shape": {
+    "t": [
+     "object"
+    ],
+    "k": {
+     "nightId": {
+      "t": [
+       "string"
+      ]
+     },
+     "tableId": {
+      "t": [
+       "string"
+      ]
+     },
+     "table": {
+      "t": [
+       "object"
+      ],
+      "k": {
+       "name": {
+        "t": [
+         "string"
+        ]
+       },
+       "mode": {
+        "t": [
+         "string"
+        ]
+       },
+       "unit": {
+        "t": [
+         "string"
+        ]
+       }
+      }
+     },
+     "ended": {
+      "t": [
+       "boolean"
+      ]
+     },
+     "startedAt": {
+      "t": [
+       "number"
+      ]
+     },
+     "endedAt": {
+      "t": [
+       "number"
+      ]
+     },
+     "players": {
+      "t": [
+       "array"
+      ],
+      "e": {
+       "t": [
+        "object"
+       ],
+       "k": {
+        "key": {
+         "t": [
+          "string"
+         ]
+        },
+        "display": {
+         "t": [
+          "string"
+         ]
+        },
+        "avatar": {
+         "t": [
+          "string"
+         ]
+        },
+        "pic": {
+         "t": [
+          "null"
+         ]
+        },
+        "buyIns": {
+         "t": [
+          "number"
+         ]
+        },
+        "rebuys": {
+         "t": [
+          "number"
+         ]
+        },
+        "cashedOut": {
+         "t": [
+          "number"
+         ]
+        },
+        "net": {
+         "t": [
+          "number"
+         ]
+        }
+       }
+      }
+     },
+     "zeroSum": {
+      "t": [
+       "boolean"
+      ]
+     },
+     "text": {
+      "t": [
+       "string"
+      ]
+     },
+     "drift": {
+      "t": [
+       "number"
+      ],
+      "o": 1
+     }
+    }
+   }
+  },
+  "table_left": {
+   "required": true,
+   "shape": {
+    "t": [
+     "object"
+    ],
+    "k": {
+     "tableId": {
+      "t": [
+       "string"
+      ]
+     },
+     "cashedOut": {
+      "t": [
+       "number"
+      ]
+     },
+     "reason": {
+      "t": [
+       "string"
+      ],
+      "o": 1
+     }
+    }
+   }
+  },
+  "bonus:claimed": {
+   "required": true,
+   "shape": {
+    "t": [
+     "object"
+    ],
+    "k": {
+     "ok": {
+      "t": [
+       "boolean"
+      ]
+     },
+     "amountCents": {
+      "t": [
+       "number"
+      ]
+     },
+     "streak": {
+      "t": [
+       "number"
+      ]
+     },
+     "day": {
+      "t": [
+       "number"
+      ]
+     },
+     "wallet": {
+      "t": [
+       "object"
+      ],
+      "k": {
+       "play": {
+        "t": [
+         "number"
+        ]
+       },
+       "chips": {
+        "t": [
+         "number"
+        ]
+       }
+      }
+     }
+    }
+   }
+  },
+  "error": {
+   "required": true,
+   "shape": {
+    "t": [
+     "object"
+    ],
+    "k": {
+     "message": {
+      "t": [
+       "string"
+      ]
+     },
+     "code": {
+      "t": [
+       "string"
+      ]
+     },
+     "game": {
+      "t": [
+       "string"
+      ],
+      "o": 1
+     }
+    }
+   }
+  },
+  "g:bender:state": {
+   "required": true,
+   "shape": {
+    "t": [
+     "object"
+    ],
+    "k": {
+     "betLevels": {
+      "t": [
+       "array"
+      ],
+      "e": {
+       "t": [
+        "number"
+       ]
+      }
+     },
+     "modes": {
+      "t": [
+       "array"
+      ],
+      "e": {
+       "t": [
+        "string"
+       ]
+      }
+     },
+     "rtp": {
+      "t": [
+       "string"
+      ]
+     },
+     "cfg": {
+      "t": [
+       "object"
+      ],
+      "k": {
+       "weights": {
+        "t": [
+         "object"
+        ],
+        "k": {
+         "pen": {
+          "t": [
+           "number"
+          ]
+         },
+         "stk": {
+          "t": [
+           "number"
+          ]
+         },
+         "bal": {
+          "t": [
+           "number"
+          ]
+         },
+         "yrd": {
+          "t": [
+           "number"
+          ]
+         },
+         "meg": {
+          "t": [
+           "number"
+          ]
+         },
+         "cap": {
+          "t": [
+           "number"
+          ]
+         },
+         "phn": {
+          "t": [
+           "number"
+          ]
+         },
+         "seal": {
+          "t": [
+           "number"
+          ]
+         }
+        }
+       },
+       "pay": {
+        "t": [
+         "object"
+        ],
+        "k": {
+         "pen": {
+          "t": [
+           "array"
+          ],
+          "e": {
+           "t": [
+            "number"
+           ]
+          }
+         },
+         "stk": {
+          "t": [
+           "array"
+          ],
+          "e": {
+           "t": [
+            "number"
+           ]
+          }
+         },
+         "bal": {
+          "t": [
+           "array"
+          ],
+          "e": {
+           "t": [
+            "number"
+           ]
+          }
+         },
+         "yrd": {
+          "t": [
+           "array"
+          ],
+          "e": {
+           "t": [
+            "number"
+           ]
+          }
+         },
+         "meg": {
+          "t": [
+           "array"
+          ],
+          "e": {
+           "t": [
+            "number"
+           ]
+          }
+         },
+         "cap": {
+          "t": [
+           "array"
+          ],
+          "e": {
+           "t": [
+            "number"
+           ]
+          }
+         },
+         "phn": {
+          "t": [
+           "array"
+          ],
+          "e": {
+           "t": [
+            "number"
+           ]
+          }
+         },
+         "seal": {
+          "t": [
+           "array"
+          ],
+          "e": {
+           "t": [
+            "number"
+           ]
+          }
+         }
+        }
+       },
+       "scatterPay": {
+        "t": [
+         "object"
+        ],
+        "k": {
+         "3": {
+          "t": [
+           "number"
+          ]
+         },
+         "4": {
+          "t": [
+           "number"
+          ]
+         },
+         "5": {
+          "t": [
+           "number"
+          ]
+         },
+         "6": {
+          "t": [
+           "number"
+          ]
+         }
+        }
+       },
+       "spinsFor": {
+        "t": [
+         "object"
+        ],
+        "k": {
+         "3": {
+          "t": [
+           "number"
+          ]
+         },
+         "4": {
+          "t": [
+           "number"
+          ]
+         },
+         "5": {
+          "t": [
+           "number"
+          ]
+         },
+         "6": {
+          "t": [
+           "number"
+          ]
+         }
+        }
+       },
+       "retrigger": {
+        "t": [
+         "object"
+        ],
+        "k": {
+         "3": {
+          "t": [
+           "number"
+          ]
+         },
+         "4": {
+          "t": [
+           "number"
+          ]
+         },
+         "5": {
+          "t": [
+           "number"
+          ]
+         }
+        }
+       },
+       "buyCost": {
+        "t": [
+         "object"
+        ],
+        "k": {
+         "election": {
+          "t": [
+           "number"
+          ]
+         },
+         "landslide": {
+          "t": [
+           "number"
+          ]
+         }
+        }
+       }
+      }
+     },
+     "buyCostX": {
+      "t": [
+       "object"
+      ],
+      "k": {
+       "election": {
+        "t": [
+         "number"
+        ]
+       },
+       "landslide": {
+        "t": [
+         "number"
+        ]
+       }
+      }
+     },
+     "wallet": {
+      "t": [
+       "object"
+      ],
+      "k": {
+       "play": {
+        "t": [
+         "number"
+        ]
+       },
+       "chips": {
+        "t": [
+         "number"
+        ]
+       }
+      }
+     },
+     "balances": {
+      "t": [
+       "object"
+      ],
+      "k": {
+       "play": {
+        "t": [
+         "number"
+        ]
+       },
+       "chips": {
+        "t": [
+         "number"
+        ]
+       }
+      }
+     },
+     "bets": {
+      "t": [
+       "array"
+      ],
+      "e": {
+       "t": [
+        "number"
+       ]
+      }
+     }
+    }
+   }
+  },
+  "g:bender:result": {
+   "required": true,
+   "shape": {
+    "t": [
+     "object"
+    ],
+    "k": {
+     "roundId": {
+      "t": [
+       "string"
+      ]
+     },
+     "bet": {
+      "t": [
+       "number"
+      ]
+     },
+     "cost": {
+      "t": [
+       "number"
+      ]
+     },
+     "mode": {
+      "t": [
+       "string"
+      ]
+     },
+     "buyBonus": {
+      "t": [
+       "null"
+      ]
+     },
+     "grid": {
+      "t": [
+       "array"
+      ],
+      "e": {
+       "t": [
+        "array"
+       ],
+       "e": {
+        "t": [
+         "object"
+        ],
+        "k": {
+         "id": {
+          "t": [
+           "number"
+          ]
+         },
+         "s": {
+          "t": [
+           "string"
+          ]
+         },
+         "m": {
+          "t": [
+           "number"
+          ]
+         }
+        }
+       }
+      }
+     },
+     "cascades": {
+      "t": [
+       "array"
+      ],
+      "e": {
+       "t": [
+        "object"
+       ],
+       "k": {
+        "clusters": {
+         "t": [
+          "array"
+         ],
+         "e": {
+          "t": [
+           "object"
+          ],
+          "k": {
+           "sym": {
+            "t": [
+             "string"
+            ]
+           },
+           "cells": {
+            "t": [
+             "array"
+            ],
+            "e": {
+             "t": [
+              "array"
+             ],
+             "e": {
+              "t": [
+               "number"
+              ]
+             }
+            }
+           },
+           "size": {
+            "t": [
+             "number"
+            ]
+           },
+           "mult": {
+            "t": [
+             "number"
+            ]
+           },
+           "base": {
+            "t": [
+             "number"
+            ]
+           },
+           "win": {
+            "t": [
+             "number"
+            ]
+           }
+          }
+         }
+        },
+        "stepWin": {
+         "t": [
+          "number"
+         ]
+        },
+        "uncapped": {
+         "t": [
+          "number"
+         ]
+        },
+        "killed": {
+         "t": [
+          "array"
+         ],
+         "e": {
+          "t": [
+           "string"
+          ]
+         }
+        },
+        "grown": {
+         "t": [
+          "array"
+         ]
+        },
+        "fall": {
+         "t": [
+          "array"
+         ],
+         "e": {
+          "t": [
+           "object"
+          ],
+          "k": {
+           "id": {
+            "t": [
+             "number"
+            ]
+           },
+           "c": {
+            "t": [
+             "number"
+            ]
+           },
+           "from": {
+            "t": [
+             "number"
+            ]
+           },
+           "to": {
+            "t": [
+             "number"
+            ]
+           }
+          }
+         }
+        },
+        "spawn": {
+         "t": [
+          "array"
+         ],
+         "e": {
+          "t": [
+           "object"
+          ],
+          "k": {
+           "c": {
+            "t": [
+             "number"
+            ]
+           },
+           "r": {
+            "t": [
+             "number"
+            ]
+           },
+           "cell": {
+            "t": [
+             "object"
+            ],
+            "k": {
+             "id": {
+              "t": [
+               "number"
+              ]
+             },
+             "s": {
+              "t": [
+               "string"
+              ]
+             },
+             "m": {
+              "t": [
+               "number"
+              ]
+             }
+            }
+           },
+           "fromTop": {
+            "t": [
+             "boolean"
+            ]
+           },
+           "order": {
+            "t": [
+             "number"
+            ]
+           }
+          }
+         }
+        },
+        "grid": {
+         "t": [
+          "array"
+         ],
+         "e": {
+          "t": [
+           "array"
+          ],
+          "e": {
+           "t": [
+            "object"
+           ],
+           "k": {
+            "id": {
+             "t": [
+              "number"
+             ]
+            },
+            "s": {
+             "t": [
+              "string"
+             ]
+            },
+            "m": {
+             "t": [
+              "number"
+             ]
+            }
+           }
+          }
+         }
+        }
+       }
+      }
+     },
+     "finalGrid": {
+      "t": [
+       "array"
+      ],
+      "e": {
+       "t": [
+        "array"
+       ],
+       "e": {
+        "t": [
+         "object"
+        ],
+        "k": {
+         "id": {
+          "t": [
+           "number"
+          ]
+         },
+         "s": {
+          "t": [
+           "string"
+          ]
+         },
+         "m": {
+          "t": [
+           "number"
+          ]
+         }
+        }
+       }
+      }
+     },
+     "scatters": {
+      "t": [
+       "number"
+      ]
+     },
+     "scatterPay": {
+      "t": [
+       "number"
+      ]
+     },
+     "bonus": {
+      "t": [
+       "null"
+      ]
+     },
+     "totalWinMult": {
+      "t": [
+       "number"
+      ]
+     },
+     "totalWin": {
+      "t": [
+       "number"
+      ]
+     },
+     "tier": {
+      "t": [
+       "string"
+      ]
+     },
+     "maxed": {
+      "t": [
+       "boolean"
+      ]
+     },
+     "steps": {
+      "t": [
+       "number"
+      ]
+     },
+     "wallet": {
+      "t": [
+       "object"
+      ],
+      "k": {
+       "play": {
+        "t": [
+         "number"
+        ]
+       },
+       "chips": {
+        "t": [
+         "number"
+        ]
+       }
+      }
+     },
+     "balances": {
+      "t": [
+       "object"
+      ],
+      "k": {
+       "play": {
+        "t": [
+         "number"
+        ]
+       },
+       "chips": {
+        "t": [
+         "number"
+        ]
+       }
+      }
+     },
+     "round": {
+      "t": [
+       "object"
+      ],
+      "k": {
+       "mode": {
+        "t": [
+         "string"
+        ]
+       },
+       "cost": {
+        "t": [
+         "number"
+        ]
+       },
+       "win": {
+        "t": [
+         "number"
+        ]
+       },
+       "base": {
+        "t": [
+         "object"
+        ],
+        "k": {
+         "initial": {
+          "t": [
+           "array"
+          ],
+          "e": {
+           "t": [
+            "array"
+           ],
+           "e": {
+            "t": [
+             "object"
+            ],
+            "k": {
+             "id": {
+              "t": [
+               "number"
+              ]
+             },
+             "s": {
+              "t": [
+               "string"
+              ]
+             },
+             "m": {
+              "t": [
+               "number"
+              ]
+             }
+            }
+           }
+          }
+         },
+         "steps": {
+          "t": [
+           "array"
+          ],
+          "e": {
+           "t": [
+            "object"
+           ],
+           "k": {
+            "clusters": {
+             "t": [
+              "array"
+             ],
+             "e": {
+              "t": [
+               "object"
+              ],
+              "k": {
+               "sym": {
+                "t": [
+                 "string"
+                ]
+               },
+               "cells": {
+                "t": [
+                 "array"
+                ],
+                "e": {
+                 "t": [
+                  "array"
+                 ],
+                 "e": {
+                  "t": [
+                   "number"
+                  ]
+                 }
+                }
+               },
+               "size": {
+                "t": [
+                 "number"
+                ]
+               },
+               "mult": {
+                "t": [
+                 "number"
+                ]
+               },
+               "base": {
+                "t": [
+                 "number"
+                ]
+               },
+               "win": {
+                "t": [
+                 "number"
+                ]
+               }
+              }
+             }
+            },
+            "stepWin": {
+             "t": [
+              "number"
+             ]
+            },
+            "uncapped": {
+             "t": [
+              "number"
+             ]
+            },
+            "killed": {
+             "t": [
+              "array"
+             ],
+             "e": {
+              "t": [
+               "string"
+              ]
+             }
+            },
+            "grown": {
+             "t": [
+              "array"
+             ]
+            },
+            "fall": {
+             "t": [
+              "array"
+             ],
+             "e": {
+              "t": [
+               "object"
+              ],
+              "k": {
+               "id": {
+                "t": [
+                 "number"
+                ]
+               },
+               "c": {
+                "t": [
+                 "number"
+                ]
+               },
+               "from": {
+                "t": [
+                 "number"
+                ]
+               },
+               "to": {
+                "t": [
+                 "number"
+                ]
+               }
+              }
+             }
+            },
+            "spawn": {
+             "t": [
+              "array"
+             ],
+             "e": {
+              "t": [
+               "object"
+              ],
+              "k": {
+               "c": {
+                "t": [
+                 "number"
+                ]
+               },
+               "r": {
+                "t": [
+                 "number"
+                ]
+               },
+               "cell": {
+                "t": [
+                 "object"
+                ],
+                "k": {
+                 "id": {
+                  "t": [
+                   "number"
+                  ]
+                 },
+                 "s": {
+                  "t": [
+                   "string"
+                  ]
+                 },
+                 "m": {
+                  "t": [
+                   "number"
+                  ]
+                 }
+                }
+               },
+               "fromTop": {
+                "t": [
+                 "boolean"
+                ]
+               },
+               "order": {
+                "t": [
+                 "number"
+                ]
+               }
+              }
+             }
+            },
+            "grid": {
+             "t": [
+              "array"
+             ],
+             "e": {
+              "t": [
+               "array"
+              ],
+              "e": {
+               "t": [
+                "object"
+               ],
+               "k": {
+                "id": {
+                 "t": [
+                  "number"
+                 ]
+                },
+                "s": {
+                 "t": [
+                  "string"
+                 ]
+                },
+                "m": {
+                 "t": [
+                  "number"
+                 ]
+                }
+               }
+              }
+             }
+            }
+           }
+          }
+         },
+         "win": {
+          "t": [
+           "number"
+          ]
+         },
+         "final": {
+          "t": [
+           "array"
+          ],
+          "e": {
+           "t": [
+            "array"
+           ],
+           "e": {
+            "t": [
+             "object"
+            ],
+            "k": {
+             "id": {
+              "t": [
+               "number"
+              ]
+             },
+             "s": {
+              "t": [
+               "string"
+              ]
+             },
+             "m": {
+              "t": [
+               "number"
+              ]
+             }
+            }
+           }
+          }
+         },
+         "scatters": {
+          "t": [
+           "number"
+          ]
+         },
+         "wilds": {
+          "t": [
+           "array"
+          ]
+         }
+        }
+       },
+       "bonus": {
+        "t": [
+         "null"
+        ]
+       },
+       "scatterPay": {
+        "t": [
+         "number"
+        ]
+       }
+      }
+     }
+    }
+   }
+  },
+  "self_changed": {
+   "required": true,
+   "shape": {
+    "t": [
+     "object"
+    ],
+    "k": {
+     "key": {
+      "t": [
+       "string"
+      ]
+     },
+     "display": {
+      "t": [
+       "string"
+      ]
+     },
+     "avatar": {
+      "t": [
+       "string"
+      ]
+     },
+     "pic": {
+      "t": [
+       "null"
+      ]
+     },
+     "account": {
+      "t": [
+       "object"
+      ],
+      "k": {
+       "key": {
+        "t": [
+         "string"
+        ]
+       },
+       "display": {
+        "t": [
+         "string"
+        ]
+       },
+       "avatar": {
+        "t": [
+         "string"
+        ]
+       },
+       "pic": {
+        "t": [
+         "null"
+        ]
+       },
+       "isAdmin": {
+        "t": [
+         "boolean"
+        ]
+       },
+       "claimed": {
+        "t": [
+         "boolean"
+        ]
+       },
+       "prefs": {
+        "t": [
+         "object"
+        ],
+        "k": {
+         "currency": {
+          "t": [
+           "string"
+          ]
+         },
+         "sound": {
+          "t": [
+           "boolean"
+          ]
+         }
+        }
+       },
+       "stats": {
+        "t": [
+         "object"
+        ],
+        "k": {
+         "hands": {
+          "t": [
+           "number"
+          ]
+         },
+         "handsWon": {
+          "t": [
+           "number"
+          ]
+         },
+         "netCents": {
+          "t": [
+           "number"
+          ]
+         },
+         "netChips": {
+          "t": [
+           "number"
+          ]
+         },
+         "biggestPot": {
+          "t": [
+           "number"
+          ]
+         },
+         "nights": {
+          "t": [
+           "number"
+          ]
+         },
+         "bestNightCents": {
+          "t": [
+           "number"
+          ]
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "auth_out": {
+   "required": true,
+   "shape": {
+    "t": [
+     "object"
+    ],
+    "k": {}
+   }
+  },
+  "bust_out": {
+   "required": true,
+   "shape": {
+    "t": [
+     "object"
+    ],
+    "k": {
+     "tableId": {
+      "t": [
+       "string"
+      ]
+     },
+     "unit": {
+      "t": [
+       "string"
+      ]
+     },
+     "mode": {
+      "t": [
+       "string"
+      ]
+     },
+     "rebuy": {
+      "t": [
+       "object"
+      ],
+      "k": {
+       "allowed": {
+        "t": [
+         "boolean"
+        ]
+       },
+       "min": {
+        "t": [
+         "number"
+        ]
+       },
+       "max": {
+        "t": [
+         "number"
+        ]
+       }
+      }
+     },
+     "balance": {
+      "t": [
+       "number"
+      ]
+     }
+    }
+   }
+  },
+  "balance_update": {
+   "required": true,
+   "shape": {
+    "t": [
+     "object"
+    ],
+    "k": {
+     "balance": {
+      "t": [
+       "number"
+      ]
+     }
+    }
+   }
+  }
+ }
+}
