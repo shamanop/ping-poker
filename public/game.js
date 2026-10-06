@@ -109,6 +109,7 @@ function avatarInner(avatar, pic) {
 }
 
 // ─── Scale unit: every size in the CSS is N * --u ─────────────────
+const PHONE_TABLE_U = 0.5;   // keep equal to --u in phone.css (#game-screen)
 let stageRO = null;
 function setScale() {
   const host = document.querySelector('.sh-stage');
@@ -117,7 +118,7 @@ function setScale() {
   const h = host && host.clientHeight ? host.clientHeight : window.innerHeight;
   const u = Math.max(0.8, Math.min(1.35, Math.min(h / 900, w / 1440)));
   document.documentElement.style.setProperty('--u', u.toFixed(4));
-  state.u = u;
+  state.u = window.innerWidth <= 600 ? PHONE_TABLE_U : u;   // phone.css redeclares the same unit on #game-screen
   return u;
 }
 
@@ -149,6 +150,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initChat();
   initEmotes();
   initPanelSide();
+  initRailDrawer();
   initBust();
   bindCopy($('room-code-btn'));
 
@@ -508,6 +510,17 @@ function initPanelSide() {
   });
 }
 
+// Phone (phone.css): the chat rail is a bottom sheet, closed by default, opened by the Chat button.
+function initRailDrawer() {
+  const scr = $('game-screen'), btn = $('btn-rail-toggle');
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    const open = !scr.classList.contains('rail-open');
+    scr.classList.toggle('rail-open', open);
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+}
+
 // ─── Quick emotes ─────────────────────────────────────────────────
 const EMOTE_KEYS = ['thumbs', 'laugh', 'mindblown', 'sweat', 'clap', 'tilt'];
 const EMOTE_COOLDOWN_MS = 3000;
@@ -761,7 +774,7 @@ function layoutTable() {
   const sw = stage.clientWidth, sh = stage.clientHeight;
   const seatW = 168 * u, seatH = 56 * u;
   const AR = 1152 / 535;
-  const H = Math.max(200, Math.min(sw * 0.9 / AR, (sh - 107 * u) / 0.8284));
+  const H = Math.max(Math.min(200, sw * 0.9 / AR), Math.min(sw * 0.9 / AR, (sh - 107 * u) / 0.8284));
   const W = H * AR;
   const spare = Math.max(0, (sh - 45 * u) - (62 * u + 0.8284 * H));
   const tbTop = 34 * u - 0.0256 * H + spare * 0.5;

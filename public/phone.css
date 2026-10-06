@@ -1,0 +1,180 @@
+/* Phone layout (P5 fix C, Q02). index.html links this with media="(max-width: 600px)": above 600 px the file is not applied at all,
+   so the desktop layout cannot change. Order: shell bars, lobby, table grid, chat drawer, action dock. */
+
+/* ── Shell: two-row top bar, game dock becomes a bottom strip; the top bar leaves while a table is open ───────── */
+body.sh-on { --sh-top: 104px; --sh-dock: 0px; --sh-bot: 56px; }
+.sh-main { bottom: var(--sh-bot, 0px); }
+.sh-top {
+  height: 104px; padding: 0 6px; column-gap: 8px; row-gap: 4px; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-rows: 1fr 1fr;
+  border-width: 8px 10px;
+}
+.sh-top > :nth-child(1) { grid-area: 1 / 1; height: 30px; }      /* logo */
+.sh-top > :nth-child(2), .sh-top > :nth-child(3) { display: none; }   /* wordmark, level meter: the profile card has the level */
+.sh-top > :nth-child(4) { grid-area: 1 / 2; justify-self: stretch; min-width: 0; font-size: 12px; }   /* wallet */
+.sh-top > :nth-child(5) { grid-area: 1 / 3; }                    /* money toggle */
+.sh-top > :nth-child(6) { grid-area: 2 / 1; }                    /* daily bonus */
+.sh-top > :nth-child(7) { grid-area: 2 / 2; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; font-size: 14px; }   /* account */
+.sh-top > :nth-child(8) { grid-area: 2 / 3; }                    /* Sign out */
+.sh-wallet span { padding: 4px 6px; font-size: 12px; }
+.sh-wallet small { margin-right: 3px; }
+.sh-btn { min-height: 44px; padding: 6px 12px; font-size: 14px; }
+.sh-bonus { min-height: 44px; padding: 4px 8px; font-size: 12px; letter-spacing: .04em; }
+.sh-acct { min-height: 44px; }
+.sh-top [data-money-toggle] button, .sh-top [data-money-toggle] { min-height: 44px; }
+.sh-dock {
+  top: auto; bottom: 0; left: 0; right: 0; width: auto; height: 56px; flex-direction: row; justify-content: center; align-items: center; gap: 10px; padding: 0 8px;
+  border-right: 0; border-top: 2px solid #000; box-shadow: inset 0 3px 0 rgba(184, 137, 58, .55);
+}
+.sh-di { width: 52px; height: 44px; }
+.sh-di .tip, .sh-di.pulse::after { display: none !important; }
+.sh-sep { width: 1px; height: 28px; margin: 0 2px; }
+body.sh-on:has(#game-screen.active) { --sh-top: 0px; }   /* the table has its own head; the game dock stays so other games stay one tap away */
+body.sh-on:has(#game-screen.active) .sh-top { display: none; }
+/* a game window (Bender, ...) covers the whole screen instead of squeezing the stage */
+.sh-stage { left: 0 !important; right: 0 !important; }
+.sh-win.open { left: 0 !important; top: 0 !important; width: 100% !important; height: 100% !important; }
+.sh-split, .sh-h { display: none !important; }
+
+/* ── Lobby, sign in, create, share: one column ─────────────────────────────────────────────────────── */
+.lb-main { padding: 12px 10px 20px; }
+.lb-cols, .lb-create, .lb-share { grid-template-columns: minmax(0, 1fr); }
+.lb-card { padding: 14px; }
+.lb-center { padding: 12px; }
+.lb-sign { width: 100%; max-width: 480px; }
+.lb-sign .logo b { font-size: 40px; }
+.lb-two { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+.lb-sum { position: static; }
+.lb-code { font-size: 64px; letter-spacing: .18em; padding: 12px 0 10px 10px; }
+.lb-seatlist { grid-template-columns: minmax(0, 1fr); }
+.lb-set { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.lb-stats b { font-size: 22px; }
+.lb-btn { min-height: 48px; }
+.lb-btn.big { min-height: 56px; }
+.lb-ghost, .lb-link { min-height: 40px; }
+.lb-seg { grid-auto-flow: row; grid-auto-columns: auto; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); }
+.lb-seg button { border-bottom: 1px solid var(--line); }
+.lb-seg.tabs { grid-auto-flow: column; grid-auto-columns: 1fr; grid-template-columns: none; }
+.lb-root .text-input, .text-input { min-height: 44px; font-size: 16px; }   /* 16 px stops iOS zooming the page when a field gets focus */
+.lb-join { grid-template-columns: minmax(0, 1fr) auto; }
+.lb-btns { flex-wrap: wrap; }
+.lb-net { grid-template-columns: 22px 34px minmax(0, 1fr) auto; }
+.lb-net > :nth-child(5) { grid-column: 3 / -1; }
+.lb-net .amt { min-width: 0; font-size: 24px; }
+.lb-pay { grid-template-columns: minmax(0, 1fr) auto; }
+.lb-modal { width: 100%; }
+.lb-frame { border-width: 14px; }
+.host-drawer { left: 8px; right: 8px; width: auto; }
+.pj-modal { max-width: 100vw; }
+
+/* ── Table unit: the table screen runs at a smaller scale than the lobby so seats, cards and chips fit a 390 px stage ──
+   --pN are resolved where they are declared, so the scale is redeclared on #game-screen. game.js setScale() uses the same 0.5 for the table geometry (PHONE_TABLE_U). */
+#game-screen {
+  --u: 0.5; --px: calc(1px * var(--u));
+  --p1: var(--px);
+  --p2: calc(2 * var(--px));
+  --p3: calc(3 * var(--px));
+  --p4: calc(4 * var(--px));
+  --p5: calc(5 * var(--px));
+  --p6: calc(6 * var(--px));
+  --p8: calc(8 * var(--px));
+  --p10: calc(10 * var(--px));
+  --p11: calc(11 * var(--px));
+  --p12: calc(12 * var(--px));
+  --p13: calc(13 * var(--px));
+  --p14: calc(14 * var(--px));
+  --p16: calc(16 * var(--px));
+  --p18: calc(18 * var(--px));
+  --p20: calc(20 * var(--px));
+  --p22: calc(22 * var(--px));
+  --p24: calc(24 * var(--px));
+  --p28: calc(28 * var(--px));
+  --p32: calc(32 * var(--px));
+  --p36: calc(36 * var(--px));
+  --p40: calc(40 * var(--px));
+  --p44: calc(44 * var(--px));
+  --p48: calc(48 * var(--px));
+  --p56: calc(56 * var(--px));
+  --p64: calc(64 * var(--px));
+  --p9: calc(9 * var(--px));
+  --p15: calc(15 * var(--px));
+  --p17: calc(17 * var(--px));
+}
+
+/* ── Table grid: head, stage, action dock; no side rail ────────────────────────────────────────────── */
+#game-screen { --gut: 6px; }
+.g-grid, .panel-right .g-grid { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto; grid-template-areas: "head" "stage" "bar"; }
+.g-head {
+  grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "l l" "m r"; row-gap: 2px; column-gap: 6px; padding: 6px 8px;
+}
+.hd-left { grid-area: l; flex-wrap: wrap; gap: 6px; }
+.hd-mid { grid-area: m; gap: 10px; }
+.hd-right { grid-area: r; gap: 6px; }
+#pl-level-wrap, #pl-next-wrap { display: none; }
+.hd-mid .pl label { font-size: 9px; }
+.hd-mid .pl b { font-size: 13px; }
+.plate-btn, .g-head .bank-chip { height: 36px; min-width: 56px; padding: 0 8px; font-size: 12px; border-width: 6px; }
+.g-head .room-chip { height: 32px; font-size: 11px; padding: 0 6px; gap: 4px; }
+.g-head .room-chip b { font-size: 14px; }
+.g-head .icon-btn { width: 36px; height: 36px; }
+.blinds-plate { min-width: 70px; height: 32px; padding: 0 6px; }
+.rail-toggle { display: inline-block; }
+.g-stage { margin: 0; }
+.emote-strip { left: 4px; top: 4px; bottom: auto; gap: 4px; padding: 4px; }
+.emote-btn { width: 38px; height: 38px; min-width: 38px; min-height: 38px; }
+.toasts, .panel-right .toasts { left: 8px; right: 8px; top: 8px; align-items: stretch; }
+
+/* ── Chat rail: bottom sheet, closed by default (Chat button in the head) ──────────────────────────── */
+.g-rail, .panel-right .g-rail {
+  grid-area: auto; position: absolute; left: 0; right: 0; bottom: 0; margin: 0; height: min(62%, 480px); z-index: 12;
+  visibility: hidden; transform: translateY(105%); transition: transform .2s ease-out, visibility 0s linear .2s;
+}
+#game-screen.rail-open .g-rail { visibility: visible; transform: none; transition: transform .2s ease-out; }
+.rail-flip { display: none; }
+.chat-input { min-height: 44px; font-size: 16px; }
+.chat-send { min-width: 44px; min-height: 44px; }
+.sticker-grid, .throw-grid { gap: 6px; }
+.sticker-item, .throw-item { height: 44px; min-height: 44px; padding: 2px; }
+.sticker-item img, .sticker-item svg, .throw-item img, .throw-item svg { max-height: 100%; width: auto; max-width: 100%; margin: 0 auto; display: block; }
+.chat-messages { min-height: 72px; }
+.g-rail { overflow: hidden; }
+
+/* ── Action dock: full width at the bottom, 44 px+ tap targets ─────────────────────────────────────── */
+.g-bar {
+  width: 100%; height: auto; margin: 0; padding: 6px 8px 8px; row-gap: 6px; column-gap: 6px; justify-self: stretch; align-self: end;
+  grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-areas: "acts acts acts" "raise raise raise";
+}
+.bar-acts, .bar-pre { grid-column: 1 / -1; column-gap: 6px; }
+.g-bar.preselect .bar-pre { column-gap: 6px; }
+.g-bar.preselect .act-pre { height: 56px; }
+.act { height: 56px; min-height: 44px; padding: 0 2px; border-width: 8px; }
+.act-main, .act-fold .act-main { font-size: 17px; letter-spacing: .06em; }
+.act-sub { font-size: 13px; min-height: 12px; }
+.act-pre .act-main, .act-pre .act-sub { font-size: 14px; }
+.bar-help { height: auto; min-height: 22px; padding: 0 6px; gap: 6px; flex-wrap: wrap; white-space: normal; text-align: center; line-height: 1.2; }
+.bar-help b, .bar-help b.me { font-size: 13px; }
+.bar-help span { font-size: 11px; }
+.raise-box { padding: 0; overflow: visible; }
+#raise-box .amt { grid-template-columns: minmax(0, 1fr) 96px; gap: 6px; }
+#raise-box .amt-presets { gap: 4px; }
+#raise-box .amt-pre { min-height: 44px; padding: 0 2px; min-width: 0; }
+#raise-box .amt-pre-l { font-size: 10px; }
+#raise-box .amt-pre-v { font-size: 12px; }
+#raise-box .amt-slider { height: 44px; }
+#raise-box .amt-text { height: 44px; min-height: 44px; font-size: 16px; }
+#raise-box .amt-row { gap: 4px; }
+#raise-box .amt-suffix { font-size: 12px; }
+.raise-slider { height: 44px; }
+
+/* ── Seat plates and table text stay readable at the small unit ───────────────────────────────────── */
+.seat-name { font-size: 10px; }
+.seat-chips { font-size: 12px; }
+.blinds-plate label { font-size: 8px; }
+.blinds-plate b { font-size: 12px; }
+.seat-tag, .seat-status { font-size: 8px; letter-spacing: .04em; }
+.seat-status.secs { font-size: 12px; }
+.hero-label { width: 90px; font-size: 10px; }
+.pot-row { font-size: 11px; }
+
+/* ── Panels laid over the table ────────────────────────────────────────────────────────────────────── */
+.wait-panel, .bust-panel, .show-panel { max-width: calc(100% - 16px); }
+.showdown-overlay { max-width: calc(100% - 8px); }
