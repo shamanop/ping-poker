@@ -194,6 +194,7 @@
     if (p.armed) steps.push(['CALLBACK!', 'Your list is full. The next call is free.']);
     if (p.filled > 0) {
       const f = +(p.filled / 10).toFixed(1); gain.textContent = '+' + f + (f === 1 ? ' LEAD' : ' LEADS'); gain.hidden = false; note.classList.remove('hit'); void note.offsetWidth; note.classList.add('hit');
+      drawNote(from);                                               // (chris 10-06 FB1) the count starts on this call's own number now, not on the next frame: with frames starved a superseded call's last number stayed up (fb1 driver, 26 of 81 samples)
       k.tween(from, Math.max(from, to), 600, (x) => { if (my === S.lg) drawNote(Math.round(x)); });
     }
     for (const [t, tx] of steps) await banner(t, tx, 1200, k);
