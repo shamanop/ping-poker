@@ -28,4 +28,5 @@ Cold Call: not in v2-core (origin/coldcall), games_shell coldcall not run. radio
 - s10_misc: login lockout copy, bender-config token gate (needs 4702): written, first half verified (wrong PIN message fine, lockout "Too many tries. Try again in 30s."); rerun against a fresh server.
 
 ## Waves
-(none yet)
+- Wave 1 spawned (visible, Sonnet default, own worktrees off v2-core 11d2618): A = agent:main:dashboard:b95ded74-f819-45d8-9934-f8c4160a0645 (branch p5-fix-a, Q03 rejoin/resume, Q08 leave control, brief builders/P5-FIX-A.md); B = agent:main:dashboard:28f4c387-db3a-4c33-a8c4-2e8e5584a0d8 (branch p5-fix-b, Q01 Q04 Q05 Q06 Q07, brief builders/P5-FIX-B.md). Never cancel them. When they report: merge p5-fix-a then p5-fix-b into v2-core (they touch different functions of public/lobby.js and public/game.js), run `node tests/v2/30_shapes.js --target .`, unit suites, the sweep scripts for the touched screens, record the commit hashes in defects.json (status fixed + fix) and rerun mkqa.py.
+- Wave 2 candidates: Q02 phone layout (needs a builder + screenshot critic on 390x844), anything new found by s10/s06c reruns.
