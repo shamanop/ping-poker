@@ -123,6 +123,8 @@ Server events `g:coldcall:state|history|spin` -> `g:coldcall:result`; buy ids `r
 
 ## Rules I am holding to
 - Branch `coldcall` only. No push to master, no deploy.
+- **HOLD, Chris 2026-10-05 21:29: "dont push it live yet we are playing".** Nothing to master, no pull request against master,
+  no deploy, by me or any builder, until Chris says so in his own words. Pushes to `coldcall` continue.
 - Own clone (`projects/ping-coldcall` on Frank's box), dev port 4610, at most 2 browser processes, kill by PID.
 - No paid APIs: art on shaman's local models (GPU lock first), code written here.
   One exception, asked for by Chris directly (2026-10-05 17:54): the concept stills menu was made with GPT image
