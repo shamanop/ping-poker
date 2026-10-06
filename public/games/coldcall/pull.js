@@ -11,7 +11,8 @@
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const app = $('app'), board = $('board'), head = $('head'), ribbon = $('ribbon'), hud = $('hud'), scene = $('scene'), ribL = $('ribL'), ribR = $('ribR');
   const el = (tag, cls, html, id) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; if (id) e.id = id; return e; };
-  const S = { view: null, mode: 'play', pot: null, rules: null, bet: 0, prompt: null, rib: null, mine: null, idleKey: '', feed: [], fi: 0, phase: 0, seen: new Set(), demo: false, hold: null, bn: 0 };
+  const S = { view: null, mode: 'play', pot: null, rules: null, bet: 0, prompt: null, rib: null, mine: null, idleKey: '', feed: [], fi: 0, phase: 0, seen: new Set(), demo: false, hold: null, bn: 0, potPend: null, potDone: false };
+  const ARM_MS = 600;                                           // U1: a decision ignores taps for its first 600 ms (a skip tap that started before the prompt must not answer it)
   const st = () => K().st;
   const live = () => !!st().live;
   const chips = () => live() && st().mode === 'chips';
@@ -39,9 +40,13 @@
   const coldLeft = () => { const v = S.view; return v && v.cold ? v.cold.inMs - (Date.now() - (v.at || Date.now())) : null; };
   function drawCold() {
     const v = S.view, c = v && v.cold, e = $('plCold'); if (!c) { note.classList.add('nocold'); return; }
-    note.classList.remove('nocold'); const left = coldLeft(), n = c.leads, w = c.warm | 0;
-    const subj = n ? `<u>${num(n)} ${n === 1 ? 'lead' : 'leads'}</u>` + (w ? ` + ${w} warm` : '') : `<u>${w} warm ${w === 1 ? 'lead' : 'leads'}</u>`;
-    e.innerHTML = `${subj} ${n + w === 1 ? 'goes' : 'go'} cold ${left <= 0 ? 'now' : 'in ' + dur(left)}`; e.classList.toggle('long', w > 0 || n >= 100);
+    const left = coldLeft(), n = c.leads, w = c.warm | 0, R = rulesOf().cold || {};
+    const part = n ? 0 : Math.max(0, Math.min(Math.round((R.batch || 0) * 10), (v.lt || 0) - Math.round((R.floor || 0) * 10))) / 10;   // under one whole lead at risk: the fraction (view.lt is in tenths)
+    if (!n && !w && !part) { note.classList.add('nocold'); return; }
+    note.classList.remove('nocold');
+    const subj = n ? `<u>${num(n)} ${n === 1 ? 'lead' : 'leads'}</u>` + (w ? ` + ${w} warm` : '') : part ? `<u>${ld1(part)} lead</u>` + (w ? ` + ${w} warm` : '') : `<u>${w} warm ${w === 1 ? 'lead' : 'leads'}</u>`;
+    const one = n ? n + w === 1 : (part && !w) || (!part && w === 1);
+    e.innerHTML = `${subj} ${one ? 'goes' : 'go'} cold ${left <= 0 ? 'now' : 'in ' + dur(left)}`; e.classList.toggle('long', w > 0 || n >= 100);
   }
   function drawNote(shown) {
     const v = S.view; if (!v) return; const full = !!v.cb, list = v.list || 0, n = shown != null ? shown : v.leads;
@@ -56,6 +61,9 @@
     else leaf.innerHTML = '<small>APPT</small><b>free leads</b>';
     leaf.classList.toggle('s', !d.claimed && !(d.next > 0));
   }
+  // P3: the winner's pot mug keeps the old balance until the pot-win card is gone (the emptied balance arrives with the round's result, seconds before YOU TOOK IT)
+  function potHeld() { const s = st(), c = s.busy && s.ctx; if (!c) return false; const p = c.p; return !!((p.pot && p.pot.won && !S.potDone) || (p.status === 'pending' && !c.promptOpen)); }
+  function potFlush() { if (!S.potPend) return; S.pot = S.potPend; S.potPend = null; drawPot(); }
   function drawPot() {
     const p = S.pot; if (!p || typeof p.bal !== 'number') { potb.hidden = true; return; }
     const t = money(p.bal).replace(' chips', ''), prev = potb.dataset.v; potb.innerHTML = `<div class="m"><i></i>POT</div><b class="${t.length > 10 ? 'xs' : t.length > 8 ? 's' : ''}">${t}</b>`;
@@ -94,14 +102,16 @@
   const feedLine = (ev) => {
     const who = ev.you ? 'YOU' : String(ev.who || '?').slice(0, 12), a = ev.amount != null ? money(ev.amount) : '';
     const t = ev.kind === 'win' ? 'closed ' + xTxt(ev.x) : ev.kind === 'bonus' ? 'hit ' + (BN[ev.bonus] || 'a bonus') : ev.kind === 'callback' ? 'took a CALLBACK' : ev.kind === 'pot' ? 'took THE POT ' + a : null;
-    return t == null ? null : { who, t, you: !!ev.you };
+    return t == null ? null : { who, t, you: !!ev.you, mode: ev.mode || null };
   };
+  const sameMode = (l) => !l.mode || l.mode === st().mode;
   function feed(ev) {
     if (!ev || !live()) return; if (ev.id != null) { if (S.seen.has(ev.id)) return; S.seen.add(ev.id); }
-    const ln = feedLine(ev); if (!ln) return; S.feed.push(ln); if (S.feed.length > 12) S.feed.shift(); S.fi = S.feed.length - 1; S.phase = 0; feedStep(true);
+    const ln = feedLine(ev); if (!ln || !sameMode(ln)) return; S.feed = S.feed.filter(sameMode); S.feed.push(ln); if (S.feed.length > 12) S.feed.shift(); S.fi = S.feed.length - 1; S.phase = 0; feedStep(true);
   }
   function feedStep(now) {                                      // 3 beats of the current line, 1 beat of the usual right-hand text
     const can = live() && S.view && S.feed.length && !st().busy && !S.prompt && !S.idleKey;
+    if (S.feed.some((l) => !sameMode(l))) { S.feed = S.feed.filter(sameMode); S.fi = Math.min(S.fi, Math.max(0, S.feed.length - 1)); }
     if (!can) { feedEl.hidden = true; ribbon.classList.remove('plf'); return; }
     if (!now && S.demo) return;                                  // ?mock=pull keeps the line on screen for the shot
     if (!now) { S.phase = (S.phase + 1) % 4; if (S.phase === 0) S.fi = (S.fi + 1) % S.feed.length; }
@@ -109,45 +119,56 @@
     const ln = S.feed[S.fi]; if (!ln) return;
     feedEl.innerHTML = `<s>${ln.who.replace(/[<>&]/g, '')}</s>${ln.t}`; feedEl.classList.toggle('you', ln.you); feedEl.hidden = false; ribbon.classList.add('plf');
   }
+  function feedClear() { S.feed = []; S.seen.clear(); S.fi = 0; S.phase = 0; feedEl.hidden = true; ribbon.classList.remove('plf'); feedStep(true); }   // U9: a mode switch never shows the other currency
   setInterval(() => feedStep(false), 1600);
   setInterval(() => { if (S.view && live()) drawCold(); }, 15000);                // the cold clock runs down on this screen too
 
   // ------------------------------------------------------------------ prompts (PICK YOUR LEAD / ONE MORE CALL): one at a time, the watchdog closes a stale one
   function openPrompt(kind, ctx) {
-    closePrompt(); const P = (S.prompt = { kind, ctx, gone: 0, iv: 0, dispose: null, keys: null, dr: null });
+    closePrompt(); const P = (S.prompt = { kind, ctx, gone: 0, iv: 0, dispose: null, keys: null, dr: null, armed: false, armT: 0 });
     ribbon.classList.remove('gold', 'warn', 'plf'); feedEl.hidden = true; S.idleKey = ''; ribbon.classList.add('ask');
-    ribSet(kind === 'pick' ? 'PICK YOUR LEAD' : 'ONE MORE CALL?', ''); P.iv = setInterval(tick, 100); tick(); return P;
+    ribSet(kind === 'pick' ? 'PICK YOUR LEAD' : 'ONE MORE CALL?', ''); P.iv = setInterval(tick, 100); tick();
+    P.armT = setTimeout(() => { P.armed = true; if (P.keys) P.keys.classList.remove('arming'); document.querySelectorAll('.slots i.pl-arm').forEach((n) => n.classList.remove('pl-arm')); }, ARM_MS); return P;
   }
   function tick() {
     const P = S.prompt; if (!P) return; const c = P.ctx, t = c.timer, left = t.left(), total = t.timeoutMs || 20000, f = Math.max(0, Math.min(1, left / total)), s = Math.ceil(left / 1000);
     ribbon.style.setProperty('--left', (f * 100).toFixed(1) + '%'); ribbon.classList.toggle('late', left < 5000 && left > 0);
-    ribR.textContent = '0:' + pad2(s); S.mine = { l: S.mine ? S.mine.l : ribL.textContent, r: ribR.textContent };
+    ribR.textContent = Math.floor(s / 60) + ':' + pad2(s % 60); S.mine = { l: S.mine ? S.mine.l : ribL.textContent, r: ribR.textContent };
     if (P.dr) { P.dr.firstChild.style.setProperty('--w', (f * 100).toFixed(1) + '%'); P.dr.classList.toggle('late', left < 5000 && left > 0); }
-    if (P.kind === 'pick') document.querySelectorAll('.slots i.pick').forEach((n) => n.classList.toggle('pl-late', left < 5000));
+    if (P.kind === 'pick') document.querySelectorAll('.slots i.pick').forEach((n) => { n.classList.toggle('pl-late', left < 5000); if (!P.armed) n.classList.add('pl-arm'); });
     const s0 = st(); if (!s0.ctx || s0.ctx !== c || !c.promptOpen) { if (++P.gone > 4) closePrompt(); } else P.gone = 0;   // the round went away under the prompt (voided, refused, settled): clean up
   }
   function closePrompt() {
-    const P = S.prompt; if (!P) return; S.prompt = null; clearInterval(P.iv); if (P.dispose) P.dispose();
+    const P = S.prompt; if (!P) return; S.prompt = null; clearInterval(P.iv); clearTimeout(P.armT); if (P.dispose) P.dispose();
     if (P.keys) P.keys.remove(); hud.classList.remove('dec'); ribbon.classList.remove('ask', 'late'); ribbon.style.removeProperty('--left');
-    document.querySelectorAll('.slots i.pl-late').forEach((n) => n.classList.remove('pl-late')); ribRestore(); idleRibbon();
+    document.querySelectorAll('.slots i.pl-late, .slots i.pl-arm').forEach((n) => n.classList.remove('pl-late', 'pl-arm')); ribRestore(); idleRibbon();
   }
   function askPick(pend, ctx) {
     return new Promise((res) => {
       const P = openPrompt('pick', ctx); let done = false;
-      P.dispose = ctx.pickTargets(pend.choices, (p) => { if (done) return; done = true; closePrompt(); res(p); });
+      P.dispose = ctx.pickTargets(pend.choices, (p) => { if (done || !P.armed) return; done = true; closePrompt(); res(p); });   // U1: a tap inside the arming window is swallowed (board.js eats it, nothing is picked, nothing skips)
       tick();
     });
   }
+  // U2: the three numbers are the ROUND's outcomes. base = what the trigger spin already paid (the WIN meter minus the bonus W); it stays in every outcome.
+  function moreFigures(pend, ctx) {
+    const runT = ctx.run && typeof ctx.run.t === 'number' ? ctx.run.t : pend.W, baseT = Math.max(0, runT - pend.W);
+    return { baseT, bank: ctx.cents(baseT + pend.W), win: ctx.cents(baseT + pend.W * pend.mult), lose: ctx.cents(baseT), bonus: ctx.cents(pend.W), base: ctx.cents(baseT) };
+  }
   function askMore(pend, ctx) {
     return new Promise((res) => {
-      const P = openPrompt('more', ctx), W = ctx.cents(pend.W), X = ctx.cents(pend.W * pend.mult), [pw, pl] = pct2(pend.pWin), mx = pend.mult > 1 ? 'double' : 'x' + pend.mult;
-      const keys = el('div', 'dec2', `<div class="dr"><i></i></div>
-        <button class="k hang" id="pl_bank"><b>HANG UP</b><em>BANK ${money(W)}</em><small>keep it</small></button>
-        <button class="k more" id="pl_more"><b>ONE MORE CALL</b><span><b>${pw}%</b> you ${pend.mult === 2 ? 'double' : 'x' + pend.mult} (${money(X)}).</span><span><b>${pl}%</b> you leave with ${money(0)}.</span></button>`);
-      keys.querySelector('.hang em').style.fontSize = money(W).length > 12 ? '14px' : '';
+      const P = openPrompt('more', ctx), F = moreFigures(pend, ctx), paid = F.baseT > 0, [pw, pl] = pct2(pend.pWin), dbl = pend.mult === 2 ? 'double' : 'x' + pend.mult;
+      const mb = money(F.bank), mw = money(F.win), ml = money(F.lose), long = Math.max(mb.length, mw.length, ml.length);
+      const lines = paid
+        ? `<span><b>${pw}%</b> ${dbl} the bonus: ${mw}</span><span><b>${pl}%</b> lose the bonus: ${ml}</span>`
+        : `<span><b>${pw}%</b> you ${dbl} (${mw}).</span><span><b>${pl}%</b> you leave with ${ml}.</span>`;
+      const keys = el('div', 'dec2 arming' + (long > 17 ? ' xs' : long > 12 ? ' s' : ''), `<div class="dr"><i></i></div>
+        <div class="bon" aria-hidden="true"><small>THE BONUS</small><b>${money(F.bonus)}</b>${paid ? `<em>+ ${money(F.base)} already won</em>` : ''}</div>
+        <button class="k hang" id="pl_bank"><b>HANG UP</b><em>${paid ? 'bank ' : 'BANK '}${mb}</em><small>keep it</small></button>
+        <button class="k more" id="pl_more"><b>ONE MORE CALL</b>${lines}</button>`);
       P.keys = keys; P.dr = keys.querySelector('.dr'); hud.insertBefore(keys, hud.firstChild); hud.classList.add('dec');
-      let done = false; const go = (take) => (e) => { e.preventDefault(); if (done) return; done = true; keys.querySelectorAll('button').forEach((b) => { b.disabled = true; }); closePrompt(); res(take); };
-      keys.querySelector('#pl_bank').addEventListener('click', go(false)); keys.querySelector('#pl_more').addEventListener('click', go(true)); void mx;
+      let done = false; const go = (take) => (e) => { e.preventDefault(); if (done || !P.armed) return; done = true; keys.querySelectorAll('button').forEach((b) => { b.disabled = true; }); closePrompt(); res(take); };   // U1: inert until armed
+      keys.querySelector('#pl_bank').addEventListener('click', go(false)); keys.querySelector('#pl_more').addEventListener('click', go(true));
       tick();
     });
   }
@@ -186,7 +207,7 @@
     const TN = ['quote_bronze', 'quote_silver', 'quote_gold'], fin = new Map();
     for (const rd of ph.rounds) {
       for (const r of rd.reveals) fin.set(r.p, { k: r.k, v: r.v, t: r.t });
-      for (const u of rd.upsells) for (const h of u.hits) { const f = fin.get(h.p); if (f && f.k === 'b') f.v = h.after; }
+      for (const u of rd.upsells) for (const h of u.hits) { const f = fin.get(h.p); if (f && (f.k === 'b' || (f.k === 'c' && !h.pend))) f.v = h.after; }   // every hit counts: an upsell on a close that already collected multiplies it (U10)
       for (const c of rd.collects) { const f = fin.get(c.p); if (f) f.v = c.value; }
     }
     head.classList.add('plg'); B.setHot(ph.leads); await ctx.wait(380);
@@ -226,7 +247,7 @@
     if (!reduce) box.animate([{ transform: 'scale(.3)', opacity: 0 }, { transform: 'scale(1.08)', opacity: 1, offset: 0.6 }, { transform: 'none', opacity: 1 }], { duration: 380 * K().speed(), easing: 'ease-out' });
     const e = box.querySelector('em'); await ctx.tween(0, amt, 1100, (v) => { e.textContent = money(Math.round(v)).replace(' chips', ''); }); e.textContent = t;
     if (ctx.demoHold) await hold(ctx, 0); else await Promise.race([ctx.waitTap(3200), ctx.wait(3400)]);
-    box.remove();
+    box.remove(); S.potDone = true; potFlush();
   }
 
   // ------------------------------------------------------------------ info screen: one honest line per mechanic, numbers from the rules, plus the pot odds
@@ -238,8 +259,8 @@
     if (R.cold) ln.push(['Going cold.', `Stay away ${h(R.cold.afterMs)} h and leads go cold: ${R.cold.batch} every ${h(R.cold.stepMs)} h, never below ${R.cold.floor}. Warm squares die at the first cold event.`]);
     if (R.warm) ln.push(['Warm leads.', `A spin that ends with lit squares and no phone keeps each one with a ${+(R.warm.chance * 100).toFixed(1)}% chance, up to ${R.warm.cap}. A warm square is lit at the bet it was made at: any other bet drops them.`]);
     if (R.ghost && R.ghost.on) ln.push(['If a phone had landed.', `On a spin that paid under ${xTxt(R.ghost.maxWinTenths / 10)} with lit squares and no phone, the stamp shows what the call you did not get would have paid, only when that is ${xTxt(R.ghost.minTenths / 10)} or more. It is a draw, not a promise, and it is never added to your win.`]);
-    if (R.pick && R.pick.on) { const m = R.pick.mult || {}; ln.push(['Pick your lead.', `When a bonus phone is about to ring with ${R.pick.minLeads}+ lit leads, you pick one. Its call is drawn with the odds multiplied: bronze x${m.bronze}, silver x${m.silver}, gold x${m.gold}, upsell x${m.upsell}, close x${m.close}. ${Math.round((R.decision ? R.decision.timeoutMs : 20000) / 1000)} seconds, then it picks the first lead.`]); }
-    if (R.more && R.more.on) ln.push(['One more call.', `After a bonus paying ${+(R.more.minTenths / 10).toFixed(1)}x or more you can bank it, or call once more: ${pct2(R.more.rtp / R.more.mult)[0]}% you win ${R.more.mult}x the bonus, ${pct2(R.more.rtp / R.more.mult)[1]}% you get ${dollar(0)}. ${R.more.rtp === 1 ? 'A fair coin: it does not change the payback. ' : ''}Not offered when the double would pass the cap. Wait too long and you bank.`]);
+    if (R.pick && R.pick.on) { const m = R.pick.mult || {}; ln.push(['Pick your lead.', `At the first phone of a bonus, if ${R.pick.minLeads} or more leads are lit, you pick one. Its call is drawn with the odds multiplied: bronze x${m.bronze}, silver x${m.silver}, gold x${m.gold}, upsell x${m.upsell}, close x${m.close}. ${Math.round((R.decision ? R.decision.timeoutMs : 20000) / 1000)} seconds, then it picks the first lead.`]); }
+    if (R.more && R.more.on) ln.push(['One more call.', `After a bonus paying ${+(R.more.minTenths / 10).toFixed(1)}x or more you can bank it, or call once more: ${pct2(R.more.rtp / R.more.mult)[0]}% you win ${R.more.mult}x the bonus, ${pct2(R.more.rtp / R.more.mult)[1]}% you get ${dollar(0)}. ${R.more.rtp === 1 ? 'A fair coin: it does not change the payback. ' : ''}The bank, double and lose figures are the whole round: what the spin that triggered the bonus already paid stays yours. Not offered when the double would pass the cap. Wait too long and you bank.`]);
     if (R.daily) ln.push(['The appointment.', `Your first paid spin each day keeps your appointment: ${ldTxt(R.daily.base)} free, +${+Number(R.daily.perStreak).toFixed(2)} for each day in a row, up to ${ldTxt(R.daily.base + R.daily.perStreak * R.daily.streakMax)}. They count at your bet or ${dollar(R.daily.stakeCap)}, whichever is lower.`]);
     if (R.pot) {
       const o = R.pot.oneInPerDollar, hit = o > 0 ? `each spin has a 1 in ${num(o)} chance per ${chips() ? '100 chips' : '$1'} bet of taking all of it, up to ${num(R.pot.maxPayX)}x your bet` : 'no one can take it right now';
@@ -259,10 +280,13 @@
   function setView(view, mode) {
     if (!view) return; S.view = view; S.mode = mode || S.mode; S.bet = betNow(); render();
   }
-  function setPot(p) { if (!p) return; S.pot = p; drawPot(); potb.hidden = !(live() && S.view); }
+  function setPot(p) {
+    if (!p) return; if ((S.potPend || (S.pot && typeof p.bal === 'number' && p.bal < S.pot.bal)) && potHeld()) { S.potPend = p; return; }
+    S.potPend = null; S.pot = p; drawPot(); potb.hidden = !(live() && S.view);
+  }
   function onBetChange(b) { S.bet = b != null ? b : betNow(); drawWarm(); idleRibbon(); }
   new MutationObserver(() => {                                      // the SPIN button class is the busy flag; the spin button's .cb is the Callback flag
-    const busy = st().busy; app.classList.toggle('pl-busy', busy); syncCb();
+    const busy = st().busy; app.classList.toggle('pl-busy', busy); syncCb(); if (!busy) { S.potDone = false; potFlush(); }
     if (busy) { S.view && drawWarmOff(); ribbon.classList.remove('gold', 'warn'); if (S.idleKey) { ribRestore(); S.idleKey = ''; } feedStep(true); } else if (S.view) { drawWarm(); idleRibbon(); }
   }).observe($('spin'), { attributes: true, attributeFilter: ['class'] });
   const drawWarmOff = () => CC.board.ovl().querySelectorAll('.wst').forEach((n) => n.remove());
@@ -271,7 +295,7 @@
   async function demo(state = 'idle', mode = 'play') {
     const k = K(); while (!CC.ready) await new Promise((r) => setTimeout(r, 50)); S.demo = true; if (S.hold) { const r = S.hold; S.hold = null; r(); }
     closePrompt(); k.sweep(); bn.hidden = true; head.classList.remove('plg', 'plbn'); document.querySelectorAll('#head > .stamp').forEach((n) => n.remove());
-    const s = k.st, bet = 100; s.live = true; s.mode = mode; s.me = 'YOU'; s.busy = false; s.betIdx = Math.max(0, s.bets.indexOf(bet)); s.cbBet = null;
+    const s = k.st, bet = +Q.get('bet') || 100; s.live = true; s.mode = mode; s.me = 'YOU'; s.busy = false; s.betIdx = Math.max(0, s.bets.indexOf(bet)); s.cbBet = null;
     k.applyWallet({ play: 100000, chips: 100000 }); document.querySelector(`#modebar [data-m="${mode}"]`).click(); $('spin').classList.remove('run'); $('spin').classList.add('idle'); s.ctx = null;
     const L = rulesOf().list, cold = { inMs: 3 * 3600e3 + 12 * 60e3, leads: Math.floor(rulesOf().cold.batch), warm: 4 };
     const view = { leads: state === 'callback' ? L : 312, lt: state === 'callback' ? L * 10 : 3125, list: L, cb: state === 'callback' ? { bet: 200 } : null, warm: state === 'callback' ? [] : [3, 8, 19, 26], warmBet: bet, cold, daily: { claimed: false, streak: 3, next: 0.3 }, at: Date.now() };
@@ -284,7 +308,7 @@
     CC.board.show(ids(bonus ? G.bonus : state === 'ghost' ? G.dead : G.idle)); CC.board.setHot(bonus || state === 'ghost' || state === 'pot' ? [] : view.warm, true);
     s.bets.length || (s.bets = E.BET_LEVELS.slice());
     const ctx = { bet, cents: (t) => t * bet / 10, dollars: k.dollars, wait: k.wait, tween: k.tween, speed: k.speed, SFX: k.SFX, FX: CC.fx, say: k.say, stamp: k.stamp, waitTap: k.waitTap, timer: { timeoutMs: 20000, expiresAt: Date.now() + 14000, left() { return Math.max(0, this.expiresAt - Date.now()); } },
-      pickTargets: (c, cb) => CC.board.pickTargets(c, cb), demoHold: true, promptOpen: null, p: { totalWinTenths: state === 'more_lost' ? 0 : 717, status: 'done' } };
+      pickTargets: (c, cb) => CC.board.pickTargets(c, cb), run: { t: state === 'pick' ? 112 : (+Q.get('W') || 358.4) + (+Q.get('base') || 0) }, demoHold: true, promptOpen: null, p: { totalWinTenths: state === 'more_lost' ? 0 : 717, status: 'done' } };
     k.syncView(); render();
     $('win').dataset.c = 0; k.setWin(0, false);
     if (state === 'callback') { k.say('idle'); k.SFX.stamp; }
@@ -295,7 +319,7 @@
       document.getElementById('stage').classList.add('bonus'); $('bh').hidden = false; $('bhLeft').textContent = state === 'pick' ? 7 : 0; $('bhTot').textContent = state === 'pick' ? k.dollars(1120) : k.dollars(3584);
       k.setWin(state === 'pick' ? 1120 : 3584, false); ctx.promptOpen = state; s.ctx = ctx; s.busy = true; $('spin').classList.add('run'); $('spin').classList.remove('idle'); app.classList.add('pl-busy');
       if (state === 'pick') { CC.board.setHot([7, 14, 21], true); k.say('idle'); askPick({ choices: [7, 14, 21] }, ctx).then(() => {}); }
-      else { CC.hero.mood('hype'); askMore({ W: 358.4, mult: 2, pWin: 0.49 }, ctx).then(() => {}); }
+      else { CC.hero.mood('hype'); askMore({ W: +Q.get('W') || 358.4, mult: 2, pWin: 0.5 }, ctx).then(() => {}); }
     }
     if (state === 'ghost') {
       s.busy = true; app.classList.add('pl-busy'); CC.hero.mood('shock'); k.setWin(0, false);
@@ -309,6 +333,7 @@
   }
   const release = () => { if (S.hold) { const r = S.hold; S.hold = null; r(); } };
 
-  CC.pull = { setView, setPot, feed, onBetChange, leadGain, ghost, askPick, askMore, expired, moreOutcome, potWin, rules, timer, infoLines, demo, release, _S: S };
+  const armed = () => !!(S.prompt && S.prompt.armed);                 // true once the open prompt takes taps (false: no prompt, or still inside the 600 ms arming window)
+  CC.pull = { armed, feedClear, setView, setPot, feed, onBetChange, leadGain, ghost, askPick, askMore, expired, moreOutcome, potWin, rules, timer, infoLines, demo, release, _S: S };
   if (Q.get('mock') === 'pull') { window.demo = demo; demo(Q.get('state') || 'idle', Q.get('mode') || 'play'); }
 })();

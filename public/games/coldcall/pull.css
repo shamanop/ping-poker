@@ -75,25 +75,38 @@
 .slots i.pick{outline:none !important;cursor:pointer;box-shadow:inset 0 0 0 3px var(--gold),0 0 0 3px var(--ink-dk),0 0 0 6px var(--gold),0 0 20px 8px rgba(255,208,88,.8) !important;z-index:2}
 .slots i.pick.pl-late{box-shadow:inset 0 0 0 3px #ef5a42,0 0 0 3px var(--ink-dk),0 0 0 6px #ef5a42,0 0 20px 8px rgba(239,90,66,.8) !important}
 
-/* ---- ONE MORE CALL: the HUD's top row becomes two big keys (thumb zone). The board stays fully visible. ---- */
+/* ---- ONE MORE CALL: the HUD's top row becomes the keys (thumb zone). The board stays fully visible.
+   The SAFE key (HANG UP / bank) sits where SPIN sits (centre column, biggest): a stray skip tap at the SPIN position can only bank. ONE MORE CALL is the side key.
+   Both prompts are inert for their first 600 ms (.arming: dimmed, a bar fills along the key's lower edge; pull.js ARM_MS). ---- */
 #hud.dec{grid-template-rows:auto 36px auto}
 #hud.dec #balM,#hud.dec #spin,#hud.dec #betM{display:none}
-.dec2{grid-column:1/-1;grid-row:1;display:grid;grid-template-columns:minmax(0,.82fr) minmax(0,1.18fr);grid-template-rows:9px auto;gap:6px 8px;align-items:stretch}
+.dec2{grid-column:1/-1;grid-row:1;display:grid;grid-template-columns:minmax(0,1fr) 196px minmax(0,1fr);grid-template-rows:9px auto;gap:6px 8px;align-items:stretch}
 .dec2 .dr{grid-column:1/-1;height:9px;border:2px solid var(--ink-dk);border-radius:5px;overflow:hidden;background:#1a2c48;box-shadow:0 1px 0 rgba(255,244,214,.35)}
 .dec2 .dr i{display:block;height:100%;width:var(--w,100%);background:linear-gradient(var(--gold),var(--gold2))}
 .dec2 .dr.late i{background:linear-gradient(#ef5a42,var(--red))}
-.dec2 .k{display:grid;align-content:center;justify-items:center;gap:3px;min-height:96px;padding:5px 5px;border:3px solid var(--ink-dk);border-radius:10px;text-align:center;line-height:1.08;box-shadow:0 5px 0 var(--ink-dk),0 10px 10px rgba(0,0,0,.45)}
+.dec2 .bon{grid-column:1;grid-row:2;display:grid;align-content:center;justify-items:center;gap:2px;min-width:0;text-align:center;line-height:1.05;text-shadow:0 3px 0 #000,0 0 8px #000;pointer-events:none}
+.dec2 .bon small{font-family:var(--display);font-size:11px;letter-spacing:2px;color:var(--gold)}
+.dec2 .bon b{font-family:var(--display);font-weight:400;font-size:22px;color:var(--cream);font-variant-numeric:tabular-nums;max-width:100%;overflow-wrap:anywhere}
+.dec2 .bon em{font-style:normal;font-family:var(--memo);font-size:13px;color:#d8c9a0}
+.dec2 .k{position:relative;overflow:hidden;display:grid;grid-row:2;align-content:center;justify-items:center;gap:3px;min-height:96px;min-width:0;padding:5px 5px;border:3px solid var(--ink-dk);border-radius:10px;text-align:center;line-height:1.08;box-shadow:0 5px 0 var(--ink-dk),0 10px 10px rgba(0,0,0,.45);transition:opacity .15s}
 .dec2 .k:active{transform:translateY(4px);box-shadow:0 1px 0 var(--ink-dk)}
 .dec2 .k[disabled]{opacity:.55}
-.dec2 .hang{background:linear-gradient(var(--beige-hi),var(--beige-lo));color:var(--paper-ink)}
-.dec2 .more{background:linear-gradient(#e2472f,var(--red-lo));color:#fff3d6;text-shadow:0 2px 0 var(--red-dk)}
-.dec2 .k b{font-family:var(--display);font-weight:400;font-size:26px}
-.dec2 .more b{font-size:23px}
-.dec2 .k em{font-style:normal;font-family:var(--display);font-size:18px;white-space:nowrap}
+.dec2 .hang{grid-column:2;min-height:104px;background:linear-gradient(var(--beige-hi),var(--beige-lo));color:var(--paper-ink)}
+.dec2 .more{grid-column:3;background:linear-gradient(#e2472f,var(--red-lo));color:#fff3d6;text-shadow:0 2px 0 var(--red-dk)}
+.dec2 .k b{font-family:var(--display);font-weight:400;font-size:28px}
+.dec2 .more b{font-size:17px;letter-spacing:.01em}
+.dec2 .k em{font-style:normal;font-family:var(--display);font-size:19px;max-width:100%;overflow-wrap:anywhere;line-height:1.05}
 .dec2 .hang em{color:var(--red-lo)}
 .dec2 .hang small{font-size:13px;font-weight:700;color:var(--paper-ink)}
-.dec2 .more span{display:block;font-family:var(--font);font-weight:700;font-size:16px;line-height:1.15;color:#fff3d6;text-shadow:0 1px 0 var(--red-dk)}
-.dec2 .more span b{font-family:var(--font);font-size:inherit;color:var(--gold);text-shadow:0 1px 0 #000}
+.dec2 .more span{display:block;font-family:var(--font);font-weight:700;font-size:13px;line-height:1.12;color:#fff3d6;text-shadow:0 1px 0 var(--red-dk);overflow-wrap:anywhere}
+.dec2 .more span b{font-family:var(--font);font-size:inherit;letter-spacing:0;color:var(--gold);text-shadow:0 1px 0 #000}
+.dec2.s .hang em{font-size:16px}.dec2.s .more span{font-size:12px}.dec2.s .bon b{font-size:18px}
+.dec2.xs .hang em{font-size:13px}.dec2.xs .more span{font-size:11px}.dec2.xs .bon b{font-size:15px}
+.dec2.arming .k{opacity:.5;cursor:progress}
+.dec2.arming .k::after{content:"";position:absolute;left:0;bottom:0;height:5px;width:100%;background:var(--gold);transform-origin:left;animation:plarm .6s linear forwards}
+@keyframes plarm{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+.slots i.pick.pl-arm{opacity:.55;box-shadow:inset 0 0 0 3px var(--cream),0 0 0 3px var(--ink-dk),0 0 0 6px var(--cream) !important}
+@media (prefers-reduced-motion:reduce){.dec2.arming .k::after{animation:none;transform:none}}
 
 /* ---- GHOST: a sticky with a rubber stamp in the head band (steal 2, concept C). Leaves the WIN window alone. ---- */
 #head.plg #cap{visibility:hidden}
