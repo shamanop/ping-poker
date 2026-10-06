@@ -5,10 +5,11 @@
 //        stratified RTP: RTP = E[base cluster + base phone] + sum_k P(bell trigger k) * E[bonus k]; each bonus is sampled directly,
 //        so the heavy tail of the bonuses no longer dominates the interval (same idea as games/bender-rtp.js)
 //   nice -n 10 node games/coldcall-sim.js --buys [runsPerBuy=5000000] [seed=1]  average value and RTP of every buy at its configured price
-//   add --cfg '{"extra":{"base":{"phone":0.6}}}' to override levers (objects merge, arrays and numbers replace); --json for one JSON line.
+//   add --cfg '{"extra":{"base":{"phone":0.6}}}' to override levers (objects merge, arrays and numbers replace); --json for one JSON line; --out file.json also writes the JSON.
 // Seeds are stratified: the run is cut into 1M-spin chunks, each chunk has its own seed (splitmix of base seed + chunk index) and its
 // own 128-bit rng stream, so chunks are independent and the result does not depend on how many threads ran it.
 const os = require('os');
+const fs = require('fs');
 const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
 const Eng = require('./coldcall-engine.js');
 
@@ -33,12 +34,12 @@ if (!isMainThread) {
     }
     parentPort.postMessage(out);
   } else if (mode === 'strat') {
-    const out = { a: mk(), n: 0, nk: [0, 0, 0, 0], ak: [0, 0, 0, 0], cl: 0, ph: 0, bonus: {}, nUp: 0 };
+    const out = { a: mk(), n: 0, nk: [0, 0, 0, 0], ak: [0, 0, 0, 0], cl: 0, ph: 0, bonus: {}, nUp: 0, capBase: 0, over1000Base: 0 };
     for (const k of chunks) {
       const rng = Eng.rngFrom(seedOf(baseSeed, k));
       for (let i = 0; i < size; i++) {
         const sp = eng.playSpin(rng, 0, new Uint8Array(30), false, { capLeft: capT });
-        const a = sp.win; add(out.a, a); out.cl += sp.cluster; out.ph += sp.phone;
+        const a = sp.win; add(out.a, a); out.cl += sp.cluster; out.ph += sp.phone; if (sp.capped) out.capBase++; if (a >= 10000) out.over1000Base++;
         const kind = sp.capped || sp.bells < 3 ? 0 : sp.bells >= 5 ? 3 : sp.bells === 4 ? 2 : 1;
         out.nk[kind]++; out.ak[kind] += a;
       }
@@ -54,7 +55,7 @@ if (!isMainThread) {
     parentPort.postMessage(out);
   } else {
     const out = { total: mk(), cluster: mk(), phone: mk(), bonus: [mk(), mk(), mk(), mk()], nBonus: [0, 0, 0, 0], upg: 0, hitAny: 0, hitBase: 0, maxT: 0, capHits: 0,
-      baseWinSpins: 0, baseCascades: 0, phoneBase: 0, phoneBaseLeads: 0, phoneBaseCloses: 0, over100: 0, over1000: 0, over5000: 0, bells2: 0, bonusSpins: 0, bonusCascades: 0 };
+      capByKind: [0, 0, 0, 0], baseWinSpins: 0, baseCascades: 0, phoneBase: 0, phoneBaseLeads: 0, phoneBaseCloses: 0, over100: 0, over1000: 0, over5000: 0, bells2: 0, bonusSpins: 0, bonusCascades: 0 };
     for (const k of chunks) {
       const rng = Eng.rngFrom(seedOf(baseSeed, k));
       for (let i = 0; i < size; i++) {
@@ -67,7 +68,7 @@ if (!isMainThread) {
         if (r.phoneFired) { out.phoneBase++; out.phoneBaseLeads += r.leads; out.phoneBaseCloses += r.closes; }
         if (r.bells === 2) out.bells2++;
         if (w > out.maxT) out.maxT = w;
-        if (w >= capT) out.capHits++;
+        if (w >= capT) { out.capHits++; out.capByKind[r.bonusKind]++; }
         if (w >= 1000) out.over100++; if (w >= 10000) out.over1000++; if (w >= 50000) out.over5000++;
       }
     }
@@ -78,7 +79,7 @@ if (!isMainThread) {
   const argv = process.argv.slice(2);
   const flag = (f) => { const i = argv.indexOf(f); if (i < 0) return null; const v = argv[i + 1]; argv.splice(i, v && !v.startsWith('--') ? 2 : 1); return v && !v.startsWith('--') ? v : true; };
   const bool = (f) => { const i = argv.indexOf(f); if (i < 0) return false; argv.splice(i, 1); return true; };
-  const cfgArg = flag('--cfg'), buysMode = bool('--buys'), stratMode = bool('--strat'), asJson = bool('--json'), thrArg = flag('--threads');
+  const cfgArg = flag('--cfg'), buysMode = bool('--buys'), stratMode = bool('--strat'), asJson = bool('--json'), thrArg = flag('--threads'), outFile = flag('--out');
   const nums = argv.filter((a) => !a.startsWith('--')).map(Number);
   const cfg = merged(Eng.CFG, cfgArg && cfgArg !== true ? JSON.parse(cfgArg) : {});
   const threads = Math.min(MAX_THREADS, Math.max(1, +thrArg || MAX_THREADS));
@@ -110,6 +111,7 @@ if (!isMainThread) {
         const nb = parts.reduce((a, p) => a + p[b].nb, 0), caps = parts.reduce((a, p) => a + p[b].capHits, 0);
         o.buys[b] = { avgValueX: s.mean, ci: 1.96 * s.se, priceX: price, rtpPct: s.mean / price * 100, rtpCi: 1.96 * s.se / price * 100, suggestedPriceTenths: Math.round(s.mean / 0.98 * 10), bonusPct: nb / total * 100, capHits: caps, sdX: s.sd };
       }
+      if (outFile) fs.writeFileSync(outFile, JSON.stringify(o));
       if (asJson) return console.log(JSON.stringify(o));
       console.log(`buys, ${total} runs each, seed ${seed}, ${f(secs, 1)}s`);
       for (const b of Object.keys(o.buys)) { const x = o.buys[b]; console.log(`  ${b.padEnd(7)} avg value ${f(x.avgValueX, 3)}x (+-${f(x.ci, 3)})  price ${f(x.priceX, 1)}x  RTP ${f(x.rtpPct)}% (+-${f(x.rtpCi)})  suggested price (avg/0.98) ${f(x.suggestedPriceTenths / 10, 1)}x = ${x.suggestedPriceTenths} tenths  bonus on ${f(x.bonusPct, 2)}% of rounds  cap hits ${x.capHits}  sd ${f(x.sdX, 1)}x`); }
@@ -137,11 +139,13 @@ if (!isMainThread) {
       const partB = {}, partBci = {};
       for (const kind of KINDS) { partB[kind] = pk[kind] * bs[kind].avgX; partBci[kind] = 1.96 * Math.sqrt(pk[kind] ** 2 * VAR[kind] / 100 + bs[kind].avgX ** 2 * pk[kind] * (1 - pk[kind]) / n); }
       const o = { mode, baseSpins: n, bonusRunsPerKind: bs[1].runs, seed, secs, rtpPct: rtp * 100, rtpCi: ci * 100, parts: { cluster: clP * 100, basePhone: phP * 100, bonus1: partB[1] * 100, bonus2: partB[2] * 100, bonus3: partB[3] * 100 },
-        partsCi: { bonus1: partBci[1] * 100, bonus2: partBci[2] * 100, bonus3: partBci[3] * 100 }, oneIn: { bonus1: 1 / pk[1], bonus2: 1 / pk[2], bonus3: pk[3] ? 1 / pk[3] : null, any: 1 / (pk[1] + pk[2] + pk[3]) }, bonus: bs };
+        partsCi: { bonus1: partBci[1] * 100, bonus2: partBci[2] * 100, bonus3: partBci[3] * 100 }, oneIn: { bonus1: 1 / pk[1], bonus2: 1 / pk[2], bonus3: pk[3] ? 1 / pk[3] : null, any: 1 / (pk[1] + pk[2] + pk[3]) }, bonus: bs, capBase: sumP('capBase'), over1000Base: sumP('over1000Base') };
+      if (outFile) fs.writeFileSync(outFile, JSON.stringify(o));
       if (asJson) return console.log(JSON.stringify(o));
       console.log(`COLD CALL stratified RTP: ${n} base spins + ${bs[1].runs} runs of each bonus, seed ${seed}, ${f(secs, 1)}s`);
       console.log(`  total RTP   ${f(o.rtpPct, 3)}% +- ${f(o.rtpCi, 3)} (95%)`);
       console.log(`  by part     clusters ${f(o.parts.cluster)}%  base phone ${f(o.parts.basePhone)}%  bonus1 ${f(o.parts.bonus1)}% (+-${f(o.partsCi.bonus1, 3)})  bonus2 ${f(o.parts.bonus2)}% (+-${f(o.partsCi.bonus2, 3)})  bonus3 ${f(o.parts.bonus3)}% (+-${f(o.partsCi.bonus3, 3)})`);
+      console.log(`  base spin alone (no bonus): >=1000x ${o.over1000Base} times, cap ${o.capBase} times in ${n} spins`);
       console.log(`  triggers    bonus1 1 in ${f(o.oneIn.bonus1, 0)}  bonus2 1 in ${f(o.oneIn.bonus2, 0)}  bonus3 ${o.oneIn.bonus3 ? '1 in ' + f(o.oneIn.bonus3, 0) : 'none seen'}  any 1 in ${f(o.oneIn.any, 1)}`);
       for (const kind of KINDS) { const b = bs[kind]; console.log(`  bonus${kind}      avg ${f(b.avgX, 2)}x (+-${f(b.ci, 2)}) [clusters ${f(b.cl, 1)}x, phone ${f(b.ph, 1)}x]  spins ${f(b.spins, 1)}  cascades ${f(b.casc, 1)}  phone fired ${f(b.fired, 1)}/bonus  closes ${f(b.closes, 2)}  ${kind === 1 ? 'upgraded ' + f(b.up * 100, 1) + '%  ' : ''}>=100x ${f(b.over100 * 100, 1)}%  >=1000x ${f(b.over1000 * 100, 2)}%  >=5000x ${f(b.over5000 * 100, 3)}%  cap hits ${b.capHits}${b.capOneIn ? ' (1 in ' + f(b.capOneIn, 0) + ' runs)' : ''}`); }
       return;
@@ -164,8 +168,10 @@ if (!isMainThread) {
       avgBonusSpins: nAny ? sumP('bonusSpins') / nAny : 0,
       maxWinX: Math.max(...parts.map((p) => p.maxT)) / 10, capHits: sumP('capHits'), capOneIn: sumP('capHits') ? total / sumP('capHits') : null,
       tail: { ge100: sumP('over100') / total, ge1000: sumP('over1000') / total, ge5000: sumP('over5000') / total }, tailCounts: { ge100: sumP('over100'), ge1000: sumP('over1000'), ge5000: sumP('over5000') },
+      capByKind: [0, 1, 2, 3].map((k) => sumArr('capByKind', k)),
       twoBells: sumP('bells2') / total,
     };
+    if (outFile) fs.writeFileSync(outFile, JSON.stringify(o));
     if (asJson) return console.log(JSON.stringify(o));
     console.log(`COLD CALL sim (plain full rounds): ${total} spins, seed ${seed}, ${threads} threads, ${f(secs, 1)}s (${f(total / secs / 1e6, 2)}M spins/s)`);
     console.log(`  total RTP        ${f(o.rtpPct, 3)}% +- ${f(o.rtpCi, 3)} (95%, plain; use --strat for the tight figure)`);
@@ -175,6 +181,7 @@ if (!isMainThread) {
     console.log(`  base phone       fires on ${f(o.phoneBase.pctOfSpins, 2)}% of spins (1 in ${o.phoneBase.oneIn ? f(o.phoneBase.oneIn, 1) : 'n/a'}), avg ${f(o.phoneBase.avgLeads, 1)} hot leads, ${f(o.phoneBase.avgCloses, 3)} closes`);
     console.log(`  cascades         ${f(o.avgCascadesPerWinningSpin, 2)} per winning base spin   bonus avg ${f(o.avgBonusSpins, 1)} spins`);
     console.log(`  max win          ${f(o.maxWinX, 1)}x   cap (${Eng.MAX_WIN_X}x) hit ${o.capHits} times${o.capOneIn ? ' (1 in ' + f(o.capOneIn, 0) + ')' : ''}`);
+    console.log(`  cap hits by source  base only ${o.capByKind[0]}  bonus1 ${o.capByKind[1]}  bonus2 ${o.capByKind[2]}  bonus3 ${o.capByKind[3]}`);
     console.log(`  tail (share of spins)  >=100x ${(o.tail.ge100 * 100).toExponential(3)}% (1 in ${o.tail.ge100 ? f(1 / o.tail.ge100, 0) : 'n/a'})  >=1000x ${(o.tail.ge1000 * 100).toExponential(3)}% (1 in ${o.tail.ge1000 ? f(1 / o.tail.ge1000, 0) : 'n/a'})  >=5000x ${(o.tail.ge5000 * 100).toExponential(3)}% (${o.tailCounts.ge5000} spins)`);
   }).catch((e) => { console.error(e); process.exit(1); });
 }

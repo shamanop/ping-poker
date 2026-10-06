@@ -26,10 +26,10 @@
     weights: [35.9, 29, 22, 17, 12.2, 8.2, 6.2, 4.5, 3.2, 2.2],
     // closer (wild), bell (scatter) and phone weights per cell, per mode (a phone is also guaranteed on every bonus3 spin and on a 'call' buy)
     extra: {
-      base: { wild: 1, bell: 1.52, phone: 0.18 },
-      bonus1: { wild: 1, bell: 1.52, phone: 4.5 },
-      bonus2: { wild: 1, bell: 1.52, phone: 4.5 },
-      bonus3: { wild: 1, bell: 1.52, phone: 3 },
+      base: { wild: 1, bell: 1.567, phone: 0.192 },
+      bonus1: { wild: 1, bell: 1.567, phone: 4.5 },
+      bonus2: { wild: 1, bell: 1.567, phone: 4.5 },
+      bonus3: { wild: 1, bell: 1.567, phone: 3 },
     },
     // cluster pay in tenths of the bet by cluster size: 5, 6, 7, 8, 9, 10, 11, 12, 13+  (5 pays 0.1x to 1x, 13+ pays 15x to 100x)
     pay: {
@@ -47,9 +47,9 @@
     payScale: 1,   // applied once when the engine is built (rounded to integer tenths, min 1); 1 = the table as written
     // hot lead reveals: tier weights per mode (bonus3 has no bronze), optional per-mode value weights (bubbles), values in tenths of the bet
     reveal: {
-      base: { bronze: 100, silver: 2.5, gold: 0.2, upsell: 6, close: 1 },
-      bonus1: { bronze: 100, silver: 6, gold: 0.6, upsell: 7, close: 1 },
-      bonus2: { bronze: 100, silver: 6, gold: 0.6, upsell: 7, close: 0.4 },
+      base: { bronze: 100, silver: 2.5, gold: 0.2, upsell: 6, close: 0.6 },
+      bonus1: { bronze: 100, silver: 8, gold: 0.5, upsell: 7, close: 0.4 },
+      bonus2: { bronze: 100, silver: 8, gold: 0.5, upsell: 7, close: 0.15 },
       bonus3: { bronze: 0, silver: 5.5, gold: 0.05, upsell: 0.5, close: 0.004,
         bubbles: { silver: [[50, 75], [100, 15], [150, 7], [200, 3]], gold: [[250, 60], [500, 25], [1000, 10], [2500, 4], [5000, 1]] } },
     },
@@ -67,7 +67,7 @@
     maxRevealRounds: 30,         // hard cap on the reveal / close repeat loop (it cannot pass the number of hot leads anyway)
     // buy prices, tenths of the bet. Set from the measured average value / 0.98 (rounded to a whole tenth), then re-simulated.
     buyCost: { call: 49, bonus1: 553, bonus2: 3094, hunt: 30 },
-    hunt: { bellMult: 1.7 },     // 'hunt': one spin whose bell weight is multiplied (base game otherwise)
+    hunt: { bellMult: 1.85 },     // 'hunt': one spin whose bell weight is multiplied (base game otherwise)
     maxWinTenths: MAX_WIN_T,
   };
   const TIERS = [[100, 'legend'], [50, 'mega'], [25, 'huge'], [10, 'big'], [5, 'sweet'], [2, 'nice']];
