@@ -327,9 +327,12 @@ function settingsCard(t) {
 
 // ── buy-in picker (slider + typed) ────────────────────────────────
 function buyInPicker(t, mySettled) {
-  const unit = t.unit || unitOf(t.mode), bi = t.buyIn, bank = unit === 'chips' ? (S.user && (S.user.bankChips ?? S.user.chips)) : (t.mode === 'play' && S.wallet ? S.wallet.play : null);
-  const hi = bank != null && Number.isFinite(bank) ? Math.max(bi.min, Math.min(bi.max, bank)) : bi.max;
-  const vals = ladder(unit, bi.min, hi, [bi.default]);
+  const unit = t.unit || unitOf(t.mode), bi = t.buyIn;
+  let fund = t.mode;
+  const bankOf = (f) => (f === 'chips' ? (S.user && (S.user.bankChips ?? S.user.chips)) : (S.wallet ? S.wallet.play : null));
+  const hiOf = (bk) => (bk != null && Number.isFinite(bk) ? Math.max(bi.min, Math.min(bi.max, bk)) : bi.max);
+  let bank = bankOf(fund), hi = hiOf(bank);
+  let vals = ladder(unit, bi.min, hi, [bi.default]);
   let val = Math.min(hi, Math.max(bi.min, bi.default));
   window.Money && window.Money.setUnit && window.Money.setUnit(unit);
   const range = h('input', { type: 'range', min: 0, max: vals.length - 1, step: 1, value: nearIdx(vals, val), id: 'lb-buyin-range', 'aria-label': 'Buy-in' });
@@ -338,22 +341,34 @@ function buyInPicker(t, mySettled) {
   const msg = h('div', { class: 'lb-err', id: 'lb-buyin-err' });
   function plain(v) { return unit === 'chips' || (window.Money && window.Money.getMode && window.Money.getMode() === 'chips') ? String(v) : '$' + (v % 100 ? (v / 100).toFixed(2) : v / 100); }
   const paint = () => { const a = range.value / Math.max(1, vals.length - 1); fill.style.left = 'var(--p8)'; fill.style.width = 'calc((100% - var(--p16)) * ' + a + ')'; };
-  range.addEventListener('input', () => { val = vals[+range.value]; typed.value = plain(val); msg.textContent = ''; paint(); });
+  range.addEventListener('input', () => { val = vals[+range.value]; typed.value = plain(val); msg.textContent = ''; paint(); drawBal(); });
   const commit = () => {
     const v = parseAmt(typed.value, unit);
     if (v == null) { msg.textContent = 'Enter an amount.'; return false; }
     val = Math.min(hi, Math.max(bi.min, v)); typed.value = plain(val); range.value = nearIdx(vals, val); paint();
-    msg.textContent = v !== val ? 'Buy-in is ' + fm(bi.min, unit) + ' to ' + fm(hi, unit) + '.' : ''; return true;
+    msg.textContent = v !== val ? 'Buy-in is ' + fm(bi.min, unit) + ' to ' + fm(hi, unit) + '.' : ''; drawBal(); return true;
   };
   typed.addEventListener('change', commit); typed.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); commit(); } });
   paint();
+  const balLine = h('div', { class: 'lb-muted', id: 'lb-fund-bal' });
+  const drawBal = () => {
+    const cross = fund !== t.mode;
+    balLine.textContent = bank == null ? '' : (fund === 'play' ? 'Your Play $: ' + fm(bank, 'cents') : 'Your bank: ' + fm(bank, 'chips')) + (cross ? '. This buy-in costs ' + (fund === 'play' ? fm(val, 'cents') : fm(val, 'chips')) + ' (1 chip = $0.01).' : '');
+  };
+  const fundBtn = (f, label) => h('button', { type: 'button', class: 'lb-btn' + (fund === f ? '' : ' blue'), id: 'lb-fund-' + f, onclick: () => {
+    if (fund === f) return; fund = f; bank = bankOf(fund); hi = hiOf(bank);
+    vals = ladder(unit, bi.min, hi, [bi.default]); val = Math.min(hi, Math.max(bi.min, val)); range.max = vals.length - 1; range.value = nearIdx(vals, val); typed.value = plain(val); msg.textContent = '';
+    fundRow.replaceChildren(fundBtn('chips', 'Chips'), fundBtn('play', 'Play $')); paint(); drawBal();
+  } }, label);
+  const fundRow = h('div', { class: 'lb-field', id: 'lb-fund' }, fundBtn('chips', 'Chips'), fundBtn('play', 'Play $'));
+  drawBal();
   const night = mySettled != null ? h('div', { class: 'lb-muted' }, 'Your night so far: ', h('b', { class: mySettled > 0 ? 'up' : mySettled < 0 ? 'down' : '' }, fm(mySettled, unit, { signed: true }))) : null;
   const el = h('div', { class: 'lb-stack', style: 'gap:var(--p14)' },
     h('div', { class: 'lb-field' }, h('label', null, 'Buy-in'), h('div', { class: 'lb-join' }, typed, h('span'))),
     h('div', { class: 'lb-slider' }, h('div', { class: 'trk' }), fill, range),
     h('div', { class: 'lb-ends' }, h('span', null, fm(bi.min, unit)), h('span', null, fm(hi, unit))), msg, night,
-    bank != null ? h('div', { class: 'lb-muted' }, (t.mode === 'play' ? 'Your Play $: ' : 'Your bank: ') + fm(bank, unit)) : null);
-  return { el, get: () => (commit() ? val : null), msg };
+    fundRow, balLine);
+  return { el, get: () => (commit() ? val : null), getFund: () => fund, msg };
 }
 
 // ── join / buy-in modal ───────────────────────────────────────────
@@ -383,7 +398,7 @@ function modalJoin(info, me) {
   const sit = h('button', { class: 'lb-btn', id: 'lb-sit', onclick: () => {
     const v = me ? (me.stack || t.buyIn.default) : pick.get(); if (v == null) return;
     sit.disabled = true; err.textContent = ''; S.onError = (m) => { sit.disabled = false; err.textContent = m; };
-    emit('table_join', { tableId: id, buyIn: v });
+    emit('table_join', { tableId: id, buyIn: v, fund: pick.getFund() });
   } }, me ? 'Return to seat' : 'Sit down');
   openModal(
     h('div', null, h('span', { class: 'lb-eyebrow' }, 'Table ' + id), h('h3', null, t.name)),
@@ -517,7 +532,7 @@ function drawShare() {
       h('button', { class: 'lb-btn full', id: 'lb-enter', onclick: () => { S.onError = (m) => { err.textContent = m; }; emit('table_join', { tableId: id, buyIn: me.stack || t.buyIn.default }); } }, 'Go to the table'), err);
   } else {
     const pick = S.sharePick && S.sharePick.id === id ? S.sharePick.p : (S.sharePick = { id, p: buyInPicker(t, S.net[id]) }).p;
-    const sit = h('button', { class: 'lb-btn full', id: 'lb-sit', onclick: () => { const v = pick.get(); if (v == null) return; sit.disabled = true; S.onError = (m) => { sit.disabled = false; err.textContent = m; }; emit('table_join', { tableId: id, buyIn: v }); } }, 'Sit down');
+    const sit = h('button', { class: 'lb-btn full', id: 'lb-sit', onclick: () => { const v = pick.get(); if (v == null) return; sit.disabled = true; S.onError = (m) => { sit.disabled = false; err.textContent = m; }; emit('table_join', { tableId: id, buyIn: v, fund: pick.getFund() }); } }, 'Sit down');
     right = h('section', { class: 'lb-card lb-stack' }, h('h2', null, 'Take your seat'), pick.el, h('div', { class: 'lb-copy' }, modeNote(t.mode)), err, sit);
   }
   S.shareBox.replaceChildren(

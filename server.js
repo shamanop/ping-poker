@@ -271,7 +271,18 @@ function moneyMeta(room, name, key) {
   if (!room.nightId) return undefined;
   return { mode: room.unit, tableId: room.id, nightId: room.nightId, key: key || bankKey(name) };
 }
+// Funding source for a seat: 'chips' (bank) or 'play' (wallet). Anything else, or the table's own currency, means no conversion.
+const fundOf = (room, f) => (f === 'chips' || f === 'play') && (room.mode === 'chips' || room.mode === 'play') ? f : room.mode;
+// 1 table unit = 1 unit of the other currency (1 chip = 1 Play $ cent). Moves money between the bank and the wallet around a normal payIn/payOut.
+function convertFunds(name, key, from, to, amount) {
+  if (!(amount > 0) || from === to || !gameHooks || !gameHooks.wallet) return;
+  const w = gameHooks.wallet;
+  if (from === 'play') { w.spend(key, 'play', amount); adjustBank(name, amount, null); }
+  else { adjustBank(name, -amount, null); w.credit(key, 'play', amount); }
+}
 function payIn(room, name, amount, type, opts = {}) {
+  const fund = fundOf(room, opts.fund);
+  if (fund !== room.mode) convertFunds(name, opts.key || bankKey(name), fund, room.mode, amount);
   const meta = moneyMeta(room, name, opts.key);
   if (room.mode === 'play') {
     const k = (meta && meta.key) || opts.key || bankKey(name);
@@ -284,12 +295,16 @@ function payOut(room, name, amount, opts = {}) {
   let meta = moneyMeta(room, name, opts.key);
   if (meta && opts.reason) meta.reason = opts.reason;
   if (opts.park && room.mode === 'chips') meta = { ...(meta || {}), park: true };
+  const seat = room.players.find(p => !p.isBot && p.name === name);
+  const fund = fundOf(room, opts.fund || (seat && seat.fund));
+  let out;
   if (room.mode === 'play') {
     const k = (meta && meta.key) || opts.key || bankKey(name);
     if (gameHooks && gameHooks.wallet && amount > 0) gameHooks.wallet.credit(k, 'play', amount);
-    tables.noteRow(room, { name, type: 'cashout', amount, key: k }); return null;
-  }
-  return adjustBank(name, amount, 'cashout', room, 0, meta);
+    tables.noteRow(room, { name, type: 'cashout', amount, key: k }); out = null;
+  } else out = adjustBank(name, amount, 'cashout', room, 0, meta);
+  if (fund !== room.mode) { convertFunds(name, (meta && meta.key) || opts.key || bankKey(name), room.mode, fund, amount); if (room.mode === 'chips') out = getBalance(name); }
+  return out;
 }
 const tables = createTables({
   io, rooms, ledger, accounts, file: TABLES_FILE, bankKey, makeRoom, makePlayer, getBalance, getPlay: k => (gameHooks && gameHooks.wallet ? gameHooks.wallet.get(k).play : Infinity), payIn, payOut, AV_EMOJI,
@@ -1578,7 +1593,7 @@ io.on('connection', socket => {
   });
 
   // ── rebuy ─────────────────────────────────────────────────────────────────
-  on('rebuy', ({ roomId, tableId, amount } = {}) => {
+  on('rebuy', ({ roomId, tableId, amount, fund: reqFund } = {}) => {
     const room = rooms.get(roomId || tableId);
     if (!room) return;
     const playerIdx = room.players.findIndex(p => p.socketId === socket.id);
@@ -1598,18 +1613,20 @@ io.on('connection', socket => {
     const t = room.settings, legacy = !room.nightId;
     const startChips = room.startChips || STARTING_CHIPS;
     const min = legacy ? BIG_BLIND : t.buyIn.min, max = legacy ? Math.max(t ? t.buyIn.max : STARTING_CHIPS, startChips) : t.buyIn.max;
-    const balance = room.mode === 'chips' ? getBalance(player.name) : room.mode === 'play' ? playBalance(player.acct || bankKey(player.name)) : Infinity;
+    const fund = fundOf(room, player.chips > 0 ? player.fund : (reqFund || player.fund));
+    const balance = fund === 'chips' ? getBalance(player.name) : fund === 'play' ? playBalance(player.acct || bankKey(player.name)) : Infinity;
+    const fundWord = fund === 'play' ? 'Play $' : 'chips in bank';
     let buyIn = amount;
     if (buyIn === undefined || buyIn === null) buyIn = Math.min(legacy ? startChips : t.buyIn.default, balance);
     if (!Number.isSafeInteger(buyIn) || buyIn < min || buyIn > max) {
-      if (room.mode === 'play' && balance < min) socket.emit('error', { message: 'Not enough Play $ to rebuy', code: 'bank' });
-      else if (room.mode === 'chips' && balance < min) socket.emit('error', { message: 'Not enough chips in bank to rebuy', code: 'bank' });
+      if (balance < min) socket.emit('error', { message: `Not enough ${fundWord} to rebuy`, code: 'bank' });
       else socket.emit('error', { message: `Rebuy must be between ${min} and ${max}`, code: 'range' });
       return;
     }
-    if (buyIn > balance) { socket.emit('error', { message: room.mode === 'play' ? 'Not enough Play $ to rebuy' : 'Not enough chips in bank to rebuy', code: 'bank' }); return; }
+    if (buyIn > balance) { socket.emit('error', { message: `Not enough ${fundWord} to rebuy`, code: 'bank' }); return; }
 
-    const newBalance = payIn(room, player.name, buyIn, 'rebuy', { key: player.acct });
+    const newBalance = payIn(room, player.name, buyIn, 'rebuy', { key: player.acct, fund });
+    player.fund = fund;
     room.rebuyCounts[pkey] = (room.rebuyCounts[pkey] || 0) + 1;
     player.chips     = buyIn;
     player.chipsBought = (player.chipsBought || 0) + buyIn;

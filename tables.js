@@ -364,7 +364,7 @@ function createTables(E) {
       socket.emit('table_info', { table: publicTable(t), seated: seatedList(t), openSeats: Math.max(0, t.seats - humans(roomOf(t)).length) });
     });
 
-    on('table_join', ({ tableId, buyIn, seat } = {}) => {
+    on('table_join', ({ tableId, buyIn, seat, fund: reqFund } = {}) => {
       const key = authed(); if (!key) return;
       const t = lookup(tableId);
       if (!t) { err('No table with that code'); return; }
@@ -393,15 +393,14 @@ function createTables(E) {
       let amount = buyIn === undefined || buyIn === null ? (prior >= t.buyIn.min ? Math.min(prior, t.buyIn.max) : t.buyIn.default) : buyIn;
       if (!isInt(amount) || amount < t.buyIn.min || amount > t.buyIn.max) { err(`Buy-in must be between ${t.buyIn.min} and ${t.buyIn.max}`, 'range'); return; }
       if (!existing && humans(room).length + room.players.filter(p => p.isBot).length >= room.maxSeats) { err('Table is full', 'full'); return; }
-      if (t.mode === 'chips') {
-        const bal = E.getBalance(acct.display);
-        if (bal < amount) { err('Not enough in your bank', 'bank'); return; }
-      }
-      if (t.mode === 'play' && E.getPlay(key) < amount) { err('Not enough Play $', 'bank'); return; }
+      const fund = reqFund === 'chips' || reqFund === 'play' ? reqFund : t.mode;
+      if (fund === 'chips' && E.getBalance(acct.display) < amount) { err('Not enough in your bank', 'bank'); return; }
+      if (fund === 'play' && E.getPlay(key) < amount) { err('Not enough Play $', 'bank'); return; }
 
       let player = existing;
       if (player) {
-        E.payIn(room, player.name, amount, 'buyin', { key });
+        E.payIn(room, player.name, amount, 'buyin', { key, fund });
+        player.fund = fund;
         delete room.lastStacks[key];
         applySeat(player, acct);
         player.chips = amount; player.chipsBought = amount; player.connected = true; player.socketId = socket.id;
@@ -410,7 +409,8 @@ function createTables(E) {
       } else {
         player = E.makePlayer(socket.id, acct.display, E.AV_EMOJI[Number(String(acct.avatar).slice(1)) - 1] || '🃏', amount);
         player.acct = key; applySeat(player, acct);
-        E.payIn(room, acct.display, amount, 'buyin', { key });
+        E.payIn(room, acct.display, amount, 'buyin', { key, fund });
+        player.fund = fund;
         delete room.lastStacks[key];
         if (room.status === 'playing' || room.status === 'waiting_next') player.sittingOut = true;
         room.players.push(player);

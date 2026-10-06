@@ -46,6 +46,20 @@ const cl = () => { const c = { ev: [] }; c.s = io(`http://localhost:${PORT}`, { 
     ok(a.last('error') && a.last('error').code === 'bad_mode' && !a.has('g:bender:result'), 'ledger mode refused');
     a.ev.length = 0; a.s.emit('table_create', { settings: { name: 'Old school', mode: 'friends', buyIn: { min: 500, max: 5000, default: 1000 }, blinds: { sb: 5, bb: 10 } } }); await sleep(300);
     ok(a.last('error') && !a.has('table_created'), 'Friends $ tables can no longer be created');
+    // choose the funding source on the buy-in: chips table paid with Play $, Play $ table paid with chips, each cashes back to its source
+    a.ev.length = 0; a.s.emit('table_create', { settings: { name: 'Chips night', mode: 'chips', unit: 'chips', buyIn: { min: 500, max: 5000, default: 1500 }, blinds: { sb: 10, bb: 20 } } }); await sleep(400);
+    const ct = a.last('table_created'); ok(ct && ct.table.mode === 'chips', 'chips table created');
+    a.ev.length = 0; a.s.emit('wallet_get'); await sleep(300); const f0 = a.last('wallet');
+    a.ev.length = 0; a.s.emit('table_join', { tableId: ct.table.id, buyIn: 1500, fund: 'play' }); await sleep(500);
+    a.s.emit('wallet_get'); await sleep(300); const f1 = a.last('wallet');
+    ok(a.has('table_joined') && f1.play === f0.play - 1500 && f1.chips === f0.chips, 'chips table paid with Play $: play -1500, bank untouched (' + f0.play + '/' + f0.chips + ' -> ' + f1.play + '/' + f1.chips + ')');
+    a.s.emit('table_leave', { tableId: ct.table.id }); await sleep(500); a.s.emit('wallet_get'); await sleep(300); const f2 = a.last('wallet');
+    ok(f2.play === f0.play && f2.chips === f0.chips, 'cash-out returned to Play $ (' + f2.play + '/' + f2.chips + ')');
+    a.ev.length = 0; a.s.emit('table_join', { tableId: id, buyIn: 2000, fund: 'chips' }); await sleep(500);
+    a.s.emit('wallet_get'); await sleep(300); const f3 = a.last('wallet');
+    ok(a.has('table_joined') && f3.chips === f0.chips - 2000 && f3.play === f0.play, 'Play $ table paid with chips: bank -2000, Play $ untouched (' + f3.play + '/' + f3.chips + ')');
+    a.s.emit('table_leave', { tableId: id }); await sleep(500); a.s.emit('wallet_get'); await sleep(300); const f4 = a.last('wallet');
+    ok(f4.play === f0.play && f4.chips === f0.chips, 'cash-out returned to the chips bank (' + f4.play + '/' + f4.chips + ')');
   } finally { proc.kill(); setTimeout(() => { try { fs.rmSync(dir, { recursive: true, force: true }); } catch {} process.exit(fails ? 1 : 0); }, 400); }
   console.log(fails ? `FAILED ${fails}` : 'ALL PASS');
 })();
