@@ -255,7 +255,7 @@ async function dealAligned(srv, names, stacks, o = {}) {
     if (o.want === undefined || btn === o.want) {
       const start = Object.fromEntries(host.gs.players.map(p => [p.name, p.chips + p.roundBet]));
       const blinds = Object.fromEntries(host.gs.players.map(p => [p.name, p.roundBet]));
-      return { id, bots, names, start, blinds, bank0, handNum: h, button: host.gs.players[btn].name, order: host.gs.players.map(p => p.name) };
+      return { id, bots, names, start, blinds, bank0, sd0: bots.map(b => b.showdowns.length), handNum: h, button: host.gs.players[btn].name, order: host.gs.players.map(p => p.name) };
     }
     await drive(bots, P.fold, () => host.gs.handNum > h || host.gs.status !== 'playing', 8000);
     h += 1;
@@ -265,19 +265,38 @@ async function dealAligned(srv, names, stacks, o = {}) {
 // Wait for the hand's showdown_result on `ob`, then audit at once. Returns per-player chips (table) + bank delta, plus the payload.
 async function settleOf(S, ob, ms = 15000) {
   const b = S.bots[ob === undefined ? 0 : ob];
-  const n0 = b.showdowns.length;
-  await waitFor(() => b.showdowns.length > n0, ms);
-  const sd = b.showdowns[b.showdowns.length - 1];
+  const base = S.sd0 ? S.sd0[ob === undefined ? 0 : ob] : b.showdowns.length;
+  await waitFor(() => b.showdowns.length > base, ms);
+  const sd = b.showdowns.length > base ? b.showdowns[base] : null;
   const a = await audit(b); const room = roomOf(a, S.id);
   const totals = {};
   for (const bt of S.bots) { const seat = room && room.players.find(p => p.name === bt.name); totals[bt.name] = (seat ? seat.chips : 0) + ((a.bank[bt.key] ?? 0) - (S.bank0[bt.name] ?? 0)); }
-  return { sd: n0 === b.showdowns.length ? null : sd, totals, audit: a };
+  return { sd, totals, audit: a };
 }
 // expected totals = start - committed + settled payout (refSettle). committed/strength keyed by name.
 function expectTotals(S, committed, folded, strength) {
   const r = refSettle({ committed, folded, strength, order: S.order, button: S.button });
   const out = {}; for (const n of S.names) out[n] = S.start[n] - (committed[n] || 0) + (r.final[n] || 0);
   return { totals: out, ref: r };
+}
+
+// One pot scenario: align the hand, run the script (or the policies), settle, compare with the reference.
+// spec: { names, stacks, deck, want, settings, policies | script(S), committed(S) -> {name:n}, folded(S) -> Set, strength: [n per player], observer }
+async function runPot(srv, spec) {
+  const S = await dealAligned(srv, spec.names, spec.stacks, { want: spec.want, deck: spec.deck, settings: spec.settings });
+  const ob = spec.observer || 0;
+  const t0 = Date.now();
+  if (spec.script) await spec.script(S);
+  else await drive(S.bots, spec.policies, () => S.bots[ob].showdowns.length > S.sd0[ob], 25000);
+  const res = await settleOf(S, ob);
+  const strength = Object.fromEntries(spec.names.map((n, i) => [n, spec.strength[i]]));
+  const exp = expectTotals(S, spec.committed(S), spec.folded ? spec.folded(S) : new Set(), strength);
+  S.bots.forEach(b => b.close());
+  return { S, res, exp, ms: Date.now() - t0 };
+}
+function diffTotals(got, want) {
+  const bad = Object.keys(want).filter(n => got[n] !== want[n]);
+  return bad.length ? bad.map(n => `${n} got ${got[n]} want ${want[n]}`).join('; ') : '';
 }
 
 // ---------------------------------------------------------------- check runner
@@ -315,4 +334,4 @@ function suite(file) {
 }
 
 module.exports = { startServer, Bot, waitFor, sleep, log, audit, roomOf, seatOf, moneyTotal, rigDeck, card, tableWith, step, info, P, drive, refSettle,
-  suite, expect, expectEq, Fail, dealAligned, settleOf, expectTotals, TARGET_DIR, REPO_ROOT, PORT_BASE, RUN_ROOT };
+  suite, expect, expectEq, Fail, dealAligned, settleOf, expectTotals, runPot, diffTotals, TARGET_DIR, REPO_ROOT, PORT_BASE, RUN_ROOT };
