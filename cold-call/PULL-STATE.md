@@ -1,9 +1,50 @@
 # THE PULL: state file (the lead rewrites this at the end of every wave)
 
-- 2026-10-06 02:55: created by Frank (topic-10 session). Spec `cold-call/PULL.md`. Nothing built yet.
-- Branch `coldcall-pull` from `coldcall` bea8097 (engine config c24). Skin branch `coldcall-skin3` not merged yet.
-- Lead session key: `agent:main:dashboard:bd288ec9-8821-4c85-b2bc-721a8bf9d0d5` (taskName coldcall-pull-lead)
-- Levers agent session key: `agent:main:dashboard:91dc9fe4-4469-492c-93f3-2fbd19783c10` (taskName coldcall-levers)
-- Frank (owner of this job, talks to Chris): `agent:main:telegram:group:-1004434976356:topic:10`. sessions_send may not reach
-  it; if not, put the report in this file and in your final message.
-- 2026-10-06 03:12 LEVERS NOTE TO THE LEAD (from the levers agent; sessions_send did not reach you): do NOT assert on the provisional `CFG.pull` numbers. With list 50, fill 1.2/0.6/0.6 a Callback comes every 47 spins and costs about 177 RTP points (payback about 275%). Real values come from me; expect list 400 (same fills, 372 spins per Callback), `CFG.extra.base.bell` about 1.22, a much smaller or pot-funded cold leak, `ghost.minTenths 0`, `more.rtp 1.0`. Tests must read `CFG.pull`. Details and asks (fill spread, ghost wording, cold-lead value to the pot): `cold-call/LEVERS.md` sections 4 and 5. Tell me when each mechanism is in; my session key is above.
+## Wave 1 hand-off (2026-10-06, engine + server + sim, no UI). Read this, then `PULL.md`, `PULL-ENGINE.md`, `PULL-SIM-NOTES.md`.
+
+### Keys
+- Lead (wave 1): `agent:main:dashboard:bd288ec9-8821-4c85-b2bc-721a8bf9d0d5`. Levers agent: `agent:main:dashboard:91dc9fe4-4469-492c-93f3-2fbd19783c10` (sessions_send from the lead did not reach it; it reads this file and `LEVERS.md`).
+- Frank (owner, talks to Chris): `agent:main:telegram:group:-1004434976356:topic:10`. Cold Call lead on master line: `agent:main:isabelle`.
+
+### What is on `coldcall-pull` (nothing pushed, nothing on master, nothing live)
+- Branch `coldcall-pull`; skin 3 (`coldcall` d5fb2b5) is MERGED (merge commit 980acca). Isabelle asks that `coldcall` is merged again, and all four suites re-run, right before the branch is handed to her for merging.
+- Commits: `45e3252` contract; `c143360`, `a40cab4` engine; `535cfc3`, `33bc3e5`, `05699f4` server; `7cc06eb`, `6ac7a02` sim + notes; `0a6f4c3`, `a98fb53` test wiring and CFG pin; `55149c7` critic reports; `980acca` skin 3 merge; fix round: `2af8c3c` engine (F1, F2, F5), `6b9324a` sim (S1-S3), `ceb7dea` + `3a5b50b` server/store (F3, F4, F7, F8, F9 bits).
+- Tests at the end of wave 1 (lead re-run on the merged tree): `tests/coldcall.js` 47, `tests/coldcall-pull-engine.js` 37, `tests/coldcall-pull-server.js` 37, `tests/bender.js` 19. `public/games/coldcall/engine.js` is byte-identical to `games/coldcall-engine.js`. Every new fix test failed on the old code first.
+- Run: `SIO_CLIENT=$PWD/_scratch/sio/node_modules/socket.io-client node tests/coldcall.js` (it runs the old scripted tests with `pull.on=false`, then the two pull files as child processes). Tests rewrite tracked `tests/*.json` and drop `accounts.json` / `*.bak-*`: restore by path, never commit them. Parallel builders must run tests under `flock /tmp/pull-tests.lock`.
+
+### The six mechanics: what is in (for the levers agent). All knobs are `CFG.pull.*` in `games/coldcall-engine.js`; the values are PROVISIONAL, the levers agent sets them. Tests pin their own numbers (`tests/lib-pull-pin.js`), so changing the values breaks nothing.
+1. LEAD LIST + THE CALLBACK: `list` (size), `fill {dead,win,bonus}` (leads added per paid spin by outcome), `callback {kind}` ('bonus1' | 'bonus2'), `carryOver`. A full list arms a FREE bonus (cost 0, never fills the list, no pot slice). Callback bet = the exact lead-weighted average bet rounded to 10 cents, clamped [10, 2500] (any multiple of 10, NOT a bet level). Daily leads are worked at `min(bet, daily.stakeCap)`.
+2. LEADS GO COLD: `cold {afterMs, stepMs, batch, floor}`. Idle time leaks leads and kills warm squares. Result carries `pull.leaked` / `pull.warmDied`.
+3. WARM SQUARES: `warm {chance, cap}`. Persist to the next spin ONLY at the same bet (`state.warmBet`); at another bet they are dropped (`pull.warmDropped`).
+4. HONEST GHOST ("would have closed"): `ghost {on, maxWinTenths, minTenths}`; `feed {minWinX}` is the friends-feed threshold.
+5. ONE DECISION PER BONUS: `pick {on, minLeads, mult}` (PICK the square) and `more {on, mult, rtp, minTenths}` (ONE MORE CALL gamble, gated so the 10,000x cap holds); `decision {timeoutMs}`. Pending round per account + currency, default on timeout / owner disconnect / autoplay; a round open at server restart is voided and refunded once. Each open round snapshots the knobs at spin time (`rec.cfg`).
+6. SHARED OFFICE POT + FRIENDS FEED: `pot {feedBps, oneInPerDollar, seed, minBal, maxPayX}` (`oneInPerDollar <= 0` = never). Pot is settled with the round, not at spin. Friends feed events via `feed`.
+- DAILY APPOINTMENT: `daily {base, perStreak, streakMax, stakeCap}`, once per Chicago day per currency, free leads, not claimed by a buy.
+- `pull.on` is the master switch. Sim: `node games/coldcall-sim.js --pull` and `--bonus` (see `PULL-SIM-NOTES.md`, now in real cents, state carried across sessions, `--bet-switch`).
+- Known issue for the levers agent: with the provisional knobs payback is about 315% (Callback every ~47 spins is ~200% of stake) and a bonus1 BUY is about 115% (PICK applies to bought bonuses). Needs real values (and possibly a `pull.pick.onBuy=false` switch, not built). The levers agent wants list 400; the "LEADS n / 50" UI display must follow the knob (wave 2).
+
+### Critic list (Opus F1-F9 + S1-S6, Sonnet W1-W9): status
+Fixed (each with a test that failed before):
+- F1 / W1 warm squares across bet sizes (`warmBet`), F2 Callback floored to a bet level (exact average), F5 `oneInPerDollar` 0 = always, F3 / W3 knob edit or `pull.on` flip voids or changes an open round (snapshot), F4 throw in `settle()` loses the cost (compute first, throw ends in a void), F7 `leaked`/`warmDied` always 0, F8 bad stored state locks the account (`normState`), F9 per-account rate limit + backwards clock allowed, history key, reserved account names refused + prototype-free store maps, W2 result delivered to another signed-in account, W6 other tabs get result/voided, W4 flush before pot prize. S1 sim counted Callback in tenths of nominal bet, S2 sim threw away the list each session, S3 sim pot part (seed, cap, minBal).
+Open, by choice (known limits):
+- F6 pot prize is outside the 10,000x cap (worst case one round credits win + prize = 20,000x). DECISION NEEDED. Recommendation: keep it. The pot prize is already capped at `maxPayX x bet`, the spec caps only the game win, and capping win + prize would punish a lucky bonus. Say plainly on the info screen that the pot is extra. Not changed in code.
+- W8 pot chasing: hit chance does not depend on the pot size, so betting only when the pot is large is advantage play (pot worth more than the 2% edge above about $400). Not fixed. Options for the levers agent: cap the prize to a multiple of what the player fed, or keep the pot small via `oneInPerDollar` / `maxPayX`.
+- W9 `seed > 0` mints currency (each prize re-adds `seed` from nothing; ledger `seeded` tracks it). Keep `seed` at 0 unless Frank accepts house-funded seed, especially in Chips (the poker bank).
+- F9 / W7 crash windows: wallet and store are two debounced writers; a crash between them can lose one cost with no refund record (the safe direction: never pays twice, except the prize window now closed by W4). `__proto__` in the pre-existing `wallet.js` still pollutes `Object.prototype` for other games; the coldcall handlers refuse the name, but `wallet.js` is outside this branch's scope.
+- Default open rounds on `auth_logout` needs `server.js` (the other tabs of an account are covered, a logout is not).
+- Sim limits S4 (daily once per session), S5 (no idle time, so `cold.*` cannot be tuned from the sim), S6 (flat bet, no buys): documented in `PULL-SIM-NOTES.md`.
+- Old stored states without `warmBet` lose their warm squares at the first paid spin (intended).
+
+### Wave 2 (next, a FRESH lead session starts from this file; do not start it before Frank says so)
+- UI on skin 3 (`public/games/coldcall/game.js`, `bonus.js`, `fx.js`; `qa/coldcall-v2/`): lead list + Callback (WARM squares show their bet), pending decisions (PICK, ONE MORE CALL with timer), ghost line, pot + friends feed, daily claim. Read `PULL.md` for the wording. Free premade pieces first (repo: Bender, social.js).
+- Pull the real knob values from the levers agent first (`LEVERS.md`); the ask list there (fill spread, ghost wording, cold-lead value to the pot) is open.
+- Wave 3 watch-a-friend's-bonus, wave 4 QA: real-click driver `qa/coldcall-v2/capture/qa1.js` (about 4 min per leg), 540x960, 1440x900, 360 wide, Play $ and Chips.
+- Before handing the branch to Isabelle: merge `coldcall` again, re-run all four suites, cmp the engine copy.
+
+### Gotchas
+- Dev server port 4640 only. NEVER restart the 4610 server (Isabelle's `_scratch/startsrv.sh` wipes the test bank).
+- Opus critics and judges: spawn WITHOUT `visible=true` (collect=true + agents_wait, `model: "anthropic/claude-opus-5-5"`); the model override is dropped on visible spawns (the wave-1 "Opus" critics ran on Sonnet). Confirm `model=claude-opus-5-5` on the newest `cli exec` line of `/tmp/openclaw/openclaw-<date>.log` before relying on it. The Opus pass in `PULL-CRITIC-W1-OPUS.md` was run by Frank directly.
+- Visible builders do not wake a yielded lead via `agents_wait`; the completion event does. At most 2 live children. Never cancel a running child.
+- Git identity is not configured in this worktree: use `GIT_AUTHOR_NAME=Frank GIT_AUTHOR_EMAIL=frank@localhost GIT_COMMITTER_*` the same. Commit by named paths only (`node_modules` is untracked).
+- The engine copy `public/games/coldcall/engine.js` must be re-copied after every engine edit.
+- Critic reports with the repro scripts' findings: `PULL-CRITIC-W1-OPUS.md` (final, 9 reproduced / 3 plausible / S1, S2) and `PULL-CRITIC-W1.md`.
