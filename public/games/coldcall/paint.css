@@ -57,3 +57,44 @@
 
 /* ---- S4 (chris 10-06 FB4): big-win backdrop. The painted sunburst (centre at 50% 45% like the conic one it replaces) is the #tierbg layer, no box changes. ---- */
 #tierbg{background:var(--img-ui_burst) 50% 45%/cover no-repeat}
+
+/* ---- FIX ROUND r1 (chris 10-06 FB4), critic r0 text-fit quotes. Padding only moves the live text inside the same boxes; nothing here sets a size. ---- */
+/* (r1) critic r0: 'HANG UP: keep it sits on the plate's bottom bevel line, struck through' / 'ONE MORE CALL: last line lies on the bottom bevel; the title touches the top edge' */
+/* the box must keep its size: padding + content shrink are traded 1:1 (the text gets smaller by what the padding adds), measured with _scratch/r1/probe.js */
+.dec2 .hang,.dec2 .more{--bw:10px 14px 13px 14px;padding:8px 5px 10.6px;gap:2px}
+.dec2 .more b{line-height:1.04}.dec2 .more span{font-size:12.5px;line-height:1.06}.dec2.s .more span{font-size:12px}.dec2 .hang small{line-height:1}
+.dec2.s .hang b{font-size:24px}.dec2.xs .hang b{font-size:20px}.dec2.s .more b{font-size:15px}.dec2.xs .more b{font-size:13.5px}.dec2.xs .hang small{font-size:11px}
+@media (max-width:420px){.dec2 .hang,.dec2 .more{--bw:8px 12px 9px 12px;padding:6px 4px 13.6px}.dec2 .more span,.dec2.xs .more span{font-size:11.5px;line-height:1.12}.dec2.xs .more b{font-size:12.5px}}
+/* (r1) critic r0: 'BUY BONUS: label pokes above the top of the painted pill; the greyed sub-label (n/a, Callback first) is unreadable' */
+#buy{padding:2px 3px 3px}
+#buy b{font-size:12px;line-height:1}#buy span{font-size:9px;margin-top:1px;line-height:1;color:#fff0c0;text-shadow:0 1px 0 #3a0a04}
+#buy:disabled{filter:saturate(.6) brightness(.95)}
+#buy:disabled b{color:#f4e6c0}#buy:disabled span{color:#fff6d8;text-shadow:0 1px 0 #000,0 0 3px #000}
+/* (r1) critic r0: 'i reads as 1, bet minus/plus are dark blobs, MUSIC touches the pill's right edge' */
+#info{font-family:Georgia,"Times New Roman",serif;font-style:italic;font-weight:700;font-size:19px;line-height:14px;letter-spacing:0;color:#1d1408}
+.sq{--bw:5px 8px 8px 8px;font-size:26px;line-height:22px;padding:0 0 4px;color:#1d1408;text-shadow:0 1px 0 rgba(255,244,214,.8)}
+@media (max-width:420px){.btns button{padding-left:4px;padding-right:4px}.btns button.tog{gap:2px}.tog svg{width:11px;height:11px}.tog em{font-size:9px;letter-spacing:0}}
+
+/* ---- r1 paint sheet S5 (chris 10-06 FB4): memo strip, blotter bar, brass-rimmed readout plates, panel frame, trough. Same rule: art inside the existing boxes, nothing resizes. ---- */
+/* (r1) critic r0: 'Leads strip: flat yellow bar with a flat red line, reads as a CSS box; 312 / 450 rise above its top edge' */
+#plNote{--note-art:var(--img-ui_strip_memo)}
+#plNote b{font-size:21px}
+#plNote .bar{height:4px;border-top:0;background:rgba(36,26,10,.25);border-radius:2px}
+#plNote .bar i{background:linear-gradient(#e8533d,#b8301f)}
+/* (r1) critic r0: 'Mode tabs Play $ / Chips and the top bar: 1 px outlined pill with flat gold fill on a flat navy bar; plain CSS' */
+#modebar{background:var(--img-ui_blotter) center/100% 100% no-repeat;border-bottom:2px solid transparent}
+#modebar .mb{border-color:transparent;background:var(--img-ui_key_navy) center/100% 100% no-repeat}
+#modebar button{text-shadow:0 1px 0 rgba(0,0,0,.6)}
+/* (r1) critic r0: 'WIN, POT, SPINS LEFT and BONUS TOTAL plates: flat navy with a thin gold line' */
+#winbox{border-image:var(--img-ui_rim_win) 22 fill/9px/0 stretch}
+#plPot,.chip{border-image:var(--img-ui_rim_chip) 22 fill/8px/0 stretch}
+/* (r1) critic r0: 'Flat CSS bars: the countdown block inside the red status bar and the progress line above HANG UP' */
+#ribbon.ask::after{top:5px;bottom:5px;right:5px;border-radius:0 3px 3px 0;background:var(--img-ui_blotter) right center/auto 100% no-repeat;border-left:2px solid #e3b34a;box-shadow:inset 0 2px 5px rgba(0,0,0,.6)}
+.dec2 .dr{border-color:transparent;border-radius:0;background:var(--img-ui_trough) center/100% 100% no-repeat;box-shadow:none}
+/* (r1) critic r0: 'Keypad screen: outer panel frame and the YOU DIALED / FREE SPINS boxes are thin-line CSS boxes; the corner phone ornaments are mud at 360' */
+.scn,.card{border-image:var(--img-ui_rim_panel) 30 fill/18px/0 stretch}
+@media (max-width:420px){.scn .hd i{visibility:hidden}}
+/* (r1) critic r0: 'plates read as CSS boxes' follow-up: the thick brass rim is slimmer on the small HUD plates so labels clear it; the keypad boxes keep the full rim and push the label down */
+#plPot,#bh .chip{border-image-width:6px}
+.scn .chip small{position:relative;top:3px}
+#plNote b{font-size:19px}

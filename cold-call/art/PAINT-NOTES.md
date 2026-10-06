@@ -55,3 +55,8 @@ One 9:16 piece, refs s1 raw + before/big_win_540x960.jpg: painted sunburst, calm
 - Splash PICK UP, lobby: use .btn (red key) already; no separate art.
 - Win-screen tier title text (MEGA WIN): live HTML with a stroke, by design.
 - No separate pressed / disabled / lit paintings: derived by CSS filter from the blank (said above).
+
+### S5 + fix round r1 (chris 10-06 FB4, critic r0 on 174771f)
+Sheet S5 (3:2, refs s1 + s3 raw, first try, $0.1855): memo strip (strip_memo 1032x60, #plNote art slot), blotter bar (blotter 1080x48: top bar #modebar and the drained end of the PICK/ONE MORE countdown), rim_win 449x114 (#winbox 9-slice 9px), rim_chip 251x103 (#plPot, .chip, 8px / 6px on the HUD plates), rim_panel 274x323 (.card, .scn 18px: modal cards and the keypad screen frame), trough 1000x20 (.dec2 .dr progress line above HANG UP). key_navy now backs the mode-tab pill (.mb, stretched, not 9-sliced).
+Text fit (no art): HANG UP / ONE MORE CALL padding + smaller text traded 1:1 so the boxes keep their size (probe: _scratch/r1/probe.js, per size), BUY BONUS label + sub-label recoloured and tightened, bet -/+ and i glyphs, 360 label sizes.
+Verified: qa/coldcall-fb1/paint/r1 (idle, hot_leads, callback, gain, pick, more, more_won, more_lost, pot, buy_menu, buy_confirm, info, keypad_lit; 540/360/1440, Play and Chips). paint_shift: 72 pairs, 0 shifted.

@@ -21,6 +21,8 @@ T = {
  's3': [('bubble_body', 'bubble_body', 'nine', (.8,)), ('bubble_tail', 'bubble_tail', 'tail', ()), ('toast', 'toast', 'nine', (.8,)),
         ('card_panel', 'card_panel', 'nine', (.9,)), ('plate_win', 'plate_win', 'nine', (.7,)), ('plate_chip', 'plate_chip', 'nine', (.8,))],
  's4': [('burst', 'burst', 'raw', ())],
+ 's5': [('strip', 'strip_memo', 'fit', (1032, 60, 40)), ('blotter', 'blotter', 'fit', (1080, 48, 40)), ('rwin', 'rim_win', 'nine', (.7,)), ('rchip', 'rim_chip', 'nine', (.7,)),
+        ('panel', 'rim_panel', 'nine', (1,)), ('trough', 'trough', 'fit', (1000, 20, 30))],
 }
 if os.path.exists('paint_export_cfg.py'): sys.path.insert(0, '.'); T.update(__import__('paint_export_cfg').T)
 for sheet in ([sys.argv[1]] if len(sys.argv) > 1 else T):

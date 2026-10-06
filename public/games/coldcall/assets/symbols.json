@@ -99,7 +99,13 @@
     "ui_plate_chip": "img/ui/ui_plate_chip.webp",
     "ui_plate_win": "img/ui/ui_plate_win.webp",
     "ui_toast": "img/ui/ui_toast.webp",
-    "ui_burst": "img/ui/ui_burst.webp"
+    "ui_burst": "img/ui/ui_burst.webp",
+    "ui_blotter": "img/ui/ui_blotter.webp",
+    "ui_rim_chip": "img/ui/ui_rim_chip.webp",
+    "ui_rim_panel": "img/ui/ui_rim_panel.webp",
+    "ui_rim_win": "img/ui/ui_rim_win.webp",
+    "ui_strip_memo": "img/ui/ui_strip_memo.webp",
+    "ui_trough": "img/ui/ui_trough.webp"
   },
   "textures": {},
   "fonts": [
