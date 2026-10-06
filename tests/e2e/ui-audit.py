@@ -34,6 +34,29 @@ try:
     for sel in ['#chat-input', '#room-code-btn', '#raise-input']:
         c.eq('contextmenu native on %s' % sel, cm(sel), False)
 
+    # --- defect 6, 7: three Pause controls renamed / placed, disabled look
+    c.eq('#btn-sit-out label', pg.inner_text('#btn-sit-out').strip().lower(), 'sit out')
+    c.eq('#pause-btn removed from the header', pg.evaluate("!!document.getElementById('pause-btn')"), False)
+    c.ok('header has no second "Pause" label', pg.evaluate("![...document.querySelectorAll('.g-head button')].some(b => /^pause$/i.test(b.textContent.trim()))"))
+    c.ok('.plate-btn:disabled looks disabled', pg.evaluate("(() => { const b = document.getElementById('btn-sit-out'); const was = b.disabled; b.disabled = true; const o = parseFloat(getComputedStyle(b).opacity), cur = getComputedStyle(b).cursor; b.disabled = was; return o < 1 && cur === 'not-allowed' })()"))
+    # --- defect 8, 13: chat rail and hit targets
+    pg.fill('#chat-input', 'hello audit'); pg.keyboard.press('Enter'); pg.wait_for_timeout(500)
+    c.ok('chat rail >= 200px wide', pg.evaluate("document.getElementById('rail').getBoundingClientRect().width >= 199"))
+    c.ok('chat font >= 12px', pg.evaluate("(() => { const e = document.querySelector('.chat-text') || document.querySelector('.chat-msg'); return !e || parseFloat(getComputedStyle(e).fontSize) >= 12 })()"))
+    hit = """sel => { const e = document.querySelector(sel); if (!e) return 'missing'; const r = e.getBoundingClientRect(); const cx = r.x + r.width / 2, cy = r.y + r.height / 2;
+      const ok = y => { const t = document.elementFromPoint(cx, y); return !!t && (t === e || e.contains(t)) };
+      return (r.width >= 31.5 || r.height >= 31.5) && ok(cy - 15) && ok(cy + 15) && (r.width >= 31.5 || (ok(cy) && document.elementFromPoint(cx - 15, cy) != null)) }"""
+    for sel in ['#raise-minus', '#raise-plus', '#chat-send', '#btn-panel-side', '.money-toggle', '#sh-acct']:
+        v = pg.evaluate(hit, sel)
+        c.ok('hit target >= 32px vertical %s' % sel, v is True or v == 'missing')
+    # --- defect 15: a toast does not sit on a seat
+    pg.evaluate("(() => { const d = document.createElement('div'); d.className = 'toast'; d.id = '__t'; d.innerHTML = '<b>Test</b><span>message</span>'; document.getElementById('toasts').append(d); d.style.animation = 'none' })()")
+    pg.wait_for_timeout(200)
+    c.ok('toast does not intersect any seat', pg.evaluate("(() => { const t = document.getElementById('__t').getBoundingClientRect(); return ![...document.querySelectorAll('#player-seats .seat')].some(s => { const r = s.getBoundingClientRect(); return !(r.right < t.left || r.left > t.right || r.bottom < t.top || r.top > t.bottom) }) })()"))
+    pg.evaluate("document.getElementById('__t').remove()")
+
+    # --- defect 9: the pot text is not under a bet stack
+    c.ok('pot text not covered by a bet', pg.evaluate("(() => { const n = document.querySelector('.pot-num'); if (!n) return true; const r = n.getBoundingClientRect(); const t = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return !!t && (t === n || n.contains(t) || !!t.closest('.pot-row')) })()"))
     # --- defect 4: hotkeys while an overlay is open
     pg.wait_for_function("!document.getElementById('btn-fold').disabled", timeout=90000)
     pg.click('#bank-btn'); pg.wait_for_selector('#bank-panel.open')

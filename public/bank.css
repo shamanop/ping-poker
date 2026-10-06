@@ -133,7 +133,7 @@
 
 /* money-toggle */
 .money-toggle {
-  display: inline-flex; align-items: stretch; height: var(--p28, 28px); padding: 0; overflow: hidden;
+  display: inline-flex; align-items: stretch; height: max(32px, var(--p28, 28px)); padding: 0; overflow: hidden;
   border: 1px solid var(--brass, #C99A45); border-radius: var(--p6, 6px); background: #120C08; cursor: pointer;
   font-family: var(--f-display, inherit); font-size: var(--p14, 14px); letter-spacing: .1em; text-transform: uppercase;
   box-shadow: 0 var(--p2, 2px) 0 rgba(0, 0, 0, .55); vertical-align: middle;

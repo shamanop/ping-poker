@@ -209,6 +209,8 @@
   position: fixed; z-index: 60; top: calc(var(--head-h) + var(--p8)); left: var(--p16); width: calc(340 * var(--px)); display: grid; gap: var(--p12);
   padding: var(--p20); background: linear-gradient(180deg, #231710, #150E09); border: 1px solid var(--line-lt); border-radius: var(--p8); box-shadow: 0 var(--p12) var(--p32) rgba(0, 0, 0, .65);
 }
+.host-drawer { max-height: calc(100vh - var(--head-h) - var(--p24)); overflow-y: auto; overscroll-behavior: contain; }
+.host-drawer > * { min-width: 0; }
 .host-drawer h4 { font-family: var(--f-display); font-weight: 400; font-size: var(--p22); letter-spacing: .1em; display: flex; justify-content: space-between; align-items: baseline; }
 .host-drawer h4 small { font-family: var(--f-text); font-size: var(--p12); color: var(--ink-dim); letter-spacing: 0; }
 .host-drawer .lb-seat button { margin-left: auto; }

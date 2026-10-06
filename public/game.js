@@ -989,7 +989,8 @@ function renderGame() {
   const so = $('btn-sit-out');
   const canSit = !!(me && gs.status === 'playing' && !(me.sittingOut && !me.sitOutRequest && !me.cardCount));
   so.disabled = !canSit;
-  so.textContent = canSit && me.sitOutRequest ? 'Resume' : 'Pause';
+  so.textContent = canSit && me.sitOutRequest ? 'Back in' : 'Sit out';
+  so.title = !canSit ? 'Available while a hand is being played' : me.sitOutRequest ? 'Rejoin from the next hand' : 'Sit out from the next hand';
   so.classList.toggle('on', canSit && !!me.sitOutRequest);
 }
 
@@ -1235,6 +1236,19 @@ function betSpot(i, gs) {
   return { x: sx + ux * t, y: sy + uy * t, ux, uy };
 }
 
+// A bet stack must not sit on the pot text (ui defect 9): slide it sideways clear of the pot row.
+function avoidPot(s) {
+  const g = state.geo, row = $('pot-row'), st = $('stage');
+  if (!row || !st || !row.firstChild) return s;
+  const r = row.getBoundingClientRect(), o = st.getBoundingClientRect();
+  if (!r.width) return s;
+  const pad = 4 * g.u, hw = 46 * g.u, hh = 34 * g.u;
+  const L = r.left - o.left - pad, R = r.right - o.left + pad, T = r.top - o.top - pad, B = r.bottom - o.top + pad;
+  if (s.x + hw <= L || s.x - hw >= R || s.y + hh <= T || s.y - hh >= B) return s;
+  const mid = (L + R) / 2;
+  return { ...s, x: s.x < mid ? L - hw : R + hw };
+}
+
 function renderBets(gs) {
   const layer = $('bet-layer'), pucks = $('puck-layer');
   const g = state.geo;
@@ -1242,7 +1256,7 @@ function renderBets(gs) {
   let bh = '';
   gs.players.forEach((p, i) => {
     if (!(p.roundBet > 0) || !g.seats[i]) return;
-    const s = betSpot(i, gs);
+    const s = avoidPot(betSpot(i, gs));
     const key = `${gs.handNum}|${gs.street}|${i}|${p.roundBet}`;
     const fresh = state.betKey?.[i] !== key;
     (state.betKey ||= {})[i] = key;

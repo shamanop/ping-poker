@@ -44,10 +44,6 @@
     const slot = $('bank-slot');
     if (slot) slot.replaceWith(btn);
     else { const chip = $('room-code-btn'); head.insertBefore(btn, chip ? chip.nextSibling : head.children[1]); }
-    const pz = document.createElement('button');
-    pz.type = 'button'; pz.id = 'pause-btn'; pz.className = 'bank-chip pause-chip hidden'; pz.textContent = 'Pause';
-    pz.addEventListener('click', () => { if (state.socket) state.socket.emit('set_pause', { paused: !(state.gameState && state.gameState.paused) }); });
-    if (btn.parentNode === head) head.insertBefore(pz, btn.nextSibling); else (btn.parentNode || head).appendChild(pz);
     const pb = document.createElement('div');
     pb.id = 'pause-banner'; pb.className = 'pause-banner hidden';
     pb.innerHTML = '<b>Paused</b><span>The table is on hold</span><button type="button" id="reset-btn" class="pause-reset hidden">Reset table</button>';
@@ -370,11 +366,10 @@
     });
     Money.onPrefChange(() => { if (isOpen && data) render(); });
     state.socket.on('game_state', gs => {
-      const pz = $('pause-btn'), pb = $('pause-banner');
+      const pb = $('pause-banner');
       const u = window.Lobby && Lobby.user && Lobby.user();
       const chris = String(state.myName || '').toLowerCase().trim() === 'chris' || !!(u && (u.key === 'chris' || u.isAdmin));
       const mine = chris && (!gs.tableId || gs.tableId === 'POKERPING');
-      if (pz) { pz.classList.toggle('hidden', !mine); pz.textContent = gs.paused ? 'Resume' : 'Pause'; pz.classList.toggle('on', !!gs.paused); }
       if (pb) {
         pb.classList.toggle('hidden', !gs.paused);
         const rb = $('reset-btn'); if (rb) rb.classList.toggle('hidden', !mine);

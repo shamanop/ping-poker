@@ -57,7 +57,7 @@
   --head-h: calc(58 * var(--px));
   --bar-h: calc(96 * var(--px));
   --bar-row: calc(136 * var(--px));
-  --rail-w: calc(150 * var(--px));
+  --rail-w: max(212px, calc(150 * var(--px)));
   --rail-t: calc(24 * var(--px));
 
   --f-display: 'Bebas Neue', Impact, 'Arial Narrow', sans-serif;
@@ -795,3 +795,25 @@ html.art-login .setup-card { background: linear-gradient(180deg, rgba(34, 22, 14
 
 /* Charm pinned above the plate on upper seats so it clears bet chips and revealed cards */
 .pj-charm.above { transform-origin: 50% 98%; }
+
+/* ── ui/REPORT fixes (wave 2, step D) ───────────────────────────── */
+/* 7: a disabled plate button must look disabled */
+.plate-btn:disabled { opacity: .45; cursor: not-allowed; filter: grayscale(.4); }
+.plate-btn:disabled:hover { filter: grayscale(.4); }
+/* 8: chat rail readable */
+.chat-msg, .chat-name { font-size: max(12px, var(--p11)); }
+.chat-input { font-size: max(12px, var(--p11)); }
+/* 13: hit targets >= 32px (the visible art stays, the box grows) */
+.step { min-width: 32px; min-height: 32px; }
+.chat-send { min-width: 32px; min-height: 32px; }
+.rail-flip { min-width: 32px; min-height: 32px; z-index: 2; }
+.pre { min-height: 32px; }
+.sh-acct, .sh-bonus, .sh-out { position: relative; }
+.sh-acct::after, .sh-bonus::after, .sh-out::after { content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 32px; transform: translateY(-50%); }
+.chat-input { padding-right: 40px; }
+/* 15: toasts live in the stage corner, not on the top seat */
+.toasts { left: auto; right: var(--p16); transform: none; align-items: flex-end; }
+.panel-right .toasts { left: var(--p16); right: auto; align-items: flex-start; }
+/* the wider rail (212px min) would push the chat input off a 900px-high screen with 2-column grids: 4 columns instead */
+.sticker-grid, .throw-grid { grid-template-columns: repeat(4, 1fr); }
+.sticker-item, .throw-item { font-size: var(--p18, 18px); padding: var(--p2); }
