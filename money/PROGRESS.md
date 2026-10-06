@@ -74,3 +74,21 @@ Narrow race that remains: the check and the append are not atomic. If a second o
 - A quarantined money line means balances may be short by that line and needs an admin look. It is only reported, never repaired: a lost buy-in or cash-out line can leave a balance short (or a seat unrecoverable) until an admin acts. Nothing alerts anyone beyond the log line and `check().quarantined`; the server layer has to surface it.
 - Performance at scale: the ledger keeps every line in memory and `list`/`seatFund`/`nightSummary` scan. Fine for thousands of lines; not measured beyond the 10,000-transfer fuzz and the 500-account fixture.
 - `bootRecover` stray-pot refund (pro rata, largest remainder) is tested on one hand-built pot only.
+
+## P6 wave 2-a: escrow, pools and `ctx.money` (2026-10-06)
+
+What landed, all on the contract in `ADD-A-GAME.md` sections 2-3:
+- `ledger.js`: `escrow` (4 parts) and `pool` (3 parts) are holders, never negative, either currency.
+- `service.js`: `openRound`, `settleRound`, `voidRound`, `openRounds`, `roundClosed`, `poolBalance`, `sweepEscrows`, pool legs on `houseRound`; `mirror()` folds a player's escrows into their row, `playHeld` / `topUpEligible` count open Play escrows (`escrow` field added), `balances()` gains `escrows` and `inRound`.
+- `transport/game-money.js`: `ctx.money` bound per game id. `games/index.js`: per-module ctx, `recover()`, `audit()`. `server.js`: `ctx.gameMoney`, `ctx.games.recover()` before listen.
+
+Decisions worth knowing:
+1. The close ref is decided from its stored lines (`closeOf`) before anything is built: after the first close the escrow is 0, so a rebuilt batch would differ and the ledger's own sig check would say `ref_conflict` for a plain resend.
+2. `pool_short` is the ledger's `insufficient` on the pool account, re-labelled in `writeBatch`; `have` is what the pool held at that step (after this batch's own feed).
+3. An escrow held in the other currency than the `cur` a caller names makes `settleRound` / `voidRound` throw `bad_cur`: otherwise a "free round" settle would burn the `:close` ref and strand the real stake.
+4. `houseRound` still returns a noop for all-zero amounts BEFORE looking at the ref (as it always did), so an all-zero resend of a stored round is a noop, not `ref_conflict`. `openRound` cost 0 does the same.
+5. `sweepEscrows` voids through an internal `voidAccount` that does not check the game id against `GAMES`, so an escrow of a game id this build has no entry for still goes home.
+6. Modules get their own ctx; the raw `service` is stripped from it (the registry keeps it for the sweep). `ctx.money` on the server ctx stays poker's money port; the game money is `ctx.gameMoney`.
+7. Shutdown does nothing for escrows. Recovery is the boot rule only.
+
+Tests: `tests/v2-unit/money-rounds.js` (service level, includes a seeded 4000-op random walk against a model), `tests/v2-unit/tables-game-money.js` (ctx.money + registry with a fake game), `tests/v2/18_escrow_boot.js` (real server, seeded data dir, SIGKILL and SIGTERM restarts).
