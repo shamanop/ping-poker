@@ -29,8 +29,11 @@
   const money = { live: false, mode: 'play', wallet: { play: 0, chips: 0 } };
   const pend = new Map(); let reqSeq = 0;
   const toParent = (m) => { if (BRIDGE) window.parent.postMessage(m, '*'); };
-  const chipsFmt = (n) => { try { const M = window.parent && window.parent !== window ? window.parent.Money : null; if (M && M.getPref && M.getPref() === 'usd') return M.fmt(n, { mode: 'usd' }); } catch (e) {} return Math.round(n).toLocaleString('en-US'); };
-  const liveFmt = () => (money.mode === 'chips' ? chipsFmt : dollars);
+  const P = (() => { try { return window.parent && window.parent !== window && window.parent.AmountInput && window.parent.Money ? window.parent : window; } catch (e) { return window; } })();
+  const wUnit = () => (money.mode === 'chips' ? 'chips' : 'cents');
+  const chipsFmt = (n) => { try { const M = window.parent && window.parent !== window ? window.parent.Money : null; if (M && M.format && M.pref === 'usd') return M.format(n, 'usd'); } catch (e) {} return Math.round(n).toLocaleString('en-US'); };
+  // amounts follow the player's pref per wallet unit (S3-11); dollars() is only the fallback when Money did not load
+  const liveFmt = () => (P.Money && P.Money.format ? (n) => P.Money.format(n, P.Money.modeFor(P.Money.pref, wUnit())) : (money.mode === 'chips' ? chipsFmt : dollars));
   const walletBal = () => (money.mode === 'chips' ? money.wallet.chips : money.wallet.play);
   const avail = () => (money.live ? walletBal() : st.bal);
   const fmtBal = (n) => fmt(n);
@@ -249,7 +252,24 @@
     el.textContent = (hot ? 'HOT +' : 'COLD -') + fmt(Math.abs(sum));
     el.title = 'Last ' + HC.length + ' spins';
   }
-  function drawBet() { $('bet').textContent = fmt(bet()); $('betDn').disabled = st.busy || st.betIdx === 0; $('betUp').disabled = st.busy || st.betIdx === BETS.length - 1; $('buy').disabled = st.busy; $('buyFrom').textContent = 'from ' + fmt(bet() * E.CFG.buyCost.election); }
+  // The bet is a number from the server's ladder (BETS); the text box is a view of it. Typed values must be listed or they are
+  // refused with a message (never rounded to a neighbour) and play() will not spin on an invalid box.
+  let betField = null, betKey = '';
+  function betChrome() { $('betDn').disabled = st.busy || st.betIdx === 0; $('betUp').disabled = st.busy || st.betIdx === BETS.length - 1; $('buy').disabled = st.busy; $('buyFrom').textContent = 'from ' + fmt(bet() * E.CFG.buyCost.election); }
+  function drawBet() {
+    const live = money.live, key = (live ? wUnit() : 'votes') + '|' + BETS.join(',');
+    if (!betField || betKey !== key) {
+      if (betField) betField.destroy();
+      betKey = key;
+      betField = P.AmountInput({ units: bet(), min: BETS[0], max: BETS[BETS.length - 1], unit: live ? wUnit() : 'chips', fixedMode: live ? undefined : 'chips', scale: 'ladder', compact: true,
+        allowed: BETS.slice(), label: 'Bet', rangeLabel: 'Bet', doc: document,
+        onChange: (v) => { if (v !== null && BETS.includes(v) && BETS.indexOf(v) !== st.betIdx) { st.betIdx = BETS.indexOf(v); betChrome(); } } });
+      betField.input.id = 'betIn';
+      $('bet').replaceChildren(betField.el);
+    } else betField.set(bet(), { source: 'stepper' });
+    betField.input.disabled = st.busy;
+    betChrome();
+  }
   function setBusy(b) {
     st.busy = b; $('spin').classList.toggle('run', b); $('spin').classList.toggle('idle', !b); drawBet();
     poke();
@@ -526,7 +546,7 @@
   // ---------- PingJuice win tiers ----------
   const PJ = window.PingJuice;
   if (PJ) { PJ.config.stage = '#stage'; PJ.sfx = () => false; } // one audio engine: SFX owns every sound in this game
-  if (!window.Money) window.Money = { fmt: (n) => fmt(n) };
+  if (!window.PingFmt) window.PingFmt = (n) => fmt(n);
   function juiceTier(x, maxed) { return maxed || x >= 1000 ? 'jackpot' : x >= 100 ? 'mega' : x >= 20 ? 'big' : x >= 5 ? 'nice' : null; }
   function juiceWin(x, amt, maxed) {
     const t = juiceTier(x, maxed); if (!PJ || !t) return null;
@@ -653,6 +673,7 @@
   }
   async function play(mode) {
     if (st.busy) { if (mode !== 'spin') st.queued = mode; else st.skip = true; return; }
+    if (betField && betField.value() === null) { toast('Pick a listed bet.'); st.auto = false; $('auto').classList.remove('on'); return; }
     const b = bet(), costX = mode === 'buy-election' ? E.CFG.buyCost.election : mode === 'buy-landslide' ? E.CFG.buyCost.landslide : 1, cost = b * costX;
     if (avail() < cost) { toast(mode === 'spin' ? `Not enough ${unitWord()}. Lower your bet.` : `Not enough ${unitWord()} for that bonus.`); st.auto = false; $('auto').classList.remove('on'); return; }
     SFX.init(); setBusy(true); st.skip = false; FX.clear(); sweepCells();
@@ -776,7 +797,7 @@
   $('pigeon').addEventListener('click', () => { SFX.init(); SFX.hic(); say('idle'); });
   stage.addEventListener('click', (e) => { if (e.target.closest('#tier')) st.tap++; });
   addEventListener('keydown', (e) => { const sc = ov.querySelector('.scrim'); if (e.key === 'Escape' && sc) { e.stopImmediatePropagation(); sc._done?.('x'); } });
-  addEventListener('keydown', (e) => { if (e.code === 'Space' && !e.repeat) { e.preventDefault(); if (ov.querySelector('.scrim')) { ov.querySelector('.scrim')._done?.('x'); return; } SFX.init(); st.tap++; st.busy ? (st.skip = true) : play('spin'); } });
+  addEventListener('keydown', (e) => { if (e.target && e.target.closest && e.target.closest('.amt')) return; if (e.code === 'Space' && !e.repeat) { e.preventDefault(); if (ov.querySelector('.scrim')) { ov.querySelector('.scrim')._done?.('x'); return; } SFX.init(); st.tap++; st.busy ? (st.skip = true) : play('spin'); } });
 
   $('buy').addEventListener('click', async () => {
     if (st.busy) return; SFX.init(); SFX.click();
@@ -862,6 +883,7 @@
     money.live = false; fmt = fx; pend.clear(); setBets(DEFAULT_BETS); st.betIdx = 3; st.bal = st.balShown = 50000;
     modeUi(); setBal(50000, false); drawBet(); if (msg) toast(msg, 2600);
   }
+  if (P.Money && P.Money.onPrefChange) P.Money.onPrefChange(() => { if (money.live) fmt = liveFmt(); if (!st.busy) setBal(money.live ? walletBal() : st.bal, false); drawBet(); });
   function initBridge() {
     const bar = document.createElement('div'); bar.id = 'modebar';
     bar.innerHTML = '<div class="mb"><button data-m="play">Play $</button><button data-m="chips">Chips</button></div><span id="modenote"></span>';

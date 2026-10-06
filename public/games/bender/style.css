@@ -310,3 +310,14 @@ canvas#fxb{z-index:49}
 .votedstamp{transform:translate(-50%,-50%) rotate(-9deg);position:absolute;left:50%;top:72%;z-index:60;pointer-events:none;text-align:center;border:12px solid #C8352B;border-radius:22px;padding:14px 40px 8px;white-space:nowrap;color:#C8352B;background:rgba(253,251,247,.9);box-shadow:0 0 0 6px rgba(253,251,247,.9),0 20px 40px rgba(0,0,0,.5);mix-blend-mode:normal}
 .votedstamp b{display:block;font-family:var(--slab);font-weight:400;font-size:120px;line-height:1;letter-spacing:4px}
 .votedstamp i{display:block;font-style:normal;font-weight:900;font-size:40px;letter-spacing:10px;margin-top:2px}
+
+/* bet box = AmountInput (public/amount.js): looks like the old .val readout, typed text is a view of the listed bet */
+#betM .val{overflow:visible;position:relative}
+#bet .amt{display:block;position:relative}
+#bet .amt-row{display:flex;align-items:baseline;justify-content:center;gap:4px}
+#bet .amt-text{width:100%;min-width:0;background:transparent;border:0;outline:0;color:inherit;font:inherit;text-align:center;text-shadow:inherit;padding:0;user-select:text;-webkit-user-select:text;border-radius:6px}
+#bet .amt-text:focus{box-shadow:0 0 0 3px var(--gold)}
+#bet .amt-sym{font-size:.55em;color:var(--gold);font-weight:800}
+#bet .amt-suffix{display:none}
+#bet .amt-msg{position:absolute;left:50%;top:100%;transform:translateX(-50%);min-height:0;width:320px;max-width:60vw;font:700 18px/1.15 var(--sans);color:#ffc2c2;text-shadow:0 2px 0 var(--navy);text-align:center;z-index:3;pointer-events:none}
+#bet .amt.amt-bad .amt-text{color:#ffb3b3;box-shadow:0 0 0 3px #ff8a8a}

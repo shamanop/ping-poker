@@ -57,7 +57,7 @@
   --head-h: calc(58 * var(--px));
   --bar-h: calc(96 * var(--px));
   --bar-row: calc(136 * var(--px));
-  --rail-w: calc(150 * var(--px));
+  --rail-w: max(212px, calc(150 * var(--px)));
   --rail-t: calc(24 * var(--px));
 
   --f-display: 'Bebas Neue', Impact, 'Arial Narrow', sans-serif;
@@ -72,6 +72,15 @@
 html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--ink); }
 body { font-family: var(--f-text); font-size: var(--p14); line-height: 1.35; -webkit-font-smoothing: antialiased; font-variant-numeric: tabular-nums; }
 button, input { font: inherit; color: inherit; }
+
+/* ── Selection / drag policy (ui defect 5): nothing selectable by default, text allowlist below ── */
+body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+input, textarea, [contenteditable="true"], #chat-messages, #chat-messages *, .chat-input, .raise-input, .amt-input,
+.wp-invite-link, #room-code, #room-code-btn b, .lb-code, .lb-root .t, .lb-root .s, .lb-root h3, .lb-eyebrow, .error-text, .err, .lb-err, .amt-msg,
+.adm-dlg table, .adm-dlg td, .adm-dlg th, .adm-log, .adm-dlg pre, .bank-feed, .bank-players,
+#auth-name, #auth-pin, [type="password"], [type="text"], [type="search"], [type="number"] { -webkit-user-select: text; user-select: text; }
+img, svg { -webkit-user-drag: none; user-drag: none; }
+button img, .seat img, .card img, .seat-av img, .table-mark, .g-brand img, .chip img, .bet img, .sticker-item img, .throw-item img, .emote-btn img { pointer-events: none; }
 button { cursor: pointer; }
 .hidden { display: none !important; }
 :focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
@@ -786,3 +795,47 @@ html.art-login .setup-card { background: linear-gradient(180deg, rgba(34, 22, 14
 
 /* Charm pinned above the plate on upper seats so it clears bet chips and revealed cards */
 .pj-charm.above { transform-origin: 50% 98%; }
+
+/* ── ui/REPORT fixes (wave 2, step D) ───────────────────────────── */
+/* 7: a disabled plate button must look disabled */
+.plate-btn:disabled { opacity: .45; cursor: not-allowed; filter: grayscale(.4); }
+.plate-btn:disabled:hover { filter: grayscale(.4); }
+/* 8: chat rail readable */
+.chat-msg, .chat-name { font-size: max(12px, var(--p11)); }
+.chat-input { font-size: max(12px, var(--p11)); }
+/* 13: hit targets >= 32px (the visible art stays, the box grows) */
+.step { min-width: 32px; min-height: 32px; }
+.chat-send { min-width: 32px; min-height: 32px; }
+.rail-flip { min-width: 32px; min-height: 32px; z-index: 2; }
+.pre { min-height: 32px; }
+.sh-acct, .sh-bonus, .sh-out { position: relative; }
+.sh-acct::after, .sh-bonus::after, .sh-out::after { content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 32px; transform: translateY(-50%); }
+.chat-input { padding-right: 40px; }
+/* 15: toasts live in the stage corner, not on the top seat */
+.toasts { left: auto; right: var(--p16); transform: none; align-items: flex-end; }
+.panel-right .toasts { left: var(--p16); right: auto; align-items: flex-start; }
+/* the wider rail (212px min) would push the chat input off a 900px-high screen with 2-column grids: 4 columns instead */
+.sticker-grid, .throw-grid { grid-template-columns: repeat(4, 1fr); }
+.sticker-item, .throw-item { font-size: var(--p18, 18px); padding: var(--p2); }
+.showdown-overlay { max-width: calc(100% - 16px); }
+.sd-row { flex-wrap: wrap; white-space: normal; }
+.showdown-winner-name, .showdown-pot { white-space: nowrap; }
+
+/* ── Raise box on AmountInput (step F): presets row, then slider + amount; message/confirm only when shown ── */
+.raise-mount { min-width: 0; }
+#raise-box .amt { display: grid; grid-template-columns: minmax(0, 1fr) calc(150 * var(--px)); grid-template-areas: "pre pre" "sl row" "msg msg" "conf conf"; gap: var(--p6); align-items: center; }
+#raise-box .amt-presets { grid-area: pre; flex-wrap: nowrap; }
+#raise-box .amt-pre { min-width: 0; padding: 0 var(--p4); min-height: 32px; flex-direction: column; justify-content: center; }
+#raise-box .amt-slider { grid-area: sl; height: calc(26 * var(--px)); }
+#raise-box .amt-row { grid-area: row; }
+#raise-box .amt-text { height: calc(30 * var(--px)); min-height: 30px; width: 100%; border-radius: var(--p3); background: #0F0A06; border: 1px solid #7B5C32; color: var(--ink); padding: 0 var(--p4); }
+#raise-box .amt-text:focus { border-color: var(--gold); outline: none; }
+#raise-box .amt-text:disabled { opacity: .45; }
+#raise-box .amt-ends { display: none; }
+#raise-box .amt-msg { grid-area: msg; min-height: 0; font-size: var(--p12); }
+#raise-box .amt-msg:empty { display: none; }
+#raise-box .amt-confirm { grid-area: conf; }
+#raise-box .amt-confirm[hidden], #raise-box .amt-confirm.hidden { display: none; }
+#raise-box.off .amt-pre, #raise-box.off .amt-slider { pointer-events: none; }
+.sd-net { font-size: var(--p12); margin-left: var(--p4); } .sd-net.pos { color: #8FD3A8; } .sd-net.neg { color: var(--danger-ink); }
+.seat.leaving { opacity: .45; filter: grayscale(.7); }

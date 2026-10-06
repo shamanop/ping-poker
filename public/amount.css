@@ -1,0 +1,24 @@
+/* AmountInput (public/amount.js). Uses the shared palette and --p* scale; works inside .lb-root and the game. */
+.amt { display: flex; flex-direction: column; gap: var(--p8); min-width: 0; }
+.amt-row { display: flex; align-items: center; gap: var(--p8); }
+.amt-sym, .amt-suffix { font-weight: 700; color: var(--ink-dim); font-size: var(--p18); }
+.amt-text { flex: 1 1 auto; min-width: 0; text-align: center; font-weight: 700; user-select: text; -webkit-user-select: text; }
+.amt-slider { width: 100%; margin: 0; accent-color: var(--brass-lt, #D9AE55); height: var(--p28); }
+.amt-ends { display: flex; justify-content: space-between; font-size: var(--p12); color: var(--ink-dim); }
+.amt-presets { display: flex; flex-wrap: wrap; gap: var(--p6); }
+.amt-pre {
+  flex: 1 1 0; min-width: calc(56 * var(--px, 1px)); min-height: 32px; padding: var(--p4) var(--p8); cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; gap: 0; line-height: 1.1;
+  background: #241810; color: #EFE3C4; border: 1px solid var(--line-lt); border-radius: var(--p4);
+}
+.amt-pre:hover:not(:disabled) { border-color: var(--brass-lt, #D9AE55); }
+.amt-pre-l { font-size: var(--p11, 11px); color: var(--ink-dim); text-transform: uppercase; letter-spacing: .04em; }
+.amt-pre-v { font-size: var(--p13); }
+.amt-pre-allin { border-color: var(--gold); }
+.amt-pre-allin .amt-pre-l { color: var(--gold); }
+.amt-msg { min-height: var(--p18); font-size: var(--p13); color: var(--danger-ink); }
+.amt.amt-bad .amt-text { border-color: var(--danger-ink); box-shadow: 0 0 0 1px var(--danger-ink); }
+.amt-confirm { display: flex; align-items: center; flex-wrap: wrap; gap: var(--p8); padding: var(--p8); border: 1px solid var(--gold); border-radius: var(--p4); font-size: var(--p13); }
+.amt-confirm.hidden, .amt-confirm[hidden] { display: none; }
+.amt-confirm button { min-height: 32px; padding: 0 var(--p12); cursor: pointer; background: #241810; color: #EFE3C4; border: 1px solid var(--line-lt); border-radius: var(--p4); }
+.amt-confirm-yes { border-color: var(--gold) !important; color: var(--gold) !important; }

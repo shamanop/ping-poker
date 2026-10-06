@@ -7,8 +7,6 @@ const state = {
   myIdx:          null,
   myCards:        [],
   gameState:      null,
-  selectedAvatar: '🤠',
-  profilePic:     null,
   myBalance:      null,
   soundOn:        true,
   prevPot:        0,
@@ -31,25 +29,31 @@ const state = {
   noDealHand:     null,
   firstState:     false,
   heroKey:        '',
-  raiseKey:       '',
-  raiseVal:       0,
-  raiseMin:       0,
-  raiseMax:       0,
   spectating:     false,
+  unit:           'chips',
 };
 
 const TURN_MS       = 30000;
-const BIG_BLIND     = 20;
+const CHIP_ART_BB  = 20;   // chip-pile artwork denominations are drawn for a 20-chip big blind (cents tables scale them); not a rule
 const buyInDefault = () => state.table?.buyIn?.default ?? state.gameState?.table?.buyIn?.default ?? 1500;
 const bustMin      = () => state.gameState?.bb || state.table?.bb || 20;
-const inputText    = v => Money.getMode() === 'usd'
-  ? (v % 100 ? (v / 100).toFixed(2) : String(v / 100)) : String(v);
-const readInput    = txt => Money.parse(txt);
-const niceStep     = () => Money.niceStep(state.gameState?.bb || BIG_BLIND);
+// Display mode is per table: the user's pref resolved against THIS table's unit (no global unit).
+const normUnit     = u => (u === 'chips' ? 'chips' : 'cents');
+function setTableUnit(u) {
+  const n = normUnit(u);
+  if (n === state.unit) return;
+  state.unit = n;
+  document.querySelectorAll('[data-money-toggle]').forEach(el => { el.dataset.unit = n; });
+  Money.refreshToggles();
+}
+const tableMode    = () => Money.modeFor(Money.pref, state.unit);
+const fmt          = (n, o) => Money.format(n, tableMode(), o);
+const inputText    = v => Money.plain(v, tableMode());
+const readInput    = txt => { const r = Money.parse(txt, tableMode()); return r.ok ? r.units : null; };
+const niceStep     = () => Money.niceStep(state.gameState?.bb || CHIP_ART_BB, tableMode());
 const niceRound    = v => { const st = niceStep(); return st > 1 ? Math.round(v / st) * st : Math.round(v); };
 let activeTray      = null;
 const prevChipsMap  = {};
-let balanceTimeout  = null;
 
 const $ = id => document.getElementById(id);
 
@@ -76,9 +80,7 @@ function probeArt() {
   let pending = AV_FILES.length;
   const done = () => {
     if (--pending > 0) return;
-    renderAvatarGrid();
-    renderLandingTable();
-    if (state.gameState && $('game-screen').classList.contains('active')) renderGame();
+        if (state.gameState && $('game-screen').classList.contains('active')) renderGame();
   };
   AV_FILES.forEach(f => {
     const im = new Image();
@@ -127,7 +129,6 @@ function onResize() {
 
 function relayout() {
   setScale();
-  placeStaticSockets();
   if (state.gameState && $('game-screen').classList.contains('active')) renderGame();
 }
 
@@ -138,9 +139,6 @@ document.addEventListener('DOMContentLoaded', () => {
   window.PingSocket = state.socket;
   probeArt();
   document.querySelectorAll('svg.t-ping').forEach(fillPing);
-  renderAvatarGrid();
-  renderLandingTable();
-  bindLanding();
   bindWaitPanel();
   bindActions();
   bindSocket();
@@ -153,7 +151,6 @@ document.addEventListener('DOMContentLoaded', () => {
   initPanelSide();
   initBust();
   bindCopy($('room-code-btn'));
-  placeStaticSockets();
 
   $('player-seats').addEventListener('click', (e) => {
     const seat = e.target.closest('.seat[data-player-idx]');
@@ -168,9 +165,14 @@ document.addEventListener('DOMContentLoaded', () => {
     showThrowTray(playerIdx, seat.querySelector('.seat-pill') || seat);
   });
 
+  $('player-seats').addEventListener('keydown', (e) => {
+    const seat = e.target.closest && e.target.closest('.seat[data-player-idx]');
+    if (!seat || seat !== e.target) return;
+    if (e.key === 'Enter' || e.key === ' ' || e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey)) { e.preventDefault(); seat.click(); }
+  });
+
   window.addEventListener('resize', onResize);
-  $('raise-input')?.setAttribute('step', 'any');
-  Money.onChange(() => {
+  Money.onPrefChange(() => {
     if (state.lastBust != null && !$('bust-panel').classList.contains('hidden')) showBust(state.lastBust);
     if (state.lastLb) renderLeaderboard(state.lastLb);
     if (state.gameState && $('game-screen')?.classList.contains('active')) renderGame();
@@ -190,7 +192,6 @@ function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   $(id)?.classList.add('active');
   setScale();
-  placeStaticSockets();
 }
 
 // ─── Toasts (the only fixed layer) ────────────────────────────────
@@ -268,146 +269,7 @@ const SEAT_ANGLES = {
 };
 const anglesFor = n => SEAT_ANGLES[Math.max(2, Math.min(8, n))];
 
-const SAMPLE_COMMUNITY = [
-  { rank: 'A', suit: '♠' }, { rank: 'K', suit: '♥' }, { rank: 'Q', suit: '♦' },
-  { rank: 'J', suit: '♣' }, { rank: '10', suit: '♠' },
-];
-
-// ─── Static table (landing) ──────────────────────────────
-function placeSockets(tb, host, seats) {
-  if (!tb || !host) return;
-  const W = tb.clientWidth, H = tb.clientHeight;
-  if (!W || !H) return;
-  const angles = anglesFor(8);
-  host.querySelectorAll('.sock').forEach((el, i) => {
-    const [ex, ey] = stadiumEdge(W, H, angles[i]);
-    el.style.left = (W / 2 + ex) + 'px';
-    el.style.top  = (H / 2 + ey) + 'px';
-  });
-}
-
-function placeStaticSockets() {
-  placeSockets($('landing-tb'), $('landing-sockets'));
-}
-
-function renderAvatarGrid() {
-  const grid = $('avatar-grid');
-  if (!grid) return;
-  grid.innerHTML = AV_EMOJI.map(e =>
-    `<button type="button" class="avatar-option${e === state.selectedAvatar ? ' selected' : ''}" data-avatar="${e}" aria-label="Avatar ${e}">${avatarInner(e, null)}</button>`
-  ).join('');
-  grid.querySelectorAll('.avatar-option').forEach(el => {
-    el.addEventListener('click', () => {
-      grid.querySelectorAll('.avatar-option').forEach(a => a.classList.remove('selected'));
-      el.classList.add('selected');
-      state.selectedAvatar = el.dataset.avatar;
-      renderLandingTable();
-    });
-  });
-}
-
-function renderLandingTable() {
-  const host = $('landing-sockets');
-  if (!host) return;
-  const name = ($('player-name')?.value || '').trim();
-  host.innerHTML = Array.from({ length: 8 }, (_, i) => {
-    if (i === 0) {
-      return `<div class="sock filled"><span class="av-wrap">${avatarInner(state.selectedAvatar, state.profilePic)}</span>${name ? `<span class="nm">${esc(name)}</span>` : ''}</div>`;
-    }
-    return '<div class="sock"></div>';
-  }).join('');
-  host.querySelectorAll('.sock.filled .av-wrap > img').forEach(im => im.classList.add('av'));
-  const comm = $('landing-community');
-  if (comm && !comm.children.length) {
-    comm.style.setProperty('--cw', 'calc(74 * var(--px))');
-    comm.innerHTML = SAMPLE_COMMUNITY.map((c, i) =>
-      faceCardHtml(c, 'lg', i, `--i:${i};--n:5`)).join('');
-  }
-  const pot = $('landing-pot');
-  if (pot && !pot.children.length) {
-    pot.innerHTML = `<div class="pile">${chipStacksHtml(1280, 3, 5)}</div><div class="pot-txt"><small>Pot</small><span class="pot-num">1,280</span></div>`;
-  }
-  placeStaticSockets();
-}
-
-// ─── Landing ──────────────────────────────────────────────────────
-function bindLanding() {
-  if (!$('btn-join') || !$('player-name')) return;
-  const photoInput = $('photo-input');
-  const photoArea  = $('photo-upload-area');
-  photoArea.addEventListener('click', () => photoInput.click());
-  photoArea.addEventListener('dragover', e => { e.preventDefault(); photoArea.classList.add('drag-over'); });
-  photoArea.addEventListener('dragleave', () => photoArea.classList.remove('drag-over'));
-  photoArea.addEventListener('drop', e => {
-    e.preventDefault(); photoArea.classList.remove('drag-over');
-    const file = e.dataTransfer?.files[0];
-    if (file && file.type.startsWith('image/')) processPhotoUpload(file);
-  });
-  photoInput.addEventListener('change', () => { if (photoInput.files[0]) processPhotoUpload(photoInput.files[0]); });
-
-  $('player-name').addEventListener('input', () => {
-    clearTimeout(balanceTimeout);
-    const name = $('player-name').value.trim();
-    renderLandingTable();
-    if (!name) { $('bank-display').classList.add('hidden'); return; }
-    balanceTimeout = setTimeout(() => {
-      state.socket.emit('check_balance', { name });
-    }, 500);
-  });
-
-  $('btn-demo').addEventListener('click', () => {
-    const name = getPlayerName(); if (!name) return;
-    localStorage.setItem('ppName', name);
-    state.socket.emit('create_demo', { name, avatar: state.selectedAvatar, profilePic: state.profilePic });
-  });
-
-  $('btn-join').addEventListener('click', () => {
-    const name = getPlayerName(); if (!name) return;
-    const password = $('password-input')?.value.trim() || '';
-    if (!password) { showError('Enter the table password'); return; }
-    localStorage.setItem('ppName', name);
-    state.socket.emit('join_game', { name, avatar: state.selectedAvatar, profilePic: state.profilePic, password });
-  });
-
-  $('player-name').addEventListener('keydown', e => { if (e.key === 'Enter') $('btn-join').click(); });
-  $('password-input')?.addEventListener('keydown', e => { if (e.key === 'Enter') $('btn-join').click(); });
-}
-
-function processPhotoUpload(file) {
-  const canvas = document.createElement('canvas');
-  canvas.width = 80; canvas.height = 80;
-  const ctx = canvas.getContext('2d');
-  const img = new Image();
-  const url = URL.createObjectURL(file);
-  img.onload = () => {
-    const size = Math.min(img.width, img.height);
-    ctx.drawImage(img, (img.width - size) / 2, (img.height - size) / 2, size, size, 0, 0, 80, 80);
-    URL.revokeObjectURL(url);
-    state.profilePic = canvas.toDataURL('image/jpeg', 0.65);
-    const preview = $('photo-preview-circle');
-    preview.innerHTML = `<img src="${state.profilePic}" class="photo-preview-img" alt="Profile">`;
-    preview.classList.add('has-photo');
-    renderLandingTable();
-  };
-  img.onerror = () => URL.revokeObjectURL(url);
-  img.src = url;
-}
-
-function getPlayerName() {
-  const name = lobbyName() || ($('player-name')?.value || '').trim();
-  if (!name) { showError('Enter your name first'); return null; }
-  return name;
-}
-
-function showError(msg) {
-  const el = $('landing-error');
-  if (el) {
-    el.textContent = msg; el.classList.add('show');
-    clearTimeout(showError.t);
-    showError.t = setTimeout(() => { el.classList.remove('show'); }, 3000);
-  }
-  if (!$('landing-screen')?.classList.contains('active')) toast(msg, '', 'warn');
-}
+function showError(msg) { toast(msg, '', 'warn'); }
 
 // ─── Waiting panel (on the table, before the first hand) ──────────
 function renderShowPanel(gs) {
@@ -432,13 +294,7 @@ function bindWaitPanel() {
   });
   bindCopy($('wp-invite'));
   $('btn-start').addEventListener('click', () => {
-    const on = document.querySelector('#blind-seg .seg-btn.on');
-    const blindInterval = parseInt(on?.dataset.v || '0');
-    state.socket.emit('start_game', { roomId: state.roomId, blindInterval });
-  });
-  $('blind-seg').addEventListener('click', e => {
-    const b = e.target.closest('.seg-btn'); if (!b) return;
-    document.querySelectorAll('#blind-seg .seg-btn').forEach(x => x.classList.toggle('on', x === b));
+    if (state.roomId) state.socket.emit('table_start', { tableId: state.roomId });
   });
 }
 
@@ -456,7 +312,6 @@ function renderWaitPanel(gs) {
   $('wp-invite-link').textContent = inviteLink().replace(/^https?:\/\//, '');
   $('wp-invite').classList.toggle('hidden', canStart);
   $('btn-start').classList.toggle('hidden', !(isHost && canStart));
-  $('blind-settings').classList.toggle('hidden', !isHost);
 }
 
 // ─── Platform adapter (lobby/shell call these) ────────────────────
@@ -469,6 +324,7 @@ function leaveToLobby() {
   window.PingGame.leave();
 }
 
+window.PingFmt = fmt; // table-aware formatter for juice.js
 window.PingGame = {
   enter({ tableId, playerIdx, stack, table, you } = {}) {
     resetDeal();
@@ -480,9 +336,10 @@ window.PingGame = {
     state.hands = { room: tableId, base: null, played: {}, log: [], seen: -1 };
     state.myName = (you && (you.display || you.name)) || lobbyName() || state.myName || null;
     if (stack !== undefined) state.myBalance = stack;
-    if (table && window.Money) window.Money.setUnit(table.unit === 'chips' ? 'chips' : 'cents');
+    if (table) setTableUnit(table.unit);
     const rc = $('room-code'); if (rc) rc.textContent = (table && (table.code || table.name)) || tableId;
     $('bust-panel')?.classList.add('hidden');
+    if (state.rebuyField) { state.rebuyField.destroy(); state.rebuyField = null; $('bust-amt')?.replaceChildren(); }
     showScreen('game-screen');
   },
   leave() {
@@ -500,35 +357,23 @@ window.PingGame = {
 function bindSocket() {
   const s = state.socket;
 
-  s.on('balance_data', ({ balance }) => {
-    state.myBalance = balance;
-    $('bank-amount').textContent = Money.fmt(balance);
-    $('bank-display').classList.remove('hidden');
-  });
-
   s.on('balance_update', ({ balance }) => { state.myBalance = balance; });
   s.on('money', (m) => {
-    if (!m || typeof m.bank !== 'number') return;
-    state.myBalance = m.bank;
-    const el = $('bank-amount'); if (el) { el.textContent = Money.fmt(m.bank); const d = $('bank-display'); if (d) d.classList.remove('hidden'); }
-  });
-
-  s.on('room_joined', ({ roomId, playerIdx, balance }) => {
-    state.roomId = roomId;
-    state.myIdx  = playerIdx;
-    if (balance !== undefined) state.myBalance = balance;
-    $('room-code').textContent       = roomId;
-    showScreen('game-screen');
+    if (m && typeof m.bank === 'number') state.myBalance = m.bank;
   });
 
   s.on('game_state', gs => {
     const prev = state.gameState;
     state.gameState = gs;
     const gu = gs.unit || gs.table?.unit;
-    if (gu) Money.setUnit(gu);
+    if (gu) setTableUnit(gu);
     if (!state.myName && gs.players[state.myIdx]) state.myName = gs.players[state.myIdx].name;
-    const idxNow = gs.players.findIndex(p => p.name === state.myName);
+    const idxNow = gs.you && gs.you.idx != null ? gs.you.idx : gs.players.findIndex(p => p.name === state.myName);
     if (idxNow >= 0) state.myIdx = idxNow;
+    if (gs.players[state.myIdx] && gs.players[state.myIdx].chips > 0 && !$('bust-panel').classList.contains('hidden')) { // the rebuy was seated
+      $('bust-panel').classList.add('hidden');
+      if (state.rebuyField) { state.rebuyField.destroy(); state.rebuyField = null; $('bust-amt').replaceChildren(); }
+    }
     if (!prev || prev.handNum !== gs.handNum) { resetDeal(); state.dealt = {}; state.heroKey = ''; state.reveal = null; hideShowdown(); }
     if (!prev && gs.street && gs.street !== 'preflop') state.noDealHand = gs.handNum;
     noteTable(prev, gs);
@@ -560,14 +405,15 @@ function bindSocket() {
     if (state.gameState) { renderSeats(state.gameState); renderShowPanel(state.gameState); }
   });
 
-  s.on('showdown_result', ({ winners, pot, reveals, nextMs }) => {
+  s.on('showdown_result', ({ winners, pot, reveals, nextMs, net }) => {
     state.sdMs = nextMs || 5000;
     renderShowdown(winners, pot, reveals);
     playSound('win');
     const myName = state.gameState?.players[state.myIdx]?.name;
-    if (myName && winners.some(w => w.name === myName)) {
-      setTimeout(() => showWinFloat(pot), 250);
-    }
+    // my NET for the hand (never the whole pot): `net` map by name, else my winner row's net
+    const mine = winners.find(w => w.name === myName);
+    const myNet = net && myName in net ? net[myName] : (mine ? mine.net : 0);
+    if (myNet > 0) setTimeout(() => showWinFloat(myNet), 250);
     juiceShowdown(winners, pot);
   });
 
@@ -580,15 +426,15 @@ function bindSocket() {
   s.on('emote', ({ idx, id }) => showEmote(idx, id));
 
   s.on('blinds_up', ({ level, sb, bb, unit }) => {
-    if (unit) Money.setUnit(unit);
-    toast(`BLINDS UP · LEVEL ${level + 1}`, `${Money.fmt(sb)} / ${Money.fmt(bb)}`, '', 4200);
+    if (unit) setTableUnit(unit);
+    toast(`BLINDS UP · LEVEL ${level + 1}`, `${fmt(sb)} / ${fmt(bb)}`, '', 4200);
     playSound('blinds_up');
   });
 
-  s.on('bust_out', ({ balance }) => { showBust(balance); });
+  s.on('bust_out', ({ balance, rebuy }) => { showBust(rebuy && rebuy.balance != null ? rebuy.balance : balance, rebuy); });
   s.on('leaderboard_data', ({ entries }) => { renderLeaderboard(entries); });
   s.on('self_changed', v => { if (v && v.display) state.myName = v.display; });
-  s.on('error', ({ message }) => { showError(message); });
+  s.on('error', e => { showError(PingUI.errorText(e, tableMode())); });
 
   s.on('disconnect', () => { toast('Connection lost', 'Trying to reconnect', 'warn', 5000); });
   s.on('connect',    () => { if (state.roomId) toast('Back online', '', 'ok', 2000); });
@@ -688,7 +534,7 @@ function initEmotes() {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     const t = e.target, tag = t && t.tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable)) return;
-    if (!$('game-screen')?.classList.contains('active') || document.querySelector('.modal-back:not(.hidden), .pj-modal')) return;
+    if (!$('game-screen')?.classList.contains('active') || PingUI.isOverlayOpen()) return;
     const i = '123456'.indexOf(e.key);
     if (e.key.length === 1 && i >= 0) sendEmote(EMOTE_KEYS[i]);
   });
@@ -740,7 +586,7 @@ const HC_FLAKE = '<svg viewBox="0 0 24 24" aria-hidden="true"><g stroke="current
 function hotColdHtml(r, what) {
   if (!r || r.net === 0) return '';
   const hot = r.net > 0;
-  const amt = Money.fmt(Math.abs(r.net), {});
+  const amt = fmt(Math.abs(r.net), {});
   return `<div class="hc-chip ${hot ? 'hot' : 'cold'}" title="Last ${r.n} ${what}">${hot ? HC_FLAME : HC_FLAKE}<b>${hot ? 'HOT' : 'COLD'}</b><span>${hot ? '+' : '-'}${esc(amt)}</span></div>`;
 }
 
@@ -769,8 +615,14 @@ function appendChatMsg(name, text) {
 function initBust() {
   $('btn-rebuy').addEventListener('click', () => {
     if (!state.roomId) return;
-    state.socket.emit('rebuy', { roomId: state.roomId });
-    $('bust-panel').classList.add('hidden');
+    // the amount sent is the number in the AmountInput (the same number the button label promises); never a guess.
+    // The panel stays until the server seats the chips (game_state with chips > 0): an error (range, bank, rebuy_off...) leaves it open.
+    const f = state.rebuyField;
+    if (!f) return;
+    const v = f.value(); if (v === null) { f.submit(); return; }
+    const fund = state.lastRebuy && state.lastRebuy.fund;
+    state.socket.emit('rebuy', fund ? { roomId: state.roomId, amount: v, fund } : { roomId: state.roomId, amount: v });
+    const btn = $('btn-rebuy'); btn.disabled = true; setTimeout(() => { if (state.rebuyField) btn.disabled = state.rebuyField.value() === null; }, 900);
   });
   $('btn-spectate').addEventListener('click', () => {
     state.spectating = true;
@@ -785,19 +637,41 @@ function initBust() {
   });
 }
 
-function showBust(balance) {
+function showBust(balance, rebuy) {
   state.lastBust = balance;
   state.spectating = false;
+  if ($('bust-panel').classList.contains('hidden') && state.rebuyField) { state.rebuyField.destroy(); state.rebuyField = null; $('bust-amt').replaceChildren(); } // a new bust starts from the default again
   $('bust-panel').classList.remove('hidden');
-  $('bust-balance').textContent = `Bank ${Money.fmt(balance)}`;
+  const rbd = rebuy || state.lastRebuy || {};
+  $('bust-balance').textContent = `${rbd.fund === 'play' ? 'Play $' : 'Bank'} ${fmt(balance)}`;
   const rebuyBtn = $('btn-rebuy');
   const brokeMsg = $('bust-broke-msg');
-  if (balance >= bustMin()) {
+  const slot = $('bust-amt');
+  const bi = state.table?.buyIn || {};
+  const rb = rebuy || state.lastRebuy || {};
+  if (rebuy) state.lastRebuy = rebuy;
+  const lo = rb.min ?? bi.min ?? bustMin();
+  const hi = Math.min(rb.max ?? bi.max ?? balance, balance);
+  const def = Math.min(hi, Math.max(lo, rb.default ?? buyInDefault()));
+  if (rb.allowed !== false && balance >= lo && hi >= lo) {
     rebuyBtn.classList.remove('hidden');
     brokeMsg.classList.add('hidden');
-    rebuyBtn.textContent = `Rebuy ${Money.fmt(Math.min(buyInDefault(), balance))}`;
+    const presets = [{ label: 'Min', units: lo }, { label: 'Default', units: def }, { label: 'Max', units: hi }];
+    const label = () => { const v = state.rebuyField && state.rebuyField.value(); rebuyBtn.textContent = v === null || v === undefined ? 'Rebuy' : `Rebuy ${fmt(v)}`; rebuyBtn.disabled = v === null || v === undefined; };
+    if (state.rebuyField && state.rebuyField.unitKey === state.unit) {
+      state.rebuyField.setBounds({ min: lo, max: hi, presets });
+    } else {
+      if (state.rebuyField) state.rebuyField.destroy();
+      state.rebuyField = AmountInput({ units: def, min: lo, max: hi, unit: state.unit, scale: 'ladder', presets, label: 'Rebuy amount', rangeLabel: 'Rebuy', onChange: label });
+      state.rebuyField.unitKey = state.unit;
+      state.rebuyField.input.id = 'rebuy-input';
+      slot.replaceChildren(state.rebuyField.el);
+    }
+    label();
   } else {
+    if (state.rebuyField) { state.rebuyField.destroy(); state.rebuyField = null; slot.replaceChildren(); }
     rebuyBtn.classList.add('hidden');
+    brokeMsg.textContent = rb.allowed === false && balance >= lo ? 'Rebuys are closed at this table.' : (rb.fund === 'play' ? 'Your Play $ is empty. Top up from the wallet.' : 'Your bank is empty. GG.');
     brokeMsg.classList.remove('hidden');
   }
 }
@@ -810,7 +684,7 @@ function renderLeaderboard(entries) {
     <div class="lb-row ${String(e.display || e.name || '').toLowerCase() === me ? 'lb-me' : ''}">
       <span class="lb-rank">${i + 1}</span>
       <span class="lb-name">${esc(e.display || e.name)}</span>
-      <span class="lb-balance">${Money.fmt(e.netCents ?? e.balance)}</span>
+      <span class="lb-balance">${fmt(e.netCents ?? e.balance)}</span>
     </div>`).join('') || '<div class="empty-note">No standings yet</div>';
 }
 
@@ -862,7 +736,7 @@ const DENOMS = [500, 100, 25, 5, 1];
 function chipStacksHtml(amount, maxCols = 3, cap = 6) {
   const cols = [];
   let rem = Math.max(0, Math.floor(amount));
-  const sc = (Money.getUnit() === 'cents' && state.gameState?.bb) ? state.gameState.bb / BIG_BLIND : 1;
+  const sc = (state.unit === 'cents' && state.gameState?.bb) ? state.gameState.bb / CHIP_ART_BB : 1;
   for (const d of DENOMS) {
     if (cols.length >= maxCols) break;
     const val = d * sc;
@@ -948,7 +822,8 @@ function renderGame() {
   const so = $('btn-sit-out');
   const canSit = !!(me && gs.status === 'playing' && !(me.sittingOut && !me.sitOutRequest && !me.cardCount));
   so.disabled = !canSit;
-  so.textContent = canSit && me.sitOutRequest ? 'Resume' : 'Pause';
+  so.textContent = canSit && me.sitOutRequest ? 'Back in' : 'Sit out';
+  so.title = !canSit ? 'Available while a hand is being played' : me.sitOutRequest ? 'Rejoin from the next hand' : 'Sit out from the next hand';
   so.classList.toggle('on', canSit && !!me.sitOutRequest);
 }
 
@@ -977,11 +852,11 @@ function noteActions(prev, gs) {
     if (p.allIn && (p.lastAction === 'RAISE' || p.lastAction === 'CALL')) { kind = 'allin'; text = 'All-in'; }
     else if (p.lastAction === 'FOLD')  text = 'Fold';
     else if (p.lastAction === 'CHECK') text = 'Check';
-    else if (p.lastAction === 'CALL')  text = `Call ${Money.fmt(p.roundBet)}`;
+    else if (p.lastAction === 'CALL')  text = `Call ${fmt(p.roundBet)}`;
     else if (p.lastAction === 'RAISE') {
       const opening = prev && prev.handNum === gs.handNum && prev.street === gs.street && prev.currentBet === 0;
       kind = opening ? 'bet' : 'raise';
-      text = `${opening ? 'Bet' : 'Raise to'} ${Money.fmt(p.roundBet)}`;
+      text = `${opening ? 'Bet' : 'Raise to'} ${fmt(p.roundBet)}`;
     } else return;
     bubbles[i] = { text, kind, t: Date.now() };
   });
@@ -1064,6 +939,7 @@ function planHoleDeal(gs) {
 
 // ─── Seats ────────────────────────────────────────────────────────
 function seatStatus(p) {
+  if (p.leaving)     return ['Leaving', ''];
   if (p.connected === false && !p.isBot) return ['Offline', 'offline'];
   if (p.allIn)       return ['All-in', 'allin'];
   if (p.sittingOut)  return [p.sitOutRequest ? 'Away' : 'Joining', ''];
@@ -1084,7 +960,7 @@ function renderSeats(gs) {
   noteActions(state.prevForBubbles, gs);
   state.prevForBubbles = gs;
 
-  const html = gs.players.map((p, i) => {
+  const seatsNew = gs.players.map((p, i) => {
     const off = (i - myIdx + n) % n;
     const [x, y0, sc] = seatCenter(angles[off]);
     const hero = i === myIdx;
@@ -1112,22 +988,48 @@ function renderSeats(gs) {
       if (age < BUBBLE_MS) bubble = `<div class="seat-bubble k-${b.kind} ${peekUp ? 'below' : 'above'}" style="animation-delay:${-age}ms">${esc(b.text)}</div>`;
     }
 
-    const cls = ['seat', hero ? 'hero' : '', peekUp ? '' : 'upper', p.isActive ? 'active' : '', p.folded ? 'folded' : '', p.sittingOut ? 'away' : '', state.winners?.has(p.name) ? 'winner' : ''].filter(Boolean).join(' ');
-    return `<div class="${cls}" data-player-idx="${i}" style="left:${x.toFixed(1)}px;top:${y.toFixed(1)}px;--ss:${sc.toFixed(3)}">
+    const cls = ['seat', hero ? 'hero' : '', peekUp ? '' : 'upper', p.isActive ? 'active' : '', p.folded ? 'folded' : '', p.sittingOut ? 'away' : '', p.leaving ? 'leaving' : '', state.winners?.has(p.name) ? 'winner' : ''].filter(Boolean).join(' ');
+    const inner = `
       ${peek}
       <div class="seat-pill">
         <div class="seat-av">${avatarInner(p.avatar, p.profilePic)}</div>
         <div class="seat-info">
-          <div class="seat-l1"><span class="seat-name">${esc(p.name)}</span>${tag ? `<span class="seat-tag ${tag.toLowerCase()}">${tag}</span>` : ''}</div>
-          <div class="seat-l2"><span class="seat-chips">${Money.fmt(p.chips)}</span>${stText || stCls === 'secs' ? `<span class="seat-status ${stCls}">${stText}</span>` : ''}</div>
+          <div class="seat-l1"><span class="seat-name" title="${esc(p.name)}">${esc(p.name)}</span>${tag ? `<span class="seat-tag ${tag.toLowerCase()}">${tag}</span>` : ''}</div>
+          <div class="seat-l2"><span class="seat-chips">${fmt(p.chips)}</span>${stText || stCls === 'secs' ? `<span class="seat-status ${stCls}">${stText}</span>` : ''}</div>
         </div>
         ${p.isActive ? `<div class="seat-timer"><i style="--t:${state.turnEndAt ? Math.min(1, Math.max(0, (state.turnEndAt - Date.now()) / TURN_MS)).toFixed(3) : 1}"></i></div>` : ''}
       </div>
       ${bubble}
       ${hero ? hotColdHtml(handsNet(), 'hands') : ''}
-    </div>`;
-  }).join('');
-  el.innerHTML = html;
+    `;
+    return { key: p.seatNo != null ? 's' + p.seatNo : 'n' + p.name, cls, idx: i, left: x.toFixed(1) + 'px', top: y.toFixed(1) + 'px', ss: sc.toFixed(3), inner, name: p.name, hero };
+  });
+
+  // Patch, do not rebuild: a seat node lives as long as its seat does, so hover, focus and an open menu survive every state.
+  const live = state.seatEls || (state.seatEls = new Map());
+  const keep = new Set();
+  seatsNew.forEach((d, pos) => {
+    keep.add(d.key);
+    let node = live.get(d.key);
+    if (!node) {
+      node = document.createElement('div');
+      node.tabIndex = 0;
+      node.setAttribute('role', 'button');
+      node.setAttribute('aria-haspopup', 'menu');
+      node._inner = null;
+      live.set(d.key, node);
+    }
+    if (node.className !== d.cls) node.className = d.cls;
+    if (node.dataset.playerIdx !== String(d.idx)) node.dataset.playerIdx = d.idx;
+    if (node.style.left !== d.left) node.style.left = d.left;
+    if (node.style.top !== d.top) node.style.top = d.top;
+    if (node.style.getPropertyValue('--ss') !== d.ss) node.style.setProperty('--ss', d.ss);
+    const label = d.hero ? `${d.name}, you` : `${d.name}, seat ${d.idx + 1}`;
+    if (node.getAttribute('aria-label') !== label) node.setAttribute('aria-label', label);
+    if (node._inner !== d.inner) { node.innerHTML = d.inner; node._inner = d.inner; }
+    if (el.children[pos] !== node) el.insertBefore(node, el.children[pos] || null);
+  });
+  for (const [k, node] of live) if (!keep.has(k)) { node.remove(); live.delete(k); }
 
   gs.players.forEach((p, i) => {
     if (prevChipsMap[i] !== undefined && prevChipsMap[i] !== p.chips) {
@@ -1168,6 +1070,19 @@ function betSpot(i, gs) {
   return { x: sx + ux * t, y: sy + uy * t, ux, uy };
 }
 
+// A bet stack must not sit on the pot text (ui defect 9): slide it sideways clear of the pot row.
+function avoidPot(s) {
+  const g = state.geo, row = $('pot-row'), st = $('stage');
+  if (!row || !st || !row.firstChild) return s;
+  const r = row.getBoundingClientRect(), o = st.getBoundingClientRect();
+  if (!r.width) return s;
+  const pad = 4 * g.u, hw = 46 * g.u, hh = 34 * g.u;
+  const L = r.left - o.left - pad, R = r.right - o.left + pad, T = r.top - o.top - pad, B = r.bottom - o.top + pad;
+  if (s.x + hw <= L || s.x - hw >= R || s.y + hh <= T || s.y - hh >= B) return s;
+  const mid = (L + R) / 2;
+  return { ...s, x: s.x < mid ? L - hw : R + hw };
+}
+
 function renderBets(gs) {
   const layer = $('bet-layer'), pucks = $('puck-layer');
   const g = state.geo;
@@ -1175,11 +1090,11 @@ function renderBets(gs) {
   let bh = '';
   gs.players.forEach((p, i) => {
     if (!(p.roundBet > 0) || !g.seats[i]) return;
-    const s = betSpot(i, gs);
+    const s = avoidPot(betSpot(i, gs));
     const key = `${gs.handNum}|${gs.street}|${i}|${p.roundBet}`;
     const fresh = state.betKey?.[i] !== key;
     (state.betKey ||= {})[i] = key;
-    bh += `<div class="bet${i === myIdx ? ' hero-bet' : ''}" style="left:${s.x.toFixed(1)}px;top:${s.y.toFixed(1)}px${fresh ? '' : ';animation:none'}">${chipStacksHtml(p.roundBet, 3, 6)}<span class="bet-amt">${Money.fmt(p.roundBet)}</span></div>`;
+    bh += `<div class="bet${i === myIdx ? ' hero-bet' : ''}" style="left:${s.x.toFixed(1)}px;top:${s.y.toFixed(1)}px${fresh ? '' : ';animation:none'}">${chipStacksHtml(p.roundBet, 3, 6)}<span class="bet-amt">${fmt(p.roundBet)}</span></div>`;
   });
   gs.players.forEach((p, i) => { if (!(p.roundBet > 0) && state.betKey) delete state.betKey[i]; });
   layer.innerHTML = bh;
@@ -1201,7 +1116,7 @@ function renderPot(gs) {
   const row = $('pot-row');
   if (!(gs.pot > 0)) { row.innerHTML = ''; state.prevPot = 0; return; }
   const grow = gs.pot > state.prevPot;
-  row.innerHTML = `<div class="pile">${chipStacksHtml(gs.pot, 3, 5)}</div><div class="pot-txt"><small>Pot</small><span class="pot-num">${Money.fmt(gs.pot, { compact: true })}</span></div>`;
+  row.innerHTML = `<div class="pile">${chipStacksHtml(gs.pot, 3, 5)}</div><div class="pot-txt"><small>Pot</small><span class="pot-num">${fmt(gs.pot, { compact: true })}</span></div>`;
   if (grow) {
     row.classList.remove('pot-pulse'); void row.offsetWidth; row.classList.add('pot-pulse');
     playSound('chip');
@@ -1259,8 +1174,8 @@ function renderMyCards() { if (state.gameState) renderHero(state.gameState); }
 
 // ─── Plaque (header) ──────────────────────────────────────────────
 function renderPlaque(gs) {
-  const sb = gs.sb || 10, bb = gs.bb || BIG_BLIND;
-  $('pl-blinds').textContent = `${Money.fmt(sb)} / ${Money.fmt(bb)}`;
+  const sb = gs.sb || 0, bb = gs.bb || 0;
+  $('pl-blinds').textContent = `${fmt(sb)} / ${fmt(bb)}`;
   $('pl-level-wrap').classList.toggle('hidden', !gs.blindsEnabled);
   $('pl-next-wrap').classList.toggle('hidden', !gs.blindsEnabled);
   if (gs.blindsEnabled) {
@@ -1271,8 +1186,6 @@ function renderPlaque(gs) {
   const me = gs.players[state.myIdx];
   const inHand = gs.status === 'playing' && me && !me.folded;
   const toCall = me ? Math.max(0, gs.currentBet - (me.roundBet || 0)) : 0;
-  $('pl-tocall').textContent  = inHand ? (toCall ? Money.fmt(Math.min(toCall, me.chips)) : 'Check') : '—';
-  $('pl-minraise').textContent = gs.status === 'playing' ? Money.fmt(gs.currentBet + bb) : '—';
 }
 
 // ─── Action bar ───────────────────────────────────────────────────
@@ -1290,21 +1203,17 @@ function setBar(mode, main, sub, name) {
 function renderControls(gs) {
   const me   = gs.players[state.myIdx];
   const fold = $('btn-fold'), call = $('btn-check-call'), rbtn = $('btn-raise');
-  const box  = $('raise-box'), slider = $('raise-slider'), input = $('raise-input');
-  const bb   = gs.bb || BIG_BLIND;
+  const la   = gs.legalActions || null;   // the server's answer: non-null only when it is my turn in a live hand
   const isMyTurn = gs.currentPlayerIdx === state.myIdx;
-  const canAct = !!me && isMyTurn && !me.folded && !me.allIn && gs.status === 'playing';
-  const toCall = me ? Math.max(0, gs.currentBet - (me.roundBet || 0)) : 0;
-  const allInCall = !!me && toCall >= me.chips;
-  const callAmt = me ? Math.min(toCall, me.chips) : 0;
+  const canAct = !!la && !!me && gs.status === 'playing';
+  const canRaise = canAct && !!la.canRaise;
+  // display arithmetic only (preselect buttons and labels off-turn); every rule comes from `la`
+  const toCall = la ? la.toCall : (me ? Math.max(0, gs.currentBet - (me.roundBet || 0)) : 0);
+  const callAmt = la ? la.callAmount : (me ? Math.min(toCall, me.chips) : 0);
+  const allInCall = !!me && toCall > 0 && callAmt >= me.chips;
 
-  call.querySelector('.act-main').textContent = toCall === 0 ? 'Check' : (allInCall ? 'All-in' : 'Call');
-  call.querySelector('.act-sub').innerHTML = toCall === 0 ? '&nbsp;' : Money.fmt(callAmt);
-
-  const minRaise = gs.currentBet + bb;
-  const maxRaise = me ? me.chips + (me.roundBet || 0) : 0;
-  const othersCanRespond = gs.players.some((o, i) => i !== state.myIdx && !o.folded && !o.allIn && !o.sittingOut && o.connected && o.cardCount);
-  const canRaise = canAct && othersCanRespond && me.chips > toCall && maxRaise >= minRaise;
+  call.querySelector('.act-main').textContent = la ? (la.canCheck ? 'Check' : (allInCall ? 'All-in' : 'Call')) : (toCall === 0 ? 'Check' : (allInCall ? 'All-in' : 'Call'));
+  call.querySelector('.act-sub').innerHTML = toCall === 0 ? '&nbsp;' : fmt(callAmt);
   rbtn.querySelector('.act-main').textContent = gs.currentBet === 0 ? 'Bet' : 'Raise';
 
   // Pre-select applies while waiting on someone else with a live hand
@@ -1324,7 +1233,7 @@ function renderControls(gs) {
   else if (me.allIn) setBar('idle', "You're all-in", 'Good luck');
   else if (canAct) {
     state.helper = { toCall, callAmt, allInCall, pot: gs.pot, chips: me.chips, roundBet: me.roundBet || 0, canRaise };
-    setBar('turn', toCall ? `${allInCall ? 'All-in' : 'Call'} ${Money.fmt(callAmt)} to win ${Money.fmt(gs.pot + callAmt)}` : `Check, or bet to win ${Money.fmt(gs.pot)}`, '');
+    setBar('turn', toCall ? `${allInCall ? 'All-in' : 'Call'} ${fmt(callAmt)} to win ${fmt(gs.pot + callAmt)}` : `Check, or bet to win ${fmt(gs.pot)}`, '');
     updateHelper();
   } else {
     const who = gs.players[gs.currentPlayerIdx];
@@ -1335,51 +1244,68 @@ function renderControls(gs) {
   $('turn-ring').classList.toggle('idle', state.barMode === 'idle');
   if (state.barMode === 'idle') { $('my-turn-timer').innerHTML = '&nbsp;'; $('my-turn-ring').style.setProperty('--t', 0); }
 
-  fold.disabled = !canAct;
-  call.disabled = !canAct;
+  fold.disabled = !(canAct && la.canFold);
+  call.disabled = !(canAct && (la.canCheck || la.canCall));
   rbtn.disabled = !canRaise;
+  renderRaiseBox(gs, me, la, canRaise, toCall);
+}
 
-  // Raise box
-  const key = `${gs.handNum}|${gs.street}|${gs.currentBet}|${me?.chips}|${canAct}`;
-  const preflop = gs.street === 'preflop';
-  const base = gs.currentBet > bb ? gs.currentBet : bb;
-  const clampV = v => Math.max(minRaise, Math.min(maxRaise, niceRound(v)));
-  const potRaise = f => gs.currentBet + f * (gs.pot + toCall);
-  const presetDefs = preflop
-    ? [['2.5x', clampV(2.5 * base)], ['3x', clampV(3 * base)], ['4x', clampV(4 * base)], ['All-in', maxRaise]]
-    : [['Min', minRaise], ['½ Pot', clampV(potRaise(0.5))], ['Pot', clampV(potRaise(1))], ['All-in', maxRaise]];
-
+// Raise box: one AmountInput bounded by the server's [minRaiseTo, maxRaiseTo]. While the box is focused and dirty a game_state does not
+// rewrite the text (S1-2): only the slider, labels and bounds follow; the text syncs on blur or submit.
+function renderRaiseBox(gs, me, la, canRaise, toCall) {
+  const box = $('raise-box'), mount = $('raise-mount');
   box.classList.toggle('off', !canRaise);
-  slider.disabled = input.disabled = !canRaise;
-  $('raise-minus').disabled = $('raise-plus').disabled = !canRaise;
-  $('raise-presets').innerHTML = presetDefs.map(([label, v]) =>
-    `<button type="button" class="pre" data-v="${v}"${canRaise ? '' : ' disabled'}><span>${label}</span><b>${canRaise ? Money.fmt(v) : '—'}</b></button>`).join('');
-
-  if (canRaise) {
-    slider.min = minRaise; slider.max = maxRaise;
-    state.raiseMin = minRaise; state.raiseMax = maxRaise;
-    if (state.raiseKey !== key) { state.raiseKey = key; state.raiseVal = minRaise; }
-    setRaiseValue(state.raiseVal);
-    $('tick-min').textContent = Money.fmt(minRaise);
-    $('tick-max').textContent = Money.fmt(maxRaise);
-  } else {
-    state.raiseKey = '';
-    slider.min = 0; slider.max = 100; slider.value = 0; slider.style.setProperty('--fill', '0%');
-    input.value = '';
-    $('tick-min').textContent = $('tick-max').textContent = '';
-    $('raise-sub').innerHTML = '&nbsp;';
+  let f = state.raiseField;
+  if (f && (state.raiseCfg !== `${state.unit}|${gs.bb}`)) { f.destroy(); f.el.remove(); f = state.raiseField = null; }
+  if (!canRaise) {
+    state.raiseDecision = '';
+    if (f) { f.input.disabled = f.slider.disabled = true; f.el.querySelectorAll('button').forEach(b => { b.disabled = true; }); }
+    return;
   }
+  const lo = la.minRaiseTo, hi = la.maxRaiseTo;
+  const clampV = v => Math.max(lo, Math.min(hi, niceRound(v)));
+  const preflop = gs.street === 'preflop';
+  const base = gs.currentBet > gs.bb ? gs.currentBet : gs.bb;
+  const potRaise = fr => gs.currentBet + fr * (gs.pot + toCall);
+  const presets = (preflop
+    ? [['2.5x', clampV(2.5 * base)], ['3x', clampV(3 * base)], ['4x', clampV(4 * base)]]
+    : [['Min', lo], ['\u00BD Pot', clampV(potRaise(0.5))], ['Pot', clampV(potRaise(1))]]
+  ).map(([label, units]) => ({ label, units })).concat([{ label: 'All-in', units: hi }]);
+  state.raiseMax = hi;
+  if (!f) {
+    f = state.raiseField = AmountInput({
+      units: lo, min: lo, max: hi, unit: state.unit, scale: 'raise', bb: gs.bb, presets, label: 'Raise to', rangeLabel: 'Raise to',
+      onChange: () => { syncRaiseSub(); updateHelper(); },
+      onCommit: v => { playSound('raise'); sendAction('raise', v); },
+    });
+    state.raiseCfg = `${state.unit}|${gs.bb}`;
+    f.input.id = 'raise-input'; f.input.classList.add('raise-input');
+    mount.replaceChildren(f.el);
+    state.raiseDecision = `${gs.handNum}|${gs.street}|${gs.currentBet}|${me.chips}`;
+  } else {
+    f.input.disabled = false;
+    f.el.querySelectorAll('button').forEach(b => { b.disabled = false; });
+    f.setBounds({ min: lo, max: hi, presets, allIn: hi });
+    const d = `${gs.handNum}|${gs.street}|${gs.currentBet}|${me.chips}`;
+    if (state.raiseDecision !== d) { state.raiseDecision = d; f.set(lo, { source: 'server' }); }
+  }
+  syncRaiseSub();
+}
+function syncRaiseSub() {
+  const f = state.raiseField, v = f ? f.value() : null;
+  $('raise-sub').textContent = v === null ? '\u2014' : fmt(v);
 }
 
 // Helper line above the bar on the player's turn: stack left after calling / after the dialled raise
 function updateHelper() {
   const h = state.helper;
   if (!h) return;
-  const afterCall = Money.fmt(h.chips - h.callAmt);
+  const afterCall = fmt(h.chips - h.callAmt);
   let sub = `${afterCall} behind after ${h.toCall ? 'calling' : 'checking'}`;
-  if (h.canRaise && state.raiseVal) {
-    const put = state.raiseVal - h.roundBet;
-    sub += ` · ${Money.fmt(h.chips - put)} after ${state.raiseVal >= state.raiseMax ? 'all-in' : 'raising to ' + Money.fmt(state.raiseVal)}`;
+  const v = state.raiseField ? state.raiseField.value() : null;
+  if (h.canRaise && v) {
+    const put = v - h.roundBet;
+    sub += ` \u00B7 ${fmt(h.chips - put)} after ${v >= state.raiseMax ? 'all-in' : 'raising to ' + fmt(v)}`;
   }
   $('bar-status-sub').textContent = sub;
 }
@@ -1393,7 +1319,7 @@ function renderPreselect(show, toCall, callAmt) {
   if (pre && pre.mode === 'call' && pre.amount !== toCall) pre = state.pre = null;
   const cf = $('pre-checkfold'), cl = $('pre-call');
   cl.disabled = toCall <= 0;
-  $('pre-call-sub').innerHTML = toCall > 0 ? Money.fmt(callAmt) : '&nbsp;';
+  $('pre-call-sub').innerHTML = toCall > 0 ? fmt(callAmt) : '&nbsp;';
   cf.classList.toggle('on', !!pre && pre.mode === 'checkfold');
   cl.classList.toggle('on', !!pre && pre.mode === 'call' && toCall > 0);
   cf.setAttribute('aria-pressed', cf.classList.contains('on'));
@@ -1416,71 +1342,34 @@ function sendPreselect(mode) {
   if (state.gameState) renderPreselect(true, ctx.toCall || 0, ctx.callAmt || 0);
 }
 
-function setRaiseValue(v) {
-  const lo = state.raiseMin, hi = state.raiseMax;
-  v = Math.max(lo, Math.min(hi, Math.round(v) || lo));
-  state.raiseVal = v;
-  const slider = $('raise-slider');
-  slider.value = v;
-  slider.style.setProperty('--fill', hi > lo ? ((v - lo) / (hi - lo) * 100).toFixed(1) + '%' : '100%');
-  $('raise-input').value = inputText(v);
-  $('raise-sub').textContent = Money.fmt(v);
-  document.querySelectorAll('#raise-presets .pre').forEach(b => b.classList.toggle('on', parseInt(b.dataset.v) === v));
-  updateHelper();
-}
-
 // ─── Action sends ─────────────────────────────────────────────────
 function bindActions() {
   $('btn-fold').addEventListener('click', () => doFold());
   $('btn-check-call').addEventListener('click', () => doCall());
   $('btn-raise').addEventListener('click', () => doRaise());
 
-  $('raise-slider').addEventListener('input', e => {
-    const raw = parseInt(e.target.value), lo = state.raiseMin, hi = state.raiseMax;
-    setRaiseValue(raw <= lo ? lo : raw >= hi ? hi : niceRound(raw));
-  });
-  $('raise-input').addEventListener('input', e => {
-    const v = readInput(e.target.value);
-    if (v !== null) {
-      const slider = $('raise-slider');
-      state.raiseVal = Math.max(state.raiseMin, Math.min(state.raiseMax, v));
-      slider.value = state.raiseVal;
-      const lo = state.raiseMin, hi = state.raiseMax;
-      slider.style.setProperty('--fill', hi > lo ? ((state.raiseVal - lo) / (hi - lo) * 100).toFixed(1) + '%' : '100%');
-      $('raise-sub').textContent = Money.fmt(state.raiseVal);
-      updateHelper();
-    }
-  });
-  const stepBy = d => { if (!$('btn-raise').disabled) setRaiseValue(state.raiseVal + d * (state.gameState?.bb || BIG_BLIND)); };
-  $('raise-minus').addEventListener('click', () => stepBy(-1));
-  $('raise-plus').addEventListener('click', () => stepBy(1));
   $('pre-checkfold').addEventListener('click', () => sendPreselect('checkfold'));
   $('pre-call').addEventListener('click', () => sendPreselect('call'));
-  $('raise-input').addEventListener('blur', () => setRaiseValue(state.raiseVal));
-  $('raise-presets').addEventListener('click', e => {
-    const b = e.target.closest('.pre');
-    if (b && !b.disabled) setRaiseValue(parseInt(b.dataset.v));
-  });
 
   document.addEventListener('keydown', e => {
     if (!$('game-screen').classList.contains('active')) return;
-    if (e.ctrlKey || e.metaKey || e.altKey || state.barMode !== 'turn') return;
+    if (e.ctrlKey || e.metaKey || e.altKey || state.barMode !== 'turn' || PingUI.isOverlayOpen()) return;
     const t = e.target;
     const inText = (t.tagName === 'INPUT' && t.type !== 'range' && t.id !== 'raise-input') || t.tagName === 'TEXTAREA';
     if (inText) return;
     const inRaiseInput = t.id === 'raise-input';
-    const k = e.key;
+    const k = e.key, f = state.raiseField;
     if (!inRaiseInput && (k === 'f' || k === 'F')) { e.preventDefault(); doFold(); }
     else if (!inRaiseInput && (k === 'c' || k === 'C')) { e.preventDefault(); doCall(); }
-    else if (!inRaiseInput && (k === 'r' || k === 'R')) { e.preventDefault(); const i = $('raise-input'); if (!i.disabled) { i.focus(); i.select(); } }
+    else if (!inRaiseInput && (k === 'r' || k === 'R')) { e.preventDefault(); if (f && !f.input.disabled) { f.focus(); f.input.select(); } }
     else if (k === 'ArrowUp' || k === 'ArrowDown') {
-      if (!$('btn-raise').disabled) {
+      if (f && !$('btn-raise').disabled && !inRaiseInput) {
         e.preventDefault();
-        const bb = state.gameState?.bb || BIG_BLIND;
-        setRaiseValue(state.raiseVal + (k === 'ArrowUp' ? bb : -bb));
+        const bb = state.gameState?.bb || 1, b = f.bounds(), cur = f.value() ?? b.min;
+        f.set(Math.max(b.min, Math.min(b.max, cur + (k === 'ArrowUp' ? bb : -bb))), { source: 'key' });
       }
     }
-    else if (k === 'Enter' && t.tagName !== 'BUTTON') { e.preventDefault(); doRaise(); }
+    else if (k === 'Enter' && !inRaiseInput && t.tagName !== 'BUTTON') { e.preventDefault(); doRaise(); }
   });
 }
 
@@ -1491,24 +1380,22 @@ function doFold() {
 
 function doCall() {
   const gs = state.gameState; if (!gs || $('btn-check-call').disabled) return;
-  const me = gs.players[state.myIdx];
-  const toCall = gs.currentBet - (me?.roundBet || 0);
-  const action = toCall === 0 ? 'check' : 'call';
+  const la = gs.legalActions;
+  const action = la && la.canCheck ? 'check' : 'call';
   playSound(action === 'check' ? 'check' : 'chip');
   sendAction(action);
 }
 
+// Raise button: the AmountInput validates (range, all-in confirm) and calls onCommit -> sendAction('raise', raise-TO units).
 function doRaise() {
-  if ($('btn-raise').disabled) return;
-  const amount = Math.max(state.raiseMin, Math.min(state.raiseMax, readInput($('raise-input').value) || state.raiseVal));
-  playSound('raise');
-  sendAction('raise', amount);
+  if ($('btn-raise').disabled || !state.raiseField) return;
+  state.raiseField.submit();
 }
 
 function sendAction(action, amount = 0) {
   state.socket.emit('player_action', { roomId: state.roomId, action, amount });
   $('btn-fold').disabled = $('btn-check-call').disabled = $('btn-raise').disabled = true;
-  $('raise-slider').disabled = $('raise-input').disabled = true;
+  if (state.raiseField) { state.raiseField.input.disabled = state.raiseField.slider.disabled = true; }
   $('raise-box').classList.add('off');
   state.barMode = 'sent';
 }
@@ -1550,7 +1437,7 @@ function logLineHtml(line) {
   return `<div class="log-line">${esc(line)}</div>`;
 }
 
-const logAmt = t => Money.fmt(Number(String(t).replace(/,/g, '')));
+const logAmt = t => fmt(Number(String(t).replace(/,/g, '')));
 function renderLog(entries) {
   mergeLog(entries || []);
   const el = $('log-entries');
@@ -1689,7 +1576,7 @@ function showWinFloat(amount) {
   const px = r.left + g.cx, py = r.top + g.cy - g.H * 0.12;
   const el = document.createElement('div');
   el.className = 'win-float';
-  el.textContent = `+${Money.fmt(amount)}`;
+  el.textContent = `+${fmt(amount)}`;
   el.style.cssText = `position:fixed;left:${px}px;top:${py}px;z-index:70;pointer-events:none;transform:translate(-50%,-50%);`;
   document.body.appendChild(el);
   const dx = mx - px, dy = my - py;
@@ -1792,6 +1679,14 @@ function faceCardHtml(card, size = 'md', delay = 0, style = '', extra = '') {
 // ─── Showdown (non-modal plaque on the felt + winners' cards at the seats) ─
 let sdTimer = null;
 
+// Keep a centred (translateX(-50%)) plaque inside the stage so a long hand label is never cut by the screen edge.
+function clampToStage(el) {
+  const st = $('stage'); if (!st) return;
+  const w = el.offsetWidth, sw = st.clientWidth, m = 8;
+  const c = parseFloat(el.style.left) || sw / 2;
+  el.style.left = Math.max(w / 2 + m, Math.min(sw - w / 2 - m, c)) + 'px';
+}
+
 function renderShowdown(winners, pot, reveals) {
   const gs = state.gameState;
   const ov = $('showdown-overlay');
@@ -1800,12 +1695,12 @@ function renderShowdown(winners, pot, reveals) {
   (reveals || winners).forEach(w => { if (w.cards?.length) { state.reveal.cards[w.name] = w.cards; state.reveal.names[w.name] = richHandLabel(w.handName || '', w.cards, gs?.community); } });
   state.winners = new Set(winners.map(w => w.name));
 
-  const share = Math.floor(pot / Math.max(1, winners.length));
-  $('showdown-content').innerHTML = winners.map((w, i) => `
+  // winners = pot winners only (a seat that just got a refund is not listed); amount = what they took, net = their gain over their own bets
+  $('showdown-content').innerHTML = winners.map(w => `
     <div class="sd-row">
       <span class="showdown-winner-name">${esc(w.name)}</span>
       <span class="showdown-hand-name">${esc(richHandLabel(w.handName || '', w.cards, gs?.community))}</span>
-      <span class="showdown-pot">wins <strong>${Money.fmt(Number.isFinite(w.net) ? w.net : Number.isFinite(w.amount) ? w.amount : share + (i === 0 ? pot - share * winners.length : 0))}</strong></span>
+      <span class="showdown-pot">wins <strong>${Number.isFinite(w.amount) ? fmt(w.amount) : ''}</strong>${Number.isFinite(w.net) && w.net !== w.amount ? ` <small class="sd-net ${w.net > 0 ? 'pos' : w.net < 0 ? 'neg' : ''}">net ${w.net > 0 ? '+' : ''}${fmt(w.net)}</small>` : ''}</span>
     </div>`).join('');
 
   ov.classList.remove('hidden');
@@ -1820,6 +1715,7 @@ function renderShowdown(winners, pot, reveals) {
     }
   }
   ov.classList.toggle('split', winners.length > 1);
+  clampToStage(ov);
   if (state.gameState) renderSeats(state.gameState);
 
   const myName = gs?.players[state.myIdx]?.name;
@@ -1982,7 +1878,7 @@ const juiceSeatByName = name => { const i = state.gameState?.players.findIndex(p
 function juiceShowdown(winners, pot) {
   const PJ = window.PingJuice, gs = state.gameState;
   if (!PJ || !gs) return;
-  const bb = gs.bb || BIG_BLIND, bbs = pot / bb;
+  const bb = gs.bb || 0, bbs = bb > 0 ? pot / bb : 0;
   const potEl = $('t-center'), myName = gs.players[state.myIdx]?.name;
   const allInPot = gs.players.some(p => p.allIn);
   const tier = bbs >= 25 ? 'mega' : (bbs >= 5 || allInPot) ? 'big' : 'nice';
@@ -1990,7 +1886,7 @@ function juiceShowdown(winners, pot) {
   winners.forEach((w, wi) => {
     const idx = gs.players.findIndex(p => p.name === w.name);
     const seat = idx >= 0 ? juiceSeat(idx) : null;
-    const amt = Number.isFinite(w.amount) ? w.amount : Math.floor(pot / winners.length);
+    const amt = Number.isFinite(w.amount) ? w.amount : 0;
     const netAmt = Number.isFinite(w.net) ? w.net : amt;
     if (seat) PJ.chipShower(potEl, seat, Math.max(6, Math.min(18, Math.round(6 + bbs / 3))));
     if (seat && idx >= 0) setTimeout(() => {
@@ -2003,12 +1899,12 @@ function juiceShowdown(winners, pot) {
     const callout = /^(Full House|Four of a Kind|Straight Flush|Royal Flush)/i.test(hn);
     if (callout) setTimeout(() => PJ.calloutHand(hn + '!', $('stage')), 200);
     if (mine || bbs >= 20) {
-      setTimeout(() => PJ.winCelebration(tier, seat || potEl, mine ? netAmt : `${w.name} +${Money.fmt(netAmt)}`), (callout ? 1700 : 350) + wi * 200);
+      setTimeout(() => PJ.winCelebration(tier, seat || potEl, mine ? netAmt : `${w.name} +${fmt(netAmt)}`), (callout ? 1700 : 350) + wi * 200);
     }
   });
   if (bbs >= 50) {
     const top = winners[0];
-    PJ.toast(`**${top.name}** won a **${Money.fmt(pot)}** pot`, { sticker: 'vp-chip' });
+    PJ.toast(`**${top.name}** won a **${fmt(pot)}** pot`, { sticker: 'vp-chip' });
   }
 }
 
