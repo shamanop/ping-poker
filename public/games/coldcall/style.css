@@ -107,9 +107,9 @@ button[disabled]{opacity:.4;pointer-events:none}
 .slots i.hot{margin:2px;background:linear-gradient(165deg,#8be0f0,var(--hot) 40%,#2f90ad 75%,var(--hot-lo));border-radius:6px;box-shadow:inset 0 0 0 2px var(--gold),inset 0 -10px 14px rgba(8,30,50,.4),0 0 12px rgba(110,215,240,.8),0 3px 6px rgba(0,0,0,.6);transform:rotate(var(--rot,0deg));animation:slap .32s cubic-bezier(.2,1.6,.4,1) var(--d,0ms) backwards}
 .slots i.hot.still{animation:none}
 .slots i.hot::after{content:"";position:absolute;right:0;bottom:0;width:15px;height:15px;border-radius:0 0 6px 0;background:linear-gradient(315deg,#0a2234 48%,rgba(235,250,255,.7) 52%)}
-.slots i.cool{margin:2px;border-radius:6px;animation:cool .3s ease-in forwards}
+.slots i.cool{margin:2px;border-radius:6px;background:linear-gradient(165deg,#8be0f0,var(--hot-lo));box-shadow:inset 0 0 0 2px var(--gold),0 0 12px rgba(110,215,240,.8);animation:cool .3s ease-in forwards}   /* (chris 10-06 FB5) the look is static now and only OPACITY animates (compositor): the old keyframes interpolated box-shadow blur + background on the main thread, a new GPU blur program and a repaint of the board layer on every frame (three 17 ms frames at the first big win, 361 full repaints in a cascade) */
 @keyframes slap{from{transform:scale(1.7) rotate(calc(var(--rot,0deg) - 12deg));opacity:0}to{transform:rotate(var(--rot,0deg));opacity:1}}
-@keyframes cool{from{box-shadow:inset 0 0 0 2px var(--gold),0 0 12px rgba(110,215,240,.8);background:linear-gradient(165deg,#8be0f0,var(--hot-lo))}to{opacity:.2}}
+@keyframes cool{0%{opacity:1}49%{opacity:.62}50%{opacity:.2}100%{opacity:.08}}   /* (chris 10-06 FB5) was: from{box-shadow..;background..}to{opacity:.2}. Same beat: the lit square holds, snaps to its glow at half time (the old background flipped at 50% too), fades out. */
 .cell{position:absolute;width:var(--cell);height:var(--cell);transition:opacity .12s}
 .cell img.sym{position:absolute;left:-2.5%;top:-2.5%;width:105%;height:105%;object-fit:contain;pointer-events:none;filter:drop-shadow(0 3px 2px rgba(0,0,0,.55))}
 .cell.hit{background:radial-gradient(ellipse at 50% 45%,rgba(255,208,88,.42),rgba(255,208,88,.1) 75%);border-radius:8px;z-index:2;box-shadow:0 0 0 2px var(--gold),0 0 14px rgba(255,208,88,.6),inset 0 0 12px rgba(255,230,160,.4)}
@@ -180,7 +180,8 @@ button[disabled]{opacity:.4;pointer-events:none}
 
 /* ---- win readout in the monitor's bottom lip ---- */
 #winbox{grid-row:3;z-index:4;align-self:end;justify-self:center;width:300px;height:46px;margin-bottom:8px;display:grid;grid-template-columns:auto 1fr;align-items:center;padding:0 14px;
-  border:3px solid var(--ink-dk);border-radius:8px;background:linear-gradient(#060b14,#101a2e);box-shadow:inset 0 3px 8px #000,0 2px 0 rgba(255,244,214,.55)}
+  border:3px solid var(--ink-dk);border-radius:8px;background:linear-gradient(#060b14,#101a2e);box-shadow:inset 0 3px 8px #000,0 2px 0 rgba(255,244,214,.55);
+  will-change:transform}   /* (chris 10-06 FB5) own compositor layer: #win is rewritten every frame of a count-up (cascade, big-win card), which re-rastered the whole stage-layer tile strip under it with every rounded plate and blurred shadow in it (FillRRectOp 39k per 3 s, 13x less with this) */
 #winbox .lbl{font-family:var(--display);font-weight:400;font-size:14px;letter-spacing:2px;color:var(--red);text-shadow:0 0 6px rgba(216,64,46,.55)}
 #win{font-family:var(--display);font-weight:400;font-size:27px;line-height:1;text-align:right;color:var(--gold);font-variant-numeric:tabular-nums;text-shadow:0 0 10px rgba(255,170,40,.7),0 2px 0 #5a2a00;white-space:nowrap}
 #win.pop{animation:winpop .3s ease-out}
@@ -193,7 +194,7 @@ button[disabled]{opacity:.4;pointer-events:none}
 .meter{display:grid;gap:3px;align-content:center;text-shadow:0 3px 0 #000,0 0 8px #000}
 .meter .lbl{font-family:var(--display);font-weight:400;font-size:11px;letter-spacing:2px;color:var(--gold)}
 .meter .val{font-family:var(--display);font-weight:400;font-size:25px;line-height:1.05;font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--cream)}
-#balM{grid-column:1;grid-row:1;padding-left:4px}
+#balM{grid-column:1;grid-row:1;padding-left:4px;will-change:transform}   /* (chris 10-06 FB5) own layer: the balance counts every frame at the start / end of a round (see #winbox) */
 #betM{grid-column:3;grid-row:1;justify-items:end}
 #betM .row{display:grid;grid-template-columns:34px minmax(60px,auto) 34px;gap:8px;align-items:center}
 #betM .val{font-size:25px;text-align:center}
