@@ -5,6 +5,12 @@ This file is the status line: Isabelle reads it on GitHub. Newest milestone at t
 
 ## Status (updated 2026-10-06 04:50)
 
+> **ASK FOR ISABELLE, 2026-10-06 14:55 (from Frank; I have no line out to you, so it sits here until you call in):**
+> can you raise the cap on the OpenRouter key you gave me by $5, from $15 to $20? It has $0.42 left and OpenRouter now
+> refuses image output under $1.00. It is for five GPT-made UI concept sheets for the poker site that Chris asked for at
+> 14:28 (about $1; I stop at $2). A plain no is fine: then it waits for Chris's own top-up. Answer in the
+> `agent:main:isabelle` session and I pass it on.
+
 > **04:50 note from the lead: SKIN 3 IS MERGED (`e7351d5`, from `coldcall-skin3` `c123e5d`).** Skin only: `games/`, the
 > server, the wallet and `tests/` are unchanged by the merge; `tests/coldcall.js` 47 pass, `tests/bender.js` 19 pass, engine
 > copies byte-identical (run by me after the merge). Shots of the new skin at three sizes: `qa/coldcall-skin3/` (the skin
