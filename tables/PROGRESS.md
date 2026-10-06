@@ -22,7 +22,7 @@
 | 5 | registry + viewlog | done (14 + 5 tests) |
 | 6 | transport + boot | done (30_shapes 42/42, empty allowlist) |
 | 7 | harness slices | done (all slices green, fuzz 3 seeds green) |
-| 8 | whole run | todo |
+| 8 | whole run | done: 142/147 pass; the 5 FAIL are all check 21 and contradict contract H6 (see Harness vs contract) |
 | 9 | old suites + cleanup | todo |
 
 ## houseRound in the wallet adapter (lead, 03:5x; v2-core 819f9db merged into v2-tables at 61d3e3a)
@@ -35,6 +35,7 @@
 ## Where the contract was wrong
 
 ## Harness vs contract
+- **Check 21 (`tests/v2/21_money_stores.js`, 5 checks) cannot pass against the contract.** It seats the same accounts at two tables at once (Bob at the chips table and the play table, Cat likewise, Dee and Ann at POKERPING as well). The contract (V2-DESIGN one seat per account, brief hard rule, harness check 13/H6) answers the second `table_join` with `error one_seat` ("You already have a seat at a table"). `seat()` in 21 then returns null and `s2[0].emit` throws `Cannot read properties of null (reading 'emit')`, so all 5 checks fail with ERR. Reproduced with a scratch copy that logs the sit errors (tables/runs/dbg21.js, 4 errors printed, all one_seat). The baseline passed 2 of the 5 only because the old server allowed multi-seating (the bug H6 pins). Not worked around: the table layer keeps one seat per account. The lead needs to fix the harness (use distinct accounts per table, or leave before the next sit). The money invariants that 21 checks (restart conservation, settle-ups zero-sum) are exercised by 07/17/23/25, 08/09 and the fuzz 10, all green.
 
 ## Not verified
 
