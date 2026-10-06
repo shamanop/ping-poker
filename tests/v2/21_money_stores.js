@@ -22,9 +22,11 @@ async function scenario() {
     setTimeout(() => {
       b.acting = false; if (!b.myTurn()) return;
       const me = b.me(), toCall = Math.max(0, b.gs.currentBet - me.roundBet), r = rnd();
-      if (aggr && r < 0.35) b.act('raise', me.chips + me.roundBet);
+      const la = b.gs.legalActions;
+      const canRaise = (amt) => la?.canRaise && amt >= la.minRaiseTo && amt <= la.maxRaiseTo;
+      if (aggr && r < 0.35 && canRaise(me.chips + me.roundBet)) b.act('raise', me.chips + me.roundBet);
       else if (r < 0.1 && toCall) b.act('fold');
-      else if (r < 0.25) b.act('raise', b.gs.currentBet + 100);
+      else if (r < 0.25 && canRaise(b.gs.currentBet + 100)) b.act('raise', b.gs.currentBet + 100);
       else b.act(toCall ? 'call' : 'check');
     }, 30);
   }; };
