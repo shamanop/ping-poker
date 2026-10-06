@@ -422,7 +422,7 @@ function freshForm(mode, prev) {
   const unit = unitOf(mode), c = unit === 'chips';
   return Object.assign({ mode, unit, name: (prev && prev.name) || ((S.user && S.user.display) || 'My') + "'s table",
     min: 500, max: c ? 1000000 : 50000, def: c ? 2000 : mode === 'play' ? 2000 : 10000, preset: c ? 0 : mode === 'play' ? 0 : 1, custom: false, csb: c ? 50 : 50, cbb: c ? 100 : 100,
-    seats: 8, timer: 30, bi: false, biEvery: 15, biSched: 'standard', rebuys: true, priv: true }, prev ? { seats: prev.seats, timer: prev.timer, bi: prev.bi, biEvery: prev.biEvery, biSched: prev.biSched, rebuys: prev.rebuys, priv: prev.priv } : {});
+    seats: 8, timer: 30, bi: false, biEvery: 15, biSched: 'standard', rebuys: true, priv: true, look: 'basement' }, prev ? { seats: prev.seats, timer: prev.timer, bi: prev.bi, biEvery: prev.biEvery, biSched: prev.biSched, rebuys: prev.rebuys, priv: prev.priv, look: prev.look || 'basement' } : {});
 }
 function blindsOf(f) { if (f.custom) return { sb: f.csb, bb: f.cbb }; const p = PRESETS[f.unit][f.preset]; return { sb: p[0], bb: p[1] }; }
 function viewCreate() {
@@ -450,7 +450,7 @@ function fillSummary(f, el) {
     h('dl', null, h('dt', null, 'Mode'), h('dd', null, modeLabel(f.mode)), h('dt', null, 'Blinds'), h('dd', null, fm(b.sb, u) + ' / ' + fm(b.bb, u)),
       h('dt', null, 'Buy-in'), h('dd', null, fm(f.min, u) + ' to ' + fm(f.max, u) + ', default ' + fm(f.def, u)), h('dt', null, 'Seats'), h('dd', null, f.seats),
       h('dt', null, 'Clock'), h('dd', null, f.timer ? f.timer + 's' : 'None'), h('dt', null, 'Blinds rise'), h('dd', null, f.bi ? 'every ' + f.biEvery + ' min' : 'Off'),
-      h('dt', null, 'Rebuys'), h('dd', null, f.rebuys ? 'On' : 'Off'), h('dt', null, 'Visibility'), h('dd', null, f.priv ? 'Private, code only' : 'Listed in lobby')),
+      h('dt', null, 'Rebuys'), h('dd', null, f.rebuys ? 'On' : 'Off'), h('dt', null, 'Visibility'), h('dd', null, f.priv ? 'Private, code only' : 'Listed in lobby'), h('dt', null, 'Table look'), h('dd', null, PingLooks.nameOf(f.look))),
     ...(f.min < b.bb * 20 ? [h('div', { class: 'lb-warn', id: 'lb-warn' }, 'Minimum buy-in is under 20 big blinds. Short stacks play fast.')] : []),
     h('div', { class: 'lb-muted' }, 'Suggested buy-in: ' + fm(sug, u) + ' (100 big blinds).'),
     h('div', { class: 'lb-copy' }, modeNote(f.mode)));
@@ -507,6 +507,7 @@ function formBody(f, redraw, sum) {
     h('div', { class: 'lb-two' }, g('Blinds rise over time', seg([[true, 'On'], [false, 'Off']], f.bi, set('bi'), 'lb-bi')), g('Rebuys', onOff('rebuys', 'lb-rebuys'))),
     f.bi ? h('div', { class: 'lb-two' }, g('Every', seg([[10, '10 min'], [15, '15 min'], [20, '20 min'], [30, '30 min']], f.biEvery, set('biEvery'), 'lb-bievery')), g('Pace', seg([['standard', 'Standard'], ['turbo', 'Turbo']], f.biSched, set('biSched'), 'lb-bisched'))) : null,
     g('Visibility', seg([[true, 'Private', 'code or link only'], [false, 'Listed', 'shows in lobby']], f.priv, set('priv'), 'lb-priv')),
+    g('Table look', PingLooks.picker({ value: f.look, id: 'lb-look', onPick: (v) => { f.look = v; sum(); } })),
   ];
 }
 function submitCreate(f, err, btn) {
@@ -519,7 +520,7 @@ function submitCreate(f, err, btn) {
   err.textContent = ''; btn.disabled = true; S.onError = (m) => { btn.disabled = false; err.textContent = m; };
   emit('table_create', { settings: { name: nm, mode: f.mode, unit: f.unit, moneyMode: f.mode,
     buyIn: { min: f.min, max: f.max, default: f.def }, blinds: b, blindIncrease: { enabled: f.bi, everyMin: f.biEvery, schedule: f.biSched },
-    seats: f.seats, actionTimerSec: f.timer, rebuys: f.rebuys, rebuyLimit: 0, isPrivate: f.priv } });
+    seats: f.seats, actionTimerSec: f.timer, rebuys: f.rebuys, rebuyLimit: 0, isPrivate: f.priv, look: f.look || 'basement' } });
 }
 
 // ── share ─────────────────────────────────────────────────────────
@@ -783,6 +784,8 @@ function drawDrawer(confirmEnd) {
       h('button', { class: 'lb-btn sm', id: 'host-start', onclick: () => emit('table_start', { tableId: id }) }, 'Start'),
       h('button', { class: 'lb-btn sm blue', id: 'host-pause', onclick: () => emit('table_pause', { tableId: id, paused: !paused }) }, paused ? 'Resume table' : 'Pause table')),
     (blindsFor === id && blindsEl) ? (blindsEl.update(t), blindsEl.el) : (blindsFor = id, blindsEl = blindsEditor(t, id, unit), blindsEl.el),
+    h('div', { class: 'lb-label' }, 'Table look'),
+    PingLooks.picker({ value: t.look, id: 'host-look', onPick: (v) => { t.look = v; emit('table_update', { tableId: id, patch: { look: v } }); } }),
     h('div', { class: 'lb-label' }, 'Players'),
     ...((info && info.seated) || []).map((p) => h('div', { class: 'lb-seat' }, h('img', { src: avSrc(p), alt: '' }), h('div', null, h('b', null, p.display || p.key), h('span', null, fm(p.stack, unit))),
       p.key !== myKey() ? h('button', { class: 'lb-ghost', onclick: () => emit('table_kick', { tableId: id, key: p.key }) }, 'Kick') : null)),

@@ -430,7 +430,7 @@ html.art-login .setup-card { background: linear-gradient(180deg, rgba(34, 22, 14
 /* ══ GAME GRID ════════════════════════════════════════════════════ */
 /* One grid: head over (rail | stage / bar). --gut is the shared gutter. */
 #game-screen {
-  background: #0B0705 url(images/ui/room.jpg) center / cover no-repeat;
+  background: #0B0705 var(--room-img) center / cover no-repeat;
   --gut: calc(10 * var(--px));
 }
 #game-screen::before {
@@ -696,7 +696,7 @@ html.art-login .setup-card { background: linear-gradient(180deg, rgba(34, 22, 14
 /* ══ D3 table + seat plates ═══════════════════════════════════════ */
 #table-box::before {
   content: ''; position: absolute; inset: 0; z-index: 1; pointer-events: none;
-  background: url(images/ui/table.png) center / 100% 100% no-repeat;
+  background: var(--table-img) center / 100% 100% no-repeat;
   filter: brightness(.82) saturate(.9) drop-shadow(0 var(--p16) var(--p24) rgba(0, 0, 0, .65));
 }
 #table-box .t-lamp { inset: 12% 8% 22% 8%; border-radius: 9999px; z-index: 2; }

@@ -334,6 +334,7 @@ window.PingGame = {
     state.myCards = []; state.spectating = false;
     state.roomId = tableId;
     state.table  = table || null;
+    if (window.PingLooks) PingLooks.apply(table && table.look);
     state.myIdx  = playerIdx;
     state.hands = { room: tableId, base: null, played: {}, log: [], seen: -1 };
     state.myName = (you && (you.display || you.name)) || lobbyName() || state.myName || null;
@@ -367,6 +368,7 @@ function bindSocket() {
   s.on('game_state', gs => {
     const prev = state.gameState;
     state.gameState = gs;
+    if (window.PingLooks && gs.table) PingLooks.apply(gs.table.look);
     const gu = gs.unit || gs.table?.unit;
     if (gu) setTableUnit(gu);
     if (!state.myName && gs.players[state.myIdx]) state.myName = gs.players[state.myIdx].name;
