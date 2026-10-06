@@ -1463,9 +1463,10 @@ io.on('connection', socket => {
     maybeAutoStart(room);
   });
 
-  on('show_cards', ({ which } = {}) => {
-    const room = rooms.get(ROOM_ID);
-    const me = room && room.players.find(p => !p.isBot && p.socketId === socket.id);
+  on('show_cards', ({ which, roomId } = {}) => {
+    // Any table, not just the legacy room: find the room this socket is seated in
+    let room = roomId && rooms.get(roomId), me = room && room.players.find(p => !p.isBot && p.socketId === socket.id);
+    if (!me) for (const r of rooms.values()) { me = r.players.find(p => !p.isBot && p.socketId === socket.id); if (me) { room = r; break; } }
     if (!me || room.status !== 'waiting_next' || me.cards.length !== 2) return;
     const slots = which === 'both' ? [0, 1] : (which === 0 || which === 1) ? [which] : [];
     if (!slots.length) return;
