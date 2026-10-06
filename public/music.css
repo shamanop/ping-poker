@@ -1,0 +1,52 @@
+/* The Ping radio bar: docks in the shell top bar after the level chip. Brass + smoky gold, matches shell.css. */
+body.sh-on .sh-top { grid-template-columns: auto auto auto minmax(0, 1fr) auto auto auto auto auto; }
+.sh-lvl { justify-self: start; }
+.mu-bar { justify-self: start; display: flex; align-items: center; gap: 6px; height: 32px; min-width: 0; max-width: 100%; padding: 0 8px 0 4px; box-sizing: border-box; background: rgba(10, 6, 3, .55); border: 1px solid var(--line-lt, #6B4C2E); color: var(--ink, #F1E6CC); font-family: var(--f-text, Georgia, serif); }
+.mu-bar[hidden] { display: none; }
+.mu-bar button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+.mu-bar svg { width: 18px; height: 18px; fill: currentColor; display: block; }
+.mu-bar svg .ln { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.mu-play { flex: none; width: 28px; height: 24px; display: grid; place-items: center; background: var(--gold, #F5B942); color: #2a1706; border: 1px solid #000; }
+.mu-play:hover { filter: brightness(1.1); }
+.mu-play svg { width: 16px; height: 16px; }
+.mu-bar.off .mu-play { background: rgba(245, 185, 66, .22); color: var(--gold, #F5B942); border-color: var(--brass, #B8893A); }
+.mu-bar.blocked .mu-play { animation: mu-pulse 1.4s ease-in-out infinite; }
+@keyframes mu-pulse { 50% { box-shadow: 0 0 0 3px rgba(245, 185, 66, .35); filter: brightness(1.2); } }
+.mu-now { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 6px; text-align: left; padding: 0 2px; height: 100%; }
+.mu-now:hover .mu-st { color: var(--gold, #F5B942); }
+.mu-ic { flex: none; color: var(--brass-lt, #D9AE55); }
+.mu-ic svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+.mu-txt { min-width: 0; display: flex; flex-direction: column; line-height: 1.05; width: 150px; }
+.mu-st { font-family: var(--f-display, Impact, sans-serif); font-weight: 400; letter-spacing: .12em; font-size: 15px; color: var(--brass-lt, #D9AE55); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mu-tr { font-size: 11px; color: var(--ink-dim, #B7A486); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mu-bar.blocked .mu-tr { color: var(--gold, #F5B942); }
+.mu-caret { flex: none; width: 0; height: 0; border: 4px solid transparent; border-top-color: var(--brass-lt, #D9AE55); margin-top: 4px; }
+.mu-mute { flex: none; width: 24px; height: 24px; display: grid; place-items: center; color: var(--brass-lt, #D9AE55); }
+.mu-mute:hover { color: var(--gold, #F5B942); }
+.mu-mute.on { color: var(--danger-ink, #F0907A); }
+.mu-vol { flex: none; width: 72px; height: 16px; margin: 0; appearance: none; -webkit-appearance: none; background: transparent; cursor: pointer; --fill: 35%; }
+.mu-vol::-webkit-slider-runnable-track { height: 4px; background: linear-gradient(90deg, var(--gold, #F5B942) var(--fill), #3a2818 var(--fill)); border: 1px solid #000; }
+.mu-vol::-moz-range-track { height: 4px; background: #3a2818; border: 1px solid #000; }
+.mu-vol::-moz-range-progress { height: 4px; background: var(--gold, #F5B942); }
+.mu-vol::-webkit-slider-thumb { -webkit-appearance: none; width: 8px; height: 14px; margin-top: -6px; background: var(--brass-lt, #D9AE55); border: 1px solid #000; }
+.mu-vol::-moz-range-thumb { width: 8px; height: 14px; border-radius: 0; background: var(--brass-lt, #D9AE55); border: 1px solid #000; }
+.mu-vol:hover::-webkit-slider-thumb { background: var(--gold, #F5B942); }
+
+.mu-pop { position: fixed; z-index: 9200; width: 320px; max-height: 70vh; overflow: auto; background: var(--panel, #1B120C); border: 2px solid #000; box-shadow: 0 0 0 1px var(--brass, #B8893A), 0 12px 30px rgba(0, 0, 0, .65); font-family: var(--f-text, Georgia, serif); color: var(--ink, #F1E6CC); }
+.mu-pop[hidden] { display: none; }
+.mu-pop-h { font-family: var(--f-display, Impact, sans-serif); letter-spacing: .14em; font-size: 14px; color: #2a1706; padding: 4px 12px; background: linear-gradient(var(--brass-lt, #D9AE55), var(--brass, #B8893A)); text-shadow: 0 1px 0 rgba(255, 230, 170, .45); }
+.mu-item { display: block; width: 100%; text-align: left; font: inherit; color: inherit; background: none; border: 0; border-bottom: 1px solid rgba(107, 76, 46, .5); border-left: 3px solid transparent; padding: 9px 12px 9px 11px; cursor: pointer; }
+.mu-item:last-child { border-bottom: 0; }
+.mu-item:hover { background: rgba(245, 185, 66, .08); }
+.mu-item.on { border-left-color: var(--gold, #F5B942); background: rgba(245, 185, 66, .12); }
+.mu-item b { display: block; font-family: var(--f-display, Impact, sans-serif); font-weight: 400; letter-spacing: .12em; font-size: 17px; color: var(--brass-lt, #D9AE55); }
+.mu-item.on b { color: var(--gold, #F5B942); }
+.mu-item .tag { display: block; font-size: 12px; font-style: italic; color: var(--ink-dim, #B7A486); margin-top: 1px; }
+.mu-item .np { display: block; font-size: 12px; color: var(--cream, #E8D9B5); margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mu-item .np i { color: var(--ink-dim, #B7A486); }
+.mu-empty { padding: 14px 12px; font-size: 13px; color: var(--ink-dim, #B7A486); }
+
+@media (max-width: 1280px) { .mu-vol { display: none; } body.sh-on .sh-brand { display: none; } .sh-top { column-gap: 12px; } }
+@media (max-width: 1060px) { .mu-txt { width: 100px; } .mu-ic { display: none; } }
+@media (max-width: 900px) { .mu-mute { display: none; } .mu-txt .mu-tr { display: none; } .mu-txt { width: auto; max-width: 110px; } }
+@media (prefers-reduced-motion: reduce) { .mu-bar.blocked .mu-play { animation: none; } }
