@@ -13,10 +13,10 @@ delete process.env.COLDCALL_PULL_FILE;
 const { createWallet } = require('../wallet.js');
 const games = require('../games');
 const E = require('../games/coldcall-engine.js');
+const PIN = require('./lib-pull-pin.js').pin(E);   // mechanism tests run on fixed knob numbers (the levers agent owns the real values)
 const SRV = require('../games/coldcall.js');
 
 const clone = (o) => JSON.parse(JSON.stringify(o));
-const ORIG = clone(E.CFG.pull);                       // the caller's knobs, put back at the end
 const BASE = clone(E.CFG.pull); BASE.on = true;       // what every test starts from
 const resetCfg = () => { for (const k of Object.keys(E.CFG.pull)) delete E.CFG.pull[k]; Object.assign(E.CFG.pull, clone(BASE)); };
 
@@ -563,7 +563,7 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
   });
 
   console.log(pass + ' passed' + (process.exitCode ? ', with failures' : ''));
-  for (const k of Object.keys(E.CFG.pull)) delete E.CFG.pull[k]; Object.assign(E.CFG.pull, ORIG);
+  for (const k of Object.keys(E.CFG.pull)) delete E.CFG.pull[k]; Object.assign(E.CFG.pull, {}); PIN.restore();
   SRV.potRng = undefined; SRV.log = undefined;
   try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
 })();

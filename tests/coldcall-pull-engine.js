@@ -6,6 +6,7 @@ const path = require('path');
 const assert = require('assert');
 const crypto = require('crypto');
 const E = require('../games/coldcall-engine.js');
+const PIN = require('./lib-pull-pin.js').pin(E);   // mechanism tests run on fixed knob numbers (the levers agent owns the real values)
 
 let pass = 0;
 const test = async (name, fn) => { try { await fn(); pass++; console.log('ok   ' + name); } catch (e) { console.error('FAIL ' + name + '\n' + (e.stack || e)); process.exitCode = 1; } };
@@ -49,7 +50,7 @@ const NODAY = { day: null };
     assert.deepStrictEqual(P.cold, { afterMs: 86400000, stepMs: 21600000, batch: 3, floor: 10 });
     assert.deepStrictEqual(P.more, { on: true, mult: 2, rtp: 0.98, minTenths: 20 });
     assert.deepStrictEqual(P.pick.mult, { bronze: 0, silver: 2, gold: 3, upsell: 2, close: 2 });
-    assert.deepStrictEqual(Object.keys(P).sort(), ['callback', 'carryOver', 'cold', 'daily', 'decision', 'feed', 'fill', 'ghost', 'list', 'more', 'on', 'pick', 'pot', 'warm']);
+    assert.deepStrictEqual(PIN.knobNames, ['callback', 'carryOver', 'cold', 'daily', 'decision', 'feed', 'fill', 'ghost', 'list', 'more', 'on', 'pick', 'pot', 'warm'], 'the real CFG.pull has exactly the contract knob names');
     for (const f of ['newState', 'tickState', 'coldInfo', 'playRound', 'potSlice', 'potHitChance', 'rngFrom']) assert.strictEqual(typeof E[f], 'function', f);
     assert.ok(fs.readFileSync(path.join(__dirname, '..', 'games', 'coldcall-engine.js')).equals(fs.readFileSync(path.join(__dirname, '..', 'public', 'games', 'coldcall', 'engine.js'))), 'public copy must be byte-identical');
   });
@@ -496,4 +497,5 @@ const NODAY = { day: null };
   });
 
   console.log(pass + ' passed' + (process.exitCode ? ', with failures' : ''));
+  PIN.restore();
 })();
