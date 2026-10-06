@@ -194,8 +194,9 @@ function open(file, opts = {}) {
 
   const has = (ref) => refs.has(ref);
 
-  function* entries(filterFn) {
-    for (let i = 0; i < lines.length; i++) {
+  // afterId (optional, extra to the contract): only lines with id > afterId. Ids are 1..n in order, so it is a direct index.
+  function* entries(filterFn, afterId = 0) {
+    for (let i = Math.max(0, afterId); i < lines.length; i++) {
       const rec = lines[i];
       if (Array.isArray(rec.batch)) {
         for (const it of rec.batch) {
