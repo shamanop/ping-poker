@@ -2,7 +2,7 @@
 // AmountInput (v2): the NUMBER is the truth, the text is a view of it.
 //
 //   const f = AmountInput({ units, min, max, unit, presets, scale: 'ladder'|'raise', bb, onCommit, onChange,
-//                           label, rangeLabel, allIn, doc })
+//                           label, rangeLabel, allIn, compact, doc })
 //   f.el            root element to mount
 //   f.value()       integer units, or null when the text is invalid / out of range / empty
 //   f.set(units, {source})   external update. The TEXT is left alone while the box is dirty and focused
@@ -104,7 +104,8 @@
     confirmEl.hidden = true; confirmEl.classList.add('hidden');
     row.append(sym, input, suffix);
     ends.append(endMin, endMax);
-    el.append(row, msgEl, slider, ends, presetBox, confirmEl); // message right under the text so it is never below the fold
+    // message right under the text so it is never below the fold; compact = text + message only (create form, drawers)
+    if (opts.compact) el.append(row, msgEl); else el.append(row, msgEl, slider, ends, presetBox, confirmEl);
 
     const mode = () => M().modeFor(M().pref, unit);
     const fmt = (u, o) => M().format(u, mode(), o);

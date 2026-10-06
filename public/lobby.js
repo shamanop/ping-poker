@@ -441,7 +441,7 @@ function fillSummary(f, el) {
       h('dt', null, 'Buy-in'), h('dd', null, fm(f.min, u) + ' to ' + fm(f.max, u) + ', default ' + fm(f.def, u)), h('dt', null, 'Seats'), h('dd', null, f.seats),
       h('dt', null, 'Clock'), h('dd', null, f.timer ? f.timer + 's' : 'None'), h('dt', null, 'Blinds rise'), h('dd', null, f.bi ? 'every ' + f.biEvery + ' min' : 'Off'),
       h('dt', null, 'Rebuys'), h('dd', null, f.rebuys ? 'On' : 'Off'), h('dt', null, 'Visibility'), h('dd', null, f.priv ? 'Private, code only' : 'Listed in lobby')),
-    f.min < b.bb * 20 ? h('div', { class: 'lb-warn', id: 'lb-warn' }, 'Minimum buy-in is under 20 big blinds. Short stacks play fast.') : null,
+    ...(f.min < b.bb * 20 ? [h('div', { class: 'lb-warn', id: 'lb-warn' }, 'Minimum buy-in is under 20 big blinds. Short stacks play fast.')] : []),
     h('div', { class: 'lb-muted' }, 'Suggested buy-in: ' + fm(sug, u) + ' (100 big blinds).'),
     h('div', { class: 'lb-copy' }, modeNote(f.mode)));
 }
@@ -453,29 +453,38 @@ function formBody(f, redraw, sum) {
   const set = (k) => (v) => { f[k] = v; redraw(); };
   const modeSeg = seg([['play', 'Play $', 'fake money'], ['chips', 'Chips', 'bank chips']], f.mode, (m) => { if (m !== f.mode) { S.form = Object.assign(f, freshForm(m, f)); } redraw(); }, 'lb-mode');
   const name = h('input', { class: 'text-input', id: 'lb-tname', maxlength: 24, value: f.name, oninput: (e) => { f.name = e.target.value; sum(); } });
-  // buy-in range
-  const lo = 500, hi = u === 'chips' ? 1000000 : 50000, vals = ladder(u, lo, hi, [f.min, f.max, f.def]);
+  // buy-in range: the three typed boxes are AmountInputs (the number is the truth); the dual slider only drives them.
+  // The slider span always covers what is typed (S3-2), the server accepts 1..MAX_UNITS.
+  const LO = 500, HI = u === 'chips' ? 1000000 : 50000, MAX_UNITS = 100000000;
+  const vals = ladder(u, Math.min(LO, f.min), Math.max(HI, f.max), [f.min, f.max, f.def]);
   const rl = h('input', { type: 'range', min: 0, max: vals.length - 1, step: 1, value: nearIdx(vals, f.min), 'aria-label': 'Minimum buy-in' });
   const rh = h('input', { type: 'range', min: 0, max: vals.length - 1, step: 1, value: nearIdx(vals, f.max), 'aria-label': 'Maximum buy-in' });
   const fill = h('div', { class: 'fill' });
-  const plain = (v) => amtText(v, u);
-  const inMin = h('input', { class: 'text-input', id: 'lb-bmin', value: plain(f.min), inputmode: 'decimal' }), inDef = h('input', { class: 'text-input', id: 'lb-bdef', value: plain(f.def), inputmode: 'decimal' }), inMax = h('input', { class: 'text-input', id: 'lb-bmax', value: plain(f.max), inputmode: 'decimal' });
+  const fields = S.formFields = [];
+  const crossMsg = h('div', { class: 'lb-err', id: 'lb-bcross' });
+  const cross = () => { crossMsg.textContent = f.min <= f.def && f.def <= f.max ? '' : 'Buy-in needs minimum <= default <= maximum.'; };
+  const mk = (key, id, label, lo) => {
+    const a = AmountInput({ units: f[key], min: lo, max: MAX_UNITS, unit: u, scale: 'ladder', compact: true, label, rangeLabel: label,
+      onChange: (v) => { if (v != null && v !== f[key]) { f[key] = v; if (key === 'min' || key === 'max') syncSlider(); cross(); sum(); } } });
+    a.input.id = id; fields.push(a); return a;
+  };
+  const inMin = mk('min', 'lb-bmin', 'Minimum buy-in', 1), inDef = mk('def', 'lb-bdef', 'Default buy-in', 1), inMax = mk('max', 'lb-bmax', 'Maximum buy-in', 1);
   const n1 = Math.max(1, vals.length - 1);
   const paint = () => { const a = rl.value / n1, b = rh.value / n1; fill.style.left = 'calc(var(--p8) + (100% - var(--p16)) * ' + a + ')'; fill.style.width = 'calc((100% - var(--p16)) * ' + (b - a) + ')'; };
-  const sync = () => { f.def = Math.min(f.max, Math.max(f.min, f.def)); inMin.value = plain(f.min); inMax.value = plain(f.max); inDef.value = plain(f.def); rl.value = nearIdx(vals, f.min); rh.value = nearIdx(vals, f.max); paint(); sum(); };
-  rl.addEventListener('input', () => { if (+rl.value > +rh.value) rl.value = rh.value; f.min = vals[+rl.value]; sync(); });
-  rh.addEventListener('input', () => { if (+rh.value < +rl.value) rh.value = rl.value; f.max = vals[+rh.value]; sync(); });
-  const typedHook = (inp, key) => inp.addEventListener('change', () => {
-    const v = parseAmt(inp.value, u); if (v != null && v >= 1) { f[key] = v; if (key === 'min' && f.max < v) f.max = v; if (key === 'max' && f.min > v) f.min = v; }
-    sync();
-  });
-  typedHook(inMin, 'min'); typedHook(inDef, 'def'); typedHook(inMax, 'max'); paint();
+  const syncSlider = () => { rl.value = nearIdx(vals, f.min); rh.value = nearIdx(vals, f.max); paint(); };
+  rl.addEventListener('input', () => { if (+rl.value > +rh.value) rl.value = rh.value; f.min = vals[+rl.value]; inMin.set(f.min, { source: 'slider' }); paint(); cross(); sum(); });
+  rh.addEventListener('input', () => { if (+rh.value < +rl.value) rh.value = rl.value; f.max = vals[+rh.value]; inMax.set(f.max, { source: 'slider' }); paint(); cross(); sum(); });
+  paint(); cross();
   const b = blindsOf(f);
   const blindSeg = h('div', { class: 'lb-seg', id: 'lb-blinds' }, PRESETS[u].map((p, i) => h('button', { type: 'button', 'data-v': i, class: !f.custom && i === f.preset ? 'on' : '', onclick: () => { f.custom = false; f.preset = i; redraw(); } }, fm(p[0], u) + '/' + fm(p[1], u))),
     h('button', { type: 'button', 'data-v': 'custom', class: f.custom ? 'on' : '', onclick: () => { f.custom = true; f.csb = b.sb; f.cbb = b.bb; redraw(); } }, 'Custom'));
+  const mkBlind = (key, id, label, lo) => {
+    const a = AmountInput({ units: f[key], min: lo, max: MAX_UNITS, unit: u, scale: 'ladder', compact: true, label, rangeLabel: label, onChange: (v) => { if (v != null && v !== f[key]) { f[key] = v; sum(); } } });
+    a.input.id = id; fields.push(a); return a;
+  };
   const custom = f.custom ? h('div', { class: 'lb-two' },
-    h('div', { class: 'lb-field' }, h('label', null, 'Small blind'), h('input', { class: 'text-input', id: 'lb-csb', value: plain(f.csb), onchange: (e) => { const v = parseAmt(e.target.value, u); if (v) f.csb = v; sum(); } })),
-    h('div', { class: 'lb-field' }, h('label', null, 'Big blind'), h('input', { class: 'text-input', id: 'lb-cbb', value: plain(f.cbb), onchange: (e) => { const v = parseAmt(e.target.value, u); if (v) f.cbb = v; sum(); } }))) : null;
+    h('div', { class: 'lb-field' }, h('label', null, 'Small blind'), mkBlind('csb', 'lb-csb', 'Small blind', 1).el),
+    h('div', { class: 'lb-field' }, h('label', null, 'Big blind'), mkBlind('cbb', 'lb-cbb', 'Big blind', 2).el)) : null;
   const seats = h('div', { class: 'lb-seats', id: 'lb-seats' }, h('button', { type: 'button', 'aria-label': 'Fewer seats', onclick: () => { f.seats = Math.max(2, f.seats - 1); redraw(); } }, '−'), h('b', null, f.seats), h('button', { type: 'button', 'aria-label': 'More seats', onclick: () => { f.seats = Math.min(9, f.seats + 1); redraw(); } }, '+'));
   const onOff = (k, id) => seg([[true, 'On'], [false, 'Off']], f[k], set(k), id);
   return [
@@ -483,7 +492,7 @@ function formBody(f, redraw, sum) {
     h('div', { class: 'lb-field' }, h('label', { for: 'lb-tname' }, 'Table name'), name),
     g('Blinds', blindSeg, custom),
     g('Buy-in range', h('div', { class: 'lb-slider' }, h('div', { class: 'trk' }), fill, rl, rh), h('div', { class: 'lb-amts' },
-      h('div', { class: 'lb-field' }, h('label', null, 'Minimum'), inMin), h('div', { class: 'lb-field' }, h('label', null, 'Default'), inDef), h('div', { class: 'lb-field' }, h('label', null, 'Maximum'), inMax))),
+      h('div', { class: 'lb-field' }, h('label', null, 'Minimum'), inMin.el), h('div', { class: 'lb-field' }, h('label', null, 'Default'), inDef.el), h('div', { class: 'lb-field' }, h('label', null, 'Maximum'), inMax.el)), crossMsg),
     h('div', { class: 'lb-two' }, g('Seats', seats), g('Action clock', seg([[15, '15s'], [30, '30s'], [45, '45s'], [60, '60s'], [0, 'Off']], f.timer, set('timer'), 'lb-timer'))),
     h('div', { class: 'lb-two' }, g('Blinds rise over time', seg([[true, 'On'], [false, 'Off']], f.bi, set('bi'), 'lb-bi')), g('Rebuys', onOff('rebuys', 'lb-rebuys'))),
     f.bi ? h('div', { class: 'lb-two' }, g('Every', seg([[10, '10 min'], [15, '15 min'], [20, '20 min'], [30, '30 min']], f.biEvery, set('biEvery'), 'lb-bievery')), g('Pace', seg([['standard', 'Standard'], ['turbo', 'Turbo']], f.biSched, set('biSched'), 'lb-bisched'))) : null,
@@ -492,6 +501,8 @@ function formBody(f, redraw, sum) {
 }
 function submitCreate(f, err, btn) {
   const b = blindsOf(f), nm = f.name.trim();
+  const bad = (S.formFields || []).find((a) => a.value() === null);
+  if (bad) { bad.submit(); try { bad.el.scrollIntoView({ block: 'center' }); } catch (e) {} return (err.textContent = 'Fix the highlighted amount first.'); }
   if (nm.length < 2 || nm.length > 24) return (err.textContent = 'Table name is 2 to 24 characters.');
   if (!(b.sb >= 1 && b.bb > b.sb && b.bb >= 2)) return (err.textContent = 'Small blind must be less than big blind.');
   if (!(f.min <= f.def && f.def <= f.max)) return (err.textContent = 'Buy-in needs min <= default <= max.');
