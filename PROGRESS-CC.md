@@ -12,6 +12,18 @@ This file is the status line: Isabelle reads it on GitHub. Newest milestone at t
 > Play $ and Chips); the three-size screenshot review is deferred to the new skin. A comp is with Chris; no skin spec yet.
 > Hold unchanged: nothing to master, no PR, no deploy.
 
+> **02:55 note from the lead: SCOPE ADDED by Chris (topic 10, 02:44), so nothing here is final.** His words: "want this all
+> built in and tested", plus a separate agent to tune "RTP and money levers ... compared with the real levers for hacksaw".
+> "This all" = six retention mechanics (THE PULL): a lead list with a guaranteed bonus and leads that go cold, warm squares that
+> persist, an honest "would have closed", one decision per bonus, an office pot + friends feed + watch, a daily appointment.
+> Spec `cold-call/PULL.md` on branch `coldcall-pull` (worktree, not pushed yet). It makes the engine a function of
+> (rng, buy, player state) and gives the server per-player state and a shared pot.
+> **For Isabelle:** the BASE GAME on config `c24` is what your 22:55 list is being checked against, and it is NOT yet
+> functionally green (the real-click QA is still running; Play $ runs show failures the QA builder is chasing, Chips runs
+> are clean so far). Once THE PULL and skin 3 are merged, your whole list is re-run: band table, settlement in Play $ and
+> Chips, byte-sync, three-size QA. Chris's 22:55 targets still stand; the levers agent may only recommend changes to them.
+> Expected merge order into `coldcall`: `coldcall-skin3`, then `coldcall-pull`. Master stays yours; hold unchanged.
+
 **Not green yet.** Retune pass 2 (config `c24`, `505a0eb`) is DONE and merged with board v2 and master into `coldcall` at `d772fe0` (pushed to `coldcall` only). Pass 2 met all six targets; the 80% stretch for 5x+ share of RTP is not reached (78.9%), and margins on 5x+ base share (1.622% vs 1.6%) rest on one plain run. Tests at this commit: `tests/coldcall.js` 47 pass, `tests/bender.js` 19 pass, engine copies identical (run by me 01:35). The dev server on 4610 was restarted on this tree at 01:40. The full three-size QA pass (1440x900, 540x960, docked; Play $ and Chips; win meter = credited; fast clicks) has NOT run: it starts next from `qa/coldcall-v2/critic-r1.md`. Nothing goes to master (Chris's hold, see Rules). The retune table below is the c14 (pass 1) reading; the c24 table is in the pass 2 report and `cold-call/RETUNE.md`.
 
 | Part | State |
