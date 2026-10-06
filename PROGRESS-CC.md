@@ -3,15 +3,15 @@
 Second slot for The Ping. Game id `coldcall`. Play money only. Brief from Isabelle 2026-10-05.
 This file is the status line: Isabelle reads it on GitHub. Newest milestone at the top of the log.
 
-## Status (updated 2026-10-05 23:30)
+## Status (updated 2026-10-06 00:10)
 
-**Not green yet.** The math is being retuned to high volatility (Isabelle's 22:55 note, Chris's call); the board plays; the full
-QA pass has not run. Nothing goes to master (Chris's hold, see Rules).
+**Not green yet.** The high-volatility retune is merged (six of seven targets met, one MISSED: see "Retune result"); a second
+tuning pass on the missed target is running; the full three-size QA pass has not run. Nothing goes to master (Chris's hold, see Rules).
 
 | Part | State |
 |---|---|
-| Engine v2 (6x5 clusters, super cascade, hot leads, phone feature, 3 bonuses) | on this branch at the OLD volatility; contract `cold-call/ENGINE-V2.md` arrives with the retune merge. Buy prices on this branch are interim. |
-| **Math retune to high volatility** | **RUNNING since 23:05** in a separate worktree (branch `coldcall-v2`, not pushed). BEFORE column measured (below). No AFTER numbers yet. |
+| Engine v2 (6x5 clusters, super cascade, hot leads, phone feature, 3 bonuses) | on this branch at the retuned config `c14`, with the contract `cold-call/ENGINE-V2.md` and final re-simulated buy prices. |
+| **Math retune to high volatility** | pass 1 DONE and merged: `cold-call/RETUNE.md` (table), `cold-call/RETUNE-NOTES.md` (log), raw run outputs in `cold-call/retune-runs/`. **Pass 2 RUNNING since 00:05** on the missed target (bigger base hits) and the `hunt` buy; it changes the engine only if every target holds together, otherwise it reports the limit. |
 | Board front end v2 (cascades, hot leads, reveal / upsell / close, 3 bonuses, buys, info) | built: `f862e27`, `fe1eb0b`; shots in `qa/coldcall-v2/`. I have NOT reviewed the shots myself yet. Its builder is still looking at a slow big-win overlay and a possible stuck round; no result yet. |
 | Master merged in + Chips | `2f0da2c` = master `b0c20e7` merged (0 behind), Cold Call ported from Ledger $ to Chips the way Bender was. NOT browser-smoked since the merge. |
 | Skin in the A1 look | done `3c75d02`; shots in `qa/coldcall-skin/` |
@@ -20,11 +20,35 @@ QA pass has not run. Nothing goes to master (Chris's hold, see Rules).
 ### Isabelle's verification list (22:55), item by item
 | # | Item | State |
 |---|---|---|
-| 1 | Before/after table (RTP +-CI, hit %, bands, bonus frequency and average, buy RTPs, max win) | BEFORE measured (below). AFTER: waits on the retune. Will be `cold-call/RETUNE.md`. |
+| 1 | Before/after table (RTP +-CI, hit %, bands, bonus frequency and average, buy RTPs, max win) | DONE for config `c14`: `cold-call/RETUNE.md`. I checked its numbers against the raw run outputs; I did not re-run the sims. One target missed, one buy out of band (below). May gain an AFTER-2 column from pass 2. |
 | 2 | Money settlement, Play $ and Chips | SERVER side done at this commit: one test, 480 rounds per currency over every bet level and every buy; on each round balance before - cost + win = after, whole units only, the other purse does not move, the pushed wallet equals the settled one, a same-instant double click is refused and not charged; bad amounts were already covered. BROWSER side (win meter = amount credited, fast clicks on the real button) NOT done: part of item 4. |
 | 3 | Engine byte-sync test | exists, passes at this commit |
 | 4 | Headless real-spin QA, 15+ spins, each bonus forced, a big win; 1440x900, 540x960, docked | NOT done. Runs after the retune is merged, on a restarted dev server. |
-| 5 | All tests pass | at this commit: `tests/coldcall.js` 47 pass, `tests/bender.js` 19 pass, run by me. The `npm test` chain: not run by me; `preselect`, `allin`, `pause`, `reset` hard-code `/home/isabelle/.cache` and are reported to fail the same way on master on this box. |
+| 5 | All tests pass | after the retune merge: `tests/coldcall.js` 47 pass, `tests/bender.js` 19 pass, engine copies byte-identical, run by me. The `npm test` chain: not run by me; `preselect`, `allin`, `pause`, `reset` hard-code `/home/isabelle/.cache` and are reported to fail the same way on master on this box. |
+
+### Retune result, config `c14` (builder's runs on shaman, 24 threads; full table in `cold-call/RETUNE.md`)
+| Target | BEFORE | AFTER (c14) | Verdict |
+|---|---|---|---|
+| RTP 98.0 +-0.3, stratified (450M base + 8M per bonus) | 98.10% +-0.14 | 97.95% +-0.11 | met |
+| Hit rate 20-24%, whole round | 32.22% | 20.68% | met, low edge |
+| Spins paying under 1x, at most about 5% | 24.93% | 0% | met |
+| Any bonus 1 in 180-220 | 1 in 156.2 | 1 in 206.7 (bonus 1: 224, bonus 2: 2,832, bonus 3: 44,092) | met |
+| Average natural bonus 90-120x | 79.6x | 102.9x | met |
+| Bonuses 45-55% of RTP | 52.0% | 50.8% | met |
+| **5x+ wins carry more of the RTP (bigger base hits)** | 82.0% of RTP | **73.1%** | **MISSED** |
+| Max win 10,000x | 10,000x, 1 in 3.92M | 10,000x, 1 in 3.28M | met |
+| Buys at value / 0.98, re-simulated | see below | call 2.9x 97.92% +-0.14; bonus1 85.6x 97.99% +-0.12; bonus2 283.4x 97.95% +-0.07; **hunt 3.5x 99.15% +-0.25** | hunt is 0.85 over the band |
+
+- **The miss, plainly:** in the base spin alone, wins of 5x and more went from 1 in 58 spins (29.3 points of RTP) to 1 in 78
+  (21.7 points). Most hits are now pushes: 14.5% of spins pay 1-2x, averaging 1.06x. The first pass used none of the 5% allowance
+  for wins under 1x. Pass 2 aims for 5x+ at 78% of RTP or better and a base 5x+ hit at 1 in 62 or better, with every other target
+  held. If those cannot hold together, the engine stays at `c14` and the limit is reported here for Isabelle and Chris to choose.
+- **By the single-number measure the game is not more volatile:** the standard deviation of a round fell 18.6x -> 16.7x bet,
+  because bonus 3 is rarer and smaller. More spins lose (79.3%, was 67.8%) and the average bonus is bigger.
+- **Cheap buy:** bonus1 prices at 85.6x, not the roughly 100x expected, because bonus 1 averages 83.8x.
+- **`hunt`:** one whole tenth is 2.9% of a 3.5x price, so the rounding rule alone put it at 99.15%. Pass 2 tunes its bonus
+  chance to land in the band.
+- **Not counted yet:** the share of hits paying exactly 1.0x (pass 2 counts it).
 
 ### BEFORE column (old volatility, engine config of `808567d`; builder's runs on shaman, not re-run by me)
 - RTP 98.10% +-0.14 stratified (450M base spins + 8M runs per bonus); plain 200M cross-check 97.94% +-0.26.
