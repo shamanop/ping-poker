@@ -24,7 +24,7 @@ with sync_playwright() as pw:
     try:
         # ---- login screens on the main sweep server (4701)
         s.goto(); p.wait_for_selector('#lb-name')
-        p.fill('#lb-name', 'chris'); p.fill('#lb-pin', '9999'); p.click('#lb-submit'); time.sleep(1.2)
+        p.fill('#lb-name', 'chris'); p.fill('#lb-pin', '9999')   # NOTE: run against 4702, the lockout is per IP and escalates; p.click('#lb-submit'); time.sleep(1.2)
         e1 = p.inner_text('#lb-err'); print('wrong PIN ->', repr(e1)); c.ok('wrong PIN shows a plain message', 'wrong' in e1.lower() or 'pin' in e1.lower(), e1)
         c.ok('the message does not reveal whether the name exists', 'no account' not in e1.lower() and 'not found' not in e1.lower(), e1)
         for i in range(6):

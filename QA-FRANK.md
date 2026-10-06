@@ -8,7 +8,7 @@ Severity: S1 money or stuck table, S2 wrong or misleading, S3 looks. Status: ope
 |---|---|---|---|
 | Q01 | S2 | open | Heads-up: SB and BB badges are swapped on the seats |
 | Q02 | S2 | open | Phone width (390): header, lobby buttons and the action bar are off screen; the table cannot be played |
-| Q03 | S2 | open | Returning to a busted seat through JOIN: the buy-in is ignored silently and the table shows a dead hand |
+| Q03 | S2 | open | A player who already holds a seat is offered a buy-in form for it; the typed amount is silently ignored; a 0-chip seat shows a dead hand |
 | Q04 | S2 | open | Daily bonus window prints raw cents with no unit |
 | Q07 | S2 | open | Create-table refusals print amounts as raw cents on a Play $ form |
 | Q08 | S2 | open | No control to leave a table with chips: the only Leave button is display:none |
@@ -29,18 +29,20 @@ Severity: S1 money or stuck table, S2 wrong or misleading, S3 looks. Status: ope
 - Status: open
 - Steps: Open the site at 390x844, sign in. Lobby, then sit at a table and wait for your turn.
 - Expected: Every control reachable; Fold / Call / Raise usable.
-- Actual: Lobby: money toggle, daily bonus, account and Sign out sit at x 430-749 and CREATE TABLE / JOIN reach x 435 (page does not scroll). Table: the 210 px chat rail takes half the screen, FOLD is 22 px wide, CALL, RAISE and the raise box are cut off, the table is clipped. Moving the rail to the other side only mirrors it. A phone player can neither sign out nor act; the turn clock folds them.
+- Actual: Measured by tests/e2e/sweep/s11_phone_geometry.py at 390x844. Lobby: money toggle, daily bonus, account and Sign out sit at x 430-749, CREATE TABLE / code box / JOIN reach x 435 (the page does not scroll). Table: the stage is 98 px wide (chat rail 204 px plus the dock take the rest), FOLD / CALL / RAISE are 22 px wide at x 298-334, emote buttons 3-6, the raise box and presets are off screen, the table is clipped. Moving the rail to the other side only mirrors it. A phone player can neither sign out nor act; the turn clock folds them.
 - Where: public/*.css has no phone @media pass (client defects 1, 2, 14 from ui/REPORT were never started)
 - Evidence: ![](qa/v2-sweep/Q02.jpg)
+- Evidence: ![](qa/v2-sweep/Q02b.jpg)
 
-## Q03 (S2) Returning to a busted seat through JOIN: the buy-in is ignored silently and the table shows a dead hand
+## Q03 (S2) A player who already holds a seat is offered a buy-in form for it; the typed amount is silently ignored; a 0-chip seat shows a dead hand
 
 - Status: open
-- Steps: Bust at a table (stack 0), close the tab. Within 2 minutes sign in again, JOIN the same table from the lobby, type a buy-in (20000) and press Sit.
-- Expected: Either the buy-in is taken (rebuy) or the rebuy panel appears, or the join is refused with a reason.
-- Actual: table_joined stack 0, no money moved (bank still 80,000), the screen shows the previous hand's board and old hole cards, the text "Waiting for a second player" and the seat reads "JOINING". No rebuy panel, no message. The player has typed a buy-in and nothing tells them it was dropped.
+- Steps: (a) Disconnect on your turn (close the tab). Within 2 minutes sign in again from a fresh browser: lobby "Your tables" shows RESUME; press it. (b) Bust at a table, close the tab, sign in again and JOIN the same table from the lobby, type a buy-in (20000), Sit.
+- Expected: (a) RESUME goes straight back to the seat. (b) Either the buy-in is taken as a rebuy, the rebuy panel appears, or the join is refused with a reason.
+- Actual: (a) A table preview lists only the other player and shows "SIT DOWN" with Bank 8,000 and a 2000 buy-in; pressing it rebinds the held seat and charges nothing (bank 8000 -> 8000, seat 1975 -> 1975, verified with __audit), so the form lies about what happens. (b) table_joined stack 0, nothing charged (bank still 80,000), the page shows the previous hand's board and old hole cards, "Waiting for a second player", the seat reads "JOINING", no rebuy panel and no message. Evidence for (a): tests/e2e/sweep/s06c_disconnect.py.
 - Where: tables/table.js rejoin path (seat exists -> rebind, buyIn ignored, no bust_out re-sent); public/game.js enter()
 - Evidence: ![](qa/v2-sweep/Q03.jpg)
+- Evidence: ![](qa/v2-sweep/Q03b.jpg)
 
 ## Q04 (S2) Daily bonus window prints raw cents with no unit
 

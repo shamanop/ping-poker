@@ -17,7 +17,8 @@ for d in D:
             '- Status: %s' % d.get('status', 'open') + ((' ' + d['fix']) if d.get('fix') else ''),
             '- Steps: %s' % d['steps'], '- Expected: %s' % d['expected'], '- Actual: %s' % d['actual']]
     if d.get('where'): out.append('- Where: %s' % d['where'])
-    if d.get('shot'): out.append('- Evidence: ![](qa/v2-sweep/%s)' % d['shot'])
+    for k in ('shot', 'shot2'):
+        if d.get(k): out.append('- Evidence: ![](qa/v2-sweep/%s)' % d[k])
     out.append('')
 out += ['## Covered', ''] + ['- ' + x for x in C['covered']] + ['', '## NOT covered', ''] + ['- ' + x for x in C['not_covered']] + ['']
 open(os.path.join(R, 'QA-FRANK.md'), 'w').write('\n'.join(out))
