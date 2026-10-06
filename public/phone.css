@@ -170,9 +170,12 @@ body.sh-on:has(#game-screen.active) .sh-top { display: none; }
 #raise-box .amt-suffix { font-size: 12px; }
 
 /* ── Seat plates and table text stay readable at the small unit ───────────────────────────────────── */
-.seat-name { font-size: 11px; }
+.seat-name { font-size: 12px; }
 .seat-chips { font-size: 12px; }
-.seat-status { font-size: 11px; letter-spacing: .04em; }
+.seat-status { font-size: 12px; letter-spacing: .02em; }
+.pot-num { font-size: 12px; }   /* UI wave 1 audit: nothing on the felt under 11 px */
+.bet-amt { font-size: 11px; }
+.puck { font-size: 11px; }
 .seat-tag { position: absolute; z-index: 5; right: -4px; top: -10px; width: 22px; height: 22px; font-size: 11px; border-width: 1px; }   /* the blind chip sits on the plate corner so the name keeps its width */
 .seat.hero { translate: 0 8px; }   /* the hero plate drops below the hole cards instead of covering their bottom edge (Q02 leftover) */
 .seat-status.secs { font-size: 12px; }

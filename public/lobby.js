@@ -772,7 +772,7 @@ function blindsEditor(t, id, unit) {
   };
   const el = h('div', { class: 'lb-stack', style: 'gap:var(--p8)' },
     h('div', { class: 'lb-label' }, 'Blinds'),
-    h('div', { style: 'display:grid;grid-template-columns:1fr auto 1fr;gap:var(--p8);align-items:start' }, sbF.el, h('span', null, '/'), bbF.el),
+    h('div', { style: 'display:grid;grid-template-columns:1fr auto 1fr;gap:var(--p8);align-items:start' }, sbF.el, h('span', { style: 'font-size:var(--fs-1)' }, '/'), bbF.el),
     h('button', { class: 'btn btn--secondary btn--sm btn--block', id: 'host-blinds-save', type: 'button', onclick: save }, 'Set blinds'),
     note);
   return { el, update };

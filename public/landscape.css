@@ -79,3 +79,9 @@ body.sh-on { --sh-top: 44px; --sh-dock: 52px; }
 .showdown-overlay { max-width: calc(100% - 8px); }
 .host-drawer { top: calc(var(--sh-top, 0px) + var(--head-h) + 4px); }
 .bank-panel { left: 0; right: 0; }
+
+/* ── Table text floors (UI wave 1 audit): the table runs at --u 0.5 here, so give the text on the felt a readable minimum ── */
+.seat-name, .seat-chips, .seat-status { font-size: 12px; }
+.pot-num { font-size: 12px; }
+.bet-amt, .puck { font-size: 11px; }
+.panel__close { font-size: 18px; }
