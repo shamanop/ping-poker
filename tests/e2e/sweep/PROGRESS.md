@@ -25,7 +25,11 @@ Cold Call: not in v2-core (origin/coldcall), games_shell coldcall not run. radio
 - s07_host: pause/resume, blinds change mid-hand, kick mid-hand, end night + settle-up: chips 22/0; play needs the rerun with the relaxed script (net compared with the hands' own nets).
 - s08_admin: bank adjust by delta, over-draw refused, Play $ set, row vs audit: 12/0.
 - s09_bender: 3 spins per fund, wallet/bank/header vs audit: 43/0.
-- s10_misc: login lockout copy, bender-config token gate (needs 4702): written, first half verified (wrong PIN message fine, lockout "Too many tries. Try again in 30s."); rerun against a fresh server.
+- s10_misc: bender-config verified by curl on 4702 (no/wrong token 403, right token GET 200, POST override 200, reset 200, POST without token 403); login: wrong PIN "Wrong name or PIN", lockout after 5 tries "Too many tries. Try again in 30s." (per name, escalates); reload resumes the session. The browser half of the script stops after the lockout step on a slow sign-up wait (script issue, not triaged); radio and recap do not exist in v2-core.
+- s06c_disconnect (chips): turn clock acted for the absent hero at 32 s, seat kept, cashed out after 124 s with the right amount; only failure = Q03 (RESUME shows a buy-in form).
+- s11_phone_geometry: 5 of 6 checks fail by design (Q02 numbers).
+- s07 play: settle-up shows -$1 / +$1.50 / -$0.50 = the hands' own nets (script was double counting; fixed, rerun pending).
+- Unverified suspicion (not logged as a defect): after a lockout a browser sign-up on the same IP once showed "Try again in 930s"; a node socket repro did not block a new name, so it was probably the escalating per-name lock on a reused name.
 
 ## Waves
 - Wave 1 spawned (visible, Sonnet default, own worktrees off v2-core 11d2618): A = agent:main:dashboard:b95ded74-f819-45d8-9934-f8c4160a0645 (branch p5-fix-a, Q03 rejoin/resume, Q08 leave control, brief builders/P5-FIX-A.md); B = agent:main:dashboard:28f4c387-db3a-4c33-a8c4-2e8e5584a0d8 (branch p5-fix-b, Q01 Q04 Q05 Q06 Q07, brief builders/P5-FIX-B.md). Never cancel them. When they report: merge p5-fix-a then p5-fix-b into v2-core (they touch different functions of public/lobby.js and public/game.js), run `node tests/v2/30_shapes.js --target .`, unit suites, the sweep scripts for the touched screens, record the commit hashes in defects.json (status fixed + fix) and rerun mkqa.py.
