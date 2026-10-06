@@ -205,5 +205,23 @@ function blur(f) { f.input.fire('blur'); }
   eq('value outside new bounds is pulled in, visibly', f.value(), 2000);
 }
 
+// ---- allowed list (server-defined ladders such as slot bets): only listed values are valid, stops = the list
+{
+  const ctx = load({ 'ping.currency': 'chips' });
+  const list = [10, 20, 50, 100, 200, 500, 1000];
+  const sent = [];
+  const f = ctx.AmountInput({ units: 100, min: 10, max: 1000, unit: 'chips', scale: 'ladder', compact: false, allowed: list, onCommit: u => sent.push(u) });
+  eq('allowed: stops are exactly the list', f.stops(), list);
+  type(f, '50'); eq('allowed: listed typed value ok', f.value(), 50);
+  type(f, '55'); eq('allowed: in-range but unlisted -> null', f.value(), null);
+  ok('allowed: unlisted shows a message', /listed/.test(f.message()));
+  eq('allowed: unlisted submit refused', f.submit(), false);
+  eq('allowed: nothing sent', sent, []);
+  const g = ctx.AmountInput({ units: 37, min: 10, max: 1000, unit: 'chips', scale: 'ladder', allowed: list });
+  eq('allowed: an unlisted start value snaps to the nearest listed one', g.value(), 50);
+  g.setBounds({ allowed: [10, 25, 100], min: 10, max: 100 });
+  eq('allowed: setBounds swaps the list', g.stops(), [10, 25, 100]);
+}
+
 console.log('amountfield.test.js: ' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

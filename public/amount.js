@@ -2,7 +2,9 @@
 // AmountInput (v2): the NUMBER is the truth, the text is a view of it.
 //
 //   const f = AmountInput({ units, min, max, unit, presets, scale: 'ladder'|'raise', bb, onCommit, onChange,
-//                           label, rangeLabel, allIn, compact, doc })
+//                           label, rangeLabel, allIn, compact, allowed, fixedMode, doc })
+//   fixedMode: 'usd'|'chips' pins the text mode (practice VOTES are not money); omit it and the mode follows Money.pref per `unit`.
+//   allowed: optional list of units; only those values are valid (stops = the list). For server-defined ladders such as slot bets.
 //   f.el            root element to mount
 //   f.value()       integer units, or null when the text is invalid / out of range / empty
 //   f.set(units, {source})   external update. The TEXT is left alone while the box is dirty and focused
@@ -21,6 +23,7 @@
   function buildStops(o) {
     const min = Math.round(o.min), max = Math.round(o.max);
     if (!(max >= min)) return [];
+    if (Array.isArray(o.allowed)) return o.allowed.map(Math.round).filter(v => v >= min && v <= max).sort((a, b) => a - b).filter((v, i, a) => i === 0 || v !== a[i - 1]);
     const set = new Set([min, max]);
     (o.presets || []).forEach(p => { const u = Math.round(p.units); if (u >= min && u <= max) set.add(u); });
     if (o.scale === 'raise') {
@@ -70,6 +73,7 @@
     let rawPresets = opts.presets || [];
     let presets = [];
     let stops = [];
+    let allowed = Array.isArray(opts.allowed) ? opts.allowed.map(Math.round) : null;
     let allInUnits = opts.allIn === undefined ? (scale === 'raise' ? max : null) : opts.allIn;
     let units = Number.isFinite(opts.units) ? Math.round(opts.units) : null; // last valid value = the truth
     let text = '';
@@ -107,11 +111,13 @@
     // message right under the text so it is never below the fold; compact = text + message only (create form, drawers)
     if (opts.compact) el.append(row, msgEl); else el.append(row, msgEl, slider, ends, presetBox, confirmEl);
 
-    const mode = () => M().modeFor(M().pref, unit);
+    const mode = () => (opts.fixedMode === 'usd' || opts.fixedMode === 'chips' ? opts.fixedMode : M().modeFor(M().pref, unit));
     const fmt = (u, o) => M().format(u, mode(), o);
-    const inRange = u => Number.isFinite(u) && u >= min && u <= max;
+    const snap = u => { u = Math.min(max, Math.max(min, u)); if (!allowed || !allowed.length || allowed.includes(u)) return u; return allowed.reduce((b, x) => (Math.abs(x - u) < Math.abs(b - u) ? x : b), allowed[0]); };
+    const inRange = u => Number.isFinite(u) && u >= min && u <= max && (!allowed || allowed.includes(u));
 
     function rangeMsg() {
+      if (allowed) return rangeLabel + ' must be a listed amount, ' + fmt(min) + ' to ' + fmt(max) + '.';
       if (min === max) return rangeLabel + ' must be ' + fmt(min) + '.';
       return rangeLabel + ' is ' + fmt(min) + ' to ' + fmt(max) + '.';
     }
@@ -133,7 +139,7 @@
       input.value = text;
     }
     function renderChrome() {
-      stops = buildStops({ min, max, presets: rawPresets, scale, bb: opts.bb });
+      stops = buildStops({ min, max, presets: rawPresets, scale, bb: opts.bb, allowed });
       presets = cleanPresets(rawPresets, min, max, allInUnits);
       slider.min = '0';
       slider.max = String(Math.max(0, stops.length - 1));
@@ -210,12 +216,13 @@
       if (b.min !== undefined) min = Math.round(b.min);
       if (b.max !== undefined) max = Math.round(b.max);
       if (b.presets) rawPresets = b.presets;
+      if (b.allowed !== undefined) allowed = Array.isArray(b.allowed) ? b.allowed.map(Math.round) : null;
       if (b.allIn !== undefined) allInUnits = b.allIn; else if (scale === 'raise') allInUnits = max;
       renderChrome();
       const textLocked = dirty && (focused || msg !== '');
       if (!textLocked && units !== null && !inRange(units)) {
         // bounds moved under a value the user did not type: show the nearest legal value visibly
-        units = Math.min(max, Math.max(min, units));
+        units = snap(units);
         renderText(); syncSlider();
       }
       if (dirty) validateText(); else syncSlider();
@@ -327,7 +334,7 @@
       focus: () => { try { input.focus(); } catch (e) {} },
     };
 
-    if (units !== null && !inRange(units)) units = Math.min(max, Math.max(min, units));
+    if (units !== null && !inRange(units)) units = snap(units);
     renderText(); renderChrome(); setMsg('');
     return api;
   }
