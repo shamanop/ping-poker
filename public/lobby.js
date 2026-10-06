@@ -31,26 +31,13 @@ const LS = { get: (k) => { try { return localStorage.getItem(k); } catch { retur
 
 // ── money helpers ─────────────────────────────────────────────────
 // display and typed amounts share one mode per unit, so whatever a box shows parses back to the same value
-function modeFor(unit) {
-  const M = window.Money, pref = M && M.getPref ? M.getPref() : 'auto';
-  return pref === 'auto' ? (unit === 'cents' ? 'usd' : 'chips') : pref;
-}
+function modeFor(unit) { return window.Money.modeFor(window.Money.pref, unit); }
 function fm(u, unit, o) {
   if (u == null || Number.isNaN(u)) return '-';
-  if (window.Money) return window.Money.fmt(u, Object.assign({ unit, mode: modeFor(unit) }, o));
-  const s = (o && o.signed && u > 0 ? '+' : '') + (u < 0 ? '-' : '');
-  const a = Math.abs(u);
-  return unit === 'chips' ? s + a.toLocaleString('en-US') : s + '$' + (a % 100 ? (a / 100).toFixed(2) : (a / 100).toLocaleString('en-US'));
+  return window.Money.format(u, modeFor(unit), o);
 }
-function amtText(v, unit) {
-  if (window.Money) return window.Money.fmt(v, { symbol: false, mode: modeFor(unit) }).replace(/,/g, '');
-  return unit === 'chips' ? String(v) : (v % 100 ? (v / 100).toFixed(2) : String(v / 100));
-}
-function parseAmt(text, unit) {
-  if (window.Money && window.Money.parse) { const v = window.Money.parse(text, { mode: modeFor(unit) }); return v == null || !Number.isFinite(v) ? null : Math.round(v); }
-  const s = String(text).replace(/[$,\s]/g, ''); if (!/^\d*\.?\d+$/.test(s)) return null;
-  return unit === 'chips' ? Math.round(parseFloat(s)) : Math.round(parseFloat(s) * 100);
-}
+function amtText(v, unit) { return window.Money.plain(v, modeFor(unit)); }
+function parseAmt(text, unit) { const r = window.Money.parse(text, modeFor(unit)); return r.ok ? r.units : null; }
 function ladder(unit, min, max, extra = []) {
   const set = new Set([min, max, ...extra.filter((v) => v >= min && v <= max)]);
   const N = 60, lo = Math.max(1, min);
@@ -136,7 +123,7 @@ function renderTop() {
 }
 function mountToggles() {
   if (!window.Money || !window.Money.toggleEl) return;
-  document.querySelectorAll('[data-money-toggle]').forEach((slot) => { if (!slot.firstChild) slot.append(window.Money.toggleEl()); });
+  document.querySelectorAll('[data-money-toggle]').forEach((slot) => { if (!slot.firstChild) slot.append(window.Money.toggleEl(slot.dataset.unit || 'cents')); });
 }
 function signOut() { emit('auth_logout', {}); }
 function setMain(node) { ensureRoot(); mainEl.replaceChildren(node); }
@@ -152,7 +139,6 @@ function show(name, arg) {
   if (window.PingGame && window.PingGame.isIn && window.PingGame.isIn() && name !== 'settle') { root.classList.remove('on'); return; }
   S.view = name; S.arg = arg;
   root.classList.add('on');
-  window.Money && window.Money.setUnit && window.Money.setUnit('cents');
   const v = { signin: viewSignin, lobby: viewLobby, create: viewCreate, share: viewShare, settle: viewSettle }[name] || viewLobby;
   hostUi(false);
   v(arg);
@@ -340,50 +326,39 @@ function settingsCard(t) {
     t.blindIncrease && t.blindIncrease.enabled ? cell('Blinds rise', 'every ' + t.blindIncrease.everyMin + ' min') : null, cell('Rebuys', t.rebuys === false ? 'Off' : 'On'));
 }
 
-// ── buy-in picker (slider + typed) ────────────────────────────────
+// ── buy-in picker (AmountInput: the number is the truth, the text is a view) ──
 function buyInPicker(t, mySettled) {
   const unit = t.unit || unitOf(t.mode), bi = t.buyIn;
   let fund = t.mode;
-  const bankOf = (f) => (f === 'chips' ? (S.user && (S.user.bankChips ?? S.user.chips)) : (S.wallet ? S.wallet.play : null));
-  const hiOf = (bk) => (bk != null && Number.isFinite(bk) ? Math.max(bi.min, Math.min(bi.max, bk)) : bi.max);
+  const bankOf = (f) => { const v = f === 'chips' ? (S.user && (S.user.bankChips ?? S.user.chips)) : (S.wallet ? S.wallet.play : null); return Number.isFinite(v) ? v : null; };
+  const hiOf = (bk) => (bk != null ? Math.min(bi.max, bk) : bi.max);
+  const presetsFor = (hi) => [{ label: 'Min', units: bi.min }, { label: 'Default', units: bi.default }, { label: 'Max', units: hi }];
   let bank = bankOf(fund), hi = hiOf(bank);
-  let vals = ladder(unit, bi.min, hi, [bi.default]);
-  let val = Math.min(hi, Math.max(bi.min, bi.default));
-  window.Money && window.Money.setUnit && window.Money.setUnit(unit);
-  const range = h('input', { type: 'range', min: 0, max: vals.length - 1, step: 1, value: nearIdx(vals, val), id: 'lb-buyin-range', 'aria-label': 'Buy-in' });
-  const fill = h('div', { class: 'fill' });
-  const typed = h('input', { class: 'text-input', id: 'lb-buyin-input', type: 'text', inputmode: 'decimal', autocomplete: 'off', value: plain(val) });
-  const msg = h('div', { class: 'lb-err', id: 'lb-buyin-err' });
-  function plain(v) { return amtText(v, unit); }
-  const paint = () => { const a = range.value / Math.max(1, vals.length - 1); fill.style.left = 'var(--p8)'; fill.style.width = 'calc((100% - var(--p16)) * ' + a + ')'; };
-  range.addEventListener('input', () => { val = vals[+range.value]; typed.value = plain(val); msg.textContent = ''; paint(); drawBal(); });
-  const commit = () => {
-    const v = parseAmt(typed.value, unit);
-    if (v == null) { msg.textContent = 'Enter an amount.'; return false; }
-    val = Math.min(hi, Math.max(bi.min, v)); typed.value = plain(val); range.value = nearIdx(vals, val); paint();
-    msg.textContent = v !== val ? 'Buy-in is ' + fm(bi.min, unit) + ' to ' + fm(hi, unit) + '.' : ''; drawBal(); return true;
-  };
-  typed.addEventListener('change', commit); typed.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); commit(); } });
-  paint();
+  const short = () => bank != null && bank < bi.min; // cannot afford the minimum: nothing to pick
+  const f = AmountInput({ units: Math.min(Math.max(bi.min, bi.default), Math.max(bi.min, hi)), min: bi.min, max: Math.max(bi.min, hi), unit, scale: 'ladder', presets: presetsFor(Math.max(bi.min, hi)), label: 'Buy-in', rangeLabel: 'Buy-in', onChange: () => drawBal() });
+  f.input.id = 'lb-buyin-input'; f.slider.id = 'lb-buyin-range'; f.el.id = 'lb-buyin';
   const balLine = h('div', { class: 'lb-muted', id: 'lb-fund-bal' });
   const drawBal = () => {
-    const cross = fund !== t.mode;
-    balLine.textContent = bank == null ? '' : (fund === 'play' ? 'Your Play $: ' + fm(bank, 'cents') : 'Your bank: ' + fm(bank, 'chips')) + (cross ? '. This buy-in costs ' + (fund === 'play' ? fm(val, 'cents') : fm(val, 'chips')) + ' (1 chip = $0.01).' : '');
+    const cross = fund !== t.mode, v = f.value();
+    balLine.textContent = bank == null ? '' : (fund === 'play' ? 'Your Play $: ' + fm(bank, 'cents') : 'Your bank: ' + fm(bank, 'chips'))
+      + (short() ? '. Not enough for the minimum buy-in of ' + fm(bi.min, unit) + '.' : '')
+      + (cross && v != null ? '. This buy-in costs ' + (fund === 'play' ? fm(v, 'cents') : fm(v, 'chips')) + ' (1 chip = $0.01).' : '');
   };
-  const fundBtn = (f, label) => h('button', { type: 'button', class: 'lb-btn' + (fund === f ? '' : ' blue'), id: 'lb-fund-' + f, onclick: () => {
-    if (fund === f) return; fund = f; bank = bankOf(fund); hi = hiOf(bank);
-    vals = ladder(unit, bi.min, hi, [bi.default]); val = Math.min(hi, Math.max(bi.min, val)); range.max = vals.length - 1; range.value = nearIdx(vals, val); typed.value = plain(val); msg.textContent = '';
-    fundRow.replaceChildren(fundBtn('chips', 'Chips'), fundBtn('play', 'Play $')); paint(); drawBal();
+  const fundBtn = (k, label) => h('button', { type: 'button', class: 'lb-btn' + (fund === k ? '' : ' blue'), id: 'lb-fund-' + k, onclick: () => {
+    if (fund === k) return; fund = k; bank = bankOf(fund); hi = hiOf(bank);
+    const top = Math.max(bi.min, hi), cur = f.value();
+    f.setBounds({ min: bi.min, max: top, presets: presetsFor(top) });
+    f.set(cur == null ? bi.default : Math.min(top, Math.max(bi.min, cur)), { source: 'fund' });
+    fundRow.replaceChildren(fundBtn('chips', 'Chips'), fundBtn('play', 'Play $')); drawBal();
   } }, label);
   const fundRow = h('div', { class: 'lb-field', id: 'lb-fund' }, fundBtn('chips', 'Chips'), fundBtn('play', 'Play $'));
   drawBal();
   const night = mySettled != null ? h('div', { class: 'lb-muted' }, 'Your night so far: ', h('b', { class: mySettled > 0 ? 'up' : mySettled < 0 ? 'down' : '' }, fm(mySettled, unit, { signed: true }))) : null;
-  const el = h('div', { class: 'lb-stack', style: 'gap:var(--p14)' },
-    h('div', { class: 'lb-field' }, h('label', null, 'Buy-in'), h('div', { class: 'lb-join' }, typed, h('span'))),
-    h('div', { class: 'lb-slider' }, h('div', { class: 'trk' }), fill, range),
-    h('div', { class: 'lb-ends' }, h('span', null, fm(bi.min, unit)), h('span', null, fm(hi, unit))), msg, night,
-    fundRow, balLine);
-  return { el, get: () => (commit() ? val : null), getFund: () => fund, msg };
+  // the fund picker sits above the slider so the modal footer can never hide it (ui 11)
+  const el = h('div', { class: 'lb-stack', style: 'gap:var(--p14)' }, fundRow, balLine, h('div', { class: 'lb-field' }, h('label', null, 'Buy-in'), f.el), night);
+  // get(): integer units or null. Out of range, unparsable or unaffordable never seats (S1-3); the message stays visible.
+  const get = () => { if (short()) return null; const v = f.value(); if (v === null) { f.submit(); try { f.el.scrollIntoView({ block: 'center' }); } catch (e) {} } return v; };
+  return { el, get, getFund: () => fund, field: f, short };
 }
 
 // ── join / buy-in modal ───────────────────────────────────────────
@@ -411,7 +386,7 @@ function modalJoin(info, me) {
   const pick = buyInPicker(t, S.net[id]);
   const err = h('div', { class: 'lb-err', id: 'lb-joinmsg' });
   const sit = h('button', { class: 'lb-btn', id: 'lb-sit', onclick: () => {
-    const v = me ? (me.stack || t.buyIn.default) : pick.get(); if (v == null) return;
+    const v = me ? (me.stack || t.buyIn.default) : pick.get(); if (v == null) { err.textContent = pick.short() ? 'Your balance is below the minimum buy-in.' : 'Fix the buy-in amount first.'; return; }
     sit.disabled = true; err.textContent = ''; S.onError = (m) => { sit.disabled = false; err.textContent = m; };
     emit('table_join', { tableId: id, buyIn: v, fund: pick.getFund() });
   } }, me ? 'Return to seat' : 'Sit down');
@@ -466,7 +441,7 @@ function fillSummary(f, el) {
       h('dt', null, 'Buy-in'), h('dd', null, fm(f.min, u) + ' to ' + fm(f.max, u) + ', default ' + fm(f.def, u)), h('dt', null, 'Seats'), h('dd', null, f.seats),
       h('dt', null, 'Clock'), h('dd', null, f.timer ? f.timer + 's' : 'None'), h('dt', null, 'Blinds rise'), h('dd', null, f.bi ? 'every ' + f.biEvery + ' min' : 'Off'),
       h('dt', null, 'Rebuys'), h('dd', null, f.rebuys ? 'On' : 'Off'), h('dt', null, 'Visibility'), h('dd', null, f.priv ? 'Private, code only' : 'Listed in lobby')),
-    f.min < b.bb * 20 ? h('div', { class: 'lb-warn', id: 'lb-warn' }, 'Minimum buy-in is under 20 big blinds. Short stacks play fast.') : null,
+    ...(f.min < b.bb * 20 ? [h('div', { class: 'lb-warn', id: 'lb-warn' }, 'Minimum buy-in is under 20 big blinds. Short stacks play fast.')] : []),
     h('div', { class: 'lb-muted' }, 'Suggested buy-in: ' + fm(sug, u) + ' (100 big blinds).'),
     h('div', { class: 'lb-copy' }, modeNote(f.mode)));
 }
@@ -478,29 +453,38 @@ function formBody(f, redraw, sum) {
   const set = (k) => (v) => { f[k] = v; redraw(); };
   const modeSeg = seg([['play', 'Play $', 'fake money'], ['chips', 'Chips', 'bank chips']], f.mode, (m) => { if (m !== f.mode) { S.form = Object.assign(f, freshForm(m, f)); } redraw(); }, 'lb-mode');
   const name = h('input', { class: 'text-input', id: 'lb-tname', maxlength: 24, value: f.name, oninput: (e) => { f.name = e.target.value; sum(); } });
-  // buy-in range
-  const lo = 500, hi = u === 'chips' ? 1000000 : 50000, vals = ladder(u, lo, hi, [f.min, f.max, f.def]);
+  // buy-in range: the three typed boxes are AmountInputs (the number is the truth); the dual slider only drives them.
+  // The slider span always covers what is typed (S3-2), the server accepts 1..MAX_UNITS.
+  const LO = 500, HI = u === 'chips' ? 1000000 : 50000, MAX_UNITS = 100000000;
+  const vals = ladder(u, Math.min(LO, f.min), Math.max(HI, f.max), [f.min, f.max, f.def]);
   const rl = h('input', { type: 'range', min: 0, max: vals.length - 1, step: 1, value: nearIdx(vals, f.min), 'aria-label': 'Minimum buy-in' });
   const rh = h('input', { type: 'range', min: 0, max: vals.length - 1, step: 1, value: nearIdx(vals, f.max), 'aria-label': 'Maximum buy-in' });
   const fill = h('div', { class: 'fill' });
-  const plain = (v) => amtText(v, u);
-  const inMin = h('input', { class: 'text-input', id: 'lb-bmin', value: plain(f.min), inputmode: 'decimal' }), inDef = h('input', { class: 'text-input', id: 'lb-bdef', value: plain(f.def), inputmode: 'decimal' }), inMax = h('input', { class: 'text-input', id: 'lb-bmax', value: plain(f.max), inputmode: 'decimal' });
+  const fields = S.formFields = [];
+  const crossMsg = h('div', { class: 'lb-err', id: 'lb-bcross' });
+  const cross = () => { crossMsg.textContent = f.min <= f.def && f.def <= f.max ? '' : 'Buy-in needs minimum <= default <= maximum.'; };
+  const mk = (key, id, label, lo) => {
+    const a = AmountInput({ units: f[key], min: lo, max: MAX_UNITS, unit: u, scale: 'ladder', compact: true, label, rangeLabel: label,
+      onChange: (v) => { if (v != null && v !== f[key]) { f[key] = v; if (key === 'min' || key === 'max') syncSlider(); cross(); sum(); } } });
+    a.input.id = id; fields.push(a); return a;
+  };
+  const inMin = mk('min', 'lb-bmin', 'Minimum buy-in', 1), inDef = mk('def', 'lb-bdef', 'Default buy-in', 1), inMax = mk('max', 'lb-bmax', 'Maximum buy-in', 1);
   const n1 = Math.max(1, vals.length - 1);
   const paint = () => { const a = rl.value / n1, b = rh.value / n1; fill.style.left = 'calc(var(--p8) + (100% - var(--p16)) * ' + a + ')'; fill.style.width = 'calc((100% - var(--p16)) * ' + (b - a) + ')'; };
-  const sync = () => { f.def = Math.min(f.max, Math.max(f.min, f.def)); inMin.value = plain(f.min); inMax.value = plain(f.max); inDef.value = plain(f.def); rl.value = nearIdx(vals, f.min); rh.value = nearIdx(vals, f.max); paint(); sum(); };
-  rl.addEventListener('input', () => { if (+rl.value > +rh.value) rl.value = rh.value; f.min = vals[+rl.value]; sync(); });
-  rh.addEventListener('input', () => { if (+rh.value < +rl.value) rh.value = rl.value; f.max = vals[+rh.value]; sync(); });
-  const typedHook = (inp, key) => inp.addEventListener('change', () => {
-    const v = parseAmt(inp.value, u); if (v != null && v >= 1) { f[key] = v; if (key === 'min' && f.max < v) f.max = v; if (key === 'max' && f.min > v) f.min = v; }
-    sync();
-  });
-  typedHook(inMin, 'min'); typedHook(inDef, 'def'); typedHook(inMax, 'max'); paint();
+  const syncSlider = () => { rl.value = nearIdx(vals, f.min); rh.value = nearIdx(vals, f.max); paint(); };
+  rl.addEventListener('input', () => { if (+rl.value > +rh.value) rl.value = rh.value; f.min = vals[+rl.value]; inMin.set(f.min, { source: 'slider' }); paint(); cross(); sum(); });
+  rh.addEventListener('input', () => { if (+rh.value < +rl.value) rh.value = rl.value; f.max = vals[+rh.value]; inMax.set(f.max, { source: 'slider' }); paint(); cross(); sum(); });
+  paint(); cross();
   const b = blindsOf(f);
   const blindSeg = h('div', { class: 'lb-seg', id: 'lb-blinds' }, PRESETS[u].map((p, i) => h('button', { type: 'button', 'data-v': i, class: !f.custom && i === f.preset ? 'on' : '', onclick: () => { f.custom = false; f.preset = i; redraw(); } }, fm(p[0], u) + '/' + fm(p[1], u))),
     h('button', { type: 'button', 'data-v': 'custom', class: f.custom ? 'on' : '', onclick: () => { f.custom = true; f.csb = b.sb; f.cbb = b.bb; redraw(); } }, 'Custom'));
+  const mkBlind = (key, id, label, lo) => {
+    const a = AmountInput({ units: f[key], min: lo, max: MAX_UNITS, unit: u, scale: 'ladder', compact: true, label, rangeLabel: label, onChange: (v) => { if (v != null && v !== f[key]) { f[key] = v; sum(); } } });
+    a.input.id = id; fields.push(a); return a;
+  };
   const custom = f.custom ? h('div', { class: 'lb-two' },
-    h('div', { class: 'lb-field' }, h('label', null, 'Small blind'), h('input', { class: 'text-input', id: 'lb-csb', value: plain(f.csb), onchange: (e) => { const v = parseAmt(e.target.value, u); if (v) f.csb = v; sum(); } })),
-    h('div', { class: 'lb-field' }, h('label', null, 'Big blind'), h('input', { class: 'text-input', id: 'lb-cbb', value: plain(f.cbb), onchange: (e) => { const v = parseAmt(e.target.value, u); if (v) f.cbb = v; sum(); } }))) : null;
+    h('div', { class: 'lb-field' }, h('label', null, 'Small blind'), mkBlind('csb', 'lb-csb', 'Small blind', 1).el),
+    h('div', { class: 'lb-field' }, h('label', null, 'Big blind'), mkBlind('cbb', 'lb-cbb', 'Big blind', 2).el)) : null;
   const seats = h('div', { class: 'lb-seats', id: 'lb-seats' }, h('button', { type: 'button', 'aria-label': 'Fewer seats', onclick: () => { f.seats = Math.max(2, f.seats - 1); redraw(); } }, '−'), h('b', null, f.seats), h('button', { type: 'button', 'aria-label': 'More seats', onclick: () => { f.seats = Math.min(9, f.seats + 1); redraw(); } }, '+'));
   const onOff = (k, id) => seg([[true, 'On'], [false, 'Off']], f[k], set(k), id);
   return [
@@ -508,7 +492,7 @@ function formBody(f, redraw, sum) {
     h('div', { class: 'lb-field' }, h('label', { for: 'lb-tname' }, 'Table name'), name),
     g('Blinds', blindSeg, custom),
     g('Buy-in range', h('div', { class: 'lb-slider' }, h('div', { class: 'trk' }), fill, rl, rh), h('div', { class: 'lb-amts' },
-      h('div', { class: 'lb-field' }, h('label', null, 'Minimum'), inMin), h('div', { class: 'lb-field' }, h('label', null, 'Default'), inDef), h('div', { class: 'lb-field' }, h('label', null, 'Maximum'), inMax))),
+      h('div', { class: 'lb-field' }, h('label', null, 'Minimum'), inMin.el), h('div', { class: 'lb-field' }, h('label', null, 'Default'), inDef.el), h('div', { class: 'lb-field' }, h('label', null, 'Maximum'), inMax.el)), crossMsg),
     h('div', { class: 'lb-two' }, g('Seats', seats), g('Action clock', seg([[15, '15s'], [30, '30s'], [45, '45s'], [60, '60s'], [0, 'Off']], f.timer, set('timer'), 'lb-timer'))),
     h('div', { class: 'lb-two' }, g('Blinds rise over time', seg([[true, 'On'], [false, 'Off']], f.bi, set('bi'), 'lb-bi')), g('Rebuys', onOff('rebuys', 'lb-rebuys'))),
     f.bi ? h('div', { class: 'lb-two' }, g('Every', seg([[10, '10 min'], [15, '15 min'], [20, '20 min'], [30, '30 min']], f.biEvery, set('biEvery'), 'lb-bievery')), g('Pace', seg([['standard', 'Standard'], ['turbo', 'Turbo']], f.biSched, set('biSched'), 'lb-bisched'))) : null,
@@ -517,6 +501,8 @@ function formBody(f, redraw, sum) {
 }
 function submitCreate(f, err, btn) {
   const b = blindsOf(f), nm = f.name.trim();
+  const bad = (S.formFields || []).find((a) => a.value() === null);
+  if (bad) { bad.submit(); try { bad.el.scrollIntoView({ block: 'center' }); } catch (e) {} return (err.textContent = 'Fix the highlighted amount first.'); }
   if (nm.length < 2 || nm.length > 24) return (err.textContent = 'Table name is 2 to 24 characters.');
   if (!(b.sb >= 1 && b.bb > b.sb && b.bb >= 2)) return (err.textContent = 'Small blind must be less than big blind.');
   if (!(f.min <= f.def && f.def <= f.max)) return (err.textContent = 'Buy-in needs min <= default <= max.');
@@ -539,15 +525,17 @@ function drawShare() {
   const link = location.origin + '/?t=' + id, unit = t.unit || unitOf(t.mode);
   const me = info && (info.seated || []).find((p) => p.key === myKey()), n = info ? (info.seated || []).length : 0;
   const isHost = tHost(t) === myKey() || isAdmin();
-  const err = h('div', { class: 'lb-err', id: 'lb-sharemsg' });
+  const err = h('div', { class: 'lb-err', id: 'lb-sharemsg' }, S.shareErr || '');
+  // the error stays across the 3 s preview redraws until the next action (S2-2)
+  const setErr = (m) => { S.shareErr = m || ''; err.textContent = S.shareErr; };
   let right;
   if (me) {
     right = h('section', { class: 'lb-card lb-stack' }, h('h2', null, 'You are seated'), h('div', { class: 'lb-muted' }, 'Stack ' + fm(me.stack, unit) + '. The hand deals automatically when a second player sits.'),
       isHost && n >= 2 ? h('button', { class: 'lb-btn blue full', id: 'lb-start', onclick: () => emit('table_start', { tableId: id }) }, 'Start when ready') : null,
-      h('button', { class: 'lb-btn full', id: 'lb-enter', onclick: () => { S.onError = (m) => { err.textContent = m; }; emit('table_join', { tableId: id, buyIn: me.stack || t.buyIn.default }); } }, 'Go to the table'), err);
+      h('button', { class: 'lb-btn full', id: 'lb-enter', onclick: () => { setErr(''); S.onError = (m) => { setErr(m); }; emit('table_join', { tableId: id, buyIn: me.stack || t.buyIn.default }); } }, 'Go to the table'), err);
   } else {
     const pick = S.sharePick && S.sharePick.id === id ? S.sharePick.p : (S.sharePick = { id, p: buyInPicker(t, S.net[id]) }).p;
-    const sit = h('button', { class: 'lb-btn full', id: 'lb-sit', onclick: () => { const v = pick.get(); if (v == null) return; sit.disabled = true; S.onError = (m) => { sit.disabled = false; err.textContent = m; }; emit('table_join', { tableId: id, buyIn: v, fund: pick.getFund() }); } }, 'Sit down');
+    const sit = h('button', { class: 'lb-btn full', id: 'lb-sit', onclick: () => { setErr(''); const v = pick.get(); if (v == null) { setErr(pick.short() ? 'Your balance is below the minimum buy-in.' : 'Fix the buy-in amount first.'); return; } sit.disabled = true; S.onError = (m) => { sit.disabled = false; setErr(m); }; emit('table_join', { tableId: id, buyIn: v, fund: pick.getFund() }); } }, 'Sit down');
     right = h('section', { class: 'lb-card lb-stack' }, h('h2', null, 'Take your seat'), pick.el, h('div', { class: 'lb-copy' }, modeNote(t.mode)), err, sit);
   }
   S.shareBox.replaceChildren(
@@ -732,27 +720,42 @@ function toggleDrawer() {
   document.addEventListener('pointerdown', drawerOutside, true);
   document.addEventListener('keydown', drawerEsc, true);
 }
+// Host drawer blinds editor. The two boxes are AmountInputs; the drawer re-renders on every table_info, so this keeps one
+// live editor per table and calls update(t): server blinds flow into the boxes unless the host has touched them (S2-8).
+// "Blinds set" appears only once the server's blinds equal what was sent.
 function blindsEditor(t, id, unit) {
-  const val = (v) => amtText(v, unit);
-  const cur = t.blinds || { sb: t.sb, bb: t.bb };
-  const sbIn = h('input', { class: 'text-input', id: 'host-sb', type: 'text', inputmode: 'decimal', autocomplete: 'off', value: val(cur.sb), 'aria-label': 'Small blind' });
-  const bbIn = h('input', { class: 'text-input', id: 'host-bb', type: 'text', inputmode: 'decimal', autocomplete: 'off', value: val(cur.bb), 'aria-label': 'Big blind' });
+  const MAX_UNITS = 100000000;
+  const cur = () => (S.cur && tId(S.cur) === id && S.cur.blinds) || t.blinds || { sb: t.sb, bb: t.bb };
+  const c0 = cur();
+  const mkf = (v, lo, label, eid) => { const f = AmountInput({ units: v, min: lo, max: MAX_UNITS, unit, scale: 'ladder', compact: true, label, rangeLabel: label }); f.input.id = eid; return f; };
+  const sbF = mkf(c0.sb, 1, 'Small blind', 'host-sb'), bbF = mkf(c0.bb, 2, 'Big blind', 'host-bb');
   const note = h('div', { class: 'lb-muted', id: 'host-blinds-msg' });
+  let touched = false, pending = null;
+  const markTouched = () => { touched = true; if (!pending) note.textContent = ''; };
+  sbF.input.addEventListener('input', markTouched); bbF.input.addEventListener('input', markTouched);
   const save = () => {
-    const sb = parseAmt(sbIn.value, unit), bb = parseAmt(bbIn.value, unit);
-    if (sb == null || bb == null || sb < 1) { note.textContent = 'Enter both blinds.'; return; }
+    const sb = sbF.value(), bb = bbF.value();
+    if (sb === null || bb === null) { if (sb === null) sbF.submit(); if (bb === null) bbF.submit(); note.textContent = 'Fix the highlighted blind first.'; return; }
     if (sb >= bb) { note.textContent = 'Small blind must be less than the big blind.'; return; }
-    S.onError = (m) => { note.textContent = m; };
+    pending = { sb, bb }; note.textContent = 'Sending...';
+    S.onError = (m) => { pending = null; note.textContent = m; };
     emit('table_update', { tableId: id, patch: { blinds: { sb, bb } } });
-    note.textContent = 'Blinds set to ' + fm(sb, unit) + ' / ' + fm(bb, unit) + '. A hand in progress keeps the old blinds; the new ones start next hand.';
   };
-  bbIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); save(); } });
-  sbIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); save(); } });
-  return h('div', { class: 'lb-stack', style: 'gap:var(--p8)' },
+  [sbF, bbF].forEach((f) => f.input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); save(); } }));
+  const update = (nt) => {
+    const c = (nt && (nt.blinds || (nt.sb && { sb: nt.sb, bb: nt.bb }))) || cur();
+    if (pending && c.sb === pending.sb && c.bb === pending.bb) {
+      note.textContent = 'Blinds set to ' + fm(c.sb, unit) + ' / ' + fm(c.bb, unit) + '. A hand in progress keeps the old blinds; the new ones start next hand.';
+      pending = null; touched = false;
+    }
+    if (!touched && !sbF.isDirty() && !bbF.isDirty()) { sbF.set(c.sb, { source: 'server' }); bbF.set(c.bb, { source: 'server' }); }
+  };
+  const el = h('div', { class: 'lb-stack', style: 'gap:var(--p8)' },
     h('div', { class: 'lb-label' }, 'Blinds'),
-    h('div', { style: 'display:grid;grid-template-columns:1fr auto 1fr;gap:var(--p8);align-items:center' }, sbIn, h('span', null, '/'), bbIn),
+    h('div', { style: 'display:grid;grid-template-columns:1fr auto 1fr;gap:var(--p8);align-items:start' }, sbF.el, h('span', null, '/'), bbF.el),
     h('button', { class: 'lb-btn sm full', id: 'host-blinds-save', type: 'button', onclick: save }, 'Set blinds'),
     note);
+  return { el, update };
 }
 document.addEventListener('click', (e) => {
   if (!hostBtn || !e.target.closest || !e.target.closest('.blinds-plate')) return;
@@ -768,8 +771,8 @@ function drawDrawer(confirmEnd) {
       h('button', { class: 'host-x', id: 'host-close', type: 'button', 'aria-label': 'Close host controls', onclick: closeDrawer }, '\u00d7')),
     h('div', { class: 'lb-btns' },
       h('button', { class: 'lb-btn sm', id: 'host-start', onclick: () => emit('table_start', { tableId: id }) }, 'Start'),
-      h('button', { class: 'lb-btn sm blue', id: 'host-pause', onclick: () => emit('table_pause', { tableId: id, paused: !paused }) }, paused ? 'Resume' : 'Pause')),
-    (blindsFor === id && blindsEl) ? blindsEl : (blindsFor = id, blindsEl = blindsEditor(t, id, unit)),
+      h('button', { class: 'lb-btn sm blue', id: 'host-pause', onclick: () => emit('table_pause', { tableId: id, paused: !paused }) }, paused ? 'Resume table' : 'Pause table')),
+    (blindsFor === id && blindsEl) ? (blindsEl.update(t), blindsEl.el) : (blindsFor = id, blindsEl = blindsEditor(t, id, unit), blindsEl.el),
     h('div', { class: 'lb-label' }, 'Players'),
     ...((info && info.seated) || []).map((p) => h('div', { class: 'lb-seat' }, h('img', { src: avSrc(p), alt: '' }), h('div', null, h('b', null, p.display || p.key), h('span', null, fm(p.stack, unit))),
       p.key !== myKey() ? h('button', { class: 'lb-ghost', onclick: () => emit('table_kick', { tableId: id, key: p.key }) }, 'Kick') : null)),
@@ -783,7 +786,7 @@ function onAuthOk({ account, token }) {
   S.resumeBusy = false; S.user = account; clearInterval(lockT);
   if (token) saveSession(account.key, token);
   const pref = account.prefs && account.prefs.currency;
-  if (window.Money && window.Money.setMode && pref) window.Money.setMode(pref);
+  if (pref === 'usd' || pref === 'chips' || pref === 'auto') window.Money.setPref(pref, true);
   emit('profile_get', {});
   if (S.view === 'signin' || !S.booted) {
     S.booted = true;
@@ -819,7 +822,7 @@ function bind() {
   s.on('self_changed', (v) => { if (!S.user || !v || v.key !== S.user.key) return; Object.assign(S.user, { display: v.display, avatar: v.avatar, pic: v.pic || null }); refreshProfile(); });
   s.on('account_changed', () => { if (!S.user) return; if (S.view === 'lobby') { emit('get_leaderboard', {}); emit('social:feed'); emit('social:biggest'); emit('lobby_list', {}); } if (S.view === 'share' && S.arg) emit('table_preview', { code: S.arg }); });
   s.on('wallet', (w) => { S.wallet = w; renderTop(); });
-  s.on('money', (m) => { if (!m) return; if (S.user) S.user.bankChips = m.bank; if (m.wallet) S.wallet = m.wallet; renderTop(); });
+  s.on('money', (m) => { if (!m) return; if (S.user && Number.isFinite(m.bank)) S.user.bankChips = m.bank; if (m.wallet) S.wallet = m.wallet; renderTop(); });
   s.on('social:feed', onFeed);
   s.on('social:biggest', onBest);
   s.on('achv:state', (v) => { S.achv = v; drawAch(); renderAchHint(); });
@@ -827,7 +830,7 @@ function bind() {
   s.on('lobby_tables', ({ tables }) => { S.tables = tables || []; if (S.view === 'lobby') drawLists(); });
   s.on('tables_mine', ({ tables, nightNet }) => { S.mine = tables || []; S.net = nightNet || {}; if (S.view === 'lobby') drawLists(); });
   s.on('leaderboard_data', ({ entries, me }) => { S.board = entries || []; S.boardMe = me || null; if (S.view === 'lobby') drawLists(); });
-  s.on('table_created', ({ table }) => { S.cur = table; S.sharePick = null; S.onError = null; S.info[tId(table)] = S.info[tId(table)] || { table, seated: [], openSeats: table.seats }; show('share', tId(table)); });
+  s.on('table_created', ({ table }) => { S.cur = table; S.sharePick = null; S.shareErr = ''; S.onError = null; S.info[tId(table)] = S.info[tId(table)] || { table, seated: [], openSeats: table.seats }; show('share', tId(table)); });
   s.on('table_info', onInfo);
   s.on('table_joined', (p) => {
     S.cur = p.table; S.onError = null; S.rebinding = null; S.sharePick = null; closeModal();
@@ -856,7 +859,12 @@ function bind() {
     S.cur = null; hostUi(false); root && root.classList.add('on'); show('settle', d);
   });
   s.on('ok', ({ what } = {}) => { if (what === 'pin') { toast('PIN changed'); closeModal(); } });
-  s.on('error', ({ message, code } = {}) => {
+  s.on('error', (e0 = {}) => {
+    const { code } = e0, message = window.PingUI ? PingUI.errorText(e0, Money.modeFor(Money.pref, (S.cur && S.cur.unit) || 'chips')) : e0.message;
+    if (code === 'taken_over') { // this seat was taken over by another tab or device: leave the table here
+      if (window.PingGame && PingGame.isIn && PingGame.isIn()) PingGame.leave();
+      Lobby.onGameLeft(); toast(message || 'This seat is now open on another device'); return;
+    }
     if (S.rebinding) { S.rebinding = null; LS.del('ping.table'); toast('Could not return to your table'); return; }
     if (S.pendingJoin && !S.onError) { S.pendingJoin = null; toast(message || 'No table with that code'); return; }
     if (S.onError) { const f = S.onError; if (S.pendingJoin) S.pendingJoin = null; f(message || 'Something went wrong'); } else if (S.user && message) toast(message);

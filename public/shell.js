@@ -22,7 +22,7 @@
   const gs = (id) => (L.games[id] || (L.games[id] = { open: false, mode: 'dock', side: 'right', w: 0.4, rect: null, restore: 'dock' }));
 
   const dollars = (c) => { const n = Math.round(c), a = Math.abs(n), whole = Math.floor(a / 100).toLocaleString('en-US'); return (n < 0 ? '-' : '') + '$' + whole + (a % 100 ? '.' + String(a % 100).padStart(2, '0') : ''); };
-  const chipAmt = (n) => { const M = window.Money, p = M && M.getPref ? M.getPref() : 'auto'; return M ? M.fmt(n, { mode: p === 'auto' ? 'chips' : p }) : Number(n).toLocaleString('en-US'); };
+  const chipAmt = (n) => { const M = window.Money; return M ? M.format(n, M.modeFor(M.pref, 'chips')) : Number(n).toLocaleString('en-US'); };
   const dollars2 = (c) => { const n = Math.round(c), a = Math.abs(n); return (n < 0 ? '-' : '') + '$' + Math.floor(a / 100).toLocaleString('en-US') + '.' + String(a % 100).padStart(2, '0'); };
 
   const IC = {
@@ -276,7 +276,7 @@
 
   // ---------- top bar / dock refresh ----------
   const user = () => { try { return window.Lobby && window.Lobby.user ? window.Lobby.user() : null; } catch (e) { return null; } };
-  if (window.Money && window.Money.onChange) window.Money.onChange(() => { try { refreshTop(); } catch (e) {} });
+  if (window.Money && window.Money.onPrefChange) window.Money.onPrefChange(() => { try { refreshTop(); } catch (e) {} });
   function refreshTop() {
     const p = $('sh-play'); if (!p) return;
     const c = $('sh-chips'); if (c) c.innerHTML = '<small>Chips</small>' + (chipsTotal == null ? '--' : chipAmt(chipsTotal));

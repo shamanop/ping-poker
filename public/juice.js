@@ -45,7 +45,7 @@
   function rnd(a, b) { return a + Math.random() * (b - a); }
   function T(x, y, s, r) { return 'translate(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px) translate(-50%,-50%) rotate(' + (r || 0).toFixed(1) + 'deg) scale(' + (s == null ? 1 : s).toFixed(3) + ')'; }
   function money(v, signed) {
-    if (window.Money && typeof Money.fmt === 'function') return Money.fmt(v, signed ? { signed: true } : undefined);
+    if (typeof window.PingFmt === 'function') return window.PingFmt(v, signed ? { signed: true } : undefined);
     return (signed && v > 0 ? '+' : '') + Math.round(v).toLocaleString();
   }
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
