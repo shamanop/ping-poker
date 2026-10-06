@@ -81,7 +81,10 @@ module.exports = {
       const roundId = crypto.randomBytes(6).toString('hex');
       const r = Eng.resolveRound(rng, buy);                // pure; nothing touched yet
       const cost = Math.round(r.costMult * p.bet);
-      const totalWin = Math.round(r.totalWinMult * p.bet);
+      // unbiased rounding to whole cents: plain Math.round cost ~1.5 RTP points at a 1c bet (sub-cent wins vanished).
+      // Floor + random extra cent with probability = the fraction keeps the long-run return exact at every bet size.
+      const exact = r.totalWinMult * p.bet, floor = Math.floor(exact + 1e-9);
+      const totalWin = floor + (exact - floor > 1e-9 && rng() < exact - floor ? 1 : 0);
       const ref = { game: 'bender', round: roundId };
       let w;
       try { ctx.wallet.spend(key, p.mode, cost, ref); } catch (e) { return walletErr(socket, e); }

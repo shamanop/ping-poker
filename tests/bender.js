@@ -242,7 +242,7 @@ function setup(opts = {}) {
   await test('bender: state + history (last 20) + wallet_get + topup over the socket', async () => {
     const s = setup({ rng: E.rngFrom(13) }); const a = s.sock('ann');
     a.send('g:bender:state'); const st = last(a, 'g:bender:state');
-    assert.deepStrictEqual(st.betLevels, [10, 20, 50, 100, 200, 500, 1000, 2500]);
+    assert.deepStrictEqual(st.betLevels, [1, 2, 10, 20, 50, 100, 200, 500, 1000, 2500]);
     for (let i = 0; i < 25; i++) { s.clock.advance(200); a.send('g:bender:spin', { bet: 10, mode: 'play' }); }
     a.send('g:bender:history'); const h = last(a, 'g:bender:history');
     assert.strictEqual(h.rounds.length, 20);
