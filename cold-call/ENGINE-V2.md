@@ -2,7 +2,7 @@
 
 Branch `coldcall-v2`. Files: `games/coldcall-engine.js` (math, pure), `games/coldcall.js` (server module), `games/coldcall-sim.js` (worker-thread sim),
 `tests/coldcall.js`, `public/games/coldcall/engine.js` (byte-identical copy of the engine, for the browser; the front end must NOT use it for any math).
-**This file is the contract the front-end builder codes against.** Section 2 and 3 are exact; section 7 onward are the measured numbers and the decisions.
+**This file is the contract the front-end builder codes against.** Sections 2 and 3 are the exact contract; 5 and 6 are the final config and measured numbers; 7 and 8 are my rule decisions and what is unverified.
 
 ## 1. Rules as built
 
@@ -224,7 +224,7 @@ Caps in buys: bonus2 buy hits the cap on 0.0094% of buys (469 in 5M, by design: 
 1. **Close semantics.** A close collects bubbles + other already-collected closes, times its stored upsell multiplier. In a repeat round only the NEW closes collect; old closes keep their value (an upsell revealed next to an old close
    multiplies its value). Bubbles replaced by a re-reveal are gone (paid only through the close that took them). A re-reveal replaces upsells too.
 2. **Upsell stacking** multiplies. Adjacency is **4** (the brief's lever allowed it): with 8 neighbours, on an early config, base phone feature was 34.6% RTP vs 24.2% and bonus 2 averaged 381x vs 223x
-   with a cap hit on 1 run in 171 vs 1 in 1,087; the tail could not be brought under 1 in 2M with 8. The lever is still `CFG.adjacency`.
+   with a cap hit on 1 run in 171 vs 1 in 1,087. I did not re-tune a full config around 8. The lever is still `CFG.adjacency`.
 3. **Every individual value is clamped at the 10,000x cap** while computing (so a chain of closes cannot overflow); the round win is then clamped again.
 4. **Bells** are counted on the final grid of the spin and pay nothing by themselves. 5, 6, ... bells all start bonus 3. In a bonus 2 or 3, 4+ bells give +4 spins (same as 3). Upgrade applies from the next spin.
 5. **Phone feature trigger** = a phone on the final grid AND at least one hot lead (a phone alone does nothing). In bonus 1 a phone activates carried leads even on a spin with no win.
