@@ -183,6 +183,8 @@ class Table {
     this.clearDeadline('grace:' + seat.seat);
     if (seat.key === this.hostKey) this.clearDeadline('host');
     this.afterSeatChange(seat, 'joined', { stack: seat.stack, reconnect: true });
+    // A seat that is out of chips comes back to the rebuy panel: the bust_out the player missed is sent again (same event, same shape).
+    if (seat.stack === 0 && !this.liveSeat(seat)) this.out.event(this, 'bust', { key: seat.key, seat: seat.seat }, seat.key);
     return seat;
   }
 

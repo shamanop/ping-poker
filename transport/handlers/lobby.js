@@ -23,7 +23,7 @@ function register(ctx, socket, on) {
   });
   on('table_preview', ({ code } = {}) => {
     const key = auth.requireAuth(socket); if (!key) return;
-    socket.emit('table_info', views.tableInfo(tableOf(code)));
+    socket.emit('table_info', views.tableInfo(tableOf(code), key));
   });
   on('table_clone', ({ tableId } = {}) => {
     const key = auth.requireAuth(socket); if (!key) return;

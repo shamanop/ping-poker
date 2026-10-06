@@ -367,6 +367,12 @@ function openJoin(code) {
   if (!getSock()) return;
   S.pendingJoin = code; emit('table_preview', { code });
 }
+// The caller's seat in a table_info: in `seated` when connected, else from the additive `you` key (a disconnected seat is not listed there).
+function seatOfMine(info) {
+  const me = (info.seated || []).find((p) => p.key === myKey());
+  if (me) return me;
+  return info.you && info.you.seated ? { key: myKey(), stack: info.you.stack, display: (S.user && S.user.display) || myKey() } : null;
+}
 function onInfo(info) {
   const t = info.table; if (!t) return;
   S.info[tId(t)] = info;
@@ -374,8 +380,10 @@ function onInfo(info) {
   if (S.view === 'share' && S.arg === tId(t)) { drawShare(); return; }
   if (S.pendingJoin && S.pendingJoin === tId(t)) {
     S.pendingJoin = null; S.onError = null;
-    const me = (info.seated || []).find((p) => p.key === myKey());
-    if (S.resume === tId(t) || S.rebind === tId(t)) { S.resume = S.rebind = null; if (me) { emit('table_join', { tableId: tId(t), buyIn: me.stack || t.buyIn.default }); return; } }
+    const me = seatOfMine(info);
+    // A seat you already hold is never offered a buy-in form: go straight back to it (the server rebinds, the typed amount would be ignored).
+    if (me && t.state !== 'ended') { S.resume = S.rebind = null; S.onError = (m) => { S.onError = null; if (S.view === 'lobby') { modalJoin(info, me); const e = $('lb-joinmsg'); if (e) e.textContent = m; } }; emit('table_join', { tableId: tId(t), buyIn: me.stack || t.buyIn.default }); return; }
+    S.resume = S.rebind = null;
     if (t.state === 'ended') { emit('night_get', { nightId: t.nightId }); return; }
     if (tHost(t) === myKey() && !me && S.view !== 'share' && S.view !== 'signin') { show('share', tId(t)); return; }
     modalJoin(info, me);
@@ -401,7 +409,9 @@ function modalJoin(info, me) {
 function seatCells(info) {
   const t = info.table, unit = t.unit || unitOf(t.mode);
   const cells = (info.seated || []).map((p) => h('div', { class: 'lb-seat' }, h('img', { src: avSrc(p), alt: '' }), h('div', null, h('b', null, p.display || p.key), h('span', null, fm(p.stack, unit)))));
-  const open = Math.max(0, (info.openSeats ?? t.seats - cells.length));
+  const away = (info.away || []).map((p) => h('div', { class: 'lb-seat away' }, h('div', null, h('b', null, (p.key === myKey() ? 'You' : p.display || p.key) + ' (away)'), h('span', null, fm(p.stack, unit)))));
+  cells.push(...away);
+  const open = Math.max(0, (info.openSeats ?? t.seats - (info.seated || []).length));
   for (let i = 0; i < open; i++) cells.push(h('div', { class: 'lb-seat open' }, 'Open seat'));
   return cells;
 }
@@ -523,7 +533,7 @@ function drawShare() {
   const id = S.arg, info = S.info[id], t = info ? info.table : (S.cur && tId(S.cur) === id ? S.cur : null);
   if (!S.shareBox || !t) return;
   const link = location.origin + '/?t=' + id, unit = t.unit || unitOf(t.mode);
-  const me = info && (info.seated || []).find((p) => p.key === myKey()), n = info ? (info.seated || []).length : 0;
+  const me = info && seatOfMine(info), n = info ? (info.seated || []).length : 0;
   const isHost = tHost(t) === myKey() || isAdmin();
   const err = h('div', { class: 'lb-err', id: 'lb-sharemsg' }, S.shareErr || '');
   // the error stays across the 3 s preview redraws until the next action (S2-2)

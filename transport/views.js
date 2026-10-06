@@ -32,7 +32,13 @@ function createViews({ registry, accounts, presLedger, ledger, service, wallet }
   function seatedList(t) {
     return t.players().filter(s => s.connected).map(s => { const a = acctOf(s.key); return { key: s.key, display: nameOf(s.key), avatar: a ? a.avatar : null, pic: picOf(s.key), stack: s.stack }; });
   }
-  function tableInfo(t) { return { table: publicTable(t), seated: seatedList(t), openSeats: Math.max(0, t.maxSeats - t.players().filter(s => s.connected).length) }; }
+  // `you` and `away` are additive (Q03): the caller's own seat is reported even while it is disconnected, so the lobby can resume it instead of offering a buy-in.
+  function awayList(t) { return t.players().filter(s => !s.connected).map(s => ({ key: s.key, display: nameOf(s.key), stack: s.stack })); }
+  function tableInfo(t, forKey) {
+    const mine = forKey ? t.seatOfKey(forKey) : null;
+    return { table: publicTable(t), seated: seatedList(t), openSeats: Math.max(0, t.maxSeats - t.players().filter(s => s.connected).length),
+      away: awayList(t), you: { seated: !!mine, connected: !!(mine && mine.connected), stack: mine ? mine.stack : 0 } };
+  }
 
   // ---- game_state ----------------------------------------------------------------------------------------------
   const statusOf = t => (t.phase === 'betting' || t.phase === 'runout' ? 'playing' : t.phase === 'between' ? 'waiting_next' : t.phase === 'ended' ? 'ended' : 'waiting');
@@ -50,8 +56,10 @@ function createViews({ registry, accounts, presLedger, ledger, service, wallet }
     return { toCall: la.toCall, callAmount: la.callAmount, canFold: true, canCheck: !!la.canCheck, canCall: !!la.canCall, canRaise: !!la.canRaise,
       minRaiseTo: la.canRaise ? la.minRaiseTo : null, maxRaiseTo: la.canRaise ? la.maxRaiseTo : null };
   }
+  // A table that went back to 'waiting' (hand over, not enough players) keeps its last hand in memory; nobody may see it as a live hand (Q03).
+  const shownHand = t => (t.phase === 'waiting' ? null : t.hand);
   function seatRow(t, s, i, curIdx, dealerIdx) {
-    const a = acctOf(s.key), h = t.hand;
+    const a = acctOf(s.key), h = shownHand(t);
     const hs = h && s.dealt ? h.seats[s.seat] : null, live = t.liveSeat(s);
     const chips = live && hs ? hs.stack : s.stack;
     const inHand = !!hs;
@@ -66,7 +74,7 @@ function createViews({ registry, accounts, presLedger, ledger, service, wallet }
     };
   }
   function gameState(t, forKey) {
-    const players = t.players(), h = t.hand;
+    const players = t.players(), h = shownHand(t);
     const betting = t.phase === 'betting' && h && h.toAct != null;
     const curIdx = betting ? players.findIndex(s => s.seat === h.toAct) : null;
     const dealerIdx = t.button == null ? 0 : Math.max(0, players.findIndex(s => s.seat === t.button));
@@ -90,7 +98,7 @@ function createViews({ registry, accounts, presLedger, ledger, service, wallet }
     };
   }
   function yourCards(t, seat) {
-    const h = t.hand, hs = h && seat.dealt ? h.seats[seat.seat] : null;
+    const h = shownHand(t), hs = h && seat.dealt ? h.seats[seat.seat] : null;
     return { cards: hs && hs.hole ? hs.hole.slice() : [], myIdx: t.players().findIndex(s => s.seat === seat.seat),
       preselect: seat.pre && t.preValid(seat) ? { mode: seat.pre.kind || seat.pre.mode, amount: seat.pre.amount } : null };
   }
