@@ -99,11 +99,22 @@ function createService(ledger, opts = {}) {
 
   // Cashes out `amount` (the stack) only. Whatever the seat has committed to the live hand stays in the seat
   // account until the hand batch moves it (N1). Amount 0 is a no-op (a busted seat leaving), not an error.
+  // The seat's fund comes from the ledger (seatFund), not from the caller: a different fund throws fund_mismatch,
+  // a missing one means the seat's own. A retry of a ref already written skips the check and answers dup/ref_conflict.
   function cashOut(key, tableId, amount, tableCur, fund, ref) {
     needStr(key, 'bad_key', 'key'); needStr(tableId, 'bad_table', 'tableId'); needCur(tableCur); needRef(ref);
-    fund = needFund(fund, tableCur);
     if (amount === 0) return { id: null, dup: false, noop: true };
-    return moveOut(seatName(tableId, key), key, amount, tableCur, fund, ref, 'cashout');
+    if (fund != null && fund !== '') fund = needFund(fund, tableCur);
+    if (ledger.has(ref)) {
+      if (fund == null || fund === '') { // infer the original fund from the entry the ref wrote (cashout:<fund>)
+        for (const e of ledger.entries(x => x.ref === ref && x.reason.startsWith('cashout:'))) { fund = e.reason.slice(8); break; }
+      }
+    } else {
+      const have = seatFund(tableId, key, tableCur);
+      if (fund == null || fund === '') fund = have;
+      else if (fund !== have) throw new MoneyError('fund_mismatch', { have, want: fund });
+    }
+    return moveOut(seatName(tableId, key), key, amount, tableCur, fund || tableCur, ref, 'cashout');
   }
 
   // One batch hand:<tableId>:<handNo>: each contributor seat -> pot, then pot -> seat for payouts and uncalled returns.
