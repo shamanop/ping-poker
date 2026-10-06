@@ -468,3 +468,35 @@ All recommendations in section 12 are accepted as written; the contract stands. 
 3. Q3-Q14: as recommended. Q8 (`/api/bank-summary?password=ping`) stays unchanged in wave 2 and is flagged to Isabelle for deletion in wave 3. Q10: harness author (P0) has no check depending on `minted` excluding `mint:topup`; if one turns up, the harness is wrong, not the server.
 4. Q15: noted, no action in wave 2.
 5. **Q5 REVISED (Frank, 03:45): a slot round is ONE ledger batch in wave 2, not two lines.** The money builder adds `houseRound(game, key, cost, win, cur, ref) -> { id, dup }` to `money/service.js` (one batch; insufficient funds for `cost` throws before anything is written; win 0 = spend only; cost 0 = credit only; idempotent by ref). The games adapter (P3) settles every Bender and Cold Call round with one `houseRound`, ref `<game>:<accountKey>:<roundId>`, roundId unique per round and stable across a retry. Reason: with spend then credit, a crash between the two takes the bet and loses the win. This overrides "leave it for wave 2" in item 3 above for Q5 only.
+
+## One money rule for the whole site (P6, 2026-10-06)
+
+Chris: "make sure it works, specifically the money systemwide. we need standardized scalable architecture for this whole thing". This section extends "money/" to the games. The contract a game module follows is `ADD-A-GAME.md`; the audit behind it is `P6-MONEY-AUDIT.md`; the proof is `tests/soak/`.
+
+**The rule.** Every cent or chip that exists is a balance of a ledger account. Every movement is one ledger write with a ref that names the event. No module holds money in memory or in its own file. The ledger is written first; state and client messages come after. A crash leaves every stake with its owner, in an account that boot returns, or settled; nothing is paid twice.
+
+**Poker already is this rule.** The seat account is poker's escrow; the same four moves exist everywhere:
+
+| Move | Poker | A game round | Ledger write |
+|---|---|---|---|
+| put a stake at risk | buy-in: `bank`/`play` -> `seat` | `open`: player -> `escrow:<game>:<key>:<roundId>` | one transfer (one batch through `fx:*` for a cross-currency seat) |
+| decide the outcome | the hand: seats -> `pot` -> seats | `settle`: escrow -> `house:<game>`, house -> pool, pool -> player, house -> player | ONE batch |
+| give the stake back | boot / void: `seat` -> fund | `void`: escrow -> player | one transfer |
+| all at once | - | `round` (instant): player -> house, pool legs, house -> player | ONE batch |
+
+**New accounts** (holders, never negative): `escrow:<game>:<key>:<roundId>` and `pool:<game>:<name>`. `house:<game>` stays the game's result and is the only place a game's wins come from. A pool is fed only by a leg of a round's batch, out of the stake.
+
+**Refs.** `hand:<tableId>:<handNo>`, `<game>:<key>:<roundId>` (instant), `<game>:<key>:<roundId>:open`, `<game>:<key>:<roundId>:close` (settle and void share it: one of them, once), `bonus:<key>:<day>`, `achv:<key>:<id>`, `signup:*`, `mig:*`, `boot:<bootId>:<account>`. A ref names the event, never the attempt.
+
+**One recovery rule.** `bootRecover`: stray pots refunded, every non-zero seat back to its fund, then every non-zero escrow that its game does not claim as a live round back to its player (`<game>:<key>:<roundId>:close`, reason `void:boot`).
+
+**What changes in code (P6 wave 2, not in wave 1).**
+- `money/ledger.js`: `escrow` (4 parts) and `pool` (3 parts) in `PLAYER_KINDS`.
+- `money/service.js`: `openRound`, `settleRound`, `voidRound`, pool legs on `houseRound`, escrow sweep in `bootRecover`, `mirror()` folds a player's open escrows into their `wallet.json` / `bank.json` row (a rollback must not lose an open stake).
+- `transport/game-money.js` (new): `ctx.money`, bound per game; `transport/wallet-adapter.js` keeps `spend`/`credit` for Bender as a wrapper over the instant round and loses the parked-cost path for everything else.
+- `games/index.js`: `recover` and `audit` per module.
+- Fixes from the audit that ride along: the bonus and achievement gates read the ledger (A2, A3), a failed spin write emits an error instead of a result (A5), admin adjust takes an op id from the client (A4).
+
+**Scale (measured, audit Part C).** The ledger holds every line in memory and replays the file at boot: 276 bytes and about 1 KB of RAM per slot round, 5.3 s and 957 MB at 500,000 lines. With a slot that is weeks, not years. Before the slot is live the ledger gets checkpoints: rotate at N lines, the new segment starts with one checkpoint line (all balances, refs as short hashes), `seatFund` / `lastHandNo` / `buyInCount` / top-up become maintained indexes. Account names, batch kinds and refs do not change.
+
+**The proof.** `tests/soak/`: one server, several tables in both currencies, bank moves, Bender (and each later game), kills and restarts at random points; after every step, from the ledger file alone: all accounts sum to zero per currency and each source equals what the harness saw happen; no holder is negative; no pot, seat or escrow is stranded; the mirrors match; what the client was told matches; the harness' own book matches. `tests/soak/prove.js` seeds bugs and requires every one to be caught.
