@@ -1,3 +1,4 @@
+const { authJoin } = require('./authjoin');
 // Same-name rejoin checks. Spawns a throwaway server on PORT 4777 with temp bank/ledger.
 const { spawn } = require('child_process');
 const fs = require('fs'), os = require('os'), path = require('path');
@@ -14,7 +15,7 @@ function client(name) {
   c.s.on('error', e => c.errors.push(e.message));
   c.s.on('room_joined', d => { c.joined = d; });
   c.s.on('your_cards', d => { c.cards = d.cards; });
-  c.join = async () => { c.joined = null; c.s.emit('join_game', { name, avatar: '🦊', password: 'ping' }); for (let i = 0; i < 40 && !c.joined && !c.errors.length; i++) await sleep(50); await sleep(150); return c.joined; };
+  c.join = async () => { c.joined = null; authJoin(c.s, { name, avatar: '🦊', password: 'ping' }); for (let i = 0; i < 40 && !c.joined && !c.errors.length; i++) await sleep(50); await sleep(150); return c.joined; };
   return c;
 }
 const seats = (c, n) => c.gs.players.filter(p => p.name === n);

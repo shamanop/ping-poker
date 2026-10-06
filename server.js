@@ -739,6 +739,7 @@ function maybeAutoStart(room, force) {
 
 function startHand(room) {
   const players = room.players;
+  if (!(room.dealerIdx >= 0 && room.dealerIdx < players.length)) room.dealerIdx = 0;
   if (room.pendingBlinds) { room.sb = room.pendingBlinds.sb; room.bb = room.pendingBlinds.bb; room.pendingBlinds = null; }
   room.deck      = makeDeck();
   room.community = [];
@@ -1029,7 +1030,7 @@ function scheduleNextHand(room, delayMs = 5000) {
     let nextDealer = null;
     for (let o = 1; o <= n0 && !nextDealer; o++) {
       const c = room.players[(room.dealerIdx + o) % n0];
-      if (c.connected && c.chips > 0 && !c.sitOutRequest) nextDealer = c;
+      if (c && c.connected && c.chips > 0 && !c.sitOutRequest) nextDealer = c;
     }
 
     // Remove disconnected players and busted bots; keep busted humans (rebuy option)
@@ -1340,9 +1341,9 @@ io.on('connection', socket => {
   if (process.env.AUTH_CLOCK_SKEW !== undefined) on('__test_skew', ({ ms } = {}) => { accounts.setSkew(ms); socket.emit('ok', { what: 'skew' }); });
 
   // ── Bank queries ──────────────────────────────────────────────────────────
-  on('check_balance', ({ name } = {}) => {
-    if (!cleanNameOf(name)) return;
-    socket.emit('balance_data', { balance: getBalance(cleanNameOf(name)) });
+  on('check_balance', () => {
+    if (!socket.data.acct) return;
+    socket.emit('balance_data', { balance: getBalance(accounts.displayOf(socket.data.acct)) });
   });
 
   on('get_bank_summary', ({ roomId, view } = {}) => {
@@ -1355,7 +1356,7 @@ io.on('connection', socket => {
     const room = rooms.get(ROOM_ID);
     const me = room && room.players.find(p => !p.isBot && p.socketId === socket.id);
     const admin = accounts.isAdmin(socket.data.acct);
-    if (!room || (!admin && (!me || bankKey(me.name) !== 'chris'))) { socket.emit('error', { message: 'Only Chris can edit the bank' }); return; }
+    if (!room || !admin) { socket.emit('error', { message: 'Only Chris can edit the bank' }); return; }
     const byName = me ? me.name : accounts.displayOf(socket.data.acct);
     const target = cleanNameOf(name);
     const total = Math.round(Number(balance));
@@ -1395,7 +1396,7 @@ io.on('connection', socket => {
   on('set_pause', ({ paused } = {}) => {
     const room = rooms.get(ROOM_ID);
     const me = room && room.players.find(p => !p.isBot && p.socketId === socket.id);
-    if (!room || (!accounts.isAdmin(socket.data.acct) && (!me || bankKey(me.name) !== 'chris'))) { socket.emit('error', { message: 'Only Chris can pause the table' }); return; }
+    if (!room || !accounts.isAdmin(socket.data.acct)) { socket.emit('error', { message: 'Only Chris can pause the table' }); return; }
     setRoomPaused(room, typeof paused === 'boolean' ? paused : !room.paused, 'Chris');
     broadcastGameState(room);
   });
@@ -1403,7 +1404,7 @@ io.on('connection', socket => {
   on('reset_table', ({ amount } = {}) => {
     const room = rooms.get(ROOM_ID);
     const me = room && room.players.find(p => !p.isBot && p.socketId === socket.id);
-    if (!room || (!accounts.isAdmin(socket.data.acct) && (!me || bankKey(me.name) !== 'chris'))) { socket.emit('error', { message: 'Only Chris can reset the table' }); return; }
+    if (!room || !accounts.isAdmin(socket.data.acct)) { socket.emit('error', { message: 'Only Chris can reset the table' }); return; }
     if (!room.paused) { socket.emit('error', { message: 'Pause the table first' }); return; }
     const stack = amount === undefined ? (room.startChips || STARTING_CHIPS) : Math.floor(Number(amount));
     if (!Number.isFinite(stack) || stack < BIG_BLIND * 10 || stack > 10000000) {
@@ -1486,7 +1487,9 @@ io.on('connection', socket => {
   socket.on('table_create', () => { try { const k = socket.data.acct; if (k && [...tables.tables.values()].some(t => t.hostKey === k && t.id !== tables.LEGACY_ID && Date.now() - t.createdAt < 3000)) social.onAction(socket, 'host'); } catch {} });
 
   // ── join_game ─────────────────────────────────────────────────────────────
-  on('join_game', ({ name, avatar, profilePic, password } = {}) => {
+  on('join_game', ({ avatar, profilePic, password } = {}) => {
+    if (!socket.data.acct) { socket.emit('error', { message: 'Sign in first' }); return; }
+    const name = accounts.displayOf(socket.data.acct);
     if (String(password || '').trim().toLowerCase() !== ROOM_PASSWORD) {
       socket.emit('error', { message: 'Incorrect password' }); return;
     }
@@ -1571,7 +1574,9 @@ io.on('connection', socket => {
   });
 
   // ── create_demo ───────────────────────────────────────────────────────────
-  on('create_demo', ({ name, avatar, profilePic } = {}) => {
+  on('create_demo', ({ avatar, profilePic } = {}) => {
+    if (!accounts.isAdmin(socket.data.acct)) { socket.emit('error', { message: 'Demo tables are admin-only' }); return; }
+    const name = accounts.displayOf(socket.data.acct);
     let roomId;
     do { roomId = generateRoomId(); } while (rooms.has(roomId));
 

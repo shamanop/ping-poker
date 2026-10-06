@@ -1,4 +1,5 @@
 'use strict';
+const { authJoin } = require('./authjoin');
 // Ping Poker multi-client stress test. REPORT-ONLY: runs a patched-free COPY of server.js
 // in a temp dir with a throwaway bank.json. Usage: node tests/mp.js [groupName ...]
 const path = require('path'), fs = require('fs'), os = require('os');
@@ -64,7 +65,7 @@ class Client {
   connect() { return new Promise((res, rej) => { this.sock.once('connect', res); this.sock.once('connect_error', rej); }); }
   async join(name = this.name) {
     const n = this.errors.length, j = this.events.filter(e => e.ev === 'room_joined').length;
-    this.sock.emit('join_game', { name, avatar: 'x', password: PASS });
+    authJoin(this.sock, { name, avatar: 'x', password: PASS });
     for (let i = 0; i < 100; i++) {
       await sleep(20);
       if (this.events.filter(e => e.ev === 'room_joined').length > j) return { ok: true };
@@ -96,7 +97,7 @@ async function makeTable(names, seed, { start = true, host = 0, extra = [] } = {
   for (const n of names) { const c = new Client(srv, n); await c.connect(); cs.push(c); }
   for (const c of cs) { c.sock.once('room_joined', () => {}); }
   for (const c of cs) {
-    c.sock.emit('join_game', { name: c.name, avatar: 'x', password: PASS });
+    authJoin(c.sock, { name: c.name, avatar: 'x', password: PASS });
     await waitFor(() => c.events.some(e => e.ev === 'room_joined'), 3000);
   }
   if (start) {
