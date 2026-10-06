@@ -1,20 +1,20 @@
 'use strict';
-const { startServer, mk, waitFor, sleep } = require('../qa/finaltest/D/lib.js');
+const { startServer, mk, waitFor, sleep } = require('./lib.js');
 (async () => {
   const srv = await startServer(3140, { chris: 10000, liam: 10000 });
   let fail = 0;
   const check = (ok, msg) => { console.log(ok ? 'PASS' : 'FAIL', msg); if (!ok) fail++; };
   try {
     const [a, b] = await mk(srv, ['Chris', 'Liam']);
-    if (!await waitFor(() => a.gs && a.gs.status === 'playing' && a.myTurn() !== undefined, 8000)) a.emit('start_game', { roomId: 'POKERPING' });
+    if (!await waitFor(() => a.gs && a.gs.status === 'playing' && a.myTurn() !== undefined, 8000)) a.emit('table_start', { tableId: 'POKERPING' });
     await waitFor(() => a.gs && a.gs.status === 'playing', 8000);
     await waitFor(() => a.myTurn() || b.myTurn(), 5000);
     const first = a.myTurn() ? a : b, second = first === a ? b : a;
-    first.act('raise', 100000);
+    first.act('raise', first.me().chips + first.me().roundBet); // v2: an over-stack raise is a structured error, so send the exact all-in amount
     await waitFor(() => first.me() && first.me().allIn, 3000);
     await waitFor(() => second.myTurn(), 3000);
     const before = second.me().chips + second.me().roundBet;
-    second.act('raise', 99999);
+    second.act('call'); // v2: raising to the all-in amount when it only equals the bet answers 'Raising is closed' (the old server clamped it to a call)
     await sleep(300);
     const afterReraise = second.gs.currentBet;
     const lg = second.gs.log.join(' | ');
@@ -26,7 +26,7 @@ const { startServer, mk, waitFor, sleep } = require('../qa/finaltest/D/lib.js');
     await waitFor(() => second.showdowns.length > 0, 15000);
     check(second.showdowns.length > 0, 'hand reached showdown');
     await sleep(500);
-    const tot = srv.bank().chris + srv.bank().liam + a.gs.players.reduce((s, p) => s + p.chips, 0);
+    const tot = srv.bank().chris + srv.bank().liam; // v2: the bank.json mirror folds open seats in (V2-DESIGN 9), so do not add table chips again
     check(tot === 20000, `chips total ${tot}`);
   } catch (e) { console.log('ERR', e); fail++; }
   srv.stop();

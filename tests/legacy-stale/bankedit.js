@@ -1,4 +1,4 @@
-const { authJoin } = require('./authjoin');
+const { authJoin } = require('../authjoin');
 // Bank edit permission + auto-start checks. Throwaway server on PORT 4778.
 const { spawn } = require('child_process');
 const fs = require('fs'), os = require('os'), path = require('path');
@@ -6,7 +6,7 @@ const { io } = require(process.env.SIO_CLIENT || '/home/isabelle/.cache/node_mod
 const tot = async n => { const r = await (await fetch(`http://localhost:${PORT}/api/bank-summary?password=ping`)).json(); const p = r.players.find(x => x.name.toLowerCase() === n.toLowerCase()); return p ? p.bank + p.atTable : null; };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ppbe-'));
-const PORT = Number(process.env.TEST_PORT || 4778), ROOT = path.join(__dirname, '..');
+const PORT = Number(process.env.TEST_PORT || 4778), ROOT = path.join(__dirname, '..', '..');
 const bankFile = path.join(dir, 'bank.json');
 const proc = spawn('node', ['server.js'], { cwd: ROOT, env: { ...process.env, PORT: String(PORT), BANK_FILE: bankFile, LEDGER_FILE: path.join(dir, 'ledger.json') } });
 let fails = 0; const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails++; };

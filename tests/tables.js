@@ -45,7 +45,7 @@ function drive(c) {
   const toCall = g.currentBet - g.players[me].roundBet;
   setTimeout(() => {
     if (c.auto === 'fold') c.s.emit('player_action', { roomId: c.tid, action: toCall > 0 ? 'fold' : 'check' });
-    else if (c.auto === 'allin') c.s.emit('player_action', { roomId: c.tid, action: 'raise', amount: 10000000 });
+    else if (c.auto === 'allin') { const all = g.players[me].chips + g.players[me].roundBet; c.s.emit('player_action', { roomId: c.tid, action: all > g.currentBet ? 'raise' : 'call', amount: all }); } // v2: a raise over the stack is a structured error and a raise that only equals the bet is closed, so send the exact all-in amount or call
     else if (c.auto === 'call') c.s.emit('player_action', { roomId: c.tid, action: toCall > 0 ? 'call' : 'check' });
   }, 20);
 }
@@ -101,7 +101,7 @@ const ledgerRows = () => JSON.parse(fs.readFileSync(F.ledger, 'utf8'));
     await sleep(150);
     const ru = B.last('room_update');
     ok(ru && ru.unit === 'cents' && ru.moneyMode === 'play' && ru.mode === 'play' && ru.players.length === 3, 'room_update carries unit/mode/moneyMode');
-    ok(JSON.parse(fs.readFileSync(F.bank, 'utf8')).alice === undefined, 'Play $ join never touches bank.json');
+    { const ab = JSON.parse(fs.readFileSync(F.bank, 'utf8')).alice; ok(ab === undefined || ab === 10000, 'Play $ join never touches the chips bank (v2: the mirror lists every account at its 10000 start)'); }
     ok(ledgerRows().filter(r => r.tableId === T).length === 0, 'Play $ join writes no ledger rows');
     await sleep(700);
     ok(A.gs && A.gs.status === 'waiting', 'autoStart false: table does not start itself');
@@ -209,11 +209,13 @@ const ledgerRows = () => JSON.parse(fs.readFileSync(F.ledger, 'utf8'));
     [e, d] = await G1.call('table_join', { tableId: T4, buyIn: 1500 }, 'table_joined', 'error');
     ok(e === 'table_joined', 'chips join with bank balance');
     // bank is read at boot; a fresh signup has no bank entry -> default 10000 is granted by getBalance
+    await sleep(400); // v2: bank.json is a debounced (250 ms) write-only mirror
     const bk = JSON.parse(fs.readFileSync(F.bank, 'utf8'));
     ok(bk.chipa === 8500 || bk.chipa === 1500 || typeof bk.chipa === 'number', 'chips join debits bank.json');
     [e, d] = await G1.call('table_leave', { tableId: T4 }, 'table_left', 'error');
     ok(e === 'table_left' && d.cashedOut === 1500, 'chips leave cashes out to bank');
-    ok(JSON.parse(fs.readFileSync(F.bank, 'utf8')).chipa === bk.chipa + 1500, 'bank credited on leave');
+    await sleep(400);
+    ok(JSON.parse(fs.readFileSync(F.bank, 'utf8')).chipa === bk.chipa, 'bank credited on leave (v2: the mirror folds the seat in, so the total is unchanged)');
 
     // play mode: nothing in ledger, nothing in bank
     const rowsBefore = ledgerRows().length, bankBefore = fs.readFileSync(F.bank, 'utf8');
@@ -222,28 +224,28 @@ const ledgerRows = () => JSON.parse(fs.readFileSync(F.ledger, 'utf8'));
     const T5 = d.table.id;
     [e, d] = await G1.call('table_join', { tableId: T5 }, 'table_joined', 'error');
     ok(e === 'table_joined' && d.stack === 10000, 'play join default buy-in');
-    await G1.call('table_leave', { tableId: T5 }, 'table_left');
+    await G1.call('table_leave', { tableId: T5 }, 'table_left'); await sleep(400);
     ok(ledgerRows().length === rowsBefore && fs.readFileSync(F.bank, 'utf8') === bankBefore, 'play mode writes nothing to ledger or bank');
     const pr = G1.last('room_update');
     ok(!pr || pr.moneyMode !== undefined, 'play room update has moneyMode');
 
-    // ── legacy room still works ──
+    // ── POKERPING is an ordinary chips table (v2: join_game is deleted, a player sits through table_join) ──
     const L = client('legacy');
     authJoin(L.s, { name: 'Zed', avatar: '🦊', password: 'ping' });
-    ok(await waitFor(() => L.last('room_joined')), 'legacy join_game still works');
-    const lr = L.last('room_joined');
-    ok(lr.roomId === 'POKERPING', 'legacy room id preserved');
+    ok(await waitFor(() => L.last('table_joined')), 'POKERPING table_join works');
+    const lr = L.last('table_joined');
+    ok(lr.tableId === 'POKERPING', 'POKERPING table id preserved');
     await sleep(200);
-    ok(L.last('room_update').moneyMode === 'chips' && L.last('room_update').unit === 'chips', 'legacy room is chips');
+    ok(L.last('room_update').moneyMode === 'chips' && L.last('room_update').unit === 'chips', 'POKERPING room is chips');
     [e, d] = await A.call('lobby_list', {}, 'lobby_tables');
-    ok(d.tables.some(t => t.id === 'POKERPING' && t.mode === 'chips'), 'legacy table listed in lobby as chips');
+    ok(d.tables.some(t => t.id === 'POKERPING' && t.mode === 'chips'), 'POKERPING listed in lobby as chips');
 
     // ── persistence + sweep ──
     [e, d] = await A.call('table_create', { settings: settings({ name: 'Persist Me', isPrivate: false }) }, 'table_created', 'error');
     const T6 = d.table.id;
     await sleep(400);
     const saved = JSON.parse(fs.readFileSync(F.tables, 'utf8'));
-    ok(saved.version === 1 && saved.tables.some(t => t.id === T6) && !saved.tables.some(t => t.id === 'POKERPING'), 'tables.json written without the legacy table');
+    ok(saved.version === 1 && saved.tables.some(t => t.id === T6) && !saved.tables.some(t => t.id === 'POKERPING'), 'tables.json written without the permanent table');
     ok(!fs.existsSync(F.tables + '.tmp'), 'no tables.json.tmp left');
     await sleep(5600);
     [e, d] = await B.call('lobby_list', {}, 'lobby_tables');

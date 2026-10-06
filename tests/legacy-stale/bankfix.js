@@ -1,11 +1,11 @@
-const { authJoin } = require('./authjoin');
+const { authJoin } = require('../authjoin');
 // Bank reconciliation checks: rejoin must not inflate buy-ins, names are case-insensitive, totals reconcile.
 // Spawns a throwaway server (TEST_PORT, default 3302) with scratch bank/ledger files under qa/bankfix/.
 const { spawn } = require('child_process');
 const fs = require('fs'), path = require('path');
 const { io } = require(process.env.SIO_CLIENT || '/home/isabelle/.cache/node_modules/socket.io-client');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const ROOT = path.join(__dirname, '..');
+const ROOT = path.join(__dirname, '..', '..');
 const PORT = Number(process.env.TEST_PORT || 3302);
 const dir = fs.mkdtempSync(path.join(ROOT, 'qa', 'bankfix', 'run-'));
 const bankFile = path.join(dir, 'bank.json'), ledgerFile = path.join(dir, 'ledger.json');
