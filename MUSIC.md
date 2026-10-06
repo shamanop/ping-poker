@@ -6,7 +6,7 @@ Everyone on a station hears the same moment. The server never streams: it publis
 - `public/music-clock.js` shared pure math (UMD: browser + node). `position`, `estimateOffset`, `nudgeRate`, `stationEpoch`.
 - `music.js` server: `attach({app, io, publicDir})` called once from server.js before `express.static`. Loads `public/audio/music/stations.json`, serves mp3 (Accept-Ranges, ETag, `Cache-Control: public, max-age=604800`), `GET /api/music/state`, socket `music:hello` -> `music:state`, `music:ping` (ack `{t: serverMs}`).
 - `public/music.js` + `public/music.css` client player and the bar (docked in `.sh-top` after the level chip; station picker popover on `document.body`).
-- `tools/gen-placeholder-music.sh` tiny placeholder tracks (`public/audio/music/placeholder-*`). Delete them and use the real stations.json when merged.
+- Real tracks: 24 Pixabay mp3s in 4 stations under `public/audio/music/<id>/`, licenses in `public/audio/music/LICENSES.md`. `durationSec` in stations.json is exact (ffprobe, ms precision); keep it exact, the handoff timer relies on it.
 
 ## stations.json
 `{stations:[{id,name,tagline,tracks:[{file,title,artist,durationSec}]}]}`. `file` is relative to `public/audio/music/<id>/` (or contains a `/` to be relative to the music root). Missing `durationSec` is filled with `ffprobe` at boot (needs ffprobe on the host; otherwise the track is skipped with a warning). Epochs are derived from the station id, so a redeploy never reshuffles the radio; changing track order or durations does.

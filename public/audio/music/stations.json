@@ -1,77 +1,174 @@
 {
   "stations": [
     {
-      "id": "placeholder-a",
-      "name": "Placeholder A",
-      "tagline": "Slow two-tone loop (test)",
+      "id": "smoky-lounge",
+      "name": "Smoky Lounge",
+      "tagline": "Velvet sax, low lights, stale cigars.",
       "tracks": [
         {
-          "file": "01-placeholder-tone-a1.mp3",
-          "title": "Placeholder Tone A1",
-          "artist": "Placeholder Synth",
-          "durationSec": 20.0
+          "file": "smoky-lounge/01-midnight-reed-room.mp3",
+          "title": "Midnight Reed Room",
+          "artist": "icsilviu",
+          "durationSec": 256.368
         },
         {
-          "file": "02-placeholder-tone-a2.mp3",
-          "title": "Placeholder Tone A2",
-          "artist": "Placeholder Synth",
-          "durationSec": 17.3
+          "file": "smoky-lounge/02-midnight-cocktail-lounge.mp3",
+          "title": "Midnight Cocktail Lounge (Sax & Piano)",
+          "artist": "niknet_art",
+          "durationSec": 202.464
         },
         {
-          "file": "03-placeholder-tone-a3.mp3",
-          "title": "Placeholder Tone A3",
-          "artist": "Placeholder Synth",
-          "durationSec": 23.0
+          "file": "smoky-lounge/03-noir-alley.mp3",
+          "title": "Noir Alley",
+          "artist": "welbornworks",
+          "durationSec": 190.248
+        },
+        {
+          "file": "smoky-lounge/04-smoky-jazz-club-ii.mp3",
+          "title": "Smoky Jazz Club II",
+          "artist": "vellumlounge",
+          "durationSec": 174.024
+        },
+        {
+          "file": "smoky-lounge/05-saxophone-dark-jazz.mp3",
+          "title": "Saxophone Dark Jazz",
+          "artist": "surprising_media",
+          "durationSec": 240.039
+        },
+        {
+          "file": "smoky-lounge/06-smooth-jazz-2025-2.mp3",
+          "title": "Smooth Jazz 2025 #2",
+          "artist": "senormusica81",
+          "durationSec": 244.56
         }
       ]
     },
     {
-      "id": "placeholder-b",
-      "name": "Placeholder B",
-      "tagline": "Mid-tempo pulse (test)",
+      "id": "basement-funk",
+      "name": "Basement Funk",
+      "tagline": "Wood paneling, shag carpet, fat bass.",
       "tracks": [
         {
-          "file": "01-placeholder-tone-b1.mp3",
-          "title": "Placeholder Tone B1",
-          "artist": "Placeholder Synth",
-          "durationSec": 19.0
+          "file": "basement-funk/01-sonictrum-soul-shake.mp3",
+          "title": "Soul Shake",
+          "artist": "omnitrum (Sonictrum)",
+          "durationSec": 219.24
         },
         {
-          "file": "02-placeholder-tone-b2.mp3",
-          "title": "Placeholder Tone B2",
-          "artist": "Placeholder Synth",
-          "durationSec": 21.501
+          "file": "basement-funk/02-pop-funk-upbeat.mp3",
+          "title": "Pop Funk Upbeat",
+          "artist": "artmylife",
+          "durationSec": 183.144
         },
         {
-          "file": "03-placeholder-tone-b3.mp3",
-          "title": "Placeholder Tone B3",
-          "artist": "Placeholder Synth",
-          "durationSec": 16.0
+          "file": "basement-funk/03-retro-groove.mp3",
+          "title": "Retro Groove",
+          "artist": "alexguz",
+          "durationSec": 178.39
+        },
+        {
+          "file": "basement-funk/04-basscraft-funk.mp3",
+          "title": "Basscraft Funk",
+          "artist": "airl",
+          "durationSec": 157.224
+        },
+        {
+          "file": "basement-funk/05-sixties-soul-twist.mp3",
+          "title": "Sixties Soul Twist",
+          "artist": "jorisvermeer",
+          "durationSec": 148.167
+        },
+        {
+          "file": "basement-funk/06-funk.mp3",
+          "title": "Funk",
+          "artist": "prettyjohn1",
+          "durationSec": 131.161
         }
       ]
     },
     {
-      "id": "placeholder-c",
-      "name": "Placeholder C",
-      "tagline": "Fast tremolo (test)",
+      "id": "high-roller",
+      "name": "High Roller",
+      "tagline": "Swing and brass for a hot table.",
       "tracks": [
         {
-          "file": "01-placeholder-tone-c1.mp3",
-          "title": "Placeholder Tone C1",
-          "artist": "Placeholder Synth",
-          "durationSec": 22.0
+          "file": "high-roller/01-mafia-casino-jazz-2.mp3",
+          "title": "Mafia Casino Jazz 2",
+          "artist": "casino-vip-music",
+          "durationSec": 284.88
         },
         {
-          "file": "02-placeholder-tone-c2.mp3",
-          "title": "Placeholder Tone C2",
-          "artist": "Placeholder Synth",
-          "durationSec": 18.0
+          "file": "high-roller/02-swinging-big-band.mp3",
+          "title": "Swinging Big Band Instrumental",
+          "artist": "nickpanek",
+          "durationSec": 173.352
         },
         {
-          "file": "03-placeholder-tone-c3.mp3",
-          "title": "Placeholder Tone C3",
-          "artist": "Placeholder Synth",
-          "durationSec": 20.7
+          "file": "high-roller/03-cuban-big-band.mp3",
+          "title": "Cuban Big Band",
+          "artist": "alanajordan",
+          "durationSec": 154.384
+        },
+        {
+          "file": "high-roller/04-lets-swing.mp3",
+          "title": "Souvenir: Let's Swing",
+          "artist": "opisounds",
+          "durationSec": 162.84
+        },
+        {
+          "file": "high-roller/05-swing-street-nights.mp3",
+          "title": "Swing Street Nights",
+          "artist": "mcanden",
+          "durationSec": 183.624
+        },
+        {
+          "file": "high-roller/06-game-casino-music-3.mp3",
+          "title": "Game Casino Music 3",
+          "artist": "casino-vip-music",
+          "durationSec": 220.104
+        }
+      ]
+    },
+    {
+      "id": "late-night",
+      "name": "Late Night",
+      "tagline": "Last hand, last drink, nowhere to be.",
+      "tracks": [
+        {
+          "file": "late-night/01-relaxing-smooth-jazz-late-night.mp3",
+          "title": "Relaxing Smooth Jazz Late Night",
+          "artist": "saxorphine",
+          "durationSec": 255.0
+        },
+        {
+          "file": "late-night/02-late-night-reflection.mp3",
+          "title": "Late Night Reflection",
+          "artist": "jackcatorbooks",
+          "durationSec": 196.992
+        },
+        {
+          "file": "late-night/03-lofi-jazz.mp3",
+          "title": "Lofi Jazz",
+          "artist": "the_mountain",
+          "durationSec": 170.815
+        },
+        {
+          "file": "late-night/04-chillhop-jazz-coffee-shop.mp3",
+          "title": "Chillhop Jazz Coffee Shop",
+          "artist": "alex-morgan",
+          "durationSec": 173.304
+        },
+        {
+          "file": "late-night/05-jazz-rainy-night.mp3",
+          "title": "Jazz Rainy Night Music",
+          "artist": "alex-morgan",
+          "durationSec": 192.744
+        },
+        {
+          "file": "late-night/06-night-drive-moody-lofi.mp3",
+          "title": "Night Drive (Moody Lofi Groove)",
+          "artist": "desifreemusic",
+          "durationSec": 149.52
         }
       ]
     }
