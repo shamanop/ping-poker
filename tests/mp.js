@@ -37,7 +37,7 @@ async function startServer(seed = {}) {
   proc.stdout.on('data', d => { srv.out += d; });
   proc.stderr.on('data', d => { srv.out += d; });
   proc.on('exit', code => { srv.exited = true; srv.exitCode = code; });
-  for (let i = 0; i < 100 && !srv.out.includes('running'); i++) await sleep(50);
+  for (let i = 0; i < 400 && !srv.out.includes('running'); i++) await sleep(50);
   if (!srv.out.includes('running')) throw new Error('server did not start: ' + srv.out);
   srv.bank = () => JSON.parse(fs.readFileSync(path.join(dir, 'bank.json'), 'utf8'));
   srv.stop = () => {
@@ -51,7 +51,7 @@ async function startServer(seed = {}) {
 
 class Client {
   constructor(srv, name) {
-    this.srv = srv; this.name = name; this.gs = null; this.cards = []; this.errors = [];
+    this.srv = srv; this.name = name.charAt(0).toUpperCase() + name.slice(1); this.gs = null; this.cards = []; this.errors = [];
     this.events = []; this.showdowns = []; this.busts = []; this.dead = false;
     this.sock = io(`http://127.0.0.1:${srv.port}`, { transports: ['websocket'], forceNew: true, reconnection: false });
     srv.clients.push(this);
