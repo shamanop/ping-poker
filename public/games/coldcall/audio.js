@@ -91,6 +91,27 @@ const SFX = (() => {
       tone({ f: 65.4, dur: 1.3, vol: 0.35 }); noise({ type: 'bandpass', f: 1200, dur: 2, vol: 0.06, attack: 0.5, q: 0.6 });
       for (let i = 0; i < Math.min(lvl, 4); i++) setTimeout(() => api.register(), 300 + i * 420);
     },
+    // ---- v2 board events (all synthesized). Cluster pop rises in pitch with every cascade step.
+    clusterPop(i) { const f = 392 * Math.pow(2, Math.min(i, 12) / 7); tone({ f, to: f * 1.5, type: 'triangle', dur: 0.14, vol: 0.16 }); tone({ f: f * 2, t: 0.05, type: 'sine', dur: 0.2, vol: 0.07 }); noise({ type: 'bandpass', f: 2600, dur: 0.06, vol: 0.07, q: 1.4 }); },
+    hot(n) { for (let k = 0; k < Math.min(n, 3); k++) { tone({ f: 880 * Math.pow(2, k / 6), to: 1320 * Math.pow(2, k / 6), t: k * 0.06, type: 'square', dur: 0.07, vol: 0.05, lp: 3500 }); noise({ type: 'highpass', f: 3000, t: k * 0.06, dur: 0.04, vol: 0.06 }); } },
+    sweep() { noise({ type: 'bandpass', f: 2600, to: 500, dur: 0.3, vol: 0.1, q: 1.1, attack: 0.03 }); tone({ f: 640, to: 220, type: 'sine', dur: 0.28, vol: 0.08 }); },
+    fall() { tone({ f: 150, to: 75, dur: 0.1, vol: 0.14 }); noise({ f: 700, to: 200, dur: 0.08, vol: 0.06 }); },
+    phoneRing() { ring(0, 3, 0.1); tone({ f: 1318.5, t: 0.05, dur: 0.4, vol: 0.06 }); noise({ type: 'bandpass', f: 1800, t: 1.82, dur: 0.05, vol: 0.12, q: 2 }); },   // three rings, then the handset lifts
+    reveal(t) {
+      if (t === 0) { tone({ f: 660, to: 760, type: 'triangle', dur: 0.12, vol: 0.12 }); }
+      else if (t === 1) { tone({ f: 880, type: 'triangle', dur: 0.2, vol: 0.12 }); tone({ f: 1318.5, t: 0.06, type: 'sine', dur: 0.3, vol: 0.08 }); }
+      else { [1046.5, 1318.5, 1568, 2093].forEach((f, k) => tone({ f, t: k * 0.06, type: 'triangle', dur: 0.5, vol: 0.12 })); api.coin(); }
+    },
+    upsellReveal() { tone({ f: 330, to: 990, type: 'sawtooth', dur: 0.2, vol: 0.06, lp: 2200 }); },
+    closeReveal() { tone({ f: 196, to: 98, type: 'triangle', dur: 0.25, vol: 0.22 }); tone({ f: 392, type: 'square', dur: 0.1, vol: 0.05, lp: 1800 }); },
+    upsell(m) { const s = m >= 10 ? 14 : m >= 5 ? 9 : m >= 3 ? 5 : 0; [0, 4, 7].forEach((x, k) => tone({ f: 440 * Math.pow(2, (s + x) / 12), t: k * 0.07, type: 'triangle', dur: 0.4, vol: 0.13 })); },
+    upsellHit() { tone({ f: 1760, to: 2637, type: 'square', dur: 0.07, vol: 0.05, lp: 4000 }); },
+    closeStart() { noise({ type: 'bandpass', f: 400, to: 1800, dur: 0.45, vol: 0.12, q: 2, attack: 0.25 }); tone({ f: 110, to: 220, type: 'triangle', dur: 0.45, vol: 0.15, attack: 0.2 }); },
+    collect(i) { tone({ f: 1200 * Math.pow(2, Math.min(i, 12) / 12), type: 'triangle', dur: 0.1, vol: 0.1 }); tone({ f: 2400 * Math.pow(2, Math.min(i, 12) / 12), t: 0.03, type: 'sine', dur: 0.12, vol: 0.04 }); },
+    stamp() { tone({ f: 95, to: 48, dur: 0.22, vol: 0.4 }); noise({ f: 900, to: 150, dur: 0.12, vol: 0.2 }); api.register(); },
+    bonusIntro() { [[392, 0], [494, 0.09], [587, 0.18], [784, 0.27], [988, 0.4], [1175, 0.52]].forEach(([f, t]) => tone({ f, t, dur: 0.4, vol: 0.12, type: 'triangle' })); ring(0.7, 2, 0.08); tone({ f: 98, dur: 0.9, vol: 0.3 }); },
+    spinsAdded(n) { const k = n >= 4 ? 4 : 2; for (let i = 0; i < k; i++) { tone({ f: 1046.5 * Math.pow(2, [0, 4, 7, 12][i] / 12), t: i * 0.1, dur: 0.6, vol: 0.1, type: 'triangle' }); tone({ f: 2093, t: i * 0.1, dur: 0.4, vol: 0.03, type: 'sine' }); } },
+    upgrade() { [[523, 0], [659, 0.08], [784, 0.16], [1046, 0.24], [1318, 0.4], [1568, 0.4], [2093, 0.4]].forEach(([f, t]) => tone({ f, t, dur: 0.8, vol: 0.09, type: 'triangle' })); tone({ f: 65.4, dur: 1.1, vol: 0.32 }); },
     // hold music: soft electric-piano arpeggio over a walking bass, jazzy muzak. base = 96 bpm, bonus = 126 bpm and brighter.
     music(mode) {
       musicMode = mode;

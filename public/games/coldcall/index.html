@@ -14,11 +14,13 @@
       <section id="head">
         <img id="hero" alt="" decoding="sync">
         <div id="cap" aria-live="polite"><p id="capT"></p><i id="capTail"></i></div>
+        <div id="bh" hidden><div class="chip"><small>SPINS LEFT</small><b id="bhLeft">0</b></div><div class="chip"><small>BONUS TOTAL</small><b id="bhTot">$0</b></div></div>
       </section>
-      <div id="ribbon"><span id="ribL">3+ in a row, left to right</span><span class="r" id="ribR"></span></div>
+      <div id="ribbon"><span id="ribL">5+ touching, any direction</span><span class="r" id="ribR"></span></div>
       <div id="board">
         <div class="slots" id="slots"></div>
         <div id="reels"></div>
+        <div id="ovl"></div>
         <div id="floats"></div>
       </div>
       <div id="scene"></div>
@@ -61,8 +63,9 @@
 <script src="hero.js"></script>
 <script src="fx.js"></script>
 <script src="game.js"></script>
-<script src="rotary.js"></script>
-<script src="quote.js"></script>
+<script src="board.js"></script>
+<script src="phone.js"></script>
+<script src="bonus.js"></script>
 <script src="boot.js"></script>
 </body>
 </html>

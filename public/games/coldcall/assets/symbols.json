@@ -1,18 +1,22 @@
 {
-  "_note": "ONE swap point for art. Replace files (same names) or edit paths here; no code change. Paths are relative to this file. Never put text in an image. 'pieces' and 'textures' are also exposed to CSS as --img-<id> custom properties at load.",
+  "_note": "ONE swap point for art. Replace files (same names) or edit paths here; no code change. Paths are relative to this file. Never put text in an image. 'symbols' are the 13 board symbols (ids = ColdCallEngine.SYM) plus the three quote bubbles; 'pieces' and 'textures' are also exposed to CSS as --img-<id> custom properties at load.",
   "symbols": {
-    "cash": "img/cash.webp",
-    "pile": "img/pile.webp",
-    "rx": "img/rx.webp",
-    "headset": "img/headset.webp",
-    "can": "img/can.webp",
     "mug": "img/mug.webp",
     "note": "img/note.webp",
     "ball": "img/ball.webp",
+    "can": "img/can.webp",
+    "cups": "img/extra_cups.webp",
+    "headset": "img/headset.webp",
+    "rx": "img/rx.webp",
+    "pile": "img/pile.webp",
+    "cashwad": "img/cashwad.webp",
+    "cash": "img/cash.webp",
     "closer": "img/closer.webp",
+    "bell": "img/extra_bell.webp",
     "phone": "img/phone.webp",
-    "quote": "img/quote.webp",
-    "upsell": "img/upsell.webp"
+    "quote_bronze": "img/extra_quote_bronze.webp",
+    "quote_silver": "img/extra_quote_silver.webp",
+    "quote_gold": "img/extra_quote_gold.webp"
   },
   "hero": {
     "file": "img/hero.webp",
@@ -71,15 +75,5 @@
     "Alfa Slab One",
     "Courier Prime",
     "Special Elite"
-  ],
-  "extras": {
-    "cups": "img/extra_cups.webp",
-    "cashwad": "img/cashwad.webp",
-    "bell": "img/extra_bell.webp",
-    "quote_bronze": "img/extra_quote_bronze.webp",
-    "quote_silver": "img/extra_quote_silver.webp",
-    "quote_gold": "img/extra_quote_gold.webp",
-    "cardmachine": "img/cardmachine.webp",
-    "seal": "img/seal.webp"
-  }
+  ]
 }

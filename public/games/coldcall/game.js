@@ -1,5 +1,5 @@
-/* COLD CALL: UI controller. The server resolves a whole round and returns a script; this file only ANIMATES it (reels, win highlights,
-   counters, big-win overlay). Bonus screens live in rotary.js and quote.js and talk to this file through CC.core.
+/* COLD CALL: UI controller. The server resolves a whole round and returns a script; this file only ANIMATES it. The 6x5 board and cascades live in
+   board.js, the phone feature in phone.js, the three bonuses in bonus.js; they talk to this file through CC.core (see the export at the end).
    Money: integer cents everywhere; a tenth-of-bet amount t is t * bet / 10 cents (exact at every bet level). */
 (() => {
   const CC = (window.CC = window.CC || {});
@@ -11,26 +11,24 @@
   const BRIDGE = Q.get('bridge') === '1' && window.parent !== window;
   const LIVE_SOCKET = !BRIDGE && Q.get('live') === '1';
   const DEFAULT_BETS = E.BET_LEVELS.slice();
-  const QFORCE = ['rotary', 'quote', 'big'].includes(Q.get('force')) ? Q.get('force') : null;   // practice/QA only; the server ignores it unless COLDCALL_TEST=1
-  const REG = ['cash', 'pile', 'rx', 'headset', 'can', 'mug', 'note', 'ball'];
-  const NAMES = { cash: 'Cash', pile: 'Pile', rx: 'Rx bottle', headset: 'Headset', can: 'Energy can', mug: 'Mug', note: 'Sticky note', ball: 'Stress ball', closer: 'The Closer (wild)', phone: 'Rotary phone', quote: 'Quote bubble', upsell: 'Upsell' };
+  const QFORCE = E.FORCES.includes(Q.get('force')) ? Q.get('force') : null;   // practice/QA only; the server ignores it unless COLDCALL_TEST=1
+  const NAMES = { mug: 'Mug', note: 'Sticky note', ball: 'Stress ball', can: 'Energy can', cups: 'Paper cups', headset: 'Headset', rx: 'Rx bottle', pile: 'Pile', cashwad: 'Cash wad', cash: 'Cash' };
+  const BUY_INFO = { call: ['THE CALL', 'One spin with a rotary phone guaranteed on the board.'], bonus1: ['DIALING FOR DOLLARS', 'Straight into 8 free spins. Hot leads stay lit until a phone calls them.'], bonus2: ['ALWAYS BE CLOSING', 'Straight into 12 free spins. Hot leads stay lit the whole bonus.'], hunt: ['BELL HUNT', 'One spin with about 5x the chance of ringing in a bonus.'] };
   const TIER_NAME = { big: 'BIG WIN', huge: 'HUGE WIN', mega: 'MEGA WIN', legend: 'LEGENDARY' };
   const TIER_LVL = { big: 1, huge: 2, mega: 3, legend: 4 };
 
-  const stage = $('stage'), app = $('app'), board = $('board'), reelsEl = $('reels'), floatsEl = $('floats'), ov = $('ov'), sceneEl = $('scene');
-  const css = getComputedStyle(document.documentElement);
-  const num = (v, d) => { const n = parseFloat(css.getPropertyValue(v)); return Number.isFinite(n) ? n : d; };
-  const CELL = num('--cell', 94), GAP = num('--gap', 5), PITCH = CELL + GAP;
+  const stage = $('stage'), app = $('app'), board = $('board'), floatsEl = $('floats'), ov = $('ov'), sceneEl = $('scene');
 
   // ------------------------------------------------------------------ state
   const st = { bets: DEFAULT_BETS.slice(), betIdx: 3, busy: false, auto: false, turbo: false, skip: false, tap: 0, mode: 'play', live: false, s: 1,
-    bal: 100000, balShown: 100000, winShown: 0, winTarget: 0, grid: null, modal: 0, pracBal: 100000, server: null, rounds: 0, dead: 0 };
+    bal: 100000, balShown: 100000, winShown: 0, winTarget: 0, modal: 0, pracBal: 100000, server: null, rounds: 0, dead: 0 };
   const RAGE_STREAK = 4;                                       // paid spins in a row with no win before the hero loses it (then the count restarts)
   const money = { wallet: { play: 0, ledgerNet: 0, ledgerLimit: -50000 } };
   const bet = () => st.bets[st.betIdx];
   const dollars = (c) => { const n = Math.round(c), a = Math.abs(n); return (n < 0 ? '-' : '') + '$' + Math.floor(a / 100).toLocaleString('en-US') + '.' + String(a % 100).padStart(2, '0'); };
-  const boxFmt = (c) => { c = Math.round(c); if (c >= 100000) return '$' + (c / 100000).toFixed(c % 100000 ? 1 : 0).replace(/\.0$/, '') + 'k'; if (c >= 10000) return '$' + Math.round(c / 100); if (c >= 100) return '$' + (c / 100).toFixed(2).replace(/\.?0+$/, ''); return c + 'c'; };
-  const costT = (kind) => (kind === 'spin' ? 10 : (st.server && st.server.buyCostX ? Math.round(st.server.buyCostX[kind] * 10) : E.CFG.buyCost[kind]));
+  // buys offered right now: ids with a price in the server state (practice: the engine config). A buy the state does not price is not shown.
+  const buyPrices = () => { const src = st.live ? (st.server && st.server.buyCostX) || {} : null; return E.BUYS.filter((id) => (src ? typeof src[id] === 'number' : typeof E.CFG.buyCost[id] === 'number')).map((id) => [id, src ? Math.round(src[id] * 10) : E.CFG.buyCost[id]]); };
+  const costT = (kind) => { if (kind === 'spin') return 10; const f = buyPrices().find(([id]) => id === kind); return f ? f[1] : Infinity; };
   const walletBal = () => (st.mode === 'ledger' ? money.wallet.ledgerNet : money.wallet.play);
   const avail = () => (st.live ? (st.mode === 'ledger' ? money.wallet.ledgerNet - (money.wallet.ledgerLimit ?? -50000) : money.wallet.play) : st.pracBal);
   const pick = (a) => a[(Math.random() * a.length) | 0];
@@ -56,7 +54,9 @@
   // ------------------------------------------------------------------ timing
   const speed = () => (st.turbo ? 0.45 : st.skip ? 0.3 : 1);
   const wait = (ms) => new Promise((r) => setTimeout(r, Math.max(0, ms * speed())));
-  const anim = (el, kf, o) => { const a = el.animate(kf, { fill: 'none', ...o, duration: (o.duration || 300) * speed() }); return a.finished.catch(() => {}); };
+  const anim = (el, kf, o) => { const a = el.animate(kf, { fill: 'none', ...o, duration: (o.duration || 300) * speed(), delay: (o.delay || 0) * speed() }); return a.finished.catch(() => {}); };
+  // number tween on the shared ticker: fn(value) every frame, resolves at the end (a tap skips it)
+  const tween = (from, to, ms, fn) => { const t0 = performance.now(), dur = Math.max(1, ms * speed()); return new Promise((res) => Tick.add((now) => { const k = st.skip ? 1 : Math.max(0, Math.min(1, (now - t0) / dur)); fn(from + (to - from) * (1 - Math.pow(1 - k, 3))); if (k >= 1) { res(); return false; } return true; })); };
 
   // ------------------------------------------------------------------ readouts (never blank, win only ever adds within a round)
   function setWin(cents, animate = true, ms = 450) {
@@ -67,7 +67,7 @@
     const t0 = performance.now(), dur = Math.max(1, ms * speed());
     return new Promise((res) => Tick.add((now) => {
       if (tok !== setWin.tok) { res(); return false; }
-      const k = Math.max(0, Math.min(1, (now - t0) / dur)), e = 1 - Math.pow(1 - k, 3);   // rAF timestamps can precede t0 inside the same frame: clamp so the total never dips
+      const k = st.skip ? 1 : Math.max(0, Math.min(1, (now - t0) / dur)), e = 1 - Math.pow(1 - k, 3);   // a tap skips the count-up; rAF timestamps can precede t0 inside the same frame: clamp so the total never dips
       st.winShown = Math.round(from + (cents - from) * e); w.textContent = dollars(st.winShown);
       if (k >= 1) { st.winShown = cents; w.textContent = dollars(cents); res(); return false; } return true;
     }));
@@ -82,7 +82,7 @@
   }
   function drawBet() {
     $('bet').textContent = dollars(bet()); $('betDn').disabled = st.busy || st.betIdx === 0; $('betUp').disabled = st.busy || st.betIdx === st.bets.length - 1;
-    $('buy').disabled = st.busy; $('buyFrom').textContent = 'from ' + dollars(Math.min(costT('rotary'), costT('quote')) * bet() / 10);
+    const bp = buyPrices(); $('buy').disabled = st.busy || !bp.length; $('buyFrom').textContent = bp.length ? 'from ' + dollars(Math.min(...bp.map((x) => x[1])) * bet() / 10) : 'n/a';
   }
   function setBusy(b) { st.busy = b; $('spin').classList.toggle('run', b); $('spin').classList.toggle('idle', !b); drawBet(); }
   function toast(t, ms = 1800) { const d = document.createElement('div'); d.className = 'toast'; d.textContent = t; stage.appendChild(d); setTimeout(() => d.remove(), ms); }
@@ -98,58 +98,23 @@
   }
   const say = (g, t) => CC.caption.say(g, t);
 
-  // ------------------------------------------------------------------ reels
-  const reels = [];
-  const symNode = (sym) => { const c = document.createElement('div'); c.className = 'cell'; c.dataset.s = sym; c.appendChild(CC.assets.img(sym, 'sym')); return c; };
-  function buildBoard() {
-    const slots = $('slots'); slots.replaceChildren(); for (let i = 0; i < COLS * ROWS; i++) slots.appendChild(document.createElement('i'));
-    reelsEl.replaceChildren(); reels.length = 0;
-    for (let c = 0; c < COLS; c++) {
-      const reel = document.createElement('div'); reel.className = 'reel'; reel.style.gridColumn = c + 1;
-      const strip = document.createElement('div'); strip.className = 'strip'; reel.appendChild(strip); reelsEl.appendChild(reel); reels.push({ reel, strip });
+  // ------------------------------------------------------------------ one spin (base or free): the grid drops in, the cascade replays, then the phone feature
+  async function playSpin(ctx, spin, o = {}) {
+    const Bd = CC.board;
+    Bd.setHot(spin.hotIn, true);                               // leads carried in stay lit while the symbols drop
+    if (o.bonus) SFX_.spin();
+    await Bd.drop(spin.grid, { fast: o.bonus });
+    for (let i = 0; i < spin.steps.length; i++) {
+      if (i === 0) CC.hero.mood('hype');
+      await Bd.step(spin.steps[i], i, ctx); await wait(i < spin.steps.length - 1 ? 40 : spin.phone ? 120 : 320);
     }
+    if (spin.phone) await CC.phone.run(spin, ctx);
+    else if (spin.steps.length && o.bonus) await wait(150);
+    Bd.setHot(spin.hotOut);                                    // base: all leads clear; bonus 1: clear if a phone fired; bonus 2 / 3: they stay
+    if (spin.capped) ctx.capped = true;
   }
-  const cellEl = (c, r) => reels[c].strip.children[r];
-  function showGrid(grid) { st.grid = grid; for (let c = 0; c < COLS; c++) { const s = reels[c].strip; s.getAnimations().forEach((a) => a.cancel()); s.replaceChildren(...grid[c].map(symNode)); s.style.transform = ''; } }
-  function idleGrid() {                                        // decorative start grid: plain symbols only (no phone, quote or wild)
-    const g = []; for (let c = 0; c < COLS; c++) { const col = []; for (let r = 0; r < ROWS; r++) col.push(pick(REG)); g.push(col); } showGrid(g);
-  }
-  function clearHits() { for (let c = 0; c < COLS; c++) for (const el of reels[c].strip.children) el.classList.remove('hit', 'dim', 'pulse'); }
-  // Spin the reels onto `grid` (5 columns of 3 symbol ids). opts.tease: reel 5 spins long. Resolves when the last reel has landed.
-  async function spinGrid(grid, opts = {}) {
-    const prev = st.grid; let teased = false;
-    const landings = grid.map((col, c) => new Promise((res) => {
-      const { strip, reel } = reels[c], dur = (520 + c * 170 + (opts.tease && c === COLS - 1 ? 1300 : 0)) * speed();
-      const k = Math.max(4, Math.round(dur / 85)), nodes = [...col.map(symNode)];
-      for (let i = 0; i < k; i++) nodes.push(symNode(pick(REG)));
-      const old = prev ? prev[c] : col; nodes.push(...old.map(symNode));
-      strip.replaceChildren(...nodes);
-      const dist = (nodes.length - ROWS) * PITCH;
-      if (opts.tease && c === COLS - 1 && !teased) { teased = true; setTimeout(() => { reel.classList.add('tease'); SFX_.tease(); say('tease'); }, 380 * speed()); }
-      const a = strip.animate([{ transform: `translateY(${-dist}px)` }, { transform: 'translateY(8px)', offset: 0.9 }, { transform: 'translateY(0)' }], { duration: dur, easing: 'cubic-bezier(.3,.6,.35,1)' });
-      a.finished.then(() => {
-        strip.replaceChildren(...col.map(symNode)); strip.style.transform = ''; reel.classList.remove('tease');
-        const heavy = col.includes('phone') || col.includes('quote');
-        SFX_.land(heavy); if (heavy) SFX_.thunk();
-        if (col.includes('phone')) { SFX_.phone(c); for (let r = 0; r < ROWS; r++) if (col[r] === 'phone') cellEl(c, r).classList.add('pulse'); }
-        res();
-      }, res);
-    }));
-    await Promise.all(landings); st.grid = grid;
-  }
-  // Highlight winning ways, float each amount, count the total up. mult multiplies each way (free spins). Resolves with tenths shown.
-  async function presentWins(wins, mult, ctx) {
-    if (!wins || !wins.length) return 0;
-    const hit = new Set(); let shown = 0;
-    for (const w of wins) for (let c = 0; c < w.len; c++) for (const r of w.rows[c]) hit.add(c + ',' + r);
-    for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) { const el = cellEl(c, r); if (el) el.classList.add(hit.has(c + ',' + r) ? 'hit' : 'dim'); }
-    SFX_.chime(wins.length > 1 ? 2 : 0);
-    for (const w of wins) {
-      let sx = 0, sy = 0, n = 0; for (let c = 0; c < w.len; c++) for (const r of w.rows[c]) { const [x, y] = localPt(cellEl(c, r), board); sx += x; sy += y; n++; }
-      const t = w.win * (mult || 1); shown += t;
-      floatAt(Math.min(430, Math.max(90, sx / n)), sy / n, `<span>+${dollars(t * ctx.bet / 10)}</span>${mult > 1 ? `<b>x${mult}</b>` : ''}`);
-    }
-    return shown;
+  async function tease(ctx) {                                  // exactly 2 bells and no bonus
+    CC.board.pulse('bell'); SFX_.tease(); say('tease'); CC.hero.mood('shock'); await wait(900); CC.board.pulse('bell', false);
   }
 
   // ------------------------------------------------------------------ modals / tap waits
@@ -186,44 +151,53 @@
   }
 
   // ------------------------------------------------------------------ the round
+  const MAXTXT = 'MAX ' + E.MAX_WIN_X.toLocaleString('en-US') + 'x';
+  const RIB_IDLE = '5+ touching, any direction';
   function makeCtx(p, b, kind) {
-    const run = { t: 0, total: p.totalWinTenths };
+    const run = { t: 0, raw: 0, total: p.totalWinTenths };
     const ctx = {
-      bet: b, kind, E, st, run, p, script: p.script, dollars, boxFmt, wait, anim, say, toast, stamp, floatAt, cellEl, stagePt, localPt, stage, board, sceneEl, ov, SFX: SFX_, FX: CC.fx, modal, waitTap, setWin, spinGrid, presentWins, clearHits, reduce,
+      bet: b, kind, E, st, run, p, script: p.script, dollars, wait, anim, tween, say, toast, stamp, floatAt, stagePt, localPt, stage, board, sceneEl, ov, SFX: SFX_, FX: CC.fx, modal, waitTap, setWin, reduce, capped: false,
       cents: (t) => t * b / 10,
       bonusOn() { stage.classList.add('bonus'); SFX_.music('bonus'); }, bonusOff() { stage.classList.remove('bonus'); SFX_.music('base'); },
-      rib(l, r) { $('ribL').textContent = l; $('ribR').textContent = r == null ? '' : r; },
-      // add tenths to the running total (never decreases, never exceeds the server's round total)
-      addWin(t, ms) { const add = Math.max(0, Math.min(t, run.total - run.t)); run.t += add; return setWin(run.t * b / 10, true, ms || 450); },
+      // ribbon: left = mode name while a bonus runs (else the first text), right = the status text
+      rib(l, r) { if (ctx.modeName) { $('ribL').textContent = ctx.modeName; $('ribR').textContent = l === ctx.modeName ? (r || '') : l + (r ? ' ' + r : ''); } else { $('ribL').textContent = l; $('ribR').textContent = r == null ? '' : r; } },
+      // add tenths to the running total (never decreases, never exceeds the server's round total); `raw` is what the script asked for, for the self-check
+      addWin(t, ms) { run.raw += t; const add = Math.max(0, Math.min(t, run.total - run.t)); run.t += add; return setWin(run.t * b / 10, true, ms || 450); },
       willBig: E.winTier(p.totalWinTenths / 10) in TIER_LVL, isLast: true
     };
+    ctx.playSpin = (sp, o) => playSpin(ctx, sp, o);
     return ctx;
   }
   async function animateRound(p, b, kind) {
     const S = p.script, ctx = makeCtx(p, b, kind);
-    if (S.base) {
-      ctx.rib('SPINNING', ''); await spinGrid(S.base.grid, { tease: S.base.tease }); ctx.rib(RIB_IDLE, 'MAX ' + E.MAX_WIN_X.toLocaleString('en-US') + 'x');
-      if (S.base.winTenths > 0) {
-        CC.hero.set('hype', 2000);
-        const shown = await presentWins(S.base.wins, 1, ctx); await ctx.addWin(S.base.winTenths, 500);
-        await wait(Math.max(500, Math.min(1100, shown * 0.4 + 450))); clearHits();
-      } else if (S.base.tease || S.base.phones.length === 2) { say('tease'); if (!(S.features && S.features.length)) CC.hero.set('shock', 2200); await wait(300); }
+    if (S.spin) {
+      ctx.rib(S.buy === 'call' ? 'THE CALL' : S.buy === 'hunt' ? 'BELL HUNT' : 'DIALING', ''); await playSpin(ctx, S.spin);
+      ctx.rib(RIB_IDLE, MAXTXT);
+      if (S.spin.bells === 2 && !S.bonus) await tease(ctx);
     } else { say('buy'); SFX_.sting(); await wait(500); }
-    const fs = S.features || [];
-    for (let i = 0; i < fs.length; i++) {
-      ctx.isLast = i === fs.length - 1;
-      if (fs[i].kind === 'quote') await CC.quote.run(fs[i], S.base, ctx); else await CC.rotary.run(fs[i], ctx);
-    }
-    if (ctx.run.t !== ctx.run.total) { dbg.mismatch.push({ round: p.roundId, shown: ctx.run.t, server: ctx.run.total }); await ctx.addWin(ctx.run.total - ctx.run.t, 400); }
-    ctx.rib(RIB_IDLE, 'MAX ' + E.MAX_WIN_X.toLocaleString('en-US') + 'x');
+    if (S.bonus) { if (S.spin) CC.hero.mood('hype', 1800); await CC.bonus.run(S.bonus, ctx); }
+    if (ctx.run.t !== ctx.run.total) { dbg.mismatch.push({ round: p.roundId, what: 'running total', shown: ctx.run.t, script: ctx.run.total }); await ctx.addWin(ctx.run.total - ctx.run.t, 400); }
+    ctx.rib(RIB_IDLE, MAXTXT);
     return ctx;
   }
-  const RIB_IDLE = '3+ in a row, left to right';
   function sweep() {                                           // end-of-round cleanup: nothing created for a round may outlive it
     ov.querySelectorAll('.scrim,#tier,#tierbg,.fly,.banner').forEach((n) => n.remove()); stage.querySelectorAll('.toast.keep').forEach((n) => n.remove());
-    floatsEl.replaceChildren(); board.querySelectorAll('.stamp').forEach((n) => n.remove()); sceneEl.replaceChildren();
-    stage.classList.remove('bonus', 'bw'); CC.fx.clear(); SFX_.duck(false); clearHits(); st.modal = ov.querySelectorAll('.scrim').length;
+    floatsEl.replaceChildren(); board.querySelectorAll('.stamp,.accept').forEach((n) => n.remove()); $('head').querySelectorAll('.stamp').forEach((n) => n.remove()); stage.querySelectorAll(':scope > .stamp').forEach((n) => n.remove()); sceneEl.replaceChildren(); $('bh').hidden = true;
+    stage.classList.remove('bonus', 'bw'); CC.fx.clear(); SFX_.duck(false); CC.board.clean(); st.modal = ov.querySelectorAll('.scrim').length;
   }
+  // the screen against the script, after every round: win readout, 30 cells, no leftovers, final grid. Anything off lands in CC.dbg.mismatch.
+  function selfCheck(p, ctx) {
+    dbg.checked = (dbg.checked || 0) + 1; const bad = (what, shown, script) => dbg.mismatch.push({ round: p.roundId, what, shown, script });
+    const bs = CC.board.state(), S = ctx.script, capped = !!(p.maxed || S.capped || ctx.capped);
+    if (!capped && ctx.run.raw !== ctx.run.total) bad('script adds', ctx.run.raw, ctx.run.total);
+    if (st.winShown !== p.totalWin) bad('win readout (cents)', st.winShown, p.totalWin);
+    if (p.totalWin !== ctx.cents(p.totalWinTenths)) bad('server cents', p.totalWin, ctx.cents(p.totalWinTenths));
+    if (bs.cells !== 30) bad('cells', bs.cells, 30); if (bs.ovl) bad('overlay nodes', bs.ovl, 0); if (bs.hot) bad('hot squares', bs.hot, 0);
+    const left = floatsEl.children.length + ov.children.length + sceneEl.children.length + stage.querySelectorAll('.stamp,.accept,.banner,.fly,.flash').length; if (left) bad('leftover nodes', left, 0);
+    const last = S.bonus && S.bonus.spins.length ? S.bonus.spins[S.bonus.spins.length - 1] : S.spin; if (last) { const g = last.steps.length ? last.steps[last.steps.length - 1].grid : last.grid, dom = CC.board.domGrid(); for (let i = 0; i < 30; i++) if (dom[i] !== E.SYM[g[i]]) { bad('final grid', dom.join(), g.map((x) => E.SYM[x]).join()); break; } }
+    if (CC.fx.running()) bad('fx loop running', 1, 0);
+  }
+  const allSpins = (S) => [...(S.spin ? [S.spin] : []), ...(S.bonus ? S.bonus.spins : [])];
   let autoT = 0;
   async function play(kind) {
     if (st.busy) { if (kind === 'spin') { st.skip = true; st.tap++; } return; }
@@ -231,11 +205,10 @@
     const b = bet(), cost = costT(kind) * b / 10;
     if (avail() < cost) { toast(kind === 'spin' ? 'Not enough funds. Lower your bet.' : 'Not enough funds for that bonus.'); st.auto = false; $('auto').classList.remove('on'); return; }
     SFX_.init(); wake(); dbg.started = (dbg.started || 0) + 1; setBusy(true); st.skip = false; CC.hero.set('idle'); sweep(); resetWin(); setBal(st.bal - cost, true); SFX_.spin(); say(kind === 'spin' ? 'spin' : 'buy');
-    clearHits();
     let p;
     try { p = await T.spin(b, st.mode, kind === 'spin' ? null : kind); }
     catch (e) { setBal(st.live ? walletBal() : st.pracBal, true); setBusy(false); if (e.server) { toast(e.message || 'Spin refused.', 2400); st.auto = false; $('auto').classList.remove('on'); } else toast('No answer from the server.', 2400); return; }
-    dbg.rounds.push({ id: p.roundId, kind, forced: p.forced || null, features: (p.script.features || []).map((f) => f.kind), win: p.totalWinTenths });
+    dbg.rounds.push({ id: p.roundId, kind, forced: p.forced || null, tease: !!(p.script.spin && p.script.spin.bells === 2 && !p.script.bonus), cluster: p.script.spin ? p.script.spin.cluster : 0, bigClose: allSpins(p.script).some((s) => s.phone && s.phone.rounds.some((r) => r.collects.some((c) => c.value >= 250))), bonus: p.script.bonus ? p.script.bonus.kind : null, phone: !!((p.script.spin && p.script.spin.phone) || (p.script.bonus && p.script.bonus.spins.some((s) => s.phone))), tier: p.tier, win: p.totalWinTenths });
     let ctx = null;
     try { ctx = await animateRound(p, b, kind); }
     catch (e) { console.error(e); dbg.error = String(e && e.stack || e); }
@@ -244,7 +217,7 @@
       if (ctx && ctx.run.t !== ctx.run.total) await ctx.addWin(ctx.run.total - ctx.run.t, 200);
       if (!ctx) { st.winTarget = 0; await setWin(p.totalWin, false); }
       const winX = p.totalWinTenths / 10, tier = E.winTier(winX), amt = p.totalWin;
-      if (p.maxed) toast('MAX WIN ' + E.MAX_WIN_X.toLocaleString('en-US') + 'x', 2200);
+      if (p.maxed || (ctx && ctx.capped) || p.script.capped) { stamp('MAX WIN', E.MAX_WIN_X.toLocaleString('en-US') + 'x. The round stops here.', 1700, null, 'hi'); SFX_.win(3); say('bigWin'); await wait(1400); }
       if (tier in TIER_LVL) await bigWin(winX, amt, tier);
       else if (tier === 'sweet' || tier === 'nice') { stamp(tier === 'sweet' ? 'SWEET!' : 'NICE!', 'x' + (winX >= 10 ? Math.round(winX) : winX.toFixed(1).replace(/\.0$/, '')), 1300); SFX_.win(tier === 'sweet' ? 2 : 1); say(tier === 'sweet' ? 'nice' : 'smallWin'); await wait(900); }
       else if (amt > 0) { SFX_.coin(); say('smallWin'); }
@@ -256,8 +229,9 @@
       if (amt > 0) st.dead = 0;
     } catch (e) { console.error(e); dbg.error = String(e && e.stack || e); }
     sweep();
+    if (ctx) selfCheck(p, ctx); else dbg.mismatch.push({ round: p.roundId, what: 'animation error', shown: dbg.error || '', script: '' });
     st.rounds++;
-    if (st.live) { setBal(walletBal(), true); toParent({ type: 'round', win: p.totalWin, bet: b, mode: st.mode, tier: p.tier }); }
+    if (st.live) { setBal(walletBal(), true); dbg.lastBal = { shown: st.bal, wallet: walletBal() }; toParent({ type: 'round', win: p.totalWin, bet: b, mode: st.mode, tier: p.tier }); }
     else { st.pracBal += p.totalWin - cost; if (st.pracBal < bet()) { st.pracBal = 100000; toast('Out of practice money. Free refill.', 2200); } setBal(st.pracBal, true); }
     st.skip = false; setBusy(false); wake();
     if (st.auto) { clearTimeout(autoT); autoT = setTimeout(() => { if (st.auto && !st.busy) play('spin'); }, 450 * speed()); }
@@ -279,9 +253,8 @@
     }
   };
   function localRound(b, buy) {                                 // practice only (no wallet at stake). Same engine file, same script.
-    const seed = crypto.getRandomValues(new Uint32Array(1))[0], rng = E.rngFrom(seed); let r;
-    if (!buy && QFORCE === 'big') { for (let i = 0; i < 200000; i++) { r = E.resolveRound(rng, null); if (r.winX >= 25) break; } }
-    else r = E.resolveRound(rng, buy, !buy && (QFORCE === 'rotary' || QFORCE === 'quote') ? { force: QFORCE } : undefined);
+    const seed = crypto.getRandomValues(new Uint32Array(1))[0], rng = E.rngFrom(seed);
+    const r = E.resolveRound(rng, buy, !buy && QFORCE ? { force: QFORCE } : undefined);
     return { roundId: 'p' + seed.toString(16), script: r.script, costTenths: r.costTenths, totalWinTenths: r.winTenths, totalWinMult: r.winX, cost: E.cents(r.costTenths, b), totalWin: E.cents(r.winTenths, b), tier: r.tier, maxed: r.capped, forced: QFORCE || undefined };
   }
   function settle(m) {                                          // a server result (bridge message or socket event) for the in-flight request
@@ -362,7 +335,7 @@
     tog($('sfxBtn'), SFX_.isSfx()); tog($('musicBtn'), SFX_.isMusic());
     $('sfxBtn').addEventListener('click', () => { SFX_.init(); const on = SFX_.setSfx(!SFX_.isSfx()); tog($('sfxBtn'), on); if (on) SFX_.click(); });
     $('musicBtn').addEventListener('click', () => { SFX_.init(); const on = SFX_.setMusic(!SFX_.isMusic()); tog($('musicBtn'), on); if (on) SFX_.music(stage.classList.contains('bonus') ? 'bonus' : 'base'); });
-    stage.addEventListener('click', (e) => { if (e.target.closest('#tier')) st.tap++; });
+    stage.addEventListener('click', (e) => { if (e.target.closest('#tier, .scn')) st.tap++; });
     addEventListener('keydown', (e) => {
       const sc = ov.querySelector('.scrim');
       if (e.key === 'Escape' && sc) { e.stopImmediatePropagation(); sc._done && sc._done('x'); return; }
@@ -370,24 +343,27 @@
     });
     $('buy').addEventListener('click', async () => {
       if (st.busy || st.modal) return; SFX_.init(); SFX_.click();
-      const b = bet(), cR = costT('rotary') * b / 10, cQ = costT('quote') * b / 10;
-      let v = await modal(`<div class="card"><h2>Buy a bonus</h2><div class="buygrid">
-        <button class="buyopt" id="buy_rotary" data-buy="rotary" data-v="rotary" ${avail() < cR ? 'disabled' : ''}><b>ROTARY</b><span>Spin the dial for free spins and a multiplier.</span><em>${dollars(cR)}</em></button>
-        <button class="buyopt" id="buy_quote" data-buy="quote" data-v="quote" ${avail() < cQ ? 'disabled' : ''}><b>QUOTE ACCEPTED</b><span>Bubbles drop into the checkout form. Fill fields to win.</span><em>${dollars(cQ)}</em></button>
-      </div><button class="btn alt" data-v="x">Not now</button></div>`, { backdrop: true });
-      if (v !== 'rotary' && v !== 'quote') return;
-      const c = v === 'rotary' ? cR : cQ;
-      const ok = await modal(`<div class="card"><h2>Confirm</h2><p>Buy <b>${v === 'rotary' ? 'ROTARY' : 'QUOTE ACCEPTED'}</b> for <b>${dollars(c)}</b>?<br><small>The price is charged now and the bonus plays straight away.</small></p><button class="btn" id="buy_confirm" data-v="yes">Confirm</button><button class="btn alt" data-v="x">Cancel</button></div>`, { backdrop: true });
+      const b = bet(), list = buyPrices(); if (!list.length) return;
+      const opts = list.map(([id, t]) => { const c = t * b / 10; return `<button class="buyopt" id="buy_${id}" data-buy="${id}" data-v="${id}" ${avail() < c ? 'disabled' : ''}><b>${BUY_INFO[id][0]}</b><span>${BUY_INFO[id][1]}</span><em>${dollars(c)}</em></button>`; }).join('');
+      const v = await modal(`<div class="card"><h2>Buy a bonus</h2><div class="buygrid">${opts}</div><button class="btn alt" data-v="x">Not now</button></div>`, { backdrop: true });
+      const hit = list.find(([id]) => id === v); if (!hit) return;
+      const c = hit[1] * b / 10;
+      const ok = await modal(`<div class="card"><h2>Confirm</h2><p>Buy <b>${BUY_INFO[v][0]}</b> for <b>${dollars(c)}</b>?<br><small>The price is charged now and it plays straight away.</small></p><button class="btn" id="buy_confirm" data-v="yes">Confirm</button><button class="btn alt" data-v="x">Cancel</button></div>`, { backdrop: true });
       if (ok === 'yes') play(v);
     });
     $('info').addEventListener('click', async () => {
       if (st.busy || st.modal) return; SFX_.init(); SFX_.click();
-      const P = E.CFG.pay, f = (n) => (n >= 100 ? Math.round(n) : n >= 10 ? n.toFixed(1).replace(/\.0$/, '') : n.toFixed(1).replace(/\.0$/, ''));
-      const rows = REG.map((s) => `<div><img src="${CC.assets.symUrl(s)}" alt=""><span>${NAMES[s]}</span><small>3: ${f(P[s][0] / 10)}x<br>4: ${f(P[s][1] / 10)}x<br>5: ${f(P[s][2] / 10)}x</small></div>`).join('');
-      await modal(`<div class="card"><h2>How it plays</h2>
-        <p>243 ways. Matching symbols on neighbouring reels, left to right from reel 1, win. Prices are per way, in x bet.</p><div class="pay">${rows}</div>
-        <p><b>The Closer</b> is wild on reels 2, 3 and 4.<br><b>ROTARY:</b> a phone on reels 1, 3 and 5. Spin the dial twice: free spins, then a multiplier. A phone in free spins is a callback: +1 spin.<br>
-        <b>QUOTE ACCEPTED:</b> 6 or more quote bubbles drop into a checkout form. 3 respins, reset on each landing. Fill CVV, EXPIRY, NAME or CARD for a prize; all four = PAYMENT ACCEPTED. An UPSELL doubles its field.</p>
+      const C = E.CFG, x = (t) => { const n = t / 10; return n >= 100 ? String(Math.round(n)) : String(+n.toFixed(1)); };
+      const head = ['5', '6', '7', '8', '9', '10', '11', '12', '13+'].map((s) => `<th>${s}</th>`).join('');
+      const rows = E.SYM.slice(0, E.NREG).reverse().map((s) => `<tr><td class="sy"><img src="${CC.assets.symUrl(s)}" alt=""><span>${NAMES[s]}</span></td>${C.pay[s].map((t) => `<td>${x(t)}</td>`).join('')}</tr>`).join('');
+      const range = (a) => x(a[0][0]) + 'x to ' + x(a[a.length - 1][0]) + 'x';
+      await modal(`<div class="card info"><h2>How it plays</h2>
+        <p><b>Clusters.</b> Land 5 or more of the same symbol touching each other (up, down, left, right) to win. <b>The Closer</b> is wild for any pay symbol.</p>
+        <p><b>Cascades.</b> A win clears the cluster and every other matching symbol on the board. The rest fall, new ones drop in, and it repeats while wins keep forming.</p>
+        <p><b>Hot leads.</b> Every square in a winning cluster turns into a sticky note and stays lit while symbols fall.</p>
+        <p><b>The Call.</b> When the cascade ends and a <b>rotary phone</b> is on the board, every hot lead is dialed and flips to a <b>quote bubble</b> (bronze ${range(C.bubbles.bronze)}, silver ${range(C.bubbles.silver)}, gold ${range(C.bubbles.gold)}), an <b>UPSELL</b> (${C.upsell.map((u) => 'x' + u[0]).join(' ')}, multiplies the bubbles and closes next to it) or <b>THE CLOSE</b>, which collects every bubble on the board. After a close the other leads are dialed again. The bubbles and closes on the board pay.</p>
+        <p><b>Bells.</b> The desk bells that landed in a spin: 3 = DIALING FOR DOLLARS (${C.spins.bonus1} free spins, leads stay lit until a phone calls them), 4 = ALWAYS BE CLOSING (${C.spins.bonus2} free spins, leads stay lit the whole bonus), 5 or more = QUOTE ACCEPTED (${C.spins.bonus3} free spins, a phone on every spin, no bronze bubbles). In a bonus 2 bells add 2 spins, 3 add 4; 4 or more in DIALING FOR DOLLARS upgrades it to ALWAYS BE CLOSING. Up to ${C.maxSpins} spins.</p>
+        <p class="tl">Pay for a cluster, x bet</p><div class="pt"><table><tr><th></th>${head}</tr>${rows}</table></div>
         <p><small>Max win ${E.MAX_WIN_X.toLocaleString('en-US')}x. ${st.server && st.server.rtp ? 'RTP ' + st.server.rtp + '.' : ''} Play money only: no deposits, no payouts.</small></p>
         <button class="btn" data-v="x">Close</button></div>`, { backdrop: true });
     });
@@ -395,23 +371,23 @@
 
   // ------------------------------------------------------------------ boot (called by boot.js)
   async function boot() {
-    fit(); buildBoard(); initTransport(); bindControls(); drawBet();
+    fit(); CC.board.build(); initTransport(); bindControls(); drawBet();
     $('bal').textContent = dollars(st.bal); setBal(st.pracBal, false); modeUi();
     const go = $('go'), splash = $('splash');
     await CC.assets.load((d, n) => { go.textContent = 'Loading ' + d + '/' + n; });
     const hero = $('hero'); hero.src = CC.assets.heroUrl(); try { await hero.decode(); } catch (e) { /* shown anyway */ }
     $('splashHero').src = CC.assets.heroUrl();
     if (Q.has('shot') || Q.has('mock')) { const qs = document.createElement('script'); qs.src = 'qa.js'; document.head.appendChild(qs); }   // QA shot flag: see qa.js
-    idleGrid(); $('ribR').textContent = 'MAX ' + E.MAX_WIN_X.toLocaleString('en-US') + 'x';
+    CC.board.idle(); $('ribR').textContent = 'MAX ' + E.MAX_WIN_X.toLocaleString('en-US') + 'x';
     CC.caption.say('idle'); drawBet();
     const start = () => { SFX_.init(); splash.classList.add('out'); SFX_.music('base'); setTimeout(() => splash.remove(), 600); wake(); };
     go.disabled = false; go.textContent = 'Pick up';
     if (Q.has('nosplash')) splash.remove(); else go.addEventListener('click', start);
     addEventListener('pointerdown', () => SFX_.init(), { once: true });
     setInterval(() => { if (!st.busy && !st.modal && !splash.isConnected) CC.caption.say('idle'); }, 9000);
-    if (Q.get('buy') === 'rotary' || Q.get('buy') === 'quote') setTimeout(() => play(Q.get('buy')), 600);
+    if (E.BUYS.includes(Q.get('buy'))) setTimeout(() => play(Q.get('buy')), 600);
     wake();
     CC.ready = true;
   }
-  CC.core = { boot, st, play, dollars, boxFmt, wait, anim, say, toast, stamp, floatAt, cellEl, stagePt, localPt, spinGrid, presentWins, clearHits, modal, waitTap, setWin, bigWin, sweep, Tick, T, money, applyWallet, goLive, goPractice, symNode, reels, REG, NAMES, E, stage, board, sceneEl };
+  CC.core = { boot, st, play, dollars, wait, anim, tween, speed, say, toast, stamp, floatAt, stagePt, localPt, modal, waitTap, setWin, bigWin, sweep, Tick, T, money, applyWallet, goLive, goPractice, E, stage, board, sceneEl, SFX: SFX_, FX: CC.fx };
 })();
