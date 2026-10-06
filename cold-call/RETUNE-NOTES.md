@@ -23,3 +23,4 @@ Key learnings:
 - Pay table differentiated by symbol at sizes 7+ (factor F [1,1.1,1.2,1.35,1.55,1.85,2.3,3,4,5.5]; sizes 5-6 flat 10..18): c13 98.71, c14 (base phone .205) strat 150M/3M seed 22: RTP 98.025 +-0.186. FINAL CONFIG = c14 (in engine CFG).
 - Buy values at c14, 10M seed 505 (shaman, 61 s): call 2.849x, bonus1 83.908x, bonus2 277.705x, hunt 3.469x -> prices (avg/0.98 -> whole tenth) call 29, bonus1 856, bonus2 2834, hunt 35.
 - tests: only the hit-rate band (30-35 -> 18-26) and the pay-shape assertion (5-cluster 10..18, 13+ 1300..7150) changed; 46 pass, bender 17 pass.
+- Final-run attempt 1 on 6ff7b46 (phone .205), strat 450M/8M seed 202: RTP 97.788 +-0.109 (pooled with the 150M tuning run 98.025 +-0.186 -> ~97.82). Centre it: base phone .205 -> .208 (+~0.2). Plain 200M seed 303: RTP 97.795 +-0.230, hit 20.68, sd 16.63x. Discarded as the final table; rerun on the new commit.

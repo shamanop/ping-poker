@@ -26,7 +26,7 @@
     weights: [29.925, 25.552, 20.828, 17.21, 13.464, 10.034, 8.159, 6.436, 5.001, 3.79],
     // closer (wild), bell (scatter) and phone weights per cell, per mode (a phone is also guaranteed on every bonus3 spin and on a 'call' buy)
     extra: {
-      base: { wild: 1, bell: 1.52, phone: 0.205 },
+      base: { wild: 1, bell: 1.52, phone: 0.208 },
       bonus1: { wild: 5, bell: 1.567, phone: 4.5 },
       bonus2: { wild: 3, bell: 1.567, phone: 4.5 },
       bonus3: { wild: 2, bell: 1.567, phone: 3 },
