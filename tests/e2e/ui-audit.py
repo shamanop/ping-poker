@@ -57,6 +57,11 @@ try:
 
     # --- defect 9: the pot text is not under a bet stack
     c.ok('pot text not covered by a bet', pg.evaluate("(() => { const n = document.querySelector('.pot-num'); if (!n) return true; const r = n.getBoundingClientRect(); const t = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return !!t && (t === n || n.contains(t) || !!t.closest('.pot-row')) })()"))
+    # --- defect 9: a long showdown label stays inside the stage
+    pg.evaluate("PingSocket.listeners('showdown_result').forEach(f => f({winners: [{name: 'ua1', handName: 'Two Pair, Kings and Fives with a very long kicker description', cards: ['Kh', '5d'], amount: 100, net: 50}], pot: 100, reveals: []}))")
+    pg.wait_for_timeout(300)
+    c.ok('showdown plaque inside the stage rect', pg.evaluate("(() => { const o = document.getElementById('showdown-overlay'); if (o.classList.contains('hidden')) return 'hidden'; const r = o.getBoundingClientRect(), s = document.getElementById('stage').getBoundingClientRect(); return r.left >= s.left - 0.5 && r.right <= s.right + 0.5 })()") is True)
+    pg.evaluate("document.getElementById('showdown-overlay').classList.add('hidden')")
     # --- defect 4: hotkeys while an overlay is open
     pg.wait_for_function("!document.getElementById('btn-fold').disabled", timeout=90000)
     pg.click('#bank-btn'); pg.wait_for_selector('#bank-panel.open')

@@ -1873,6 +1873,14 @@ function faceCardHtml(card, size = 'md', delay = 0, style = '', extra = '') {
 // ─── Showdown (non-modal plaque on the felt + winners' cards at the seats) ─
 let sdTimer = null;
 
+// Keep a centred (translateX(-50%)) plaque inside the stage so a long hand label is never cut by the screen edge.
+function clampToStage(el) {
+  const st = $('stage'); if (!st) return;
+  const w = el.offsetWidth, sw = st.clientWidth, m = 8;
+  const c = parseFloat(el.style.left) || sw / 2;
+  el.style.left = Math.max(w / 2 + m, Math.min(sw - w / 2 - m, c)) + 'px';
+}
+
 function renderShowdown(winners, pot, reveals) {
   const gs = state.gameState;
   const ov = $('showdown-overlay');
@@ -1901,6 +1909,7 @@ function renderShowdown(winners, pot, reveals) {
     }
   }
   ov.classList.toggle('split', winners.length > 1);
+  clampToStage(ov);
   if (state.gameState) renderSeats(state.gameState);
 
   const myName = gs?.players[state.myIdx]?.name;

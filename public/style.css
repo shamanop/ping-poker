@@ -817,3 +817,6 @@ html.art-login .setup-card { background: linear-gradient(180deg, rgba(34, 22, 14
 /* the wider rail (212px min) would push the chat input off a 900px-high screen with 2-column grids: 4 columns instead */
 .sticker-grid, .throw-grid { grid-template-columns: repeat(4, 1fr); }
 .sticker-item, .throw-item { font-size: var(--p18, 18px); padding: var(--p2); }
+.showdown-overlay { max-width: calc(100% - 16px); }
+.sd-row { flex-wrap: wrap; white-space: normal; }
+.showdown-winner-name, .showdown-pot { white-space: nowrap; }
