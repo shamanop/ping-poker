@@ -33,6 +33,7 @@ const clone = (o) => JSON.parse(JSON.stringify(o));
 const RESERVED = new Set(['__proto__', 'constructor', 'prototype']);
 const reserved = (k) => RESERVED.has(nkey(k));
 const rateLast = new Map(); // account key (normalised) -> time of its last accepted spin: the 150 ms limit is per account, not per socket
+const readyLast = new Map(); // the same limit for `ready`, kept apart so a spin does not block the ready that follows it
 
 function err(socket, code, message, extra) { socket.emit('error', { message, code, game: 'coldcall', ...(extra || {}) }); }
 
@@ -85,12 +86,27 @@ function normState(st) {
 // the player's STORED state as the engine should see it (a checked clone; NOT ticked: the engine ticks it itself, so it can report leaked / warmDied)
 const loadState = (nk, mode) => normState(store.player(nk, mode));
 
+// the day after a Chicago day string (noon UTC is early morning in Chicago, so +24 h never skips or repeats a day)
+const dayAfter = (d) => chicagoDay(Date.parse(d + 'T12:00:00Z') + 86400000);
+
+// How many leads the next daily claim gives. One source of truth: the claim itself. The engine plays a throwaway paid spin on a copy of the state on the
+// day the claim would happen (today if unclaimed, else the next day: the streak continues) and reports what it granted; nothing is stored or charged.
+function dailyNext(st, now, day, P) {
+  const claimDay = !st.day || day > st.day ? day : dayAfter(st.day);
+  const live = Eng.CFG.pull;
+  Eng.CFG.pull = P;                          // synchronous: the probe runs under the knobs the view is for
+  try {
+    const r = Eng.playRound(Eng.rngFrom(1), { buy: null, bet: BET_LEVELS[0], state: { ...clone(st), cb: null }, now, day: claimDay, script: false, auto: true });
+    return r.pull && r.pull.daily ? r.pull.daily.leads : null;
+  } catch (e) { return null; } finally { Eng.CFG.pull = live; }
+}
+
 // the player's state as the screen shows it (cold clock applied)
 function stateView(state, now, day, cfg) {
   const P = cfg || pullCfg(), st = Eng.tickState(state, now, P);
   return {
     leads: Math.floor(st.lt / 10), lt: st.lt, list: P.list, cb: st.cb, warm: st.warm, warmBet: st.warmBet || 0,
-    cold: Eng.coldInfo(st, now, P), daily: { claimed: st.day === day, streak: st.streak },
+    cold: Eng.coldInfo(st, now, P), daily: { claimed: st.day === day, streak: st.streak, next: dailyNext(st, now, day, P) },
   };
 }
 const potView = (mode) => { const p = store.pot(mode, pullCfg().pot.seed); return { bal: p.bal, last: p.last }; };
@@ -140,11 +156,16 @@ function pendingView(rec) {
   };
 }
 
+// a new decision: a full timeoutMs, and its one re-arm (`ready`) is available again
 function armTimer(rec) {
-  if (rec.timer) clearTimeout(rec.timer);
   rec.timeoutMs = rec.cfg.decision.timeoutMs;
-  rec.expiresAt = C.now() + rec.timeoutMs;
-  rec.timer = setTimeout(() => { rec.timer = null; autoSettle(rec, 'timeout'); }, rec.timeoutMs);
+  rec.armedAt = C.now(); rec.readyDone = false;
+  setTimer(rec, rec.timeoutMs);
+}
+function setTimer(rec, ms) {
+  if (rec.timer) clearTimeout(rec.timer);
+  rec.expiresAt = C.now() + ms;
+  rec.timer = setTimeout(() => { rec.timer = null; autoSettle(rec, 'timeout'); }, ms);
   if (rec.timer.unref) rec.timer.unref();
 }
 
@@ -310,7 +331,7 @@ module.exports = {
   RTP_LABEL,
   init(ctx) {
     this.rng = ctx.rng || cryptoRng();
-    clearTimers(); open.clear(); openByKey.clear(); rateLast.clear();
+    clearTimers(); open.clear(); openByKey.clear(); rateLast.clear(); readyLast.clear();
     if (store) store.close();
     C = ctx; feed = []; feedSeq = 0;
     const file = process.env.COLDCALL_PULL_FILE || (ctx.wallet && ctx.wallet.file ? path.join(path.dirname(ctx.wallet.file), 'coldcall-pull.json') : null);
@@ -327,7 +348,7 @@ module.exports = {
       if (pullOn() && store) {
         const now = ctx.now(), day = chicagoDay(now), nk = nkey(keyOf(socket));
         const opens = ['play', 'chips'].map((m) => openByKey.get(nk + '|' + m)).filter(Boolean).map(pendingView);
-        extra.pull = { on: true, list: pullCfg().list, decisionMs: pullCfg().decision.timeoutMs, play: stateView(loadState(nk, 'play'), now, day), chips: stateView(loadState(nk, 'chips'), now, day) };
+        extra.pull = { on: true, rules: clone(pullCfg()), list: pullCfg().list, decisionMs: pullCfg().decision.timeoutMs, play: stateView(loadState(nk, 'play'), now, day), chips: stateView(loadState(nk, 'chips'), now, day) };
         extra.pot = potsView(); extra.feed = feed.slice(-FEED_STATE); extra.open = opens[0] || null; extra.opens = opens;
       }
       socket.emit('g:coldcall:state', {
@@ -373,6 +394,25 @@ module.exports = {
         return;
       }
       settle(rec, r, null, socket);
+    },
+    // The prompt is on screen: give the open decision a full timeoutMs from now, ONCE per decision (the ONE MORE CALL event carries the whole bonus,
+    // whose animation runs longer than the timer that started when the event was sent). Never past armedAt + 2 x timeoutMs. Answers every socket of the account.
+    ready(socket, payload, ctx) {
+      const t = ctx.now(), rk = nkey(keyOf(socket)), prev = readyLast.get(rk);
+      if (prev != null && t >= prev && t - prev < RATE_MS) return err(socket, 'rate', 'Slow down');
+      readyLast.set(rk, t);
+      const p = payload && typeof payload === 'object' ? payload : {};
+      if (typeof p.roundId !== 'string') return err(socket, 'no_round', 'No open decision');
+      const rec = open.get(p.roundId);
+      if (!rec) return err(socket, 'no_round', 'No open decision');
+      if (rec.nk !== rk) return err(socket, 'forbidden', 'Not your round');
+      if (!rec.readyDone) {
+        const room = rec.armedAt + 2 * rec.timeoutMs - t;       // what is left of the 2 x timeoutMs this decision may ever be held
+        if (room <= 0) return;                                  // too late: the running timer decides
+        rec.readyDone = true;
+        setTimer(rec, Math.min(rec.timeoutMs, room));
+      }
+      emitAcct(rec, 'g:coldcall:timer', { roundId: rec.id, timeoutMs: rec.timeoutMs, expiresAt: rec.expiresAt }, socket);
     },
     spin(socket, payload, ctx) {
       const t = ctx.now();

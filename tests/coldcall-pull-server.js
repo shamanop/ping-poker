@@ -460,7 +460,7 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
     a.send('g:coldcall:state'); let st = last(a, 'g:coldcall:state');
     assert.ok(st.pull.play.lt > 0); assert.strictEqual(st.pull.chips.lt, 0); assert.strictEqual(st.pot.chips.bal, 0);
     for (const k of ['leads', 'lt', 'list', 'cb', 'warm', 'cold', 'daily']) assert.ok(k in st.pull.play, k);
-    assert.deepStrictEqual(Object.keys(st.pull.play.daily).sort(), ['claimed', 'streak']); assert.strictEqual(st.pull.play.daily.claimed, true); assert.strictEqual(st.pull.chips.daily.claimed, false);
+    assert.deepStrictEqual(Object.keys(st.pull.play.daily).sort(), ['claimed', 'next', 'streak']); assert.strictEqual(st.pull.play.daily.claimed, true); assert.strictEqual(st.pull.chips.daily.claimed, false);
     for (let i = 0; i < 10; i++) spin(s, a, { bet: 10, mode: 'chips', auto: true });
     a.send('g:coldcall:state'); st = last(a, 'g:coldcall:state'); assert.ok(st.pull.chips.lt > 0);
     const plays = s.store().player('ann', 'play'), chipsS = s.store().player('ann', 'chips'); assert.strictEqual(plays.rounds, 25); assert.strictEqual(chipsS.rounds, 10);
@@ -705,6 +705,132 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
     const c1 = s.sock('cy'), c2 = s.sock('cy'); rich(s, 'cy'); E.CFG.pull.decision.timeoutMs = 20000;
     const r2 = toMore(s, c1); c1.send('disconnect');
     assert.strictEqual(resultsOf(c2, r2.roundId).filter((x) => x.status === 'done' && x.auto === 'disconnect').length, 1);
+  });
+
+  // ------------------------------------------------------------------------------------------------ wave-2 UI server bits (PULL-UI.md section 0)
+  const readyOf = (sock, id) => { sock.send('g:coldcall:ready', { roundId: id }); };
+  const timers = (sock, id) => all(sock, 'g:coldcall:timer').filter((t) => !id || t.roundId === id);
+
+  await test('ready: re-arms the open decision to a full timeoutMs once, replies g:coldcall:timer to every socket of the account, the default fires at the NEW time; a second ready is a no-op with the same expiresAt', async () => {
+    const s = setup({ rng: E.rngFrom(101) }); const a = s.sock('ann'), a2 = s.sock('ann'), b = s.sock('bo'); rich(s, 'ann');
+    E.CFG.pull.decision.timeoutMs = 300;
+    const r = toMore(s, a); const rec = s.open.get(r.roundId), t0 = Date.now();
+    assert.strictEqual(r.timeoutMs, 300); const timer0 = rec.timer; assert.ok(timer0);
+    await sleep(150); s.clock.advance(150);
+    readyOf(a, r.roundId);
+    for (const sock of [a, a2]) { const ts = timers(sock, r.roundId); assert.strictEqual(ts.length, 1, 'every socket of the account hears the timer'); assert.deepStrictEqual(Object.keys(ts[0]).sort(), ['expiresAt', 'roundId', 'timeoutMs']); assert.strictEqual(ts[0].timeoutMs, 300); assert.strictEqual(ts[0].expiresAt, s.clock.now() + 300); }
+    assert.strictEqual(timers(b).length, 0, 'another account hears nothing');
+    assert.ok(rec.timer && rec.timer !== timer0 && rec.timer.hasRef() === false, 'a new unref\'d timer'); assert.strictEqual(rec.expiresAt, s.clock.now() + 300);
+    const exp = timers(a, r.roundId)[0].expiresAt, timerNow = rec.timer;
+    s.clock.advance(200); readyOf(a, r.roundId);                         // a second ready (past the 150 ms rate window): changes nothing
+    const ts = timers(a, r.roundId); assert.strictEqual(ts.length, 2); assert.strictEqual(ts[1].expiresAt, exp, 'unchanged expiresAt'); assert.strictEqual(rec.timer, timerNow, 'timer not touched'); assert.strictEqual(rec.expiresAt, exp);
+    await sleep(Math.max(0, t0 + 250 - Date.now()));                     // ~250 ms after the spin: the ORIGINAL default (300 ms) has not fired and would have by ~320
+    await sleep(120); assert.strictEqual(s.open.size, 1, 'the round is still open past the original 300 ms');
+    assert.strictEqual(resultsOf(a, r.roundId).filter((x) => x.status === 'done').length, 0);
+    await sleep(250); const fin = resultsOf(a, r.roundId).filter((x) => x.status === 'done'); assert.strictEqual(fin.length, 1, 'it defaults once, later'); assert.strictEqual(fin[0].auto, 'timeout'); assert.strictEqual(s.open.size, 0);
+  });
+
+  await test('ready: only the owner (another account is refused, nothing changes and the owner can still ready), unknown / settled round and malformed payloads never throw and never answer a timer', async () => {
+    const s = setup({ rng: E.rngFrom(102) }); const a = s.sock('ann'), b = s.sock('bo'), u = s.sock(null); rich(s, 'ann');
+    E.CFG.pull.decision.timeoutMs = 5000;
+    const r = toMore(s, a); const rec = s.open.get(r.roundId), timer0 = rec.timer, exp0 = rec.expiresAt;
+    s.clock.advance(300);
+    readyOf(b, r.roundId); assert.strictEqual(last(b, 'error').code, 'forbidden'); assert.strictEqual(timers(b).length, 0); assert.strictEqual(timers(a).length, 0);
+    assert.strictEqual(rec.timer, timer0); assert.strictEqual(rec.expiresAt, exp0, 'a foreign ready changed nothing');
+    readyOf(u, r.roundId); assert.strictEqual(last(u, 'error').code, 'auth'); assert.strictEqual(timers(u).length, 0);
+    s.clock.advance(300);
+    for (const bad of [null, undefined, 'x', 5, [], {}, { roundId: 5 }, { roundId: {} }, { roundId: null }, { roundId: 'nope' }, { roundId: r.roundId + 'x' }]) {
+      s.clock.advance(300); a.send('g:coldcall:ready', bad); assert.ok(last(a, 'error'), 'answered with an error, not a throw: ' + JSON.stringify(bad)); assert.strictEqual(timers(a).length, 0, 'no timer for ' + JSON.stringify(bad));
+    }
+    assert.strictEqual(rec.timer, timer0, 'junk changed nothing');
+    s.clock.advance(300); readyOf(a, r.roundId); assert.strictEqual(timers(a, r.roundId).length, 1, 'the owner is still able to ready (the foreign one did not use it up)'); assert.strictEqual(rec.expiresAt, s.clock.now() + 5000);
+    const f = decide(s, a, r, { k: 'more', take: false }); assert.strictEqual(f.status, 'done');
+    const nT = timers(a).length, nE = all(a, 'error').length; s.clock.advance(300);
+    readyOf(a, r.roundId); assert.strictEqual(last(a, 'error').code, 'no_round'); assert.strictEqual(all(a, 'error').length, nE + 1); assert.strictEqual(timers(a).length, nT, 'no timer for a settled round'); assert.strictEqual(s.open.size, 0);
+  });
+
+  await test('ready: one re-arm per DECISION: PICK then ONE MORE CALL in one round each get their own, the second ready of the same decision is a no-op', async () => {
+    const s = setup({ rng: E.rngFrom(103) }); const a = s.sock('ann'); rich(s, 'ann');
+    E.CFG.pull.decision.timeoutMs = 5000;
+    let done = false;
+    for (let i = 0; i < 400 && !done; i++) {
+      s.clock.advance(200);
+      let r = spin(s, a, { bet: 10, mode: 'play', buyBonus: 'bonus1' });
+      if (r.status !== 'pending') continue;
+      if (r.pending.k === 'more') { decide(s, a, r, { k: 'more', take: false }); continue; }
+      const rec = s.open.get(r.roundId); s.clock.advance(400);
+      readyOf(a, r.roundId); const t1 = timers(a, r.roundId); assert.strictEqual(t1.length, 1); assert.strictEqual(t1[0].expiresAt, s.clock.now() + 5000); assert.ok(t1[0].expiresAt > r.expiresAt, 're-armed later than the pick\'s own arm');
+      s.clock.advance(200); readyOf(a, r.roundId); assert.strictEqual(timers(a, r.roundId).length, 2); assert.strictEqual(timers(a, r.roundId)[1].expiresAt, t1[0].expiresAt, 'the second ready of the pick is a no-op');
+      const m = decide(s, a, r, { k: 'pick', p: r.pending.choices[0] });
+      if (m.status !== 'pending') continue;                                  // no ONE MORE CALL behind this pick: look for another round
+      assert.strictEqual(m.pending.k, 'more'); assert.strictEqual(rec.timer !== null, true);
+      s.clock.advance(400); readyOf(a, r.roundId); const ts = timers(a, r.roundId); assert.strictEqual(ts.length, 3, 'the second decision gets its own re-arm');
+      assert.strictEqual(ts[2].expiresAt, s.clock.now() + 5000); assert.ok(ts[2].expiresAt > m.expiresAt);
+      s.clock.advance(200); readyOf(a, r.roundId); assert.strictEqual(timers(a, r.roundId).length, 4); assert.strictEqual(timers(a, r.roundId)[3].expiresAt, ts[2].expiresAt, 'and only one');
+      const f = decide(s, a, m, { k: 'more', take: false }); assert.strictEqual(f.status, 'done'); done = true;
+    }
+    assert.ok(done, 'saw a pick followed by a more');
+  });
+
+  await test('ready: goes through a rate limit (150 ms per account; a refused ready does not use the re-arm up), and can never hold a round open past 2 x timeoutMs (a late ready is ignored)', async () => {
+    const s = setup({ rng: E.rngFrom(104) }); const a = s.sock('ann'), a2 = s.sock('ann'); rich(s, 'ann');
+    E.CFG.pull.decision.timeoutMs = 5000;
+    const r = toMore(s, a); const rec = s.open.get(r.roundId); s.clock.advance(1000);
+    a.send('g:coldcall:ready', { roundId: 'nope' }); a2.send('g:coldcall:ready', { roundId: 'nope' });          // two sockets, one ms: one is refused for the rate
+    assert.deepStrictEqual([last(a, 'error').code, last(a2, 'error').code], ['no_round', 'rate']);
+    s.clock.advance(1000); readyOf(a, r.roundId); readyOf(a2, r.roundId);
+    assert.strictEqual(timers(a, r.roundId).length, 1); assert.strictEqual(last(a2, 'error').code, 'rate'); assert.strictEqual(rec.expiresAt, s.clock.now() + 5000);
+    const s2 = setup({ rng: E.rngFrom(105) }); const c = s2.sock('cy'); rich(s2, 'cy'); E.CFG.pull.decision.timeoutMs = 5000;
+    const r2 = toMore(s2, c); const rec2 = s2.open.get(r2.roundId), timer2 = rec2.timer, exp2 = rec2.expiresAt;
+    s2.clock.advance(5000 * 2 + 1);                                             // the clock says the decision is already past 2 x timeoutMs
+    readyOf(c, r2.roundId); assert.strictEqual(timers(c).length, 0, 'no re-arm'); assert.strictEqual(rec2.timer, timer2); assert.strictEqual(rec2.expiresAt, exp2);
+    const s3 = setup({ rng: E.rngFrom(106) }); const d = s3.sock('di'); rich(s3, 'di'); E.CFG.pull.decision.timeoutMs = 5000;
+    const r3 = toMore(s3, d); s3.clock.advance(4000); readyOf(d, r3.roundId);   // late but inside: the cap clips it
+    const t3 = timers(d, r3.roundId)[0]; assert.ok(t3.expiresAt <= r3.expiresAt - 0 + 5000 + 4000 && t3.expiresAt <= r3.expiresAt + 5000, 'expiresAt never beyond armedAt + 2 x timeoutMs: ' + t3.expiresAt);
+  });
+
+  await test('state.pull.rules: a plain JSON copy of the live CFG.pull (what pullCfg() returns), follows a knob edit on the next state, editing the payload cannot move the live knobs', async () => {
+    const s = setup({ rng: E.rngFrom(107) }); const a = s.sock('ann');
+    a.send('g:coldcall:state'); let st = last(a, 'g:coldcall:state');
+    assert.ok(st.pull.rules && typeof st.pull.rules === 'object', 'rules is there');
+    assert.deepStrictEqual(st.pull.rules, JSON.parse(JSON.stringify(E.CFG.pull)));
+    assert.strictEqual(JSON.stringify(st.pull.rules), JSON.stringify(JSON.parse(JSON.stringify(st.pull.rules))), 'plain JSON: nothing is lost on a round trip (no functions, no undefined)');
+    assert.notStrictEqual(st.pull.rules, E.CFG.pull); assert.notStrictEqual(st.pull.rules.daily, E.CFG.pull.daily);
+    st.pull.rules.daily.base = 999; st.pull.rules.pot.maxPayX = 1; assert.strictEqual(E.CFG.pull.daily.base, 3, 'a copy');
+    E.CFG.pull.daily.base = 11; E.CFG.pull.decision.timeoutMs = 7777; E.CFG.pull.pick.mult.gold = 9;
+    a.send('g:coldcall:state'); st = last(a, 'g:coldcall:state');
+    assert.strictEqual(st.pull.rules.daily.base, 11); assert.strictEqual(st.pull.rules.decision.timeoutMs, 7777); assert.strictEqual(st.pull.rules.pick.mult.gold, 9);
+    assert.deepStrictEqual(st.pull.rules, JSON.parse(JSON.stringify(E.CFG.pull)));
+  });
+
+  await test('stateView.daily.next: the leads the next daily claim grants, same rule as the claim: before a claim, after it (tomorrow, streak up), through the streak cap, after a gap, per currency, on a knob edit, and in the result views', async () => {
+    const s = setup({ rng: E.rngFrom(108), t: Date.UTC(2026, 9, 6, 12, 0, 0) }); const a = s.sock('ann'); rich(s, 'ann'); rich(s, 'ann', 'chips');
+    E.CFG.pull.list = 5000;                                                // no Callback in the way (a Callback spin claims nothing)
+    const nextOf = (mode) => { a.send('g:coldcall:state'); return last(a, 'g:coldcall:state').pull[mode].daily; };
+    let d = nextOf('play'); assert.strictEqual(d.claimed, false); assert.strictEqual(d.next, E.CFG.pull.daily.base, 'day 1: base');
+    assert.strictEqual(nextOf('chips').next, d.next);
+    const granted = [];
+    for (let day = 1; day <= 9; day++) {
+      const before = nextOf('play'); assert.strictEqual(before.claimed, false); assert.ok(Number.isInteger(before.next) && before.next > 0, 'a number: ' + before.next);
+      const r = spin(s, a, { bet: 10, mode: 'play', auto: true });
+      assert.ok(r.pull.daily, 'claimed on day ' + day); assert.strictEqual(r.pull.daily.streak, day); assert.strictEqual(r.pull.daily.leads, before.next, 'day ' + day + ': next == what the claim granted'); granted.push(r.pull.daily.leads);
+      assert.strictEqual(r.pull.state.daily.claimed, true); assert.ok(Number.isInteger(r.pull.state.daily.next), 'the result view carries it too');
+      const after = nextOf('play'); assert.strictEqual(after.claimed, true);
+      const P = E.CFG.pull.daily; assert.strictEqual(after.next, P.base + P.perStreak * Math.min(day, P.streakMax), 'after a claim: tomorrow\'s grant, streak continues');
+      assert.strictEqual(r.pull.state.daily.next, after.next);
+      s.clock.advance(86400000);
+    }
+    assert.ok(granted[granted.length - 1] === granted[granted.length - 2], 'the streak cap holds: ' + granted.join());
+    assert.strictEqual(nextOf('chips').next, E.CFG.pull.daily.base, 'the Chips purse has its own streak');
+    s.clock.advance(3 * 86400000);                                          // a gap: the streak is gone
+    d = nextOf('play'); assert.strictEqual(d.claimed, false); assert.strictEqual(d.next, E.CFG.pull.daily.base);
+    E.CFG.pull.daily.base = 6; E.CFG.pull.daily.perStreak = 2;
+    d = nextOf('play'); assert.strictEqual(d.next, 6, 'a knob edit shows on the next state');
+    const r = spin(s, a, { bet: 10, mode: 'play', auto: true }); assert.strictEqual(r.pull.daily.leads, 6); assert.strictEqual(r.pull.daily.streak, 1);
+    assert.strictEqual(nextOf('play').next, 8);
+    // a bonus round that stops at a decision carries the view too
+    const p = toPending(s, a, 'more'); assert.strictEqual(p.status, 'pending'); assert.ok(Number.isInteger(p.pull.state.daily.next));
+    decide(s, a, p, { k: 'more', take: false });
   });
 
   console.log(pass + ' passed' + (process.exitCode ? ', with failures' : ''));
