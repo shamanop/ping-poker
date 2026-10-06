@@ -29,7 +29,7 @@
   const money = { live: false, mode: 'play', wallet: { play: 0, chips: 0 } };
   const pend = new Map(); let reqSeq = 0;
   const toParent = (m) => { if (BRIDGE) window.parent.postMessage(m, '*'); };
-  const chipsFmt = (n) => { try { const M = window.parent && window.parent !== window ? window.parent.Money : null; if (M && M.getPref && M.getPref() === 'usd') return M.fmt(n, { mode: 'usd' }); } catch (e) {} return Math.round(n).toLocaleString('en-US'); };
+  const chipsFmt = (n) => { try { const M = window.parent && window.parent !== window ? window.parent.Money : null; if (M && M.format && M.pref === 'usd') return M.format(n, 'usd'); } catch (e) {} return Math.round(n).toLocaleString('en-US'); };
   const liveFmt = () => (money.mode === 'chips' ? chipsFmt : dollars);
   const walletBal = () => (money.mode === 'chips' ? money.wallet.chips : money.wallet.play);
   const avail = () => (money.live ? walletBal() : st.bal);
@@ -526,7 +526,7 @@
   // ---------- PingJuice win tiers ----------
   const PJ = window.PingJuice;
   if (PJ) { PJ.config.stage = '#stage'; PJ.sfx = () => false; } // one audio engine: SFX owns every sound in this game
-  if (!window.Money) window.Money = { fmt: (n) => fmt(n) };
+  if (!window.PingFmt) window.PingFmt = (n) => fmt(n);
   function juiceTier(x, maxed) { return maxed || x >= 1000 ? 'jackpot' : x >= 100 ? 'mega' : x >= 20 ? 'big' : x >= 5 ? 'nice' : null; }
   function juiceWin(x, amt, maxed) {
     const t = juiceTier(x, maxed); if (!PJ || !t) return null;

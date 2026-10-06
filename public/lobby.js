@@ -31,26 +31,13 @@ const LS = { get: (k) => { try { return localStorage.getItem(k); } catch { retur
 
 // ── money helpers ─────────────────────────────────────────────────
 // display and typed amounts share one mode per unit, so whatever a box shows parses back to the same value
-function modeFor(unit) {
-  const M = window.Money, pref = M && M.getPref ? M.getPref() : 'auto';
-  return pref === 'auto' ? (unit === 'cents' ? 'usd' : 'chips') : pref;
-}
+function modeFor(unit) { return window.Money.modeFor(window.Money.pref, unit); }
 function fm(u, unit, o) {
   if (u == null || Number.isNaN(u)) return '-';
-  if (window.Money) return window.Money.fmt(u, Object.assign({ unit, mode: modeFor(unit) }, o));
-  const s = (o && o.signed && u > 0 ? '+' : '') + (u < 0 ? '-' : '');
-  const a = Math.abs(u);
-  return unit === 'chips' ? s + a.toLocaleString('en-US') : s + '$' + (a % 100 ? (a / 100).toFixed(2) : (a / 100).toLocaleString('en-US'));
+  return window.Money.format(u, modeFor(unit), o);
 }
-function amtText(v, unit) {
-  if (window.Money) return window.Money.fmt(v, { symbol: false, mode: modeFor(unit) }).replace(/,/g, '');
-  return unit === 'chips' ? String(v) : (v % 100 ? (v / 100).toFixed(2) : String(v / 100));
-}
-function parseAmt(text, unit) {
-  if (window.Money && window.Money.parse) { const v = window.Money.parse(text, { mode: modeFor(unit) }); return v == null || !Number.isFinite(v) ? null : Math.round(v); }
-  const s = String(text).replace(/[$,\s]/g, ''); if (!/^\d*\.?\d+$/.test(s)) return null;
-  return unit === 'chips' ? Math.round(parseFloat(s)) : Math.round(parseFloat(s) * 100);
-}
+function amtText(v, unit) { return window.Money.plain(v, modeFor(unit)); }
+function parseAmt(text, unit) { const r = window.Money.parse(text, modeFor(unit)); return r.ok ? r.units : null; }
 function ladder(unit, min, max, extra = []) {
   const set = new Set([min, max, ...extra.filter((v) => v >= min && v <= max)]);
   const N = 60, lo = Math.max(1, min);
@@ -136,7 +123,7 @@ function renderTop() {
 }
 function mountToggles() {
   if (!window.Money || !window.Money.toggleEl) return;
-  document.querySelectorAll('[data-money-toggle]').forEach((slot) => { if (!slot.firstChild) slot.append(window.Money.toggleEl()); });
+  document.querySelectorAll('[data-money-toggle]').forEach((slot) => { if (!slot.firstChild) slot.append(window.Money.toggleEl(slot.dataset.unit || 'cents')); });
 }
 function signOut() { emit('auth_logout', {}); }
 function setMain(node) { ensureRoot(); mainEl.replaceChildren(node); }
@@ -152,7 +139,6 @@ function show(name, arg) {
   if (window.PingGame && window.PingGame.isIn && window.PingGame.isIn() && name !== 'settle') { root.classList.remove('on'); return; }
   S.view = name; S.arg = arg;
   root.classList.add('on');
-  window.Money && window.Money.setUnit && window.Money.setUnit('cents');
   const v = { signin: viewSignin, lobby: viewLobby, create: viewCreate, share: viewShare, settle: viewSettle }[name] || viewLobby;
   hostUi(false);
   v(arg);
@@ -349,7 +335,6 @@ function buyInPicker(t, mySettled) {
   let bank = bankOf(fund), hi = hiOf(bank);
   let vals = ladder(unit, bi.min, hi, [bi.default]);
   let val = Math.min(hi, Math.max(bi.min, bi.default));
-  window.Money && window.Money.setUnit && window.Money.setUnit(unit);
   const range = h('input', { type: 'range', min: 0, max: vals.length - 1, step: 1, value: nearIdx(vals, val), id: 'lb-buyin-range', 'aria-label': 'Buy-in' });
   const fill = h('div', { class: 'fill' });
   const typed = h('input', { class: 'text-input', id: 'lb-buyin-input', type: 'text', inputmode: 'decimal', autocomplete: 'off', value: plain(val) });
@@ -783,7 +768,7 @@ function onAuthOk({ account, token }) {
   S.resumeBusy = false; S.user = account; clearInterval(lockT);
   if (token) saveSession(account.key, token);
   const pref = account.prefs && account.prefs.currency;
-  if (window.Money && window.Money.setMode && pref) window.Money.setMode(pref);
+  if (pref === 'usd' || pref === 'chips' || pref === 'auto') window.Money.setPref(pref, true);
   emit('profile_get', {});
   if (S.view === 'signin' || !S.booted) {
     S.booted = true;

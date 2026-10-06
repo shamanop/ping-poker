@@ -9,11 +9,11 @@
   const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const isAdmin = () => { try { const u = window.Lobby && Lobby.user && Lobby.user(); return !!(u && u.isAdmin); } catch (e) { return false; } };
   // every amount here is chips; showing and parsing with the same mode keeps typed values round-tripping
-  const cmode = () => { const p = window.Money && Money.getPref ? Money.getPref() : 'auto'; return p === 'auto' ? 'chips' : p; };
-  const num = n => (n === null || n === undefined ? '–' : (window.Money ? Money.fmt(n, { mode: cmode() }) : Math.round(n).toLocaleString('en-US')));
-  const money = n => (window.Money ? Money.fmt(n, { mode: cmode() }) : String(n));
-  const plainAmt = n => (window.Money ? Money.fmt(n, { symbol: false, mode: cmode() }).replace(/,/g, '') : String(n));
-  const parseChips = v => (window.Money ? Money.parse(v, { mode: cmode() }) : Math.round(Number(v)));
+  const cmode = () => Money.modeFor(Money.pref, 'chips');
+  const num = n => (n === null || n === undefined ? '–' : Money.format(n, cmode()));
+  const money = n => Money.format(n, cmode());
+  const plainAmt = n => Money.plain(n, cmode());
+  const parseChips = v => { const r = Money.parse(v, cmode()); return r.ok ? r.units : null; };
   const ago = t => {
     if (!t) return 'never';
     const s = Math.max(0, (Date.now() - t) / 1000);

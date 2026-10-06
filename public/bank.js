@@ -10,9 +10,11 @@
   const isPlay = () => view === 'play';
 
   const $ = id => document.getElementById(id);
-  const fmt = n => Money.fmt(n);
-  const signed = n => Money.fmt(n, { signed: true }).replace('-', '−');
-  const short = n => Money.fmt(n, { compact: 1000 });
+  // Mode is per view: the Play $ view reads cents, the Chips view reads chips; pref decides $ vs chips for 'auto'.
+  const bankMode = () => Money.modeFor(Money.pref, isPlay() ? 'cents' : 'chips');
+  const fmt = n => Money.format(n, bankMode());
+  const signed = n => Money.format(n, bankMode(), { signed: true }).replace('-', '−');
+  const short = n => Money.format(n, bankMode(), { compact: 1000 });
   const U = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--u')) || 1;
   const E = s => (typeof esc === 'function' ? esc(s) : String(s));
   const colorOf = name => {
@@ -107,7 +109,6 @@
     if (v === view) return;
     view = v; try { localStorage.setItem('pp-bank-view', v); } catch (e) {}
     data = null; lineGeo = null;
-    Money.setUnit(isPlay() ? 'cents' : 'chips');
     ['bank-players', 'bank-line', 'bank-bars', 'bank-feed'].forEach(id => { const el = $(id); if (el) lastHtml.delete(el); });
     paintView(); request(); render();
   }
@@ -210,7 +211,7 @@
     if (changed) $('bank-players').querySelectorAll('.bp-bal b.editable').forEach(b => b.addEventListener('click', () => editBank(b)));
   }
 
-  const inputText = v => Money.getMode() === 'usd' ? (v % 100 ? (v / 100).toFixed(2) : String(v / 100)) : String(v);
+  const inputText = v => Money.plain(v, bankMode());
   function editBank(b) {
     const name = b.dataset.name;
     const input = document.createElement('input');
@@ -221,7 +222,7 @@
     const finish = save => {
       if (done) return; done = true;
       if (save && state.socket) {
-        const amount = Money.parse(input.value);
+        const parsed = Money.parse(input.value, bankMode()); const amount = parsed.ok ? parsed.units : null;
         if (amount !== null) {
           state.socket.emit('bank_set', { name, balance: amount });
           const row = data && data.players.find(p => p.name.toLowerCase() === name.toLowerCase());
@@ -364,10 +365,9 @@
     state.socket.on('bank_summary', d => {
       if (d && d.view && d.view !== view) return;
       data = d;
-      const u = d && (d.unit || (d.table && d.table.unit)); if (u) Money.setUnit(u);
       if (isOpen) render();
     });
-    Money.onChange(() => { if (isOpen && data) render(); });
+    Money.onPrefChange(() => { if (isOpen && data) render(); });
     state.socket.on('game_state', gs => {
       const pz = $('pause-btn'), pb = $('pause-banner');
       const u = window.Lobby && Lobby.user && Lobby.user();
