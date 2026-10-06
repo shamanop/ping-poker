@@ -1,0 +1,5 @@
+COLD CALL --buys-pull: 30000000 rounds per buy at 5c, pick best, gamble bank, seed 121, 24 threads, 199.4s
+  call    price 14c (exact 13.5c, played at 5.185c per 10 tenths)  paid payback 98.037% +- 0.215  exact 98.041% +- 0.216  paid - exact -0.0042% +- 0.0034  avg win 13.725c  bonus on 0.229%  cap hits 9  ledger -0.00061c/offer (62785)
+  bonus1  price 482c (exact 482.0c, played at 5.000c per 10 tenths)  paid payback 97.814% +- 0.063  exact 97.814% +- 0.063  paid - exact 0.0000% +- 0.0000  avg win 471.462c  bonus on 100.000%  cap hits 2071  ledger 0.00000c/offer (27318144)
+  bonus2  price 1455c (exact 1455.0c, played at 5.000c per 10 tenths)  paid payback 98.008% +- 0.040  exact 98.008% +- 0.040  paid - exact 0.0000% +- 0.0000  avg win 1426.015c  bonus on 100.000%  cap hits 4538  ledger 0.00002c/offer (28645798)
+  hunt    price 10c (exact 10.0c, played at 5.000c per 10 tenths)  paid payback 98.124% +- 0.439  exact 98.124% +- 0.439  paid - exact -0.0001% +- 0.0005  avg win 9.812c  bonus on 1.248%  cap hits 28  ledger -0.00009c/offer (342935)

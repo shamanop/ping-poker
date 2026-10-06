@@ -1,0 +1,73 @@
+/* CONCEPT C: STICKY NOTES. The monitor already wears two painted sticky notes; the game writes on fresh ones stuck over them (leads, appointment), on the head band (cold line, pick prompt)
+   and on the board (the ONE MORE CALL choice is two notes you slap). Pot and feed ride a taller top bar (a ticker tape). */
+#modebar{height:30px;grid-template-columns:auto 1fr;gap:10px}
+#shake{padding-top:30px}
+#modebar .tape{display:flex;justify-content:space-between;align-items:center;gap:8px;min-width:0;overflow:hidden;font-family:var(--font);font-weight:700;font-size:14px;white-space:nowrap}
+#modebar .feed{color:var(--cream);overflow:hidden;text-overflow:ellipsis}
+#modebar .feed b{color:var(--gold)}#modebar .feed em{font-style:normal;color:var(--gold);font-family:var(--display)}
+#modebar .pot{flex:none;display:flex;align-items:baseline;gap:6px;padding:0 8px;height:22px;line-height:22px;border:2px solid var(--gold2);border-radius:5px;background:#060b14;color:var(--gold);font-family:var(--display);font-size:16px;text-shadow:0 0 8px rgba(255,170,40,.6)}
+#modebar .pot small{font-family:var(--display);font-size:10.5px;letter-spacing:.1em;color:var(--red)}
+#modebar.gold .pot{background:linear-gradient(var(--gold),var(--gold2));color:var(--ink-dk);text-shadow:none}#modebar.gold .pot small{color:var(--red-lo)}
+/* the paper */
+.note{position:absolute;z-index:7;color:#241a0a;font-family:var(--memo);background:linear-gradient(172deg,#fff3a0,#f6d84a 70%,#e8bf2e);box-shadow:0 2px 0 rgba(120,90,10,.5),0 6px 10px rgba(0,0,0,.5)}
+.note::after{content:"";position:absolute;right:0;bottom:0;width:14px;height:14px;background:linear-gradient(315deg,#6d5410 46%,rgba(255,250,210,.9) 50%);box-shadow:-1px -1px 2px rgba(0,0,0,.25)}
+.note.red{background:linear-gradient(172deg,#ffb48a,#f2814a 70%,#d9602a)}
+.note b{font-family:var(--display);font-weight:400}
+/* leads stack, over the painted top-left note */
+#stack{left:20px;top:20px;width:92px;height:92px;rotate:-4deg;padding:6px 6px 0;display:grid;align-content:start;line-height:1}
+#stack::before{content:"";position:absolute;inset:0;z-index:-1;translate:3px 3px;rotate:4deg;background:#e8bf2e;box-shadow:0 2px 3px rgba(0,0,0,.4)}
+#stack small{font-family:var(--display);font-size:12px;letter-spacing:.12em;color:#b02a1d}
+#stack b{font-size:36px;color:#241a0a;letter-spacing:-.02em;margin-top:1px}
+#stack em{font-style:normal;font-size:13.5px;color:#4a3a14;margin-top:-1px}
+#stack .bar{position:absolute;left:7px;right:9px;bottom:9px;height:9px;border:2px solid #241a0a;border-radius:5px}
+#stack .bar i{display:block;height:100%;width:var(--w);background:#d8402e;border-radius:3px}
+#stack.full{background:none;box-shadow:none;padding:0}
+#stack.full::after,#stack.full::before{display:none}
+#stack.full img{position:absolute;left:-6px;top:-6px;width:106px;height:106px;filter:drop-shadow(0 4px 4px rgba(0,0,0,.6))}
+#stack.full .fl{position:absolute;left:6px;right:6px;bottom:-12px;text-align:center;font-family:var(--display);font-size:15px;color:var(--cream);background:var(--red);border:2px solid var(--ink-dk);border-radius:4px;padding:1px 0;line-height:1.1;white-space:nowrap}
+/* appointment note, over the painted bottom-right one */
+#apptn{left:462px;top:332px;width:82px;height:80px;rotate:5deg;padding:6px 4px 0;display:grid;align-content:start;justify-items:center;text-align:center;line-height:1.05}
+#apptn small{font-family:var(--display);font-size:11px;letter-spacing:.1em;color:#b02a1d}
+#apptn b{font-size:22px;color:#241a0a}#apptn em{font-style:normal;font-size:14px;color:#241a0a;font-family:var(--memo)}
+/* head-band note: cold line (and the pick prompt in its place) */
+#cold{right:8px;top:34px;width:246px;padding:7px 10px 9px;rotate:1.8deg;font-size:15px;line-height:1.15;z-index:6;white-space:nowrap}
+#cold u{text-decoration:none;background:linear-gradient(transparent 58%,rgba(216,64,46,.45) 58% 92%,transparent 92%);font-weight:400}
+.bonus #cold{display:none}
+#pickn{right:8px;top:70px;width:236px;padding:6px 10px 12px;rotate:-1.5deg;z-index:7;text-align:center;line-height:1.05}
+#pickn b{display:block;font-size:25px;color:#b02a1d;letter-spacing:.02em;margin-top:2px}
+#pickn small{display:block;font-size:14px;color:#241a0a;margin-top:2px}
+#pickn .tm{position:absolute;left:10px;right:34px;bottom:5px;height:7px;border:2px solid #241a0a;border-radius:4px}
+#pickn .tm i{display:block;height:100%;width:var(--w);background:#d8402e;border-radius:2px}
+#pickn .tm span{position:absolute;right:-24px;top:-8px;font-size:13px;font-family:var(--display);color:#241a0a}
+/* warm tag: a mini sticky flag on the square's top right */
+.wfl{position:absolute;z-index:6;width:var(--cell);height:var(--cell);pointer-events:none}
+.wfl i{position:absolute;right:-4px;top:-5px;padding:0 4px;font-style:normal;font-family:var(--display);font-size:13px;line-height:17px;color:#241a0a;background:linear-gradient(#fff3a0,#f2cf3c);rotate:6deg;box-shadow:0 2px 0 rgba(120,90,10,.6),0 3px 4px rgba(0,0,0,.5);white-space:nowrap}
+/* spin / bet */
+#spin.cb span{font-size:15.5px;letter-spacing:.02em}
+#spin.cb{filter:drop-shadow(0 0 14px rgba(255,208,88,.85)) drop-shadow(0 6px 6px rgba(0,0,0,.7))}
+#betM.cb .sq{opacity:.35}#betM.cb .lbl{color:var(--hot)}
+#ribbon.gold{color:var(--ink-dk);text-shadow:0 1px 0 rgba(255,255,255,.5)}#ribbon.gold::before{background:linear-gradient(var(--gold),var(--gold2))}#ribbon.gold .r{color:var(--red-lo);text-shadow:none}
+.slots i.hot.pk{box-shadow:inset 0 0 0 3px var(--gold),0 0 0 3px var(--ink-dk),0 0 0 6px var(--gold),0 0 20px 8px rgba(255,208,88,.8)}
+/* ONE MORE CALL: two notes on the board, a tape strip with the timer across them */
+#two{position:relative;align-self:end;margin:0 10px 92px;height:236px;pointer-events:none}
+#two .note{pointer-events:auto;top:34px;width:236px;height:190px;padding:14px 10px 20px;display:grid;align-content:center;justify-items:center;gap:5px;text-align:center;line-height:1.05;z-index:2}
+#two .note.l{left:0;rotate:-3deg}#two .note.r{right:0;rotate:2.5deg}
+#two .note b{font-size:36px;color:#241a0a}#two .note.r b{font-size:33px;color:#5c120b}
+#two .note em{font-style:normal;font-family:var(--display);font-size:29px;color:#b02a1d}#two .note.r em{color:#241a0a;font-size:26px}
+#two .note small{font-family:var(--memo);font-size:16px;color:#241a0a}
+#two .tape2{position:absolute;left:50%;top:0;width:232px;height:44px;margin-left:-116px;rotate:-1deg;z-index:4;display:grid;align-content:center;justify-items:center;background:linear-gradient(rgba(240,232,205,.95),rgba(214,202,164,.95));box-shadow:0 3px 6px rgba(0,0,0,.5);pointer-events:none}
+#two .tape2 b{font-family:var(--display);font-weight:400;font-size:14px;letter-spacing:.06em;color:var(--red-lo)}
+#two .tape2 .tm{width:200px;height:9px;border:2px solid #241a0a;border-radius:5px;margin-top:2px}#two .tape2 .tm i{display:block;height:100%;width:var(--w);background:var(--red);border-radius:3px}
+/* ghost: a rubber stamp in the head band */
+.gstamp{position:absolute;z-index:7;left:74%;top:50%;translate:-50% -50%;rotate:-6deg;padding:5px 14px 4px;border:4px double var(--red-lo);border-radius:6px;background:var(--cream);color:var(--red-lo);font-family:var(--display);font-size:18px;letter-spacing:.06em;line-height:1.05;text-align:center;white-space:nowrap;box-shadow:0 4px 0 var(--ink-dk),0 10px 16px rgba(0,0,0,.55)}
+.gstamp strong{display:block;font-weight:400;font-size:38px;letter-spacing:.02em}
+/* pot: one big note slapped on the board */
+#potn{position:relative;align-self:end;justify-self:center;width:300px;height:210px;margin:0 0 168px;rotate:-3.5deg;padding:16px 10px 10px;display:grid;align-content:center;justify-items:center;text-align:center;line-height:1.05;pointer-events:auto;
+  background:repeating-conic-gradient(from 0deg at 50% 50%,rgba(255,255,255,.18) 0 6deg,transparent 6deg 18deg),linear-gradient(172deg,#fff3a0,#f6d84a 70%,#e8bf2e);box-shadow:0 3px 0 rgba(120,90,10,.5),0 14px 24px rgba(0,0,0,.7);color:#241a0a;font-family:var(--memo)}
+#potn::after{content:"";position:absolute;right:0;bottom:0;width:26px;height:26px;background:linear-gradient(315deg,#6d5410 46%,rgba(255,250,210,.9) 50%)}
+#potn small{font-size:17px;letter-spacing:.06em}
+#potn b{font-family:var(--display);font-weight:400;font-size:30px;color:#b02a1d;margin:2px 0}
+#potn em{font-style:normal;font-family:var(--display);font-size:50px;color:var(--gold);-webkit-text-stroke:7px var(--ink-dk);paint-order:stroke fill;text-shadow:0 4px 0 #000}
+#potn span{font-size:14.5px;margin-top:2px}
+#potn .cw{position:absolute;width:76px;height:76px;background:var(--img-cashwad) center/contain no-repeat;filter:drop-shadow(0 6px 5px rgba(0,0,0,.6))}
+#potn .cw.l{left:-34px;top:-30px;rotate:-14deg}#potn .cw.r{right:-34px;bottom:-26px;rotate:14deg;scale:-1 1}

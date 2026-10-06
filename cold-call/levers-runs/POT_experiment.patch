@@ -1,0 +1,38 @@
+diff --git a/games/coldcall-engine.js b/games/coldcall-engine.js
+index c0152e2..4547715 100644
+--- a/games/coldcall-engine.js
++++ b/games/coldcall-engine.js
+@@ -172,6 +172,13 @@
+   // chance that one paid spin takes the pot: one in `oneInPerDollar` per dollar of cost
+   // oneInPerDollar <= 0 (or not a number) switches the pot off: chance 0, never 1
+   function potHitChance(pullCfg, costCents) { const o = (pullCfg || CFG.pull).pot.oneInPerDollar; return o > 0 && Number.isFinite(o) ? Math.min(1, (costCents / 100) / o) : 0; }
++  // EXPERIMENT (levers 8.11, not committed): prize of one pot hit. A: floorCents > 0 lifts the cap to at least floorCents; B: capCents > 0 is the cap in money for every bet
++  function potPrize(pullCfg, bal, betCents) {
++    const P = (pullCfg || CFG.pull).pot; let cap = P.maxPayX * betCents;
++    if (P.floorCents > 0) cap = Math.max(cap, P.floorCents);
++    if (P.capCents > 0) cap = P.capCents;
++    return Math.min(bal, cap);
++  }
+ 
+   function createEngine(cfgIn) {
+     const cfg = cfgIn || CFG;
+@@ -592,5 +599,5 @@
+   // THE PULL round: (rng, { buy, bet, state, now, day, script, auto, decide }, decisions) -> { status: 'done' | 'pending', ... }
+   const playRound = (rng, input, decisions) => engine.playRound(rng, input, decisions);
+ 
+-  return { createEngine, engine, resolveRound, rngFrom, playRound, newState, tickState, coldInfo, potSlice, potHitChance, cbBet, cbArm, cbLevel: cbBet, winTier, cents, TIERS, CFG, SYM, MODES, BUYS, FORCES, TIER_NAMES, BET_LEVELS, COLS, ROWS, N, NREG, WILD, BELL, PHONE, MIN_CLUSTER, MAX_WIN_X, MAX_WIN_T };
++  return { createEngine, engine, resolveRound, rngFrom, playRound, newState, tickState, coldInfo, potSlice, potHitChance, potPrize, cbBet, cbArm, cbLevel: cbBet, winTier, cents, TIERS, CFG, SYM, MODES, BUYS, FORCES, TIER_NAMES, BET_LEVELS, COLS, ROWS, N, NREG, WILD, BELL, PHONE, MIN_CLUSTER, MAX_WIN_X, MAX_WIN_T };
+ });
+diff --git a/games/coldcall.js b/games/coldcall.js
+index f23adea..36f5611 100644
+--- a/games/coldcall.js
++++ b/games/coldcall.js
+@@ -211,7 +211,7 @@ function settle(rec, r, autoWhy, extraSocket) {
+       if (!isInt(slice.slice) || !isInt(slice.rem)) throw new Error('bad pot slice');
+       const u = (module.exports.potRng || cryptoRng())(), bal = pot.bal + slice.slice;
+       if (u < Eng.potHitChance(cfg, cost) && bal >= cfg.pot.minBal && bal > 0) {
+-        prize = Math.min(bal, cfg.pot.maxPayX * betCents);
++        prize = Eng.potPrize(cfg, bal, betCents);
+         if (!isInt(prize) || prize < 0) throw new Error('bad pot prize');
+         wonAt = C.now();
+       }

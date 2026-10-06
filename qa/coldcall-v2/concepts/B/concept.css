@@ -1,0 +1,73 @@
+/* CONCEPT B: THE ROLODEX. Leads are index cards standing in a card file set into the monitor's top bezel; each card = 20 leads and the last one is the red CALLBACK card.
+   The pot is the "#1 CLOSER" mug, the daily appointment is a desk-calendar leaf, the feed rides the rule bar, decisions are two phone keys in the thumb zone. */
+#rolo{position:absolute;z-index:7;left:102px;top:14px;width:360px;height:44px;display:flex;align-items:center;gap:8px;padding:0 10px 0 12px;border:3px solid var(--ink-dk);border-radius:8px;overflow:hidden;
+  background:linear-gradient(#060b14,#101a2e);box-shadow:inset 0 3px 8px #000,0 2px 0 rgba(255,244,214,.55)}
+#rolo .t{flex:none;display:grid;line-height:1;width:98px}
+#rolo .t small{font-family:var(--display);font-size:11.5px;letter-spacing:.12em;color:var(--red);text-shadow:0 0 6px rgba(216,64,46,.55)}
+#rolo .t b{font-family:var(--display);font-weight:400;font-size:22px;color:var(--gold);text-shadow:0 0 8px rgba(255,170,40,.6),0 2px 0 #5a2a00;white-space:nowrap}
+#rolo .t b i{font-style:normal;font-size:13px;color:var(--dim);text-shadow:none}
+#rolo .cards{flex:1;position:relative;height:100%}
+#rolo .cards u{position:absolute;bottom:-5px;width:11px;height:35px;border:2px solid var(--ink-dk);border-radius:3px 3px 0 0;text-decoration:none;background:linear-gradient(#1a2c48,#0e1a2e);transform-origin:50% 100%;rotate:var(--r)}
+#rolo .cards u.on{background:linear-gradient(#fff6dc,#e3d3a6)}
+#rolo .cards u.on::before{content:"";position:absolute;left:1px;right:1px;top:2px;height:5px;background:var(--tab,var(--gold2))}
+#rolo .cards u.cur{height:43px;bottom:-5px;background:linear-gradient(#fff6dc,#e3d3a6);box-shadow:0 0 8px rgba(255,208,88,.8)}
+#rolo .cards u.cur::before{content:"";position:absolute;left:1px;right:1px;top:2px;height:6px;background:var(--gold2)}
+#rolo .cards u.cb{background:linear-gradient(#ef5a42,var(--red-lo));height:38px}
+#rolo .cards u.cb.up{height:46px;box-shadow:0 0 10px var(--red)}
+#rolo.full{box-shadow:inset 0 3px 8px #000,0 2px 0 rgba(255,244,214,.55),0 0 0 2px var(--gold),0 0 14px rgba(255,208,88,.7)}
+#rolo.full .t b{color:var(--cream)}
+/* feed rides the rule bar (right end); the prompt takes the bar over during a decision */
+#ribbon .r.feed{font-size:14px;letter-spacing:.02em;color:var(--gold)}
+#ribbon .r.feed s{text-decoration:none;color:var(--cream);margin-right:5px}
+#ribbon.ask::before{background:linear-gradient(90deg,var(--red) 0 var(--left),#34100c var(--left))}
+#ribbon.ask{color:var(--cream)}
+#ribbon.ask .r{color:var(--gold)}
+#ribbon.gold{color:var(--ink-dk);text-shadow:0 1px 0 rgba(255,255,255,.5)}#ribbon.gold::before{background:linear-gradient(var(--gold),var(--gold2))}#ribbon.gold .r{color:var(--red-lo);text-shadow:none}
+.bonus #ribbon .r s{color:var(--ink-dk)}.bonus #ribbon .r.feed{color:var(--red-lo)}
+/* lips: calendar leaf (left), mug pot (right) */
+.lipb{position:absolute;z-index:7;top:402px;width:100px;height:46px}
+#leaf{left:22px;border:3px solid var(--ink-dk);border-radius:6px;overflow:hidden;background:linear-gradient(#fff6dc,#e3d3a6);box-shadow:0 2px 0 rgba(255,244,214,.55),0 4px 4px rgba(0,0,0,.4);display:grid;grid-template-rows:14px 1fr;text-align:center}
+#leaf small{background:var(--red);color:var(--cream);font-family:var(--display);font-size:11px;letter-spacing:.12em;line-height:14px}
+#leaf b{font-family:var(--display);font-weight:400;font-size:19px;line-height:25px;color:var(--paper-ink);white-space:nowrap}
+#leaf b i{font-style:normal;font-size:13px;color:var(--red-lo);margin-left:5px}
+#potb{left:440px;border:3px solid var(--ink-dk);border-radius:8px;background:linear-gradient(#060b14,#101a2e);box-shadow:inset 0 3px 8px #000,0 2px 0 rgba(255,244,214,.55);display:grid;align-content:center;justify-items:center;line-height:1}
+#potb .m{display:flex;align-items:center;gap:4px;font-family:var(--display);font-size:11.5px;letter-spacing:.1em;color:var(--red);text-shadow:0 0 6px rgba(216,64,46,.55)}
+#potb .m i{display:block;width:24px;height:24px;margin:-4px 0;background:var(--img-big_mug) center/contain no-repeat;filter:drop-shadow(0 2px 2px rgba(0,0,0,.7))}
+#potb b{font-family:var(--display);font-weight:400;font-size:15px;color:var(--gold);text-shadow:0 0 8px rgba(255,170,40,.6),0 2px 0 #5a2a00;white-space:nowrap;margin-top:2px}
+/* warm tag: red rubber stamp on the square */
+.wst{position:absolute;z-index:6;width:var(--cell);height:var(--cell);pointer-events:none;display:grid;place-items:end center}
+.wst i{margin-bottom:1px;padding:0 4px;font-style:normal;font-family:var(--display);font-size:13.5px;line-height:17px;color:#fff3d6;background:rgba(122,22,12,.92);border:2px solid var(--cream);border-radius:4px;rotate:-5deg;box-shadow:0 2px 0 var(--ink-dk);white-space:nowrap}
+/* cold line: a label-maker tape in the fine row */
+#fine.tape{justify-self:center;padding:2px 14px;font-family:var(--font);font-size:13.5px;letter-spacing:.02em;color:var(--paper-ink);text-shadow:none;background:linear-gradient(#fff6dc,#e3d3a6);border:2px solid var(--ink-dk);border-radius:3px;box-shadow:0 2px 0 var(--ink-dk)}
+#fine.tape b{color:var(--red-lo)}
+/* spin / bet */
+#spin.cb span{font-size:15.5px;letter-spacing:.02em}
+#spin.cb{filter:drop-shadow(0 0 14px rgba(255,208,88,.85)) drop-shadow(0 6px 6px rgba(0,0,0,.7))}
+#betM.cb .sq{opacity:.35}#betM.cb .lbl{color:var(--hot)}
+/* ONE MORE CALL: the HUD's top row becomes two phone keys and a countdown dial; the board stays untouched */
+#hud.dec #balM,#hud.dec #spin,#hud.dec #betM{display:none}
+.dec2{grid-column:1/-1;grid-row:1;display:grid;grid-template-columns:1fr 100px 1.15fr;gap:8px;align-items:center;height:100px}
+.dec2 .k{display:grid;align-content:center;justify-items:center;gap:3px;height:96px;padding:4px 4px;border:3px solid var(--ink-dk);border-radius:10px;text-align:center;line-height:1.05;box-shadow:0 5px 0 var(--ink-dk),0 10px 10px rgba(0,0,0,.45)}
+.dec2 .hang{background:linear-gradient(var(--beige-hi),var(--beige-lo));color:var(--paper-ink)}
+.dec2 .more{background:linear-gradient(#e2472f,var(--red-lo));color:#fff3d6;text-shadow:0 2px 0 var(--red-dk)}
+.dec2 .k b{font-family:var(--display);font-weight:400;font-size:25px}.dec2 .k em{font-style:normal;font-family:var(--display);font-size:19px}
+.dec2 .hang em{color:var(--red-lo)}.dec2 .more em{color:var(--gold);text-shadow:0 2px 0 #000}.dec2 .k small{font-size:13px;font-weight:700}
+.dec2 .dl{position:relative;width:96px;height:96px;border-radius:50%;justify-self:center;background:conic-gradient(var(--gold) 0 var(--deg),#1a2c48 var(--deg));border:3px solid var(--ink-dk);box-shadow:0 4px 8px rgba(0,0,0,.6)}
+.dec2 .dl::before{content:"";position:absolute;inset:11px;border-radius:50%;background:radial-gradient(circle at 36% 30%,rgba(255,252,235,.7),transparent 38%),radial-gradient(circle,var(--beige-hi),var(--beige-lo));border:3px solid var(--ink-dk)}
+.dec2 .dl span{position:absolute;inset:0;display:grid;place-items:center;font-family:var(--display);font-size:26px;color:var(--red-lo)}
+/* ghost: the win readout itself shows the miss */
+#winbox.ghost{grid-template-columns:auto 1fr}
+#winbox.ghost .lbl{font-size:11.5px;letter-spacing:.06em;line-height:1.1;color:var(--hot);text-shadow:0 0 6px rgba(92,199,220,.6)}
+#winbox.ghost #win{color:#aee9f5;text-shadow:0 0 12px rgba(110,215,240,.85),0 2px 0 #0a2234}
+/* pick */
+.slots i.hot.pk{box-shadow:inset 0 0 0 3px var(--gold),0 0 0 3px var(--ink-dk),0 0 0 6px var(--gold),0 0 20px 8px rgba(255,208,88,.8)}
+/* pot: a small medallion on the board, mug and wads */
+#potw{position:relative;align-self:center;justify-self:center;width:420px;align-self:end;margin:0 auto 150px;padding:14px 10px 16px;display:grid;justify-items:center;gap:0;text-align:center;overflow:visible;border:3px solid var(--cream);outline:3px solid var(--ink-dk);border-radius:14px;
+  background:repeating-conic-gradient(from 0deg at 50% 38%,rgba(255,208,88,.2) 0 6deg,transparent 6deg 18deg),radial-gradient(ellipse at 50% 30%,#1f4570,var(--glass-mid) 55%,var(--glass-lo) 100%);box-shadow:inset 0 0 30px rgba(0,0,0,.5),0 12px 30px rgba(0,0,0,.7);pointer-events:auto}
+#potw .mug{width:128px;height:128px;margin:-62px 0 -10px;background:var(--img-big_mug) center/contain no-repeat;filter:drop-shadow(0 10px 8px rgba(0,0,0,.6))}
+#potw small{font-family:var(--display);font-size:15px;letter-spacing:.2em;color:var(--cream);text-shadow:0 2px 3px #000}
+#potw b{font-family:var(--display);font-weight:400;font-size:34px;line-height:1.05;color:var(--gold);-webkit-text-stroke:6px var(--ink-dk);paint-order:stroke fill;text-shadow:0 4px 0 var(--red-lo)}
+#potw em{font-style:normal;font-family:var(--display);font-size:52px;line-height:1.05;color:var(--gold);-webkit-text-stroke:7px var(--ink-dk);paint-order:stroke fill;text-shadow:0 4px 0 #000,0 0 16px rgba(255,190,80,.55)}
+#potw span{font-weight:700;font-size:14px;color:var(--cream);text-shadow:0 2px 3px #000}
+#potw .cw{position:absolute;top:50%;width:84px;height:84px;margin-top:-30px;background:var(--img-cashwad) center/contain no-repeat;filter:drop-shadow(0 6px 5px rgba(0,0,0,.6))}
+#potw .cw.l{left:-26px;rotate:-14deg}#potw .cw.r{right:-26px;rotate:14deg;scale:-1 1}

@@ -1,0 +1,12 @@
+COLD CALL --pull: 100000 sessions x 2000 paid spins = 200000000 paid spins, flat bet 100c, state carried across sessions, pick best, gamble bank, seed 121, 24 threads, 200 batches, 56.3s
+  total payback   96.143% +- 0.199 (95%, by batch means, per PAID spin, money in real cents; Callback rounds are free)
+  paid cents      wallet gets 95.147% of stake (+-0.199) incl. Callback, ex pot; exact value of the same rounds 95.147%; rounding drift 0.0000% +- 0.0000 (should be 0)
+  decision ledger 827876 ONE MORE CALL offers (0.0% shown rounded up, taken 0.0%): policy bank gains 0.00000 cents per offer +- 0.00000 (sd 0.000); 0 = the shown amount tells nothing
+  by part         base clusters 29.43%  base phone 19.49%  natural bonus 25.86% (+-0.166)  Callback bonus 20.37% (+-0.119)  ONE MORE CALL net 0.000% (+-0.000)  pot paid 0.995% (+-0.001)
+  Callback        0.216 per 100 paid spins; spins per Callback mean 463.0  P10 456  median 463  P90 470; avg Callback bonus 94.33x of its own bet; avg Callback bet 100.0c, 400 of 431857 played under the nominal bet
+  left over       239.3 leads on average and 0 of 200 Callbacks still waiting at the end of every batch (carried until then)
+  spins           dead 78.16%  paid base 21.67%  natural bonus 1 in 420  cap hits 81  leads worked 1.069 per paid spin  value per lead 0.1905x bet (Callback part 20.37% of stake)
+  warm            marked-no-phone spins 42.53 per 100; warm squares created 0.626 per spin; spins starting with warm 30.66 per 100; phone features fired on warm squares 1.537 per 100 (avg pay 5.88x)
+  ghost           6.00 per 100 spins; avg shown 11.65x; pay > 0 100.0%; >= 1x 100.0%; >= 10x 34.58%; max 10000.0x
+  decisions       picks 0.417 per 100 spins; ONE MORE CALL offered 0.414 per 100, taken 0.000 per 100
+  pot             275.3 hits per 1M spins; avg pot at hit 53.70 (bet units: 53.7x bet); fed 1.000% of stake, seed 0.000%, paid out 0.995%, 9112.17 left in the pot at the end

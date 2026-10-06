@@ -1,0 +1,91 @@
+{
+  "_note": "ONE swap point for art. Replace files (same names) or edit paths here; no code change. Paths are relative to this file. Skin 3 (the monitor): the 18 painted symbols carry their own lettering (mug, note, closer, bell, ...), Chris approved lettered symbols 2026-10-06, so text inside symbol art is allowed. The three quote bubbles are blank on purpose: the game draws the amount on them. 'symbols' are the 13 board symbols (ids = ColdCallEngine.SYM) plus the three quote bubbles; 'pieces' and 'textures' are also exposed to CSS as --img-<id> custom properties at load. Source art and the export script live in cold-call/art/redesign/.",
+  "symbols": {
+    "mug": "img/s3_mug.webp",
+    "note": "img/s3_note.webp",
+    "ball": "img/s3_ball.webp",
+    "can": "img/s3_can.webp",
+    "cups": "img/s3_cups.webp",
+    "headset": "img/s3_headset.webp",
+    "rx": "img/s3_rx.webp",
+    "pile": "img/s3_pile.webp",
+    "cashwad": "img/s3_cashwad.webp",
+    "cash": "img/s3_cash.webp",
+    "closer": "img/s3_closer.webp",
+    "bell": "img/s3_bell.webp",
+    "phone": "img/s3_phone.webp",
+    "quote_bronze": "img/s3_quote_bronze.webp",
+    "quote_silver": "img/s3_quote_silver.webp",
+    "quote_gold": "img/s3_quote_gold.webp"
+  },
+  "hero": {
+    "file": "img/hero.webp",
+    "mouth": {
+      "x": 0.545,
+      "y": 0.49
+    },
+    "moods": {
+      "hype": {
+        "file": "img/hero_hype.webp",
+        "mouth": {
+          "x": 0.574,
+          "y": 0.51
+        }
+      },
+      "shock": {
+        "file": "img/hero_shock.webp",
+        "mouth": {
+          "x": 0.5,
+          "y": 0.565
+        }
+      },
+      "win": {
+        "file": "img/hero_win.webp",
+        "mouth": {
+          "x": 0.5,
+          "y": 0.47
+        }
+      },
+      "rage": {
+        "file": "img/hero_rage.webp",
+        "mouth": {
+          "x": 0.515,
+          "y": 0.49
+        }
+      }
+    }
+  },
+  "background": {
+    "file": "img/room.webp"
+  },
+  "pieces": {
+    "spin": "img/s3_spin.webp",
+    "seal": "img/seal.webp",
+    "cardmachine": "img/s3_cardmachine.webp",
+    "card": "img/card.webp",
+    "cashwad": "img/s3_cashwad.webp",
+    "phone_gold": "img/s3_phone.webp",
+    "upsell": "img/s3_upsell.webp",
+    "title": "img/title.webp",
+    "bezel": "img/bezel.webp",
+    "desk": "img/desk.webp",
+    "big_mug": "img/s3big_mug.webp",
+    "big_note": "img/s3big_note.webp",
+    "big_can": "img/s3big_can.webp",
+    "big_cashwad": "img/s3big_cashwad.webp",
+    "big_headset": "img/s3big_headset.webp",
+    "big_phone": "img/s3big_phone.webp",
+    "big_bell": "img/s3big_bell.webp",
+    "big_rx": "img/s3big_rx.webp",
+    "big_closer": "img/s3big_closer.webp",
+    "big_cups": "img/s3big_cups.webp",
+    "big_pile": "img/s3big_pile.webp",
+    "big_cash": "img/s3big_cash.webp"
+  },
+  "textures": {},
+  "fonts": [
+    "Alfa Slab One",
+    "Courier Prime",
+    "Special Elite"
+  ]
+}

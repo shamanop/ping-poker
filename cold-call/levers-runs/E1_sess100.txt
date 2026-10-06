@@ -1,0 +1,26 @@
+{
+ "mode": "sessions",
+ "carry": false,
+ "bankX": 100,
+ "sessions": 200000,
+ "seed": 45,
+ "pick": "best",
+ "more": "bank",
+ "cap": 20000,
+ "secs": 49.693,
+ "spins": {
+  "p10": 131,
+  "median": 191,
+  "p90": 1103
+ },
+ "hitCapShare": 0.01452,
+ "sawCallback": 0.1551,
+ "sawAnyBonus": 0.413375,
+ "sawNaturalBonus": 0.412195,
+ "saw20x": 0.545095,
+ "saw100x": 0.226705,
+ "doubled": 0.181865,
+ "firstBonusMeanSpin": 94.76019352887813,
+ "bonusesPerSession": 3.80147,
+ "capHits": 34
+}

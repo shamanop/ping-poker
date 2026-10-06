@@ -88,9 +88,9 @@ function start(env = process.env) {
   });
   // Live slot math (no deploy): token-only (BENDER_ADMIN_TOKEN env), disabled when unset. Moved verbatim from the old server.js.
   const benderAdminOk = req => {
-    const want = env.BENDER_ADMIN_TOKEN || '', got = String(req.get('x-admin-token') || '');
-    if (!want || got.length !== want.length) return false;
-    return crypto.timingSafeEqual(Buffer.from(got), Buffer.from(want));
+    const want = Buffer.from(env.BENDER_ADMIN_TOKEN || ''), got = Buffer.from(String(req.get('x-admin-token') || ''));   // BYTE lengths: a header with one non-ASCII character used to pass a character-length check and make timingSafeEqual throw
+    if (!want.length || got.length !== want.length) return false;
+    return crypto.timingSafeEqual(got, want);
   };
   const benderMod = () => { try { return require('./games/bender.js'); } catch { return null; } };
   app.get('/api/admin/bender-config', (req, res) => {
@@ -106,6 +106,25 @@ function start(env = process.env) {
       const info = m.setLiveConfig(b.reset ? { overrides: {}, note: b.note || 'reset to defaults' } : { overrides: b.overrides || {}, rtpLabel: b.rtpLabel, note: b.note });
       io.emit('g:bender:cfg', { cfg: m.clientCfg(), rtp: info.rtpLabel });
       console.log('[bender] live config updated:', info.note || '(no note)');
+      res.json({ ok: true, ...info });
+    } catch (e) { res.status(400).json({ ok: false, error: e.message }); }
+  });
+  // Same switch for COLD CALL (same token, same header). GET current; POST {overrides, rtpLabel?, note?} swaps (400 + the reason on a bad config, nothing changes); POST {reset:true} restores the shipped math.
+  const coldcallMod = () => { try { return require('./games/coldcall.js'); } catch { return null; } };
+  app.get('/api/admin/coldcall-config', (req, res) => {
+    if (!benderAdminOk(req)) return res.status(403).json({ error: 'forbidden' });
+    const m = coldcallMod(); if (!m) return res.status(404).json({ error: 'no slot' });
+    res.json(m.liveInfo());
+  });
+  app.post('/api/admin/coldcall-config', express.json({ limit: '64kb' }), (req, res) => {
+    if (!benderAdminOk(req)) return res.status(403).json({ error: 'forbidden' });
+    const m = coldcallMod(); if (!m) return res.status(404).json({ error: 'no slot' });
+    const b = req.body, reset = !!b && b.reset === true;               // only the boolean true resets ("false", 1, "yes" are not a reset and do not drop the overrides sent with them)
+    if (!b || typeof b !== 'object' || Array.isArray(b) || (!reset && (!b.overrides || typeof b.overrides !== 'object' || Array.isArray(b.overrides)))) return res.status(400).json({ ok: false, error: 'send {overrides: {...}} or {reset: true}' });
+    try {
+      const info = m.setLiveConfig(reset ? { overrides: {}, note: b.note || 'reset to defaults' } : { overrides: b.overrides, rtpLabel: b.rtpLabel, note: b.note });
+      io.emit('g:coldcall:cfg', m.cfgEvent());
+      console.log('[coldcall] live config updated:', info.note || '(no note)');
       res.json({ ok: true, ...info });
     } catch (e) { res.status(400).json({ ok: false, error: e.message }); }
   });

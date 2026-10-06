@@ -12,3 +12,4 @@ qa/bank/capture.log
 stacks.json
 !tests/v2-unit/fixtures/**/stacks.json
 tables/runs/
+_scratch/

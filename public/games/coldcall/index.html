@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>COLD CALL</title>
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="pull.css">
+</head>
+<body>
+<div id="app">
+  <div id="sides" aria-hidden="true"><div class="side l"><i class="ttl"></i><i class="a" style="--bg:var(--img-big_mug);--x:6;--y:36;--w:36;--r:-9deg;--d:6.2s;--dl:0s"></i><i class="a" style="--bg:var(--img-big_note);--x:54;--y:30;--w:34;--r:8deg;--d:5.4s;--dl:-2s"></i><i class="a" style="--bg:var(--img-big_headset);--x:8;--y:58;--w:34;--r:-6deg;--d:6.8s;--dl:-1s"></i><i class="a" style="--bg:var(--img-big_can);--x:60;--y:56;--w:28;--r:10deg;--d:5.1s;--dl:-3s"></i><i class="a" style="--bg:var(--img-big_cashwad);--x:26;--y:78;--w:40;--r:-5deg;--d:7s;--dl:-2s"></i></div><div class="side r"><i class="a" style="--bg:var(--img-big_closer);--x:28;--y:8;--w:42;--r:5deg;--d:5.6s;--dl:-1s"></i><i class="a" style="--bg:var(--img-big_phone);--x:8;--y:34;--w:38;--r:-8deg;--d:6.4s;--dl:-2s"></i><i class="a" style="--bg:var(--img-big_bell);--x:56;--y:42;--w:34;--r:9deg;--d:5s;--dl:-3s"></i><i class="a" style="--bg:var(--img-big_rx);--x:14;--y:60;--w:28;--r:-10deg;--d:6.2s;--dl:0s"></i><i class="a" style="--bg:var(--img-big_cups);--x:60;--y:64;--w:28;--r:6deg;--d:5.8s;--dl:-2s"></i><i class="a" style="--bg:var(--img-big_cash);--x:30;--y:80;--w:36;--r:8deg;--d:6.6s;--dl:-1s"></i></div></div>
+  <div id="stage">
+    <div id="bgslot"></div>
+    <div id="shake">
+      <section id="head">
+        <img id="hero" alt="" decoding="sync">
+        <i id="ttl" role="img" aria-label="Cold Call"></i>
+        <div id="cap" aria-live="polite"><p id="capT"></p><i id="capTail"></i></div>
+        <div id="bh" hidden><div class="chip"><small>SPINS LEFT</small><b id="bhLeft">0</b></div><div class="chip"><small id="bhTotL">BONUS TOTAL</small><b id="bhTot">$0</b></div></div>
+      </section>
+      <div id="ribbon"><span id="ribL">5+ touching = win</span><span class="r" id="ribR"></span></div>
+      <div id="board">
+        <div class="slots" id="slots"></div>
+        <div id="reels"></div>
+        <div id="ovl"></div>
+        <div id="floats"></div>
+      </div>
+      <div id="scene"></div>
+      <div id="winbox"><span class="lbl">WIN</span><span id="win" data-c="0">$0.00</span></div>
+      <div id="hud">
+        <div class="meter" id="balM"><span class="lbl" id="balL">BALANCE</span><span class="val" id="bal">$0.00</span></div>
+        <button id="spin" class="idle" aria-label="Spin"><span>SPIN</span></button>
+        <div class="meter" id="betM"><span class="lbl">BET</span><div class="row"><button class="sq" id="betDn" aria-label="Lower bet">-</button><span class="val" id="bet">$0.00</span><button class="sq" id="betUp" aria-label="Raise bet">+</button></div></div>
+        <div class="btns">
+          <button id="buy" aria-label="Buy bonus"><b>BUY BONUS</b><span id="buyFrom">from $0</span></button>
+          <button id="auto">AUTO</button>
+          <button id="turbo">TURBO</button>
+          <button id="info" aria-label="Pay table">i</button>
+          <button id="sfxBtn" class="tog" aria-label="Sound effects"><svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 4V5L7 9H3z"/><path class="x" d="M15 9l6 6M21 9l-6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path class="w" d="M15 8.5a5 5 0 0 1 0 7M17.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><em>SFX</em></button>
+          <button id="musicBtn" class="tog" aria-label="Music"><svg viewBox="0 0 24 24"><path d="M9 18V6l11-2v12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/><circle cx="6.500" cy="18" r="3"/><circle cx="17.500" cy="16" r="3"/><path class="x" d="M3 3l18 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg><em>MUSIC</em></button>
+        </div>
+        <div class="fine" id="fine"></div>
+      </div>
+    </div>
+    <canvas id="fx" width="540" height="960"></canvas>
+    <div id="ov"></div>
+    <div id="splash">
+      <div class="in">
+        <div class="sheet">
+          <div class="memo"><span>LEAD SHEET 0042</span><span>DO NOT HANG UP</span></div>
+          <h1>COLD<br>CALL</h1>
+          <p class="sub">Dial. Pitch. Close.</p>
+        </div>
+        <img id="splashHero" alt="">
+        <button class="btn go" id="go" disabled>Loading</button>
+        <div class="dis" id="dis">Play money only. No deposits, no payouts.</div>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="engine.js"></script>
+<script src="assets.js"></script>
+<script src="audio.js"></script>
+<script src="captions.js"></script>
+<script src="hero.js"></script>
+<script src="fx.js"></script>
+<script src="game.js"></script>
+<script src="board.js"></script>
+<script src="phone.js"></script>
+<script src="bonus.js"></script>
+<script src="pull.js"></script>
+<script src="boot.js"></script>
+</body>
+</html>
