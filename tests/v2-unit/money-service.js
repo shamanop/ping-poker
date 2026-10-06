@@ -384,6 +384,86 @@ t('mint, house and admin operations', () => {
   booksOk(ledger);
 });
 
+t('houseRound: one batch, conserves in both currencies, same accounts and reasons as spend/credit', () => {
+  for (const cur of ['chips', 'play']) {
+    const { svc, ledger } = env(); svc.ensureAccount('a');
+    const acct = cur === 'chips' ? 'bank:a' : 'play:a', start = ledger.balance(acct, cur), id0 = ledger.lastId;
+    const r = svc.houseRound('bender', 'a', 300, 1000, cur, 'bender:a:r1');
+    eq(r.dup, false); eq(ledger.lastId, id0 + 1, 'ONE ledger line');
+    eq(ledger.balance(acct, cur), start + 1000 - 300, 'player delta = win - cost'); eq(ledger.balance('house:bender', cur), 300 - 1000, 'house delta = cost - win');
+    const flat = [...ledger.entries(e => e.batchRef === 'bender:a:r1')];
+    eq(flat.length, 2); eq(flat[0].reason, 'bender:spend'); eq(flat[0].from, acct); eq(flat[0].to, 'house:bender');
+    eq(flat[1].reason, 'bender:credit'); eq(flat[1].from, 'house:bender'); eq(flat[1].to, acct); eq(flat[0].amount, 300); eq(flat[1].amount, 1000);
+    // a losing round: house gains
+    svc.houseRound('coldcall', 'a', 50, 20, cur, 'cc:a:r1'); eq(ledger.balance('house:coldcall', cur), 30); eq(ledger.balance(acct, cur), start + 700 - 30);
+    booksOk(ledger);
+  }
+});
+
+t('houseRound: the bet must be covered even when the win is bigger; nothing written on failure', () => {
+  const { svc, ledger } = env(); svc.ensureAccount('a');
+  svc.adminAdjust('a', -(START_CHIPS - 100), 'chips', 'drain', 'drain');            // bank: 100
+  const id = ledger.lastId, snap = JSON.stringify([ledger.list('', 'chips'), ledger.list('', 'play')]);
+  const e = throwsCode(() => svc.houseRound('bender', 'a', 101, 100000, 'chips', 'r1'), 'insufficient');
+  eq(e.details.account, 'bank:a'); eq(e.details.have, 100); eq(e.details.need, 101);
+  eq(ledger.lastId, id); eq(JSON.stringify([ledger.list('', 'chips'), ledger.list('', 'play')]), snap); ok(!ledger.has('r1'));
+  svc.houseRound('bender', 'a', 100, 5, 'chips', 'r2'); eq(ledger.balance('bank:a', 'chips'), 5, 'betting exactly everything is fine');
+  throwsCode(() => svc.houseRound('bender', 'a', 6, 0, 'chips', 'r3'), 'insufficient');
+  throwsCode(() => svc.houseRound('bender', 'nobody', 1, 0, 'chips', 'r4'), 'insufficient');
+  eq(ledger.balance('house:bender', 'chips'), 95);
+});
+
+t('houseRound: win 0 = spend only, cost 0 = credit only, both 0 = noop, validation', () => {
+  const { svc, ledger } = env(); svc.ensureAccount('a');
+  let id = ledger.lastId;
+  svc.houseRound('bender', 'a', 40, 0, 'play', 'lose'); eq(ledger.lastId, id + 1);
+  let flat = [...ledger.entries(e => e.ref === 'lose')]; eq(flat.length, 1); eq(flat[0].reason, 'bender:spend'); eq(ledger.balance('play:a', 'play'), START_PLAY - 40);
+  svc.houseRound('bender', 'a', 0, 90, 'play', 'free'); flat = [...ledger.entries(e => e.ref === 'free')];
+  eq(flat.length, 1); eq(flat[0].reason, 'bender:credit'); eq(ledger.balance('play:a', 'play'), START_PLAY - 40 + 90);
+  id = ledger.lastId; eq(svc.houseRound('bender', 'a', 0, 0, 'play', 'nothing').noop, true); eq(ledger.lastId, id); ok(!ledger.has('nothing'));
+  for (const [c, w] of [[-1, 5], [5, -1], [1.5, 0], [5, 0.5], [NaN, 0], [5, Infinity], ['5', 0], [null, 0], [undefined, 5]]) throwsCode(() => svc.houseRound('bender', 'a', c, w, 'play', 'bad'), 'bad_amount');
+  throwsCode(() => svc.houseRound('roulette', 'a', 1, 1, 'play', 'x'), 'bad_game'); throwsCode(() => svc.houseRound('bender', 'a', 1, 1, 'gold', 'x'), 'bad_cur');
+  throwsCode(() => svc.houseRound('bender', 'a', 1, 1, 'play', ''), 'bad_ref'); throwsCode(() => svc.houseRound('bender', 'a:b', 1, 1, 'play', 'x'), 'bad_key');
+  throwsCode(() => svc.houseRound('bender', 'a', 2 ** 53 - 1, 2 ** 53 - 1, 'play', 'huge'), 'insufficient');
+  eq(ledger.lastId, id);
+  // houseSpend and houseCredit are unchanged
+  svc.houseSpend('bender', 'a', 5, 'play', 'hs'); svc.houseCredit('bender', 'a', 7, 'play', 'hc'); eq(ledger.lastId, id + 2);
+});
+
+t('houseRound: dup on the same ref and content, ref_conflict on any change', () => {
+  const { svc, ledger } = env(); svc.ensureAccount('a');
+  eq(svc.houseRound('bender', 'a', 10, 25, 'chips', 'rr').dup, false);
+  const id = ledger.lastId, bal = ledger.balance('bank:a', 'chips');
+  const again = svc.houseRound('bender', 'a', 10, 25, 'chips', 'rr'); eq(again.dup, true); eq(ledger.lastId, id); eq(ledger.balance('bank:a', 'chips'), bal);
+  throwsCode(() => svc.houseRound('bender', 'a', 10, 26, 'chips', 'rr'), 'ref_conflict');
+  throwsCode(() => svc.houseRound('bender', 'a', 11, 25, 'chips', 'rr'), 'ref_conflict');
+  throwsCode(() => svc.houseRound('bender', 'a', 10, 0, 'chips', 'rr'), 'ref_conflict');
+  throwsCode(() => svc.houseRound('bender', 'a', 10, 25, 'play', 'rr'), 'ref_conflict');
+  throwsCode(() => svc.houseRound('coldcall', 'a', 10, 25, 'chips', 'rr'), 'ref_conflict');
+  svc.ensureAccount('b'); const id2 = ledger.lastId;
+  throwsCode(() => svc.houseRound('bender', 'b', 10, 25, 'chips', 'rr'), 'ref_conflict');
+  eq(ledger.lastId, id2);
+});
+
+t('houseRound: survives a reopen as one unit; a torn tail loses both lines, never one', () => {
+  const e = env(); const { svc, ledger } = e; svc.ensureAccount('a');
+  svc.houseRound('bender', 'a', 100, 250, 'chips', 'round-1');
+  const afterGood = fs.statSync(e.f).size;
+  svc.houseRound('bender', 'a', 100, 900, 'chips', 'round-2');
+  const full = fs.readFileSync(e.f); ledger.close();
+  const e2 = env(e.f);
+  eq(e2.ledger.balance('bank:a', 'chips'), START_CHIPS - 100 + 250 - 100 + 900); eq(e2.svc.houseRound('bender', 'a', 100, 900, 'chips', 'round-2').dup, true);
+  e2.ledger.close();
+  for (const cut of [afterGood + 1, afterGood + 40, afterGood + Math.floor((full.length - afterGood) / 2), full.length - 1]) {
+    fs.writeFileSync(e.f, full.subarray(0, cut));                                   // crash while writing round 2
+    const e3 = env(e.f);
+    eq(e3.ledger.balance('bank:a', 'chips'), START_CHIPS - 100 + 250, 'round 2 is neither half-applied (bet without win) nor partly there, cut=' + cut);
+    eq(e3.ledger.balance('house:bender', 'chips'), -150); ok(!e3.ledger.has('round-2'));
+    eq(e3.svc.houseRound('bender', 'a', 100, 900, 'chips', 'round-2').dup, false, 'the retry plays it once');
+    eq(e3.ledger.balance('bank:a', 'chips'), START_CHIPS - 100 + 250 - 100 + 900); booksOk(e3.ledger); e3.ledger.close();
+  }
+});
+
 t('adminAdjust cannot see or move seat money (H5): the seat is untouched', () => {
   const { svc, ledger } = env();
   svc.ensureAccount('a'); svc.buyIn('a', 'T', 3000, 'chips', 'chips', 'bi');
