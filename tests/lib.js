@@ -37,16 +37,16 @@ class Client {
     this.sock.on('showdown_result', d => this.showdowns.push(d));
     this.sock.on('bust_out', d => this.busts.push(d));
     this.sock.on('chat_message', d => this.chats.push(d));
-    this.sock.on('room_joined', d => { this.joined = d; });
+    this.sock.on('table_joined', d => { this.joined = { ...d, roomId: d.tableId }; });
     this.sock.on('disconnect', () => { this.closed = true; });
   }
   connect() { return new Promise((res, rej) => { if (this.sock.connected) return res(); this.sock.once('connect', res); this.sock.once('connect_error', rej); }); }
   async join(name = this.name, password = PASS) {
-    const n = this.errors.length, j = this.events.filter(e => e.ev === 'room_joined').length;
+    const n = this.errors.length, j = this.events.filter(e => e.ev === 'table_joined').length;
     authJoin(this.sock, { name, avatar: 'x', password });
     for (let i = 0; i < 100; i++) {
       await sleep(20);
-      if (this.events.filter(e => e.ev === 'room_joined').length > j) return { ok: true };
+      if (this.events.filter(e => e.ev === 'table_joined').length > j) return { ok: true };
       if (this.errors.length > n) return { ok: false, error: this.errors[this.errors.length - 1] };
     }
     return { ok: false, error: 'timeout' };

@@ -13,6 +13,7 @@ function createViewlog({ presLedger, accounts, social, bankOf, profileOf, nightN
   function onWrite(w) {
     if (!presLedger) return;
     const t = w.table, name = nameOf(w.key);
+    if (t.unit === 'cents') return;                       // old server: play-money tables write no ledger rows until the night-end rows (tests/tables.js 'Play $ join writes no ledger rows')
     const after = t.unit === 'cents' ? null : guard('bank', () => bankOf(w.key));
     if (w.kind === 'buyin' || w.kind === 'rebuy') {
       const seat = t.seatOfKey(w.key);

@@ -59,7 +59,7 @@ function start(env = process.env) {
   ctx.registry = registryRef.current = createRegistry({
     money: ctx.money, service, ledger, clock, file: paths.TABLES_FILE, rng: rngSource, deckSource: ctx.rig ? ctx.rig.deckSource : null, viewlog, onError: safe.onError,
     out: { state: t => ctx.out.state(t), event: (t, k, d, to) => ctx.out.event(t, k, d, to) }, onLobby: () => ctx.pushLobby(),
-    hooks: { profileOf, isAdmin: k => accounts.isAdmin(k), settlePayments: nets => presLedger.settlePayments(nets) },
+    hooks: { profileOf, isAdmin: k => accounts.isAdmin(k) },
   });
   ctx.views = createViews({ registry: ctx.registry, accounts, presLedger, ledger, service, wallet: ctx.wallet });
   ctx.auth = createAuth({ accounts, registry: ctx.registry });

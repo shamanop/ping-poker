@@ -193,8 +193,7 @@ function createRegistry(deps) {
     const d = new Date(t.endedAt || clock.now());
     const lines = [`The Ping - ${t.name} - ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`];
     for (const p of players) lines.push(`${p.display} ${fmtUnits(p.net, t.unit, true)}`);
-    const payments = t.unit !== 'chips' && hooks.settlePayments ? hooks.settlePayments(players.map(p => ({ key: p.key, net: p.net }))) : [];
-    const o = { nightId: t.nightId, tableId: t.id, table: { name: t.name, mode: t.mode, unit: t.unit }, ended: t.state === 'ended', startedAt: t.createdAt || null, endedAt: t.endedAt || null, players, zeroSum: n.zeroSum, payments, text: lines.join('\n') };
+    const o = { nightId: t.nightId, tableId: t.id, table: { name: t.name, mode: t.mode, unit: t.unit }, ended: t.state === 'ended', startedAt: t.createdAt || null, endedAt: t.endedAt || null, players, zeroSum: n.zeroSum, text: lines.join('\n') };
     if (!n.zeroSum) o.drift = n.sum;
     return o;
   }
