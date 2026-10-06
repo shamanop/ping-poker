@@ -35,7 +35,10 @@ function createRig(ctx) {
       };
     });
     if (drift.length) console.error('[v2] AUDIT DRIFT ' + JSON.stringify(drift).slice(0, 600));   // RIG only: a seat account disagrees with its seat
-    return { bank, wallet, accounts: keys, minted, slotNet, rooms, ledger: ledger.check(), seats, drift };
+    // Soak hooks (P6): money parked in the wallet adapter's memory, and each game module's own audit() (none has one yet), keyed by game id.
+    const games = {};
+    for (const m of (ctx.games && ctx.games.modules) || []) if (m && typeof m.audit === 'function') { try { games[m.id] = m.audit(); } catch (e) { games[m.id] = { error: String(e && e.message) }; } }
+    return { bank, wallet, accounts: keys, minted, slotNet, rooms, ledger: ledger.check(), seats, drift, walletPending: ctx.wallet ? ctx.wallet.pendingCount() : 0, games };
   }
 
   function register(socket, on) {
