@@ -1,13 +1,14 @@
 # tables/ + transport/ progress (builder P3, branch v2-tables, worktree wt-tables)
 
 ## HAND-OFF (top block, keep current)
-- Committed: step 3 (see git log; v2-core 0245430 merged at ddfe12d: houseRound + engine E1).
-- Done: steps 0-3. settings.js, money-port.js, table.js (seats, deadlines, pause, grace, host transfer, autostart check; NO hands).
-- Last proof: `node tests/v2-unit/run-tables.js` -> tables total 67/67 in 3 files; run-money 90/90 (before E1 merge). Engine 96/96 per lead, not re-run by me.
-- Open: steps 4-9.
-- Next: step 4, hand lifecycle in tables/table.js. Hooks already in place: `fireHand(d)` (turn/pre/street/nexthand deadlines, hand:true so pause freezes them), `leaveInHand(seat, kind)` (called by leave() when `liveSeat(seat) && !seat.folded`), `startHand()` (autostart calls it), `this.hand` (engine hand), `committedOf(seat)`, `checkAutostart()`, phase field.
-- Table API facts: `new Table(rec, {money, clock, out, hooks:{seatOf,profileOf}, onError, rng, constants})`; rec is validateSettings value + {id, hostKey, permanent, nightId, nightFromId, nightHand0, blindStartAt, handNo}; `rec.seats` (count) is kept as `table.maxSeats`, `table.seats` is a Map seatNo -> seat record. `out.event(table, kind, data, toKey?)` kinds so far: joined, rebuy, left, room, money, table_event, taken_over; transport/views maps them to the wire names. Deadline ids: 'phase' (autostart/turn/street/nexthand, one at a time), 'grace:<seat>', 'host'.
-- Gotchas: buy-in reason is `buyin:<fund>` for rebuys too (ref kind differs only in the ref). money-port `cashOut` returns `{intent:{amount}}`; `leave()` sweeps the whole seat balance when no hand is live. Exec calls over ~60 s need setsid nohup. wt-tables has node_modules symlinked.
+- Committed: step 4 (git log -1 on v2-tables). v2-core 0245430 merged (houseRound + E1).
+- Done: steps 0-4. tables/{settings,money-port,table,hand-flow}.js. table.js = seats/deadlines/pause/grace/host; hand-flow.js (mixed into Table.prototype) = startHand, act, timeoutTurn, preselect, run-out pacing, settle (commit point), afterCommit (best-effort steps), void, endNight/finishNight, leaveInHand.
+- Last proof: `node tests/v2-unit/run-tables.js` -> tables total 95/95 in 4 files (settings 24, money-port 20, seats 23, hands 28).
+- Open: steps 5-9.
+- Next: step 5 tables/registry.js (+ tables/viewlog.js). Table is constructed `new Table(rec, {money, clock, out, hooks:{seatOf, profileOf}, onError, rng, constants, deckSource})`. `deckSource()` returns a queued RIG deck or null (rig.js in step 6).
+- out.event kinds emitted by Table: joined, rebuy, left, room, money{keys}, table_event{kind: paused|resumed|kicked|host|...}, taken_over{socketId}, blinds_up, hand_start, hand_end{hand,result,bySeat}, bust{key,seat}, void{reason}, night_end{reason,keys}; out.state(table) = push game_state. views.js (step 6) maps them to wire names. `table.lastResult` is the 4.6 showdown_result object plus `.history` (the handHistory row); `table.history` is the last 10 rows; `table.log` the log ring; `table.auditSeats()` feeds `__audit.drift` (money-port.drift).
+- Gotchas: seat.stack is the HAND-START stack while a hand is live (engine stack is in hand.seats[n].stack; seat.stack is copied at the commit). A void restores seat.stack from handStartStacks and sweeps leaving seats. `committed` flag on the table = settleHand returned. A settle failure before the commit voids then rethrows; deadline errors go to onError (transport must void and re-arm). Turn clock: actionTimerSec 0 means no clock for a connected seat; a disconnected seat uses TURN_MS (env, 30 s). Grace expiry mid-hand retries every 5 s.
+- Not yet done in table layer: table_start (host start from waiting) entry point beyond startHand(), updateSettings (table_update), idle sweep, hostKey reassignment on registry level (Table.transferHost exists).
 
 ## Status
 | Step | What | State |
@@ -16,7 +17,7 @@
 | 1 | tables/settings.js | done (24 tests) |
 | 2 | tables/money-port.js | done (20 tests), not yet reviewed by lead |
 | 3 | tables/table.js seats | done (23 tests in tables-seats.js) |
-| 4 | hand lifecycle | todo |
+| 4 | hand lifecycle | done (28 tests in tables-hands.js) |
 | 5 | registry | todo |
 | 6 | transport + boot | todo |
 | 7 | harness slices | todo |

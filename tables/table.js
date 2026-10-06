@@ -23,7 +23,9 @@ class Table {
     this.nightFromId = this.nightFromId || 0;
     this.nightHand0 = this.nightHand0 || 0;
     this.phase = this.state === 'ended' ? 'ended' : 'waiting';
-    this.hand = null;
+    this.hand = null; this.button = this.button == null ? null : this.button;
+    this.log = []; this.history = []; this.committed = false; this.lastResult = null; this.pendingBlinds = null; this.blindLevelSeen = 0; this.voids = [];
+    this.deckSource = deps.deckSource || null;
     this.seats = new Map();                         // seat number -> seat record
     this.deadlines = new Map();                     // id -> { id, kind, at, hand, seat?, frozen? }
     this.handle = null;
@@ -80,10 +82,10 @@ class Table {
   }
 
   fire(d) {
+    if (d.kind === 'nexthand' || d.kind === 'turn' || d.kind === 'pre' || d.kind === 'street') return this.fireHand(d);
     if (d.kind === 'autostart') { if (this.phase === 'waiting' && this.startHand) this.startHand(); }
     else if (d.kind === 'grace') this.graceDue(d.seat);
     else if (d.kind === 'host') this.transferHost();
-    else if (this.fireHand) this.fireHand(d);          // turn / pre / street / nexthand (step 4)
   }
 
   // ---- pause ------------------------------------------------------------------------------------------------
@@ -113,9 +115,16 @@ class Table {
   // Dense list, ascending seat number: the ONLY place an array index of players is born (contract 0.3).
   players() { return [...this.seats.values()].sort((a, b) => a.seat - b.seat); }
   denseIndex(key) { return this.players().findIndex(s => s.key === key); }
-  eligible() { return this.players().filter(s => s.stack > 0 && !s.sitOutNext && s.connected); }
+  eligible() { return this.players().filter(s => s.stack > 0 && !s.sitOutNext && s.connected && !s.leaving); }
   displayOf(key) { const p = this.hooks.profileOf && this.hooks.profileOf(key); return (p && p.display) || key; }
-  liveSeat(s) { return !!(this.hand && s.dealt && this.hand.phase !== 'done'); }   // dealt into the live hand
+  liveSeat(s) { return !!(this.hand && s.dealt && this.hand.phase !== 'done' && !this.committed); }   // dealt into the live hand
+  // What __audit and the drift check need: ledger seat balance must equal stack + handBet (engine stack while a hand is live).
+  auditSeats() {
+    return this.players().map(s => {
+      const hs = this.liveSeat(s) ? this.hand.seats[s.seat] : null;
+      return { key: s.key, stack: hs ? hs.stack : s.stack, handBet: hs ? hs.committed - (hs.returned || 0) : 0 };
+    });
+  }
   committedOf(s) { return this.liveSeat(s) && this.hand.seats[s.seat] ? this.hand.seats[s.seat].committed : 0; }
 
   freeSeat(want) {
@@ -209,7 +218,7 @@ class Table {
     const seat = this.seatOfKey(key);
     if (!seat) return { cashedOut: 0, left: false };
     kind = kind || 'leave';
-    if (this.leaveInHand && this.liveSeat(seat) && !seat.folded) return this.leaveInHand(seat, kind);
+    if (this.liveSeat(seat)) return this.leaveInHand(seat, kind);
     const r = this.money.cashOut(this, key, this.money.seatBalance(this, key), kind);
     this.removeSeat(seat);
     this.out.event(this, 'left', { key, cashedOut: r.noop ? 0 : this.lastCash(r), reason: kind === 'kick' ? 'kicked' : kind }, key);
@@ -242,6 +251,7 @@ class Table {
     seat.connected = false; seat.socketId = null; seat.disconnectedAt = this.now(); seat.graceAt = seat.disconnectedAt + this.K.GRACE_MS;
     this.setDeadline('grace:' + seat.seat, 'grace', this.K.GRACE_MS, { seat: seat.seat });
     if (seat.key === this.hostKey) this.setDeadline('host', 'host', this.K.HOST_GRACE_MS);
+    if (this.handLive() && this.hand.toAct === seat.seat) this.armTurn();     // the seat on turn now runs on the disconnect clock
     this.checkAutostart();
     this.out.event(this, 'room', {}); this.out.state(this);
     return seat;
@@ -290,5 +300,7 @@ class Table {
   // Blind level for the next deal (no timer: computed from blindStartAt).
   blindLevel() { return levelAt(this, this.blindStartAt, this.now()); }
 }
+
+Object.assign(Table.prototype, require('./hand-flow').proto);
 
 module.exports = { Table };
