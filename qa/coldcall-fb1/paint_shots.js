@@ -34,7 +34,7 @@ const S = {
   ghost: { q: mock('ghost'), chips: 1, run: async (p) => { await sleep(1200); } },
   pot: { q: mock('pot'), chips: 1, run: async (p) => { await sleep(1200); } },
   disabled: { q: 'shot=idle', run: async (p) => { await sleep(600); await p.evaluate(() => { document.querySelectorAll('#hud button,.btns button').forEach((b) => { if (b.id !== 'spin') b.disabled = true; }); }); await sleep(300); } },
-  pressed: { q: 'shot=idle', run: async (p) => { await sleep(600); await p.evaluate(() => { document.querySelectorAll('.btns button,.sq').forEach((b) => b.classList.add('fakepress')); }); await sleep(200); } }
+  pressed: { q: 'shot=idle', run: async (p) => { await sleep(600); const r = await p.evaluate(() => { const b = document.getElementById('auto').getBoundingClientRect(); return [b.x + b.width / 2, b.y + b.height / 2]; }); await p.mouse.move(r[0], r[1]); await p.mouse.down(); await sleep(300); } }
 };
 const KEYS = ['#ribbon', '#plNote', '#cap', '#winbox', '#plLeaf', '#plPot', '#hud', '#buy', '#auto', '#turbo', '#info', '#sfxBtn', '#musicBtn', '#betDn', '#betUp', '#spin', '#modebar', '.mb', '#bh', '.dec2 .hang', '.dec2 .more', '.buyopt', '.dial', '.dial .key', '.dial .lcd', '#plBn', '#plmo', '.card', '.toast', '.chip'];
 (async () => {

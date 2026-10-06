@@ -86,7 +86,19 @@
     "ui_lcd": "img/ui/ui_lcd.webp",
     "ui_leaf": "img/ui/ui_leaf.webp",
     "ui_sticky": "img/ui/ui_sticky.webp",
-    "ui_strip_note": "img/ui/ui_strip_note.webp"
+    "ui_strip_note": "img/ui/ui_strip_note.webp",
+    "ui_key_cream": "img/ui/ui_key_cream.webp",
+    "ui_key_gold": "img/ui/ui_key_gold.webp",
+    "ui_key_navy": "img/ui/ui_key_navy.webp",
+    "ui_key_pad": "img/ui/ui_key_pad.webp",
+    "ui_key_red": "img/ui/ui_key_red.webp",
+    "ui_pad_plate": "img/ui/ui_pad_plate.webp",
+    "ui_bubble_body": "img/ui/ui_bubble_body.webp",
+    "ui_bubble_tail": "img/ui/ui_bubble_tail.webp",
+    "ui_card_panel": "img/ui/ui_card_panel.webp",
+    "ui_plate_chip": "img/ui/ui_plate_chip.webp",
+    "ui_plate_win": "img/ui/ui_plate_win.webp",
+    "ui_toast": "img/ui/ui_toast.webp"
   },
   "textures": {},
   "fonts": [

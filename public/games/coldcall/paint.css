@@ -13,3 +13,40 @@
 /* leads strip: ui.css gave it one art slot (#plNote::before reads --note-art): a painted yellow sticky strip, 1032 x 60 = 2x of 516 x 30. The 5 px fill meter stays live CSS on its bottom edge. */
 #plNote{--note-art:var(--img-ui_strip_note);box-shadow:none}
 #plNote .bar{left:5px;right:9px;bottom:3px}
+
+/* ---- S2 (chris 10-06 FB4): buttons. Painted blanks (cream / red / gold / navy key, keypad key + plate) as 9-slice border-images: the box keeps its own border width (3 px, now transparent),
+   the art is drawn by border-image-width inside the same border box, so no box changes size. Text stays live HTML. The chunky lip is part of the painting.
+   States come from ONE blank per colour: rest = painted; pressed = the existing translateY(3px) plus a darker filter; disabled = desaturated filter; lit = the gold blank. ---- */
+.sq,.btns button,.dec2 .hang,.buyopt,.btn.alt,.btn.alt:active{background:none;border-color:transparent;box-shadow:none;border-image:var(--img-ui_key_cream) 20 26 36 26 fill/var(--bw,6px 6px 8px 6px)/0 stretch}
+#buy,.dec2 .more,.btn{background:none;border-color:transparent;box-shadow:none;border-image:var(--img-ui_key_red) 20 26 36 26 fill/var(--bw,6px 6px 8px 6px)/0 stretch}
+.btns button.on,.btns button.on:active{background:none;box-shadow:0 0 10px rgba(255,208,88,.6);border-image:var(--img-ui_key_gold) 20 26 36 26 fill/var(--bw,6px 6px 8px 6px)/0 stretch}
+.btns button:not(#buy),.sq{padding-bottom:3px}
+.sq:active,.btns button:active,.dec2 .k:active,.buyopt:active,.btn:active{box-shadow:none;filter:brightness(.9)}
+.btns button.on:active{box-shadow:0 0 10px rgba(255,208,88,.6)}
+.sq:disabled,.btns button:disabled,.dec2 .k[disabled],.buyopt[disabled],.btn[disabled]{filter:saturate(.45) brightness(.82)}
+.dec2 .hang,.dec2 .more{--bw:11px 16px 20px 16px}
+.buyopt,.btn,.btn.alt{--bw:9px 14px 16px 14px}
+/* mode tabs: only the lit tab is painted (the gold blank); the 24 px bar is too small for the navy 9-slice (it read as a dotted line), so the pill stays CSS */
+#modebar button.on{background:var(--img-ui_key_gold) center/100% 100% no-repeat}
+/* keypad (keypad.css art slots): key face, lit key = the same face through a gold filter (sepia + saturate), plate = the navy brass blank as a 9-slice on the ::before layer */
+.dial{--key-art:var(--img-ui_key_pad);border-color:transparent;box-shadow:0 10px 14px rgba(0,0,0,.55)}
+.dial::before{inset:0;border:solid transparent;border-width:7px 14px 14px 14px;border-radius:0;background:none;border-image:var(--img-ui_pad_plate) 36 36 36 36 fill/18px/0 stretch}
+.dial .key{border-color:transparent;border-radius:0;box-shadow:none;background:none;border-image:var(--img-ui_key_pad) 22 24 44 24 fill/8px 10px 15px 10px/0 stretch;padding-bottom:6px}
+.dial .key:active,.dial .key.lit{transform:translateY(3px);box-shadow:none}
+.dial .key.lit{background:none;filter:sepia(1) saturate(3.4) hue-rotate(-6deg) brightness(1.12) drop-shadow(0 0 8px rgba(255,208,88,.8))}
+/* the painted key's face is narrower than the old CSS key (outline + lip are art): the label steps down so ♪ MUSIC and TURBO keep clear of the outline (chris 10-06 FB4) */
+.btns button{font-size:11.5px;letter-spacing:.3px}.btns button.tog{gap:3px}.tog svg{width:13px;height:13px}.tog em{font-size:10px;letter-spacing:.02em}
+#buy b{font-size:12.5px}
+
+/* ---- S3 (chris 10-06 FB4): speech bubble, toast, panels, plates. Same rule: 9-slice art inside the existing border box (border-image-width), nothing resizes. ---- */
+/* hero caption: painted cream body on #cap::before (its own ink outline), the painted tail replaces the clip-path triangle (captions.js still aims and rotates it). The old 4-way ink drop-shadow outline goes, a soft shadow stays. One 9-slice body serves all three widths (short / medium / 250 px max). */
+#cap{background:none;filter:drop-shadow(0 7px 4px rgba(0,0,0,.45))}
+#cap::before{content:"";position:absolute;inset:0;z-index:0;border:solid transparent;border-width:13px;border-image:var(--img-ui_bubble_body) 34 fill/13px/0 stretch}
+#capTail{width:34px;height:30px;clip-path:none;background:var(--img-ui_bubble_tail) center/100% 100% no-repeat}
+.toast{background:none;border-color:transparent;box-shadow:none;border-image:var(--img-ui_toast) 36 40 36 40 fill/12px 14px 12px 14px/0 stretch;filter:drop-shadow(0 4px 6px rgba(0,0,0,.5))}
+/* modal cards (info, buy menu, confirm, ...) */
+.card{background:none;border-color:transparent;outline:0;box-shadow:none;border-image:var(--img-ui_card_panel) 40 fill/16px/0 stretch;filter:drop-shadow(0 12px 14px rgba(0,0,0,.6))}
+/* readout plates: WIN, POT, SPINS LEFT / BONUS TOTAL, the pick-a-number result windows */
+#winbox{background:none;border-color:transparent;box-shadow:none;border-image:var(--img-ui_plate_win) 36 fill/12px/0 stretch}
+#plPot,.chip{background:none;border-color:transparent;box-shadow:none;border-image:var(--img-ui_plate_chip) 30 fill/10px/0 stretch}
+.chip.set{box-shadow:0 0 14px 2px rgba(255,208,88,.7)}
