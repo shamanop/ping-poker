@@ -234,7 +234,9 @@
       say('idle', 'AUTO: ' + dflt); const r = await nextResult(ctx, box, LOST_MS); advance(ctx, r); return r;
     }
     const reg = { closed: false, close() {} }, iv = { id: 0 };
-    ctx.promptOpen = k; dbgRow.shown = true; T.ready(id);
+    ctx.promptOpen = k; dbgRow.shown = true;
+    { const t = ctx.timer; t.at = Date.now(); t.expiresAt = t.at + (t.timeoutMs || 20000); t.synced = false; }   // fresh local clock for the prompt; the server's g:coldcall:timer reply (authoritative) updates it in place, a 'rate' error on ready is ignored
+    T.ready(id);
     const prompt = ask(ctx, k, pend, reg);
     const expiry = new Promise((res) => { iv.id = setInterval(() => { if (ctx.timer.left() <= 0) { clearInterval(iv.id); res({ expired: true }); } }, 150); });
     let w;

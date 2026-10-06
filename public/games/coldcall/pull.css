@@ -50,7 +50,7 @@
 /* ---- feed: rides the rule bar's right end ---- */
 #ribbon>#plFeed{position:absolute;right:16px;left:40%;top:0;bottom:0;display:flex;align-items:center;justify-content:flex-end;overflow:hidden;white-space:nowrap;font-family:var(--display);font-size:14px;letter-spacing:.02em;color:var(--gold);text-shadow:0 2px 0 var(--red-dk);opacity:1;transition:opacity .25s}
 #ribbon>#plFeed[hidden]{display:none}
-#plFeed s{text-decoration:none;color:var(--cream);margin-right:6px}
+#plFeed s{text-decoration:none;color:var(--cream);margin-right:6px;min-width:0;overflow:hidden;text-overflow:ellipsis;flex:0 1 auto}
 #plFeed.you s{color:#fff;background:var(--ink-dk);padding:0 5px;border-radius:3px}
 #ribbon.plf #ribR{visibility:hidden}
 .bonus #plFeed{color:var(--red-lo);text-shadow:none}.bonus #plFeed s{color:var(--ink-dk)}
@@ -101,10 +101,10 @@
   background:linear-gradient(172deg,#fff3a0,#f6d84a 70%,#e8bf2e);box-shadow:0 3px 0 rgba(120,90,10,.55),0 12px 18px rgba(0,0,0,.55);color:var(--red-lo);animation:none}
 #head>.stamp.plgh::before{content:"";position:absolute;left:50%;top:-9px;width:64px;height:18px;margin-left:-32px;rotate:2deg;background:linear-gradient(rgba(240,232,205,.92),rgba(214,202,164,.92));box-shadow:0 2px 4px rgba(0,0,0,.4)}
 #head>.stamp.plgh::after{content:"";position:absolute;right:0;bottom:0;width:18px;height:18px;background:linear-gradient(315deg,#6d5410 46%,rgba(255,250,210,.9) 50%)}
-.plgh .t{padding:3px 10px 2px;border:3px double var(--red-lo);border-radius:5px;font-family:var(--display);font-size:17px;letter-spacing:.06em;color:var(--red-lo);white-space:nowrap}
+.plgh .t{padding:3px 8px 2px;border:3px double var(--red-lo);border-radius:5px;font-family:var(--display);font-size:14px;letter-spacing:.06em;color:var(--red-lo);white-space:nowrap}
 .plgh .v{font-family:var(--display);font-size:40px;letter-spacing:.01em;color:var(--red-lo);-webkit-text-stroke:0;margin-top:3px;white-space:nowrap}
 .plgh .v.s{font-size:30px}
-.plgh small{font-family:var(--memo);font-size:13px;color:#241a0a;margin-top:1px}
+.plgh small{font-family:var(--memo);font-size:13px;color:#241a0a;margin-top:1px;text-align:center;line-height:1.1}
 .slots i.hot.plg{box-shadow:inset 0 0 0 3px var(--gold),0 0 0 3px var(--ink-dk),0 0 0 6px var(--gold),0 0 20px 8px rgba(255,208,88,.8)}
 .ghostrv{opacity:.92}
 

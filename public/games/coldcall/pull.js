@@ -22,6 +22,8 @@
   const xTxt = (x) => (x >= 100 ? num(x) : String(+Number(x).toFixed(1))) + 'x';
   const BN = { bonus1: 'DIALING FOR DOLLARS', bonus2: 'ALWAYS BE CLOSING', bonus3: 'QUOTE ACCEPTED' };
   const dur = (ms) => { const m = Math.max(1, Math.ceil(ms / 60000)), d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60), mm = m % 60; return d ? d + ' d ' + h + ' h' : h ? h + ' h ' + mm + ' m' : mm + ' m'; };
+  const ld1 = (n) => String(+Number(n).toFixed(1));                       // leads to one decimal (the daily is a token: 0.2 lead)
+  const ldTxt = (n) => ld1(n) + (+ld1(n) > 1 ? ' leads' : ' lead');
   const pct2 = (p) => { const a = Math.round(p * 10000); return [String(+(a / 100).toFixed(2)), String(+((10000 - a) / 100).toFixed(2))]; };   // [wins, loses], always add to 100
   const rulesOf = () => S.rules || E.CFG.pull;
   const hold = (ctx, ms) => (ctx && ctx.demoHold ? new Promise((r) => { S.hold = r; }) : ctx.wait(ms));   // demo: stay on the state until demo release
@@ -39,7 +41,7 @@
     const v = S.view, c = v && v.cold, e = $('plCold'); if (!c) { note.classList.add('nocold'); return; }
     note.classList.remove('nocold'); const left = coldLeft(), n = c.leads, w = c.warm | 0;
     const subj = n ? `<u>${num(n)} ${n === 1 ? 'lead' : 'leads'}</u>` + (w ? ` + ${w} warm` : '') : `<u>${w} warm ${w === 1 ? 'lead' : 'leads'}</u>`;
-    e.innerHTML = `${subj} ${n === 1 && !w ? 'goes' : 'go'} cold ${left <= 0 ? 'now' : 'in ' + dur(left)}`; e.classList.toggle('long', w > 0 || n >= 100);
+    e.innerHTML = `${subj} ${n + w === 1 ? 'goes' : 'go'} cold ${left <= 0 ? 'now' : 'in ' + dur(left)}`; e.classList.toggle('long', w > 0 || n >= 100);
   }
   function drawNote(shown) {
     const v = S.view; if (!v) return; const full = !!v.cb, list = v.list || 0, n = shown != null ? shown : v.leads;
@@ -50,7 +52,7 @@
     const d = S.view && S.view.daily; if (!d) { leaf.hidden = true; return; }
     leaf.classList.toggle('kept', !!d.claimed);
     if (d.claimed) leaf.innerHTML = `<small>APPT KEPT</small><b>DAY ${d.streak}</b>`;
-    else if (d.next > 0) leaf.innerHTML = `<small>APPT</small><b>+${d.next}<i>leads</i></b>`;
+    else if (d.next > 0) leaf.innerHTML = `<small>APPT</small><b>+${ld1(d.next)}<i>${+ld1(d.next) > 1 ? 'leads' : 'lead'}</i></b>`;
     else leaf.innerHTML = '<small>APPT</small><b>free leads</b>';
     leaf.classList.toggle('s', !d.claimed && !(d.next > 0));
   }
@@ -165,8 +167,8 @@
   async function leadGain(p) {                                      // after a round: leads filled, daily claim, cold leak, Callback armed
     if (!p || !live() || !S.view) return; const k = K(), v = S.view, list = v.list || 1, from = Math.floor((p.leadsBefore || 0) / 10), to = Math.floor((p.leadsAfter != null ? p.leadsAfter : (p.leadsBefore || 0)) / 10);
     const steps = [];
-    if (p.leaked > 0) steps.push(['WENT COLD', `${num(Math.floor(p.leaked / 10) || p.leaked / 10)} ${p.leaked >= 20 ? 'leads' : 'lead'} went cold while you were away.`]);
-    if (p.daily) steps.push(['APPOINTMENT KEPT', `+${num(p.daily.leads)} leads, day ${p.daily.streak}.`]);
+    if (p.leaked > 0) steps.push(['WENT COLD', `${ldTxt(p.leaked / 10)} went cold while you were away.`]);
+    if (p.daily) steps.push(['APPOINTMENT', `+${ldTxt(p.daily.leads)}, day ${p.daily.streak} kept.`]);
     if (p.armed) steps.push(['CALLBACK!', 'Your list is full. The next call is free.']);
     if (p.filled > 0) {
       const f = +(p.filled / 10).toFixed(1); gain.textContent = '+' + f + (f === 1 ? ' LEAD' : ' LEADS'); gain.hidden = false; note.classList.remove('hit'); void note.offsetWidth; note.classList.add('hit');
@@ -179,7 +181,8 @@
 
   // ------------------------------------------------------------------ GHOST: "WOULD HAVE CLOSED $12.40", a stamped sticky in the head band; the squares flip, nothing is added to the win
   async function ghost(g, ctx) {
-    const ph = g && g.script; if (!ph || !(g.pay > 0) || !live()) return; const B = CC.board, ovl = B.ovl(), k = K(), amt = ctx.cents(g.pay), nodes = [];
+    const ph = g && g.script, gr = rulesOf().ghost; if (!ph || !(g.pay > 0) || !live() || (gr && gr.minTenths > g.pay)) return;   // only at the knob's minTenths (50 = 5x)
+    const B = CC.board, ovl = B.ovl(), k = K(), amt = ctx.cents(g.pay), nodes = [];
     const TN = ['quote_bronze', 'quote_silver', 'quote_gold'], fin = new Map();
     for (const rd of ph.rounds) {
       for (const r of rd.reveals) fin.set(r.p, { k: r.k, v: r.v, t: r.t });
@@ -199,7 +202,7 @@
       if (!reduce) n.animate([{ transform: 'scaleX(0)' }, { transform: 'scaleX(1.12)', offset: 0.65 }, { transform: 'scaleX(1)' }], { duration: 230 * k.speed(), delay: i * 60 * k.speed(), fill: 'backwards', easing: 'ease-out' }); i++;
     }
     await ctx.wait(i * 60 + 300);
-    const a = money(amt), stamp = el('div', 'stamp plgh', `<div class="t">WOULD HAVE CLOSED</div><div class="v${a.length > 9 ? ' s' : ''}">${a}</div><small>if a phone had landed. Not paid.</small>`);
+    const a = money(amt), mx = xTxt(g.pay / 10), stamp = el('div', 'stamp plgh', `<div class="t">IF A PHONE HAD LANDED</div><div class="v">${mx}</div><small>${a.length > 12 ? 'times your bet' : a + ' at your bet'}<br>Not paid.</small>`);
     head.appendChild(stamp); ctx.SFX.stamp && ctx.SFX.stamp(); ctx.CC_ghost = true;
     if (!reduce) stamp.animate([{ transform: 'scale(2.2) rotate(-12deg)', opacity: 0 }, { transform: 'scale(.94)', opacity: 1, offset: 0.3 }, { transform: 'none', opacity: 1 }], { duration: 300 * k.speed(), easing: 'ease-out' });
     if (ctx.demoHold) await hold(ctx, 0); else await Promise.race([ctx.waitTap(2400), ctx.wait(2600)]);
@@ -234,13 +237,13 @@
     if (R.callback) ln.push(['The Callback.', `Fill the list (${R.list} leads) and THE CALLBACK arms: a free ${BN[R.callback.kind] || ''} bonus played at the average bet your leads came from${R.carryOver ? '. Leads over the list size carry over' : ''}.`]);
     if (R.cold) ln.push(['Going cold.', `Stay away ${h(R.cold.afterMs)} h and leads go cold: ${R.cold.batch} every ${h(R.cold.stepMs)} h, never below ${R.cold.floor}. Warm squares die at the first cold event.`]);
     if (R.warm) ln.push(['Warm leads.', `A spin that ends with lit squares and no phone keeps each one with a ${+(R.warm.chance * 100).toFixed(1)}% chance, up to ${R.warm.cap}. A warm square is lit at the bet it was made at: any other bet drops them.`]);
-    if (R.ghost && R.ghost.on) ln.push(['Would have closed.', `On a spin that paid under ${+(R.ghost.maxWinTenths / 10).toFixed(1)}x with lit squares and no phone, the stamp shows what a phone would have paid. It is never added to your win.`]);
+    if (R.ghost && R.ghost.on) ln.push(['If a phone had landed.', `On a spin that paid under ${xTxt(R.ghost.maxWinTenths / 10)} with lit squares and no phone, the stamp shows what the call you did not get would have paid, only when that is ${xTxt(R.ghost.minTenths / 10)} or more. It is a draw, not a promise, and it is never added to your win.`]);
     if (R.pick && R.pick.on) { const m = R.pick.mult || {}; ln.push(['Pick your lead.', `When a bonus phone is about to ring with ${R.pick.minLeads}+ lit leads, you pick one. Its call is drawn with the odds multiplied: bronze x${m.bronze}, silver x${m.silver}, gold x${m.gold}, upsell x${m.upsell}, close x${m.close}. ${Math.round((R.decision ? R.decision.timeoutMs : 20000) / 1000)} seconds, then it picks the first lead.`]); }
-    if (R.more && R.more.on) ln.push(['One more call.', `After a bonus paying ${+(R.more.minTenths / 10).toFixed(1)}x or more you can bank it, or call once more: ${pct2(R.more.rtp / R.more.mult)[0]}% you win ${R.more.mult}x the bonus, otherwise ${dollar(0)}. Not offered when the double would pass the cap. Wait too long and you bank.`]);
-    if (R.daily) ln.push(['The appointment.', `Your first paid spin each day keeps your appointment: ${R.daily.base} free leads, +${R.daily.perStreak} for each day in a row, up to ${R.daily.base + R.daily.perStreak * R.daily.streakMax}. They count at your bet or ${dollar(R.daily.stakeCap)}, whichever is lower.`]);
+    if (R.more && R.more.on) ln.push(['One more call.', `After a bonus paying ${+(R.more.minTenths / 10).toFixed(1)}x or more you can bank it, or call once more: ${pct2(R.more.rtp / R.more.mult)[0]}% you win ${R.more.mult}x the bonus, ${pct2(R.more.rtp / R.more.mult)[1]}% you get ${dollar(0)}. ${R.more.rtp === 1 ? 'A fair coin: it does not change the payback. ' : ''}Not offered when the double would pass the cap. Wait too long and you bank.`]);
+    if (R.daily) ln.push(['The appointment.', `Your first paid spin each day keeps your appointment: ${ldTxt(R.daily.base)} free, +${+Number(R.daily.perStreak).toFixed(2)} for each day in a row, up to ${ldTxt(R.daily.base + R.daily.perStreak * R.daily.streakMax)}. They count at your bet or ${dollar(R.daily.stakeCap)}, whichever is lower.`]);
     if (R.pot) {
       const o = R.pot.oneInPerDollar, hit = o > 0 ? `each spin has a 1 in ${num(o)} chance per ${chips() ? '100 chips' : '$1'} bet of taking all of it, up to ${num(R.pot.maxPayX)}x your bet` : 'no one can take it right now';
-      ln.push(['The office pot.', `${+(R.pot.feedBps / 100).toFixed(2)}% of every paid bet goes in; ${hit}. Play $ and Chips have separate pots. The pot is extra, on top of the ${cap} cap.`]);
+      ln.push(['The office pot.', `${+(R.pot.feedBps / 100).toFixed(2)}% of every paid bet goes in; ${hit}${R.pot.minBal > 0 ? `; a pot under ${dollar(R.pot.minBal)} pays nothing yet` : ''}. Play $ and Chips have separate pots. The pot is extra: it is paid on top of your win, outside the ${cap} cap.`]);
     }
     return ln;
   }
@@ -270,8 +273,8 @@
     closePrompt(); k.sweep(); bn.hidden = true; head.classList.remove('plg', 'plbn'); document.querySelectorAll('#head > .stamp').forEach((n) => n.remove());
     const s = k.st, bet = 100; s.live = true; s.mode = mode; s.me = 'YOU'; s.busy = false; s.betIdx = Math.max(0, s.bets.indexOf(bet)); s.cbBet = null;
     k.applyWallet({ play: 100000, chips: 100000 }); document.querySelector(`#modebar [data-m="${mode}"]`).click(); $('spin').classList.remove('run'); $('spin').classList.add('idle'); s.ctx = null;
-    const cold = { inMs: 3 * 3600e3 + 12 * 60e3, leads: 20, warm: 4 };
-    const view = { leads: state === 'callback' ? 400 : 43, lt: state === 'callback' ? 4000 : 435, list: 400, cb: state === 'callback' ? { bet: 200 } : null, warm: state === 'callback' ? [] : [3, 8, 19, 26], warmBet: bet, cold, daily: { claimed: false, streak: 3, next: 30 }, at: Date.now() };
+    const L = rulesOf().list, cold = { inMs: 3 * 3600e3 + 12 * 60e3, leads: Math.floor(rulesOf().cold.batch), warm: 4 };
+    const view = { leads: state === 'callback' ? L : 312, lt: state === 'callback' ? L * 10 : 3125, list: L, cb: state === 'callback' ? { bet: 200 } : null, warm: state === 'callback' ? [] : [3, 8, 19, 26], warmBet: bet, cold, daily: { claimed: false, streak: 3, next: 0.3 }, at: Date.now() };
     s.pv[mode] = view; s.pot[mode] = { bal: 128450, last: null }; S.rules = null; S.feed = []; S.seen.clear(); S.phase = 0;
     const ids = (n) => n.map((x) => Math.max(0, E.SYM.indexOf(x)));
     const G = { idle: ['headset', 'pile', 'closer', 'note', 'cash', 'can', 'cups', 'mug', 'ball', 'rx', 'pile', 'note', 'cash', 'headset', 'pile', 'can', 'cups', 'cash', 'note', 'mug', 'headset', 'rx', 'cashwad', 'pile', 'can', 'cups', 'pile', 'headset', 'note', 'cash'],
@@ -300,7 +303,7 @@
       ghost(g, ctx);
     }
     if (state === 'pot') { s.busy = true; app.classList.add('pl-busy'); k.setWin(3700, false); potWin({ won: true, amount: 128450, who: 'YOU' }, ctx); }
-    if (state === 'gain') leadGain({ leadsBefore: 430, leadsAfter: 442, filled: 12, daily: { leads: 30, streak: 4 }, leaked: 0, armed: false });
+    if (state === 'gain') leadGain({ leadsBefore: 3120, leadsAfter: 3245, filled: 12, daily: { leads: 0.3, streak: 4 }, leaked: 0, armed: false });
     if (state === 'more_won' || state === 'more_lost') { s.busy = true; app.classList.add('pl-busy'); moreOutcome({ take: true, won: state === 'more_won', mult: 2 }, ctx); }
     await new Promise((r) => setTimeout(r, 450));
   }
