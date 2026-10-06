@@ -71,6 +71,7 @@ function createViews({ registry, accounts, presLedger, ledger, service, wallet }
       sittingOut: !!sittingOut, sitOutRequest: !!s.sitOutNext, connected: !!s.connected, isBot: false,
       isDealer: i === dealerIdx, isActive: curIdx === i, cardCount: inHand && !(hs.folded) ? 2 : (inHand ? 2 : 0), chipsBought: 0, lastAction: s.lastAction || null,
       seatNo: s.seat, leaving: !!s.leaving,
+      blind: live && h && s.dealt ? (s.seat === h.sbSeat ? 'SB' : s.seat === h.bbSeat ? 'BB' : null) : null,   // the seats that posted the blinds (engine sbSeat/bbSeat); the client prints it as is
     };
   }
   function gameState(t, forKey) {

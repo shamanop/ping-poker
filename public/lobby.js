@@ -495,7 +495,7 @@ function formBody(f, redraw, sum) {
   const custom = f.custom ? h('div', { class: 'lb-two' },
     h('div', { class: 'lb-field' }, h('label', null, 'Small blind'), mkBlind('csb', 'lb-csb', 'Small blind', 1).el),
     h('div', { class: 'lb-field' }, h('label', null, 'Big blind'), mkBlind('cbb', 'lb-cbb', 'Big blind', 2).el)) : null;
-  const seats = h('div', { class: 'lb-seats', id: 'lb-seats' }, h('button', { type: 'button', 'aria-label': 'Fewer seats', onclick: () => { f.seats = Math.max(2, f.seats - 1); redraw(); } }, '−'), h('b', null, f.seats), h('button', { type: 'button', 'aria-label': 'More seats', onclick: () => { f.seats = Math.min(9, f.seats + 1); redraw(); } }, '+'));
+  const seats = h('div', { class: 'lb-seats', id: 'lb-seats' }, h('button', { type: 'button', 'aria-label': 'Fewer seats', onclick: () => { f.seats = Math.max(2, f.seats - 1); redraw(); } }, '−'), h('b', null, f.seats), h('button', { type: 'button', 'aria-label': 'More seats', onclick: () => { f.seats = Math.min(8, f.seats + 1); redraw(); } }, '+'));
   const onOff = (k, id) => seg([[true, 'On'], [false, 'Off']], f[k], set(k), id);
   return [
     g('Game', modeSeg),
@@ -870,7 +870,7 @@ function bind() {
   });
   s.on('ok', ({ what } = {}) => { if (what === 'pin') { toast('PIN changed'); closeModal(); } });
   s.on('error', (e0 = {}) => {
-    const { code } = e0, message = window.PingUI ? PingUI.errorText(e0, Money.modeFor(Money.pref, (S.cur && S.cur.unit) || 'chips')) : e0.message;
+    const { code } = e0, message = window.PingUI ? PingUI.errorText(e0, modeFor(S.view === 'create' && S.form ? S.form.unit : (S.cur && S.cur.unit) || 'chips')) : e0.message;
     if (code === 'taken_over') { // this seat was taken over by another tab or device: leave the table here
       if (window.PingGame && PingGame.isIn && PingGame.isIn()) PingGame.leave();
       Lobby.onGameLeft(); toast(message || 'This seat is now open on another device'); return;

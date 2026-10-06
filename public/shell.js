@@ -328,7 +328,7 @@
       bonusSt = b; renderBonusBtn();
       if (!window.PingJuice || (!reopenBonus && (!b.available || bonusShown))) { reopenBonus = false; return; }
       bonusShown = true; reopenBonus = false;
-      PingJuice.streakCalendar(b, { targetEl: $('sh-wallet'), onClaim: () => s.emit('bonus:claim') });
+      PingJuice.streakCalendar(b, { targetEl: $('sh-wallet'), format: dollars, onClaim: () => s.emit('bonus:claim') });
     });
     s.on('bonus:claimed', (r) => { if (r && r.ok && r.wallet) setWallet(r.wallet); if (r && r.ok && window.PingJuice) PingJuice.toast('Day **' + (r.day || r.streak) + '** bonus **' + dollars(r.amountCents) + '** claimed. Streak **' + r.streak + '**', { sticker: 'vp-chip' }); });
     s.on('g:bender:state', (st) => { benderReady = true; if (st && st.balances) setWallet(st.balances); toBender({ type: 'init', wallet: Object.assign({}, wallet), mode: wmode, bets: (st && (st.bets || st.betLevels)) || undefined, cfg: st && st.cfg }); });
