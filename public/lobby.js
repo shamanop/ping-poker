@@ -30,15 +30,24 @@ let root = null, topEl = null, mainEl = null, sock = null, pollT = null, lockT =
 const LS = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} }, del: (k) => { try { localStorage.removeItem(k); } catch {} } };
 
 // ── money helpers ─────────────────────────────────────────────────
+// display and typed amounts share one mode per unit, so whatever a box shows parses back to the same value
+function modeFor(unit) {
+  const M = window.Money, pref = M && M.getPref ? M.getPref() : 'auto';
+  return pref === 'auto' ? (unit === 'cents' ? 'usd' : 'chips') : pref;
+}
 function fm(u, unit, o) {
   if (u == null || Number.isNaN(u)) return '-';
-  if (window.Money) return window.Money.fmt(u, Object.assign({ unit }, o));
+  if (window.Money) return window.Money.fmt(u, Object.assign({ unit, mode: modeFor(unit) }, o));
   const s = (o && o.signed && u > 0 ? '+' : '') + (u < 0 ? '-' : '');
   const a = Math.abs(u);
   return unit === 'chips' ? s + a.toLocaleString('en-US') : s + '$' + (a % 100 ? (a / 100).toFixed(2) : (a / 100).toLocaleString('en-US'));
 }
+function amtText(v, unit) {
+  if (window.Money) return window.Money.fmt(v, { symbol: false, mode: modeFor(unit) }).replace(/,/g, '');
+  return unit === 'chips' ? String(v) : (v % 100 ? (v / 100).toFixed(2) : String(v / 100));
+}
 function parseAmt(text, unit) {
-  if (window.Money && window.Money.parse) { window.Money.setUnit?.(unit); const v = window.Money.parse(text); return v == null || !Number.isFinite(v) ? null : Math.round(v); }
+  if (window.Money && window.Money.parse) { const v = window.Money.parse(text, { mode: modeFor(unit) }); return v == null || !Number.isFinite(v) ? null : Math.round(v); }
   const s = String(text).replace(/[$,\s]/g, ''); if (!/^\d*\.?\d+$/.test(s)) return null;
   return unit === 'chips' ? Math.round(parseFloat(s)) : Math.round(parseFloat(s) * 100);
 }
@@ -243,7 +252,7 @@ function feedBold(t) { return h('b', null, String(t == null ? '' : t).replace(/\
 function feedText(e) {
   const nm = feedBold(e.name || 'Someone');
   if (e.kind === 'bigwin') {
-    const amt = typeof e.amountCents === 'number' ? (e.unit === 'chips' ? e.amountCents.toLocaleString('en-US') + ' chips' : fm(e.amountCents, 'cents')) : '';
+    const amt = typeof e.amountCents === 'number' ? fm(e.amountCents, e.unit === 'chips' ? 'chips' : 'cents') : '';
     return e.game === 'bender' ? [nm, ' hit ', feedBold(amt), ' on Ballot Bender'] : [nm, ' took a ', feedBold(amt), ' pot'];
   }
   if (e.kind === 'bonus') return [nm, ' claimed the ', feedBold('Day ' + (e.day || 1)), ' bonus'];
@@ -345,7 +354,7 @@ function buyInPicker(t, mySettled) {
   const fill = h('div', { class: 'fill' });
   const typed = h('input', { class: 'text-input', id: 'lb-buyin-input', type: 'text', inputmode: 'decimal', autocomplete: 'off', value: plain(val) });
   const msg = h('div', { class: 'lb-err', id: 'lb-buyin-err' });
-  function plain(v) { return window.Money ? window.Money.fmt(v, { symbol: false }).replace(/,/g, '') : String(v); }
+  function plain(v) { return amtText(v, unit); }
   const paint = () => { const a = range.value / Math.max(1, vals.length - 1); fill.style.left = 'var(--p8)'; fill.style.width = 'calc((100% - var(--p16)) * ' + a + ')'; };
   range.addEventListener('input', () => { val = vals[+range.value]; typed.value = plain(val); msg.textContent = ''; paint(); drawBal(); });
   const commit = () => {
@@ -474,7 +483,7 @@ function formBody(f, redraw, sum) {
   const rl = h('input', { type: 'range', min: 0, max: vals.length - 1, step: 1, value: nearIdx(vals, f.min), 'aria-label': 'Minimum buy-in' });
   const rh = h('input', { type: 'range', min: 0, max: vals.length - 1, step: 1, value: nearIdx(vals, f.max), 'aria-label': 'Maximum buy-in' });
   const fill = h('div', { class: 'fill' });
-  const plain = (v) => (u === 'chips' ? String(v) : '$' + (v % 100 ? (v / 100).toFixed(2) : v / 100));
+  const plain = (v) => amtText(v, u);
   const inMin = h('input', { class: 'text-input', id: 'lb-bmin', value: plain(f.min), inputmode: 'decimal' }), inDef = h('input', { class: 'text-input', id: 'lb-bdef', value: plain(f.def), inputmode: 'decimal' }), inMax = h('input', { class: 'text-input', id: 'lb-bmax', value: plain(f.max), inputmode: 'decimal' });
   const n1 = Math.max(1, vals.length - 1);
   const paint = () => { const a = rl.value / n1, b = rh.value / n1; fill.style.left = 'calc(var(--p8) + (100% - var(--p16)) * ' + a + ')'; fill.style.width = 'calc((100% - var(--p16)) * ' + (b - a) + ')'; };
@@ -724,8 +733,7 @@ function toggleDrawer() {
   document.addEventListener('keydown', drawerEsc, true);
 }
 function blindsEditor(t, id, unit) {
-  window.Money && window.Money.setUnit && window.Money.setUnit(unit);
-  const val = (v) => (window.Money ? window.Money.fmt(v, { symbol: false }).replace(/,/g, '') : String(v));
+  const val = (v) => amtText(v, unit);
   const cur = t.blinds || { sb: t.sb, bb: t.bb };
   const sbIn = h('input', { class: 'text-input', id: 'host-sb', type: 'text', inputmode: 'decimal', autocomplete: 'off', value: val(cur.sb), 'aria-label': 'Small blind' });
   const bbIn = h('input', { class: 'text-input', id: 'host-bb', type: 'text', inputmode: 'decimal', autocomplete: 'off', value: val(cur.bb), 'aria-label': 'Big blind' });

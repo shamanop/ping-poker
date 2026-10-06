@@ -22,6 +22,7 @@
   const gs = (id) => (L.games[id] || (L.games[id] = { open: false, mode: 'dock', side: 'right', w: 0.4, rect: null, restore: 'dock' }));
 
   const dollars = (c) => { const n = Math.round(c), a = Math.abs(n), whole = Math.floor(a / 100).toLocaleString('en-US'); return (n < 0 ? '-' : '') + '$' + whole + (a % 100 ? '.' + String(a % 100).padStart(2, '0') : ''); };
+  const chipAmt = (n) => { const M = window.Money, p = M && M.getPref ? M.getPref() : 'auto'; return M ? M.fmt(n, { mode: p === 'auto' ? 'chips' : p }) : Number(n).toLocaleString('en-US'); };
   const dollars2 = (c) => { const n = Math.round(c), a = Math.abs(n); return (n < 0 ? '-' : '') + '$' + Math.floor(a / 100).toLocaleString('en-US') + '.' + String(a % 100).padStart(2, '0'); };
 
   const IC = {
@@ -275,9 +276,10 @@
 
   // ---------- top bar / dock refresh ----------
   const user = () => { try { return window.Lobby && window.Lobby.user ? window.Lobby.user() : null; } catch (e) { return null; } };
+  if (window.Money && window.Money.onChange) window.Money.onChange(() => { try { refreshTop(); } catch (e) {} });
   function refreshTop() {
     const p = $('sh-play'); if (!p) return;
-    const c = $('sh-chips'); if (c) c.innerHTML = '<small>Chips</small>' + (chipsTotal == null ? '--' : Number(chipsTotal).toLocaleString('en-US'));
+    const c = $('sh-chips'); if (c) c.innerHTML = '<small>Chips</small>' + (chipsTotal == null ? '--' : chipAmt(chipsTotal));
     p.innerHTML = '<small>Play</small>' + (wallet.play == null ? '--' : dollars(wallet.play));
     const u = user(); $('sh-acct').textContent = u ? (u.display || u.key || '') : '';
   }
@@ -361,7 +363,7 @@
   function onSocialEvent(e) {
     if (!e || e.kind !== 'bigwin' || !window.PingJuice) return;
     const nm = String(e.name || 'Someone').replace(/\*/g, '');
-    const amt = typeof e.amountCents === 'number' ? (e.unit === 'chips' ? e.amountCents.toLocaleString('en-US') + ' chips' : dollars(e.amountCents)) : '';
+    const amt = typeof e.amountCents === 'number' ? (e.unit === 'chips' ? chipAmt(e.amountCents) : dollars(e.amountCents)) : '';
     if (e.game === 'bender') PingJuice.toast(`**${nm}** hit **${amt}** on Ballot Bender`, { sticker: 'vp-chip' });
     else PingJuice.toast(`**${nm}** took a **${amt}** pot`, { sticker: 'ping-hand' });
   }

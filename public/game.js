@@ -1537,19 +1537,20 @@ function mergeLog(entries) {
 
 function logLineHtml(line) {
   let m;
-  if ((m = line.match(/^--- Hand #(\d+)\s*·?\s*(.*?)\s*---$/))) return `<div class="log-head">Hand ${esc(m[1])}${m[2] ? ` <span>${esc(m[2])}</span>` : ''}</div>`;
+  if ((m = line.match(/^--- Hand #(\d+)\s*·?\s*(.*?)\s*---$/))) return `<div class="log-head">Hand ${esc(m[1])}${m[2] ? ` <span>${esc(m[2].replace(/^([\d,]+)\/([\d,]+)$/, (_, a, b) => logAmt(a) + '/' + logAmt(b)))}</span>` : ''}</div>`;
   if (/^--- Showdown ---$/.test(line)) return '<div class="log-head sub">Showdown</div>';
   if ((m = line.match(/^Dealer: (.+)$/))) return `<div class="log-line log-dim">Dealer ${nm(m[1])}</div>`;
-  if ((m = line.match(/^(.+) posts (SB|BB) ([\d,]+)$/))) return `<div class="log-line log-dim">${nm(m[1])} posts ${m[2]} <b>${esc(m[3])}</b></div>`;
-  if ((m = line.match(/^(.+) wins ([\d,]+)(?: with (.+))?$/))) return `<div class="log-line log-win">${nm(m[1])} wins <b>${esc(m[2])}</b>${m[3] ? ` with ${esc(m[3])}` : ''}</div>`;
-  if ((m = line.match(/^(.+) raises to ([\d,]+)$/))) return `<div class="log-line">${nm(m[1])} raises to <b>${esc(m[2])}</b></div>`;
-  if ((m = line.match(/^(.+) calls ([\d,]+)$/)))     return `<div class="log-line">${nm(m[1])} calls <b>${esc(m[2])}</b></div>`;
+  if ((m = line.match(/^(.+) posts (SB|BB) ([\d,]+)$/))) return `<div class="log-line log-dim">${nm(m[1])} posts ${m[2]} <b>${esc(logAmt(m[3]))}</b></div>`;
+  if ((m = line.match(/^(.+) wins ([\d,]+)(?: with (.+))?$/))) return `<div class="log-line log-win">${nm(m[1])} wins <b>${esc(logAmt(m[2]))}</b>${m[3] ? ` with ${esc(m[3])}` : ''}</div>`;
+  if ((m = line.match(/^(.+) raises to ([\d,]+)$/))) return `<div class="log-line">${nm(m[1])} raises to <b>${esc(logAmt(m[2]))}</b></div>`;
+  if ((m = line.match(/^(.+) calls ([\d,]+)( \(all-in\))?$/)))     return `<div class="log-line">${nm(m[1])} calls <b>${esc(logAmt(m[2]))}</b>${m[3] ? ' (all-in)' : ''}</div>`;
   if ((m = line.match(/^(.+) (folds|checks)$/)))     return `<div class="log-line ${m[2] === 'folds' ? 'log-dim' : ''}">${nm(m[1])} ${m[2]}</div>`;
   if ((m = line.match(/^(Flop|Turn|River): (.*)$/))) return `<div class="log-line log-board">${m[1]} <span class="cards">${redSuits(m[2])}</span></div>`;
   if (line.startsWith('★')) return `<div class="log-line log-board">${esc(line)}</div>`;
   return `<div class="log-line">${esc(line)}</div>`;
 }
 
+const logAmt = t => Money.fmt(Number(String(t).replace(/,/g, '')));
 function renderLog(entries) {
   mergeLog(entries || []);
   const el = $('log-entries');
