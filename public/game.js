@@ -434,7 +434,7 @@ function bindSocket() {
   s.on('bust_out', ({ balance, rebuy }) => { showBust(rebuy && rebuy.balance != null ? rebuy.balance : balance, rebuy); });
   s.on('leaderboard_data', ({ entries }) => { renderLeaderboard(entries); });
   s.on('self_changed', v => { if (v && v.display) state.myName = v.display; });
-  s.on('error', e => { showError(PingUI.errorText(e, tableMode())); });
+  s.on('error', e => { if (window.PingGame.isIn()) showError(PingUI.errorText(e, tableMode())); });   // outside a table the lobby words the error (its own mode: a create form has no table unit yet)
 
   s.on('disconnect', () => { toast('Connection lost', 'Trying to reconnect', 'warn', 5000); });
   s.on('connect',    () => { if (state.roomId) toast('Back online', '', 'ok', 2000); });
@@ -827,15 +827,6 @@ function renderGame() {
   so.classList.toggle('on', canSit && !!me.sitOutRequest);
 }
 
-function nextActiveSeat(fromIdx, players) {
-  const n = players.length;
-  for (let offset = 1; offset <= n; offset++) {
-    const c = (fromIdx + offset) % n;
-    if (!players[c].sittingOut && players[c].connected) return c;
-  }
-  return (fromIdx + 1) % n;
-}
-
 // ─── Action bubbles (short-lived, driven by lastAction changes) ───
 const BUBBLE_MS = 2600;
 const bubbles = {};
@@ -942,7 +933,7 @@ function seatStatus(p) {
   if (p.leaving)     return ['Leaving', ''];
   if (p.connected === false && !p.isBot) return ['Offline', 'offline'];
   if (p.allIn)       return ['All-in', 'allin'];
-  if (p.sittingOut)  return [p.sitOutRequest ? 'Away' : 'Joining', ''];
+  if (p.sittingOut)  return [p.chips === 0 ? 'Out of chips' : p.sitOutRequest ? 'Away' : 'Joining', ''];   // 0 chips is busted, not waiting for the deal
   if (p.isActive)    return ['', 'secs'];
   if (p.folded)      return ['Folded', ''];
   if (p.isBot)       return ['CPU', ''];
@@ -955,8 +946,6 @@ function renderSeats(gs) {
   const n   = gs.players.length;
   const myIdx = state.myIdx ?? 0;
   const angles = ELL_ANGLES[Math.max(2, Math.min(8, n))];
-  const sbIdx = gs.status === 'playing' ? nextActiveSeat(gs.dealerIdx, gs.players) : -1;
-  const bbIdx = gs.status === 'playing' ? nextActiveSeat(sbIdx, gs.players) : -1;
   noteActions(state.prevForBubbles, gs);
   state.prevForBubbles = gs;
 
@@ -969,7 +958,7 @@ function renderSeats(gs) {
     g.scales[i] = sc;
     const peekUp = y > g.cy + 10 * g.u;
     const [stText, stCls] = seatStatus(p);
-    const tag = i === sbIdx ? 'SB' : i === bbIdx ? 'BB' : '';
+    const tag = p.blind === 'SB' || p.blind === 'BB' ? p.blind : '';   // the server names the blind seats
 
     let peek = '';
     const rev = state.reveal && state.reveal.handNum === gs.handNum && state.reveal.cards[p.name];

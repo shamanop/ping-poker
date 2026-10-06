@@ -467,6 +467,7 @@
   PJ.streakCalendar = function (info, o) {
     o = o || {}; info = info || {};
     if (calOpen) return calOpen.promise;
+    var fmt = typeof o.format === 'function' ? o.format : money;   // the shell passes its Play $ formatter: the schedule is cents
     var sched = Array.isArray(info.schedule) && info.schedule.length === 7 ? info.schedule : [10000, 12500, 15000, 20000, 25000, 35000, 100000];
     var day = Math.min(7, Math.max(1, info.day | 0 || 1)), streak = Math.max(1, info.streak | 0 || day), avail = !!info.available;
     var m = document.createElement('div');
@@ -477,14 +478,14 @@
       tiles += '<div class="pj-day ' + st + (i === 7 ? ' jackpot' : '') + '" data-day="' + i + '">' +
         '<div class="dn">DAY ' + i + '</div>' +
         (i === 7 ? '<img class="art" alt="" src="' + stickerUrl('vp-charm') + '"><div class="jp">JACKPOT</div>' : '') +
-        '<div class="da">' + money(sched[i - 1]) + '</div>' +
+        '<div class="da">' + esc(fmt(sched[i - 1])) + '</div>' +
         '<div class="stamp">CLAIMED</div></div>';
     }
     m.innerHTML = '<div class="pj-card pj-cal"><div class="kick">DAY <b class="cn">' + day + '</b> OF 7</div>' +
       '<div class="pj-cal-streak"><span class="flame"></span></div>' +
       '<div class="pj-days">' + tiles + '</div>' +
       '<p class="pj-note">' + (avail ? 'Claim today to keep the streak alive. Miss a day and it resets to Day 1.' : 'Claimed. Come back tomorrow for Day ' + (day === 7 ? 1 : day + 1) + '.') + '</p>' +
-      '<button type="button" class="claim">' + (avail ? 'CLAIM ' + esc(money(sched[day - 1])) : 'CLOSE') + '</button></div>';
+      '<button type="button" class="claim">' + (avail ? 'CLAIM ' + esc(fmt(sched[day - 1])) : 'CLOSE') + '</button></div>';
     document.body.appendChild(m);
     var btn = m.querySelector('.claim'), todayEl = m.querySelector('.pj-day[data-day="' + day + '"]'), done;
     var flame = m.querySelector('.flame'); try { PJ.streakFlame(flame, streak); } catch (e) { /* optional */ }
@@ -512,7 +513,7 @@
       btn.textContent = 'CLAIMED';
       if (typeof o.onClaim === 'function') { try { o.onClaim(cents, day); } catch (e) { console.error(e); } }
       PJ.sfx('claim');
-      PJ.winCelebration(tier, todayEl, cents);
+      PJ.winCelebration(tier, todayEl, o.format ? '+' + fmt(cents) : cents);
       PJ.chipShower(todayEl, o.targetEl || null, day === 7 ? 24 : 12);
       setTimeout(function () { close(true); }, reduced() ? 300 : (day === 7 ? 3200 : 2400));
     });
