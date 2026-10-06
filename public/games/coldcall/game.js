@@ -145,7 +145,7 @@
     let tk = 0; const iv = setInterval(() => SFX_.tick(tk++), 55);
     const skipped = await new Promise((res) => Tick.add((now) => {
       const sk = st.tap !== tap0 && now - t0 > 300, k = sk ? 1 : Math.max(0, Math.min(1, (now - t0) / D)), e = k < 0.85 ? (k / 0.85) * 0.8 : 0.8 + 0.2 * (1 - Math.pow(1 - (k - 0.85) / 0.15, 3));
-      a.textContent = dollars(amtCents * (k >= 1 ? 1 : e)); if (k >= 1) { res(sk); return false; } return true;
+      a.textContent = dollars(amtCents * (k >= 1 ? 1 : e)); $('win').textContent = a.textContent; if (k >= 1) { res(sk); return false; } return true;
     }));
     clearInterval(iv); SFX_.coin(); CC.fx.burst(270, 430, { n: 30, speed: 420, size: 9 }); CC.fx.coins(20);
     await waitTap(skipped ? 700 : 1800);
@@ -165,7 +165,7 @@
       // ribbon: left = mode name while a bonus runs (else the first text), right = the status text
       rib(l, r) { if (ctx.modeName) { $('ribL').textContent = ctx.modeName; $('ribR').textContent = l === ctx.modeName ? (r || '') : l + (r ? ' ' + r : ''); } else { $('ribL').textContent = l; $('ribR').textContent = r == null ? '' : r; } },
       // add tenths to the running total (never decreases, never exceeds the server's round total); `raw` is what the script asked for, for the self-check
-      addWin(t, ms) { run.raw += t; const add = Math.max(0, Math.min(t, run.total - run.t)); run.t += add; return setWin(run.t * b / 10, true, ms || 450); },
+      addWin(t, ms) { run.raw += t; const add = Math.max(0, Math.min(t, run.total - run.t)); run.t += add; if (add && ctx.onAdd) ctx.onAdd(add, ms || 450); return setWin(run.t * b / 10, true, ms || 450); },
       willBig: E.winTier(p.totalWinTenths / 10) in TIER_LVL, isLast: true
     };
     ctx.playSpin = (sp, o) => playSpin(ctx, sp, o);
@@ -359,7 +359,7 @@
       const head = ['5', '6', '7', '8', '9', '10', '11', '12', '13+'].map((s) => `<th>${s}</th>`).join('');
       const rows = E.SYM.slice(0, E.NREG).reverse().map((s) => `<tr><td class="sy"><img src="${CC.assets.symUrl(s)}" alt=""><span>${NAMES[s]}</span></td>${C.pay[s].map((t) => `<td>${x(t)}</td>`).join('')}</tr>`).join('');
       const range = (a) => x(a[0][0]) + 'x to ' + x(a[a.length - 1][0]) + 'x';
-      await modal(`<div class="card info"><h2>How it plays</h2>
+      const pr = modal(`<div class="card info"><h2>How it plays</h2>
         <p><b>Clusters.</b> Land 5 or more of the same symbol touching each other (up, down, left, right) to win. <b>The Closer</b> is wild for any pay symbol.</p>
         <p><b>Cascades.</b> A win clears the cluster and every other matching symbol on the board. The rest fall, new ones drop in, and it repeats while wins keep forming.</p>
         <p><b>Hot leads.</b> Every square in a winning cluster turns into a sticky note and stays lit while symbols fall.</p>
@@ -367,7 +367,9 @@
         <p><b>Bells.</b> The desk bells that landed in a spin: 3 = DIALING FOR DOLLARS (${C.spins.bonus1} free spins, leads stay lit until a phone calls them), 4 = ALWAYS BE CLOSING (${C.spins.bonus2} free spins, leads stay lit the whole bonus), 5 or more = QUOTE ACCEPTED (${C.spins.bonus3} free spins, a phone on every spin, no bronze bubbles). In a bonus 2 bells add 2 spins, 3 add 4; 4 or more in DIALING FOR DOLLARS upgrades it to ALWAYS BE CLOSING. Up to ${C.maxSpins} spins.</p>
         <p class="tl">Pay for a cluster, x bet</p><div class="pt"><table><tr><th></th>${head}</tr>${rows}</table></div>
         <p><small>Max win ${E.MAX_WIN_X.toLocaleString('en-US')}x. ${st.server && st.server.rtp ? 'RTP ' + st.server.rtp + '.' : ''} Play money only: no deposits, no payouts.</small></p>
-        <button class="btn" data-v="x">Close</button></div>`, { backdrop: true });
+        <button class="btn" data-v="x">Close</button><div class="cue">SCROLL FOR THE PAY TABLE</div></div>`, { backdrop: true });
+      const cd = ov.querySelector('.card.info'), cue = cd.querySelector('.cue'); const chk = () => cue.classList.toggle('end', cd.scrollTop + cd.clientHeight >= cd.scrollHeight - 6); cd.addEventListener('scroll', chk); chk();
+      await pr;
     });
   }
 

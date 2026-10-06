@@ -56,42 +56,47 @@
     const digit = { bonus1: 1, bonus2: 2, bonus3: 3 }[b.kind];
     ctx.SFX.bonusIntro(); CC.hero.mood('hype', 1800); ctx.say(b.kind);
     const scn = document.createElement('div'); scn.className = 'scn rot';
-    scn.innerHTML = '<div class="hd"><i></i><h2>PLACE THE CALL</h2><i></i></div><p class="sub" id="bSub">Drag the dial to the stop, or tap it</p><div id="bHost"></div><div class="chips"><div class="chip nm" id="chN"><small>YOU DIALED</small><b>-</b></div><div class="chip" id="chS"><small>FREE SPINS</small><b>-</b></div></div><div class="tap" id="bTap">PLACE THE CALL</div>';
+    scn.innerHTML = '<div class="hd"><i></i><h2>PLACE THE CALL</h2><i></i></div><p class="sub" id="bSub">Drag the dial to the stop, or tap it</p><div id="bHost"></div><div class="chips"><div class="chip nm" id="chN"><small>YOU DIALED</small><b>-</b></div><div class="chip" id="chS"><small>FREE SPINS</small><b>-</b></div></div>';
     ctx.sceneEl.replaceChildren(scn);
     const d = makeDial([1, 2, 3, 4, 5, 6, 7, 8, 9, 0], (v) => String(v), ctx); scn.querySelector('#bHost').replaceChildren(d.el);
     await d.spin(digit - 1);                                     // the dial lands on the script's digit, whatever the player did
     const set = (id, t) => { const c = scn.querySelector(id); c.querySelector('b').textContent = t; c.classList.add('set'); };
     set('#chN', NAME[b.kind]); ctx.SFX.register(); ctx.FX.burst(...ctx.stagePt(scn.querySelector('#chN')), { n: 14, speed: 260 }); await ctx.wait(500);
     set('#chS', b.startSpins); ctx.SFX.register(); ctx.FX.burst(...ctx.stagePt(scn.querySelector('#chS')), { n: 14, speed: 260 });
-    scn.querySelector('#bSub').textContent = 'The call connects. ' + b.startSpins + ' free spins.'; scn.querySelector('#bTap').textContent = '';
+    scn.querySelector('#bSub').textContent = 'The call connects. ' + b.startSpins + ' free spins.';
     await ctx.wait(1300);
   }
 
   async function run(b, ctx) {
-    const hud = $('bh'), L = $('bhLeft'), T = $('bhTot'), run0 = ctx.run.t;
+    const hud = $('bh'), L = $('bhLeft'), T = $('bhTot'), run0 = ctx.run.t, lbl = run0 > 0 ? 'ROUND TOTAL' : 'BONUS TOTAL';
     // trigger flourish (the bells that landed ring)
     ctx.SFX.sting(); CC.board.pulse('bell'); ctx.stamp('BONUS!', NAME[b.kind], 1500, $('head')); ctx.FX.shake(6, 350); await ctx.wait(1500); CC.board.pulse('bell', false);
     await intro(b, ctx);
-    ctx.sceneEl.replaceChildren(); ctx.bonusOn(); ctx.st.pace = 0.8; hud.hidden = false; L.textContent = b.startSpins; T.textContent = ctx.dollars(0); let shownTot = 0;
+    ctx.sceneEl.replaceChildren(); ctx.bonusOn(); ctx.st.pace = 0.8; hud.hidden = false; L.textContent = b.startSpins; $('bhTotL').textContent = lbl;
+    // the HUD total is the WIN meter's own number (same running total, same moments); a bonus after a paying trigger spin reads ROUND TOTAL
+    let cur = ctx.cents(run0), tw = 0; T.textContent = ctx.dollars(cur);
+    const hudTo = (to, ms) => { const id = ++tw, from = cur; ctx.tween(from, to, ms, (x) => { if (id === tw) { cur = Math.round(x); T.textContent = ctx.dollars(cur); } }).then(() => { if (id === tw) { cur = to; T.textContent = ctx.dollars(to); } }); };
+    ctx.onAdd = (add, ms) => hudTo(ctx.cents(ctx.run.t), ms);
     for (const sp of b.spins) {
       ctx.modeName = NAME[sp.mode]; (CC.dbg.spinT = CC.dbg.spinT || []).push(performance.now() | 0); ctx.rib(ctx.modeName, 'SPIN ' + sp.n); if (sp.n === 1 || Math.random() < 0.25) ctx.say('freeSpin');
       await ctx.playSpin(sp, { bonus: true });
-      const to = ctx.cents(sp.bonusTotal), from = shownTot; shownTot = to;
-      if (to !== from) ctx.tween(from, to, 350, (x) => { T.textContent = ctx.dollars(Math.round(x)); }).then(() => { T.textContent = ctx.dollars(to); });
+      if (!b.capped && ctx.run.t - run0 !== sp.bonusTotal) CC.dbg.mismatch.push({ what: 'bonus HUD total', spin: sp.n, shown: ctx.run.t - run0, script: sp.bonusTotal });
+      hudTo(ctx.cents(ctx.run.t), 200);
       L.textContent = sp.left; ctx.anim(L, [{ transform: 'scale(1)' }, { transform: 'scale(1.35)' }, { transform: 'scale(1)' }], { duration: 300 });
       if (sp.added > 0) { ctx.stamp('+' + sp.added + ' SPINS', 'THE BELLS RING', 1100); ctx.SFX.spinsAdded(sp.added); ctx.say('added'); await ctx.wait(900); }
       if (sp.upgrade) { ctx.stamp('UPGRADED!', NAME.bonus2, 1500, null, 'hi'); ctx.SFX.upgrade(); CC.hero.mood('hype', 1800); await ctx.wait(1250); }
     }
     const got = ctx.run.t - run0; if (!b.capped && got !== b.winTenths) CC.dbg.mismatch.push({ what: 'bonus total', shown: got, script: b.winTenths });
     // finale
-    ctx.sceneEl.replaceChildren(); hud.hidden = true; ctx.st.pace = 1; (CC.dbg.spinT = CC.dbg.spinT || []).push(-(performance.now() | 0));
-    {                                                            // always shown; a big-win overlay (if any) follows it, so it holds shorter then
+    ctx.onAdd = null; ctx.sceneEl.replaceChildren(); hud.hidden = true; ctx.st.pace = 1; (CC.dbg.spinT = CC.dbg.spinT || []).push(-(performance.now() | 0));
+    if (ctx.willBig) { ctx.SFX.accepted(); CC.hero.mood('win', 3000); await ctx.wait(500); }   // the big-win overlay is the celebration; no second card before it
+    else {
       ctx.SFX.accepted(); ctx.FX.coins(40); ctx.FX.confetti(25); CC.hero.mood('win', 3000);
       const end = document.createElement('div'); end.className = 'scn';
-      end.innerHTML = '<h2></h2><div class="chips"><div class="chip set"><small>SPINS PLAYED</small><b></b></div><div class="chip set nm"><small>MODE</small><b></b></div></div><div class="chip set" style="width:100%"><small>BONUS TOTAL</small><b></b></div><div class="tap">TAP TO CONTINUE</div>';
+      end.innerHTML = '<h2></h2><div class="chips"><div class="chip set"><small>SPINS PLAYED</small><b></b></div><div class="chip set nm"><small>MODE</small><b></b></div></div><div class="chip set" style="width:100%"><small></small><b></b></div><div class="tap">TAP TO CONTINUE</div>';
       end.querySelector('h2').innerHTML = 'BONUS<br>COMPLETE'; const bs = end.querySelectorAll('b');
-      bs[0].textContent = b.spins.length; bs[1].textContent = NAME[b.spins.length ? b.spins[b.spins.length - 1].mode : b.kind]; bs[2].textContent = ctx.dollars(ctx.cents(b.winTenths));
-      end.prepend(CC.hero.img('win', 'fin-hero')); ctx.sceneEl.replaceChildren(end); await ctx.waitTap(ctx.willBig ? 3200 : 7000); ctx.FX.clear();
+      bs[0].textContent = b.spins.length; bs[1].textContent = NAME[b.spins.length ? b.spins[b.spins.length - 1].mode : b.kind]; bs[2].textContent = ctx.dollars(ctx.cents(ctx.run.t)); end.querySelector('.chip[style] small').textContent = lbl;
+      end.prepend(CC.hero.img('win', 'fin-hero')); ctx.sceneEl.replaceChildren(end); await ctx.waitTap(7000); ctx.FX.clear();
     }
     ctx.sceneEl.replaceChildren(); ctx.modeName = null; ctx.bonusOff();
   }
