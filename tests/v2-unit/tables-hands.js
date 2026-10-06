@@ -146,6 +146,12 @@ t('N1: kick the top bettor mid-hand: cash-out = balance - committed, E1 uncalled
   eq(T.phase, 'between'); eq(T.seatOfKey('bob'), null, 'swept after the batch');
   eq(bank(e, 'bob'), 9950, 'uncalled 450 back, matched 50 lost'); eq(T.seatOfKey('ann').stack, 2050); eq(drift(e), []); books(e);
 });
+t('a seat that left mid-hand reports stack 0 to the audit (its stack is already cashed out): no drift, no double count (fuzz finding)', () => {
+  const e = three(); const T = e.table; T.startHand(); T.act('ann', { type: 'raise', to: 200 });
+  T.leave('bob');
+  const row = T.auditSeats().find(r => r.key === 'bob'); eq(row.stack, 0); ok(row.handBet >= 0);
+  eq(drift(e), []); eq(T.phase, 'betting'); books(e);
+});
 t('leave mid-hand as a folded seat still keeps its committed chips for the batch', () => {
   const e = three(); const T = e.table; T.startHand(); T.act('ann', { type: 'raise', to: 200 }); T.act('bob', { type: 'fold' });
   T.leave('bob'); eq(bank(e, 'bob'), 8000 + 1975); T.act('cy', { type: 'fold' }); eq(T.seatOfKey('bob'), null); eq(bank(e, 'bob'), 8000 + 1975 + 0 + 0 * 1);
