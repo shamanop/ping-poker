@@ -13,6 +13,7 @@
     rotary: ['A callback! Dial it up!', 'Spin the dial, friend.', 'Free spins on the line!'],
     quote: ['Quotes everywhere! Fill the form!', 'Quote accepted? Quote accepted!', 'Card number, please...'],
     freeSpin: ['Every ring counts!', 'Free calls, full commission!', 'Keep dialing!', 'Callbacks pay double. Not really, but still.'],
+    rage: ['FOUR voicemails in a row?!', 'I will eat this phone!', 'Who keeps hanging up on me?!', 'That is it. I am calling my manager.'],
     buy: ['Skipping the small talk.', 'Straight to the close.']
   };
   const pickFrom = (g, last) => { const p = LINES[g] || LINES.idle; let t = p[0]; for (let i = 0; i < 6; i++) { t = p[(Math.random() * p.length) | 0]; if (t !== last) break; } return t; };
@@ -23,7 +24,7 @@
     // hero image box inside the head (object-fit: contain), then the mouth point inside that box
     const hw = hero.offsetWidth, hh = hero.offsetHeight, nr = hero.naturalWidth / hero.naturalHeight;
     let iw = hw, ih = hh; if (hw / hh > nr) iw = hh * nr; else ih = hw / nr;
-    const m = CC.assets.mouth();
+    const m = CC.assets.mouth(CC.hero ? CC.hero.cur() : 'idle');
     const mx = hero.offsetLeft + (hw - iw) / 2 + iw * m.x, my = hero.offsetTop + (hh - ih) / 2 + ih * m.y;
     const bx = bub.offsetLeft, by = bub.offsetTop, bw = bub.offsetWidth, bh = bub.offsetHeight;
     // nearest point on the bubble's border to the mouth, and the angle from there to the mouth

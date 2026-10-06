@@ -1,5 +1,5 @@
 {
-  "_note": "ONE swap point for art. Replace files (same names) or edit paths here; no code change. Paths are relative to this file. Never put text in an image.",
+  "_note": "ONE swap point for art. Replace files (same names) or edit paths here; no code change. Paths are relative to this file. Never put text in an image. 'pieces' and 'textures' are also exposed to CSS as --img-<id> custom properties at load.",
   "symbols": {
     "cash": "img/cash.webp",
     "pile": "img/pile.webp",
@@ -17,11 +17,59 @@
   "hero": {
     "file": "img/hero.webp",
     "mouth": {
-      "x": 0.54,
-      "y": 0.48
+      "x": 0.545,
+      "y": 0.49
+    },
+    "moods": {
+      "hype": {
+        "file": "img/hero_hype.webp",
+        "mouth": {
+          "x": 0.574,
+          "y": 0.51
+        }
+      },
+      "shock": {
+        "file": "img/hero_shock.webp",
+        "mouth": {
+          "x": 0.5,
+          "y": 0.565
+        }
+      },
+      "win": {
+        "file": "img/hero_win.webp",
+        "mouth": {
+          "x": 0.5,
+          "y": 0.47
+        }
+      },
+      "rage": {
+        "file": "img/hero_rage.webp",
+        "mouth": {
+          "x": 0.515,
+          "y": 0.49
+        }
+      }
     }
   },
   "background": {
     "file": "img/bg.jpg"
-  }
+  },
+  "pieces": {
+    "spin": "img/spin.webp",
+    "seal": "img/seal.webp",
+    "cardmachine": "img/cardmachine.webp",
+    "card": "img/card.webp",
+    "cashwad": "img/cashwad.webp",
+    "phone_gold": "img/phone_gold.webp"
+  },
+  "textures": {
+    "wood": "img/wood.webp",
+    "grain": "img/grain.webp",
+    "stampmask": "img/stampmask.webp"
+  },
+  "fonts": [
+    "Alfa Slab One",
+    "Courier Prime",
+    "Special Elite"
+  ]
 }

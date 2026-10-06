@@ -24,7 +24,8 @@
 
   // ------------------------------------------------------------------ state
   const st = { bets: DEFAULT_BETS.slice(), betIdx: 3, busy: false, auto: false, turbo: false, skip: false, tap: 0, mode: 'play', live: false, s: 1,
-    bal: 100000, balShown: 100000, winShown: 0, winTarget: 0, grid: null, modal: 0, pracBal: 100000, server: null, rounds: 0 };
+    bal: 100000, balShown: 100000, winShown: 0, winTarget: 0, grid: null, modal: 0, pracBal: 100000, server: null, rounds: 0, dead: 0 };
+  const RAGE_STREAK = 4;                                       // paid spins in a row with no win before the hero loses it (then the count restarts)
   const money = { wallet: { play: 0, ledgerNet: 0, ledgerLimit: -50000 } };
   const bet = () => st.bets[st.betIdx];
   const dollars = (c) => { const n = Math.round(c), a = Math.abs(n); return (n < 0 ? '-' : '') + '$' + Math.floor(a / 100).toLocaleString('en-US') + '.' + String(a % 100).padStart(2, '0'); };
@@ -166,7 +167,8 @@
   async function bigWin(totalX, amtCents, tier) {
     const lvl = TIER_LVL[tier]; if (!lvl) return;
     const bg = document.createElement('div'); bg.id = 'tierbg'; const box = document.createElement('div'); box.id = 'tier';
-    box.innerHTML = `<div class="name"></div><div class="xx"></div><div class="amt">$0.00</div><div class="tap">TAP TO CONTINUE</div>`;
+    box.innerHTML = `<div class="name"></div><div class="xx"></div><div class="amtw"><i class="cw l"></i><div class="amt">$0.00</div><i class="cw r"></i></div><div class="tap">TAP TO CONTINUE</div>`;
+    box.prepend(CC.hero.img('win', 'bwh')); CC.hero.set('win', 0);
     box.querySelector('.name').textContent = TIER_NAME[tier]; box.querySelector('.xx').textContent = 'x' + (totalX >= 100 ? Math.round(totalX) : totalX.toFixed(1).replace(/\.0$/, ''));
     ov.append(bg, box); stage.classList.add('bw');
     const a = box.querySelector('.amt'); SFX_.big(lvl); SFX_.duck(true); say('bigWin');
@@ -180,7 +182,7 @@
     clearInterval(iv); SFX_.coin(); CC.fx.burst(270, 430, { n: 30, speed: 420, size: 9 }); CC.fx.coins(20);
     await waitTap(skipped ? 700 : 1800);
     box.style.transition = bg.style.transition = 'opacity .3s'; box.style.opacity = bg.style.opacity = 0; await new Promise((r) => setTimeout(r, 320));
-    box.remove(); bg.remove(); stage.classList.remove('bw'); CC.fx.clear(); SFX_.duck(false);   // nothing of the overlay survives
+    box.remove(); bg.remove(); stage.classList.remove('bw'); CC.fx.clear(); SFX_.duck(false); CC.hero.set('win', 1500);   // nothing of the overlay survives
   }
 
   // ------------------------------------------------------------------ the round
@@ -202,9 +204,10 @@
     if (S.base) {
       ctx.rib('SPINNING', ''); await spinGrid(S.base.grid, { tease: S.base.tease }); ctx.rib(RIB_IDLE, 'MAX ' + E.MAX_WIN_X.toLocaleString('en-US') + 'x');
       if (S.base.winTenths > 0) {
+        CC.hero.set('hype', 2000);
         const shown = await presentWins(S.base.wins, 1, ctx); await ctx.addWin(S.base.winTenths, 500);
         await wait(Math.max(500, Math.min(1100, shown * 0.4 + 450))); clearHits();
-      } else if (S.base.tease || S.base.phones.length === 2) { say('tease'); await wait(300); }
+      } else if (S.base.tease || S.base.phones.length === 2) { say('tease'); if (!(S.features && S.features.length)) CC.hero.set('shock', 2200); await wait(300); }
     } else { say('buy'); SFX_.sting(); await wait(500); }
     const fs = S.features || [];
     for (let i = 0; i < fs.length; i++) {
@@ -227,7 +230,7 @@
     if (st.modal) return;
     const b = bet(), cost = costT(kind) * b / 10;
     if (avail() < cost) { toast(kind === 'spin' ? 'Not enough funds. Lower your bet.' : 'Not enough funds for that bonus.'); st.auto = false; $('auto').classList.remove('on'); return; }
-    SFX_.init(); wake(); dbg.started = (dbg.started || 0) + 1; setBusy(true); st.skip = false; sweep(); resetWin(); setBal(st.bal - cost, true); SFX_.spin(); say(kind === 'spin' ? 'spin' : 'buy');
+    SFX_.init(); wake(); dbg.started = (dbg.started || 0) + 1; setBusy(true); st.skip = false; CC.hero.set('idle'); sweep(); resetWin(); setBal(st.bal - cost, true); SFX_.spin(); say(kind === 'spin' ? 'spin' : 'buy');
     clearHits();
     let p;
     try { p = await T.spin(b, st.mode, kind === 'spin' ? null : kind); }
@@ -245,7 +248,12 @@
       if (tier in TIER_LVL) await bigWin(winX, amt, tier);
       else if (tier === 'sweet' || tier === 'nice') { stamp(tier === 'sweet' ? 'SWEET!' : 'NICE!', 'x' + (winX >= 10 ? Math.round(winX) : winX.toFixed(1).replace(/\.0$/, '')), 1300); SFX_.win(tier === 'sweet' ? 2 : 1); say(tier === 'sweet' ? 'nice' : 'smallWin'); await wait(900); }
       else if (amt > 0) { SFX_.coin(); say('smallWin'); }
-      else if (Math.random() < 0.5) say('lose');
+      else {
+        st.dead = kind === 'spin' ? st.dead + 1 : 0;
+        if (st.dead >= RAGE_STREAK) { st.dead = 0; CC.hero.set('rage', 2400); say('rage'); }
+        else if (Math.random() < 0.5) say('lose');
+      }
+      if (amt > 0) st.dead = 0;
     } catch (e) { console.error(e); dbg.error = String(e && e.stack || e); }
     sweep();
     st.rounds++;
@@ -380,7 +388,7 @@
         <p>243 ways. Matching symbols on neighbouring reels, left to right from reel 1, win. Prices are per way, in x bet.</p><div class="pay">${rows}</div>
         <p><b>The Closer</b> is wild on reels 2, 3 and 4.<br><b>ROTARY:</b> a phone on reels 1, 3 and 5. Spin the dial twice: free spins, then a multiplier. A phone in free spins is a callback: +1 spin.<br>
         <b>QUOTE ACCEPTED:</b> 6 or more quote bubbles drop into a checkout form. 3 respins, reset on each landing. Fill CVV, EXPIRY, NAME or CARD for a prize; all four = PAYMENT ACCEPTED. An UPSELL doubles its field.</p>
-        <p><small>Max win ${E.MAX_WIN_X.toLocaleString('en-US')}x. ${st.server && st.server.rtp ? 'RTP ' + st.server.rtp + '.' : ''} Play money only: no deposits, no payouts.<br>Placeholder art: Twemoji, CC-BY 4.0 (Twitter, Inc. and contributors).</small></p>
+        <p><small>Max win ${E.MAX_WIN_X.toLocaleString('en-US')}x. ${st.server && st.server.rtp ? 'RTP ' + st.server.rtp + '.' : ''} Play money only: no deposits, no payouts.</small></p>
         <button class="btn" data-v="x">Close</button></div>`, { backdrop: true });
     });
   }
@@ -391,8 +399,9 @@
     $('bal').textContent = dollars(st.bal); setBal(st.pracBal, false); modeUi();
     const go = $('go'), splash = $('splash');
     await CC.assets.load((d, n) => { go.textContent = 'Loading ' + d + '/' + n; });
-    $('bgslot').style.backgroundImage = `url("${CC.assets.bgUrl()}")`;
     const hero = $('hero'); hero.src = CC.assets.heroUrl(); try { await hero.decode(); } catch (e) { /* shown anyway */ }
+    $('splashHero').src = CC.assets.heroUrl();
+    if (Q.has('shot')) { const qs = document.createElement('script'); qs.src = 'qa.js'; document.head.appendChild(qs); }   // QA shot flag: see qa.js
     idleGrid(); $('ribR').textContent = 'MAX ' + E.MAX_WIN_X.toLocaleString('en-US') + 'x';
     CC.caption.say('idle'); drawBet();
     const start = () => { SFX_.init(); splash.classList.add('out'); SFX_.music('base'); setTimeout(() => splash.remove(), 600); wake(); };
