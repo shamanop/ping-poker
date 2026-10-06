@@ -172,6 +172,7 @@ button[disabled]{opacity:.4;pointer-events:none}
 /* free-spin HUD: two lamp windows under the speech bubble */
 #bh{position:absolute;right:6px;bottom:6px;z-index:3;display:grid;grid-auto-flow:column;gap:8px}
 #bh[hidden]{display:none}
+.bonus #cap{max-width:335px}                     /* keep the bubble to two lines so it clears the HUD windows */
 #bh .chip{padding:4px 10px}#bh .chip small{font-size:11px}#bh .chip b{font-size:26px;min-height:0;color:#ffe3a1}
 .chip.nm b{font-size:19px;line-height:1.1;min-height:42px;display:grid;align-items:center;text-align:center}
 

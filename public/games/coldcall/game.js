@@ -52,7 +52,7 @@
   const localPt = (el, parent) => { const r = el.getBoundingClientRect(), pr = parent.getBoundingClientRect(); return [(r.left + r.width / 2 - pr.left) / st.s - parent.clientLeft, (r.top + r.height / 2 - pr.top) / st.s - parent.clientTop]; };
 
   // ------------------------------------------------------------------ timing
-  const speed = () => (st.turbo ? 0.45 : st.skip ? 0.3 : 1);
+  const speed = () => (st.turbo ? 0.45 : st.skip ? 0.3 : 1) * (st.pace || 1);          // st.pace: free spins run 20% quicker so a 12-spin bonus does not drag
   const wait = (ms) => new Promise((r) => setTimeout(r, Math.max(0, ms * speed())));
   const anim = (el, kf, o) => { const a = el.animate(kf, { fill: 'none', ...o, duration: (o.duration || 300) * speed(), delay: (o.delay || 0) * speed() }); return a.finished.catch(() => {}); };
   // number tween on the shared ticker: fn(value) every frame, resolves at the end (a tap skips it)
@@ -183,7 +183,7 @@
   function sweep() {                                           // end-of-round cleanup: nothing created for a round may outlive it
     ov.querySelectorAll('.scrim,#tier,#tierbg,.fly,.banner').forEach((n) => n.remove()); stage.querySelectorAll('.toast.keep').forEach((n) => n.remove());
     floatsEl.replaceChildren(); board.querySelectorAll('.stamp,.accept').forEach((n) => n.remove()); $('head').querySelectorAll('.stamp').forEach((n) => n.remove()); stage.querySelectorAll(':scope > .stamp').forEach((n) => n.remove()); sceneEl.replaceChildren(); $('bh').hidden = true;
-    stage.classList.remove('bonus', 'bw'); CC.fx.clear(); SFX_.duck(false); CC.board.clean(); st.modal = ov.querySelectorAll('.scrim').length;
+    stage.classList.remove('bonus', 'bw'); st.pace = 1; CC.fx.clear(); SFX_.duck(false); CC.board.clean(); st.modal = ov.querySelectorAll('.scrim').length;
   }
   // the screen against the script, after every round: win readout, 30 cells, no leftovers, final grid. Anything off lands in CC.dbg.mismatch.
   function selfCheck(p, ctx) {

@@ -72,9 +72,9 @@
     // trigger flourish (the bells that landed ring)
     ctx.SFX.sting(); CC.board.pulse('bell'); ctx.stamp('BONUS!', NAME[b.kind], 1500, $('head')); ctx.FX.shake(6, 350); await ctx.wait(1500); CC.board.pulse('bell', false);
     await intro(b, ctx);
-    ctx.sceneEl.replaceChildren(); ctx.bonusOn(); hud.hidden = false; L.textContent = b.startSpins; T.textContent = ctx.dollars(0); let shownTot = 0;
+    ctx.sceneEl.replaceChildren(); ctx.bonusOn(); ctx.st.pace = 0.8; hud.hidden = false; L.textContent = b.startSpins; T.textContent = ctx.dollars(0); let shownTot = 0;
     for (const sp of b.spins) {
-      ctx.modeName = NAME[sp.mode]; ctx.rib(ctx.modeName, 'SPIN ' + sp.n); if (sp.n === 1 || Math.random() < 0.25) ctx.say('freeSpin');
+      ctx.modeName = NAME[sp.mode]; (CC.dbg.spinT = CC.dbg.spinT || []).push(performance.now() | 0); ctx.rib(ctx.modeName, 'SPIN ' + sp.n); if (sp.n === 1 || Math.random() < 0.25) ctx.say('freeSpin');
       await ctx.playSpin(sp, { bonus: true });
       const to = ctx.cents(sp.bonusTotal), from = shownTot; shownTot = to;
       if (to !== from) ctx.tween(from, to, 350, (x) => { T.textContent = ctx.dollars(Math.round(x)); }).then(() => { T.textContent = ctx.dollars(to); });
@@ -84,7 +84,7 @@
     }
     const got = ctx.run.t - run0; if (!b.capped && got !== b.winTenths) CC.dbg.mismatch.push({ what: 'bonus total', shown: got, script: b.winTenths });
     // finale
-    ctx.sceneEl.replaceChildren(); hud.hidden = true;
+    ctx.sceneEl.replaceChildren(); hud.hidden = true; ctx.st.pace = 1; (CC.dbg.spinT = CC.dbg.spinT || []).push(-(performance.now() | 0));
     {                                                            // always shown; a big-win overlay (if any) follows it, so it holds shorter then
       ctx.SFX.accepted(); ctx.FX.coins(40); ctx.FX.confetti(25); CC.hero.mood('win', 3000);
       const end = document.createElement('div'); end.className = 'scn';
