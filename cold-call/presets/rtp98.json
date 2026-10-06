@@ -1,5 +1,6 @@
 {
   "overrides": {},
   "rtpLabel": "98.0% (long-run, 200M-spin sim, +-0.22, includes the Callback and the office pot)",
+  "measuredHash": "4e9b57527ab9de291d8f8083e76d2cf619ed24f388693e3ef890394a94b7980b",
   "note": "rtp98: the shipped math, no overrides. Measured in LEVERS.md 8.12 / 8.13."
 }
