@@ -16,6 +16,7 @@ const eq = (a, b, m) => { if (JSON.stringify(a) !== JSON.stringify(b)) throw new
 const ok = (c, m) => { if (!c) throw new Error(m || 'not ok'); };
 const code = fn => { try { fn(); } catch (e) { return e.code || e.message; } return 'none'; };
 
+fs.mkdirSync(path.join(__dirname, '..', '..', 'tables', 'runs'), { recursive: true }); // gitignored scratch dir, absent in a fresh checkout
 const dir = fs.mkdtempSync(path.join(__dirname, '..', '..', 'tables', 'runs', 'reg-'));
 let n = 0;
 const KEYS = ['ann', 'bob', 'cy', 'chris'];

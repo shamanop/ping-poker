@@ -19,6 +19,7 @@ function throwsTable(fn, code) {
   throw new Error('did not throw ' + code);
 }
 
+fs.mkdirSync(path.join(__dirname, '..', '..', 'tables', 'runs'), { recursive: true }); // gitignored scratch dir, absent in a fresh checkout
 const dir = fs.mkdtempSync(path.join(process.env.TABLES_TMP || path.join(__dirname, '..', '..', 'tables', 'runs'), 'mp-'));
 let n = 0;
 function env(extra) {
