@@ -51,7 +51,7 @@ const NODAY = { day: null };
     assert.deepStrictEqual(P.more, { on: true, mult: 2, rtp: 0.98, minTenths: 20 });
     assert.deepStrictEqual(P.pick.mult, { bronze: 0, silver: 2, gold: 3, upsell: 2, close: 2 });
     assert.deepStrictEqual(PIN.knobNames, ['callback', 'carryOver', 'cold', 'daily', 'decision', 'feed', 'fill', 'ghost', 'list', 'more', 'on', 'pick', 'pot', 'warm'], 'the real CFG.pull has exactly the contract knob names');
-    for (const f of ['newState', 'tickState', 'coldInfo', 'playRound', 'potSlice', 'potHitChance', 'rngFrom']) assert.strictEqual(typeof E[f], 'function', f);
+    for (const f of ['newState', 'tickState', 'coldInfo', 'playRound', 'potSlice', 'potHitChance', 'rngFrom', 'cbBet']) assert.strictEqual(typeof E[f], 'function', f);
     assert.ok(fs.readFileSync(path.join(__dirname, '..', 'games', 'coldcall-engine.js')).equals(fs.readFileSync(path.join(__dirname, '..', 'public', 'games', 'coldcall', 'engine.js'))), 'public copy must be byte-identical');
   });
 
@@ -136,15 +136,15 @@ const NODAY = { day: null };
     assert.strictEqual(r.newState.lt, 0); assert.deepStrictEqual(r.newState.cb, { bet: 100 }); assert.ok(r.pull.armed);
   });
 
-  await test('avg and cb.bet: leads earned small cannot fire a big Callback; level = largest bet level <= avg + 0.5; min 10', () => {
+  await test('avg and cb.bet: leads earned small cannot fire a big Callback; cb.bet = avg rounded to the nearest 10 cents, clamped to [10, 2500]', () => {
     const e = mkEng({ daily: { base: 0, perStreak: 0 } });
     const run = (st, bet) => spin(e, strict([...gridVals(e, 0)]), st, { bet });
-    // 490 tenths at 10 cents, then a 2500-cent dead spin (12 tenths): avg = (10*490 + 2500*12) / 502 = 69.52 -> level 50
+    // 490 tenths at 10 cents, then a 2500-cent dead spin (12 tenths): avg = (10*490 + 2500*12) / 502 = 69.52 -> 70 (nearest 10 cents)
     let r = run(freeze(st0({ lt: 490, avg: 10, day: '2026-10-06' })), 2500);
-    assert.deepStrictEqual(r.newState.cb, { bet: 50 }); assert.ok(Math.abs(r.newState.avg - (10 * 490 + 2500 * 12) / 502) < 1e-9);
+    assert.deepStrictEqual(r.newState.cb, { bet: 70 }); assert.ok(Math.abs(r.newState.avg - (10 * 490 + 2500 * 12) / 502) < 1e-9);
     r = run(freeze(st0({ lt: 495, avg: 2500, day: '2026-10-06' })), 2500); assert.deepStrictEqual(r.newState.cb, { bet: 2500 });
     r = run(freeze(st0({ lt: 495, avg: 10, day: '2026-10-06' })), 10); assert.deepStrictEqual(r.newState.cb, { bet: 10 });
-    for (const [avg, lvl] of [[0, 10], [10, 10], [19.4, 10], [19.5, 20], [20, 20], [49.4, 20], [49.5, 50], [99.4, 50], [99.5, 100], [2499.4, 1000], [2499.5, 2500], [99999, 2500]]) assert.strictEqual(E.cbLevel(avg), lvl, 'avg ' + avg);
+    for (const [avg, lvl] of [[0, 10], [4.9, 10], [10, 10], [14.9, 10], [15, 20], [19.4, 20], [24.9, 20], [25, 30], [49.4, 50], [499.9, 500], [2356, 2360], [2496.4, 2500], [2499.5, 2500], [2500, 2500], [99999, 2500]]) assert.strictEqual(E.cbBet(avg), lvl, 'avg ' + avg);
     // a flat bettor at every level gets exactly his level back, never rounding drift
     for (const b of E.BET_LEVELS) { let st = st0({ day: '2026-10-06' }); for (let i = 0; i < 80 && !st.cb; i++) st = spin(e, strict(gridVals(e, 0)), st, { bet: b }).newState; assert.deepStrictEqual(st.cb, { bet: b }); assert.strictEqual(st.avg, b); }
   });
@@ -205,7 +205,7 @@ const NODAY = { day: null };
     const s = freeze(st0({ lt: 480, avg: 2500 }));
     const r = e.playRound(strict(gridVals(e, 0)), { bet: 2500, state: s, now: 1e6, day: '2026-10-06' }, []);
     assert.strictEqual(r.callback, false); assert.ok(r.pull.armed); assert.strictEqual(r.newState.lt, 480 + 30 - 500);
-    assert.strictEqual(r.newState.cb.bet, E.cbLevel((2500 * 480 + 100 * 30) / 510), 'stake capped at 100 cents');
+    assert.strictEqual(r.newState.cb.bet, E.cbBet((2500 * 480 + 100 * 30) / 510), 'stake capped at 100 cents');
   });
 
   // ---------------------------------------------------------------- warm squares and the ghost
@@ -260,12 +260,12 @@ const NODAY = { day: null };
     // warm in: a phone on the board fires on the carried-in squares even though no cluster formed this spin; they are consumed
     e = mkEng({ warm: { chance: 1, cap: 4 } });
     rng = strict([...gridVals(e, 0, { 29: 12 }), ...Array(3).fill(revVal(e, 0, 'b', 5))]);
-    r = spin(e, rng, freeze(st0({ day: '2026-10-06', warm: [7, 8, 9], coldAt: 6e6, lt: 200, avg: 100 })));
+    r = spin(e, rng, freeze(st0({ day: '2026-10-06', warm: [7, 8, 9], warmBet: 100, coldAt: 6e6, lt: 200, avg: 100 })));
     assert.strictEqual(rng.left(), 0); assert.deepStrictEqual(r.pull.warmIn, [7, 8, 9]); assert.deepStrictEqual(r.script.spin.hotIn, [7, 8, 9]); assert.deepStrictEqual(r.script.spin.phone.leads, [7, 8, 9]);
     assert.strictEqual(r.winTenths, 15); assert.deepStrictEqual(r.newState.warm, [], 'consumed'); assert.strictEqual(r.pull.ghost, null);
     // warm in, no phone: the squares are marked, can stay warm again (re-rolled), and a cluster adds to them
     e = mkEng({ warm: { chance: 1, cap: 4 }, ghost: { on: false } }); rng = strict([...baseDead(e, [0.5])]);
-    r = spin(e, rng, freeze(st0({ day: '2026-10-06', warm: [10, 11] }))); assert.deepStrictEqual(r.pull.warmOut, [0, 1, 2, 3], 'marks 0..4 and 10, 11; position order, cap 4');
+    r = spin(e, rng, freeze(st0({ day: '2026-10-06', warm: [10, 11], warmBet: 100 }))); assert.deepStrictEqual(r.pull.warmOut, [0, 1, 2, 3], 'marks 0..4 and 10, 11; position order, cap 4');
   });
 
   await test('warm squares die at the cold clock exactly like the leak; the state carried through tickState before a spin', () => {
@@ -489,9 +489,109 @@ const NODAY = { day: null };
     assert.ok(Math.abs(p - 0.49) < 5 * se, 'win rate ' + p + ' vs 0.49 (n=' + tot + ')');
   });
 
+  // ---------------------------------------------------------------- wave 1 fix round (critic F1, F2, F5)
+  await test('F1 warm squares are tied to a bet: honoured as hot only at the SAME bet; any other bet drops them (counted in pull.warmDropped) and the spin is exactly a cold spin', () => {
+    const e = mkEng({ daily: { base: 0, perStreak: 0 } });
+    const warm = [7, 8, 9], DAY = '2026-10-06';
+    const cold = () => st0({ day: DAY, lt: 200, avg: 100 });
+    let honoured = 0;
+    for (const [warmBet, bet] of [[10, 2500], [2500, 10], [100, 200], [0, 100], [undefined, 100]]) {
+      for (let seed = 1; seed <= 400; seed++) {
+        const st = freeze(Object.assign(cold(), { warm, warmBet, coldAt: 6e6 }));
+        const a = e.playRound(E.rngFrom(seed), { bet, state: st, now: 5e6, day: DAY, auto: true }, []);
+        const b = e.playRound(E.rngFrom(seed), { bet, state: freeze(cold()), now: 5e6, day: DAY, auto: true }, []);
+        assert.deepStrictEqual(a.pull.warmIn, [], 'dropped warm squares are not warmIn'); assert.strictEqual(a.pull.warmDropped, 3); assert.deepStrictEqual(a.script.spin.hotIn, []);
+        assert.strictEqual(a.winTenths, b.winTenths, 'same payback as a cold spin at that bet (seed ' + seed + ')'); assert.deepStrictEqual(a.script.spin, b.script.spin);
+        assert.deepStrictEqual(a.pull.warmOut, b.pull.warmOut); assert.strictEqual(b.pull.warmDropped, 0);
+      }
+    }
+    // the same bet honours them
+    for (let seed = 1; seed <= 200; seed++) {
+      const st = freeze(Object.assign(cold(), { warm, warmBet: 100, coldAt: 6e6 }));
+      const a = e.playRound(E.rngFrom(seed), { bet: 100, state: st, now: 5e6, day: DAY, auto: true }, []);
+      assert.deepStrictEqual(a.pull.warmIn, warm); assert.strictEqual(a.pull.warmDropped, 0); assert.deepStrictEqual(a.script.spin.hotIn, warm); honoured++;
+    }
+    assert.strictEqual(honoured, 200);
+  });
+
+  await test('F1 the attacker (10c spins until >= 3 warm squares, then one $25 spin) gets a cold $25 spin: no hot squares, same payback; a same-bet follow-up keeps the squares', () => {
+    const e = mkEng({ warm: { chance: 1, cap: 4 }, daily: { base: 0, perStreak: 0 }, list: 100000 }), DAY = '2026-10-06';   // list 100000: no Callback arms (a Callback has no base spin)
+    let st = st0({ day: DAY }), big = 0, seedN = 1;
+    const stream = E.rngFrom(99);
+    for (let i = 0; i < 60000 && big < 150; i++) {
+      if (st.warm.length >= 3) {
+        const seed = seedN++;
+        const a = e.playRound(E.rngFrom(seed), { bet: 2500, state: freeze(st), now: 1e6 + i, day: DAY, auto: true }, []);
+        const cold = e.playRound(E.rngFrom(seed), { bet: 2500, state: freeze(Object.assign({}, st, { warm: [], warmBet: 0 })), now: 1e6 + i, day: DAY, auto: true }, []);
+        assert.strictEqual(a.pull.warmDropped, st.warm.length); assert.deepStrictEqual(a.script.spin.hotIn, []); assert.strictEqual(a.winTenths, cold.winTenths); assert.deepStrictEqual(a.script.spin, cold.script.spin);
+        big++;
+        // the same squares at the SAME bet (10c) are honoured
+        const same = e.playRound(E.rngFrom(seed), { bet: 10, state: freeze(st), now: 1e6 + i, day: DAY, auto: true }, []);
+        assert.deepStrictEqual(same.pull.warmIn, st.warm); assert.deepStrictEqual(same.script.spin.hotIn, st.warm); assert.strictEqual(same.pull.warmDropped, 0);
+      }
+      st = e.playRound(stream, { bet: 10, state: freeze(st), now: 1e6 + i, day: DAY, script: false, auto: true }, []).newState;
+    }
+    assert.ok(big >= 100, 'attacker found ' + big + ' setups');
+  });
+
+  await test('F1 warmBet: set to the spin bet when warm squares are made, 0 when none; cleared by the cold clock and by a drop; survives JSON, carry-over and a Callback; buys and Callback leave it alone', () => {
+    const e = mkEng({ warm: { chance: 1, cap: 4 }, ghost: { on: false } }), DAY = '2026-10-06';
+    let r = spin(e, strict(baseDead(e, [0.5])), st0({ day: DAY }), { bet: 500 });
+    assert.deepStrictEqual(r.newState.warm, [0, 1, 2, 3]); assert.strictEqual(r.newState.warmBet, 500);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(r.newState)), r.newState);
+    // honoured at 500 (hot, marks again, re-made at 500): warmBet stays 500
+    r = spin(e, strict([...gridVals(e, 0), 0.5]), freeze(r.newState), { bet: 500 }); assert.deepStrictEqual(r.pull.warmIn, [0, 1, 2, 3]); assert.deepStrictEqual(r.newState.warm, [0, 1, 2, 3]); assert.strictEqual(r.newState.warmBet, 500);
+    // dropped at another bet, then marks at that bet become the new warm squares at the new bet
+    r = spin(e, strict(baseDead(e, [0.5])), st0({ day: DAY, warm: [20, 21], warmBet: 500 }), { bet: 100 });
+    assert.strictEqual(r.pull.warmDropped, 2); assert.deepStrictEqual(r.newState.warm, [0, 1, 2, 3]); assert.strictEqual(r.newState.warmBet, 100);
+    // dropped and nothing new: warmBet 0
+    r = spin(e, strict(gridVals(e, 0)), st0({ day: DAY, warm: [20, 21], warmBet: 500 }), { bet: 100 }); assert.deepStrictEqual(r.newState.warm, []); assert.strictEqual(r.newState.warmBet, 0);
+    // the cold clock clears warmBet with the squares
+    const t = E.tickState(freeze(st0({ lt: 300, warm: [3], warmBet: 100, coldAt: 10 })), 10); assert.deepStrictEqual(t.warm, []); assert.strictEqual(t.warmBet, 0);
+    // a Callback round has no base spin: warm and warmBet stay as they were; carry-over of a full list leaves them alone
+    const cb = e.playRound(E.rngFrom(3), { bet: 2500, state: freeze(st0({ lt: 20, avg: 100, cb: { bet: 200 }, warm: [4, 5], warmBet: 100, day: DAY })), now: 7e6, day: DAY, auto: true }, []);
+    assert.deepStrictEqual(cb.newState.warm, [4, 5]); assert.strictEqual(cb.newState.warmBet, 100);
+    const buy = freeze(st0({ warm: [1], warmBet: 100 })); assert.strictEqual(e.playRound(E.rngFrom(4), { buy: 'bonus1', bet: 2500, state: buy, now: 1, day: DAY, auto: true }, []).newState, buy);
+    const co = spin(mkEng({ warm: { chance: 1, cap: 4 }, ghost: { on: false }, daily: { base: 0, perStreak: 0 } }), strict(baseDead(e, [0.5])), freeze(st0({ lt: 495, avg: 100, day: DAY })), { bet: 100 });
+    assert.ok(co.pull.armed); assert.deepStrictEqual(co.newState.warm, [0, 1, 2, 3]); assert.strictEqual(co.newState.warmBet, 100);
+  });
+
+  await test('F2 Callback bet is the exact lead-weighted average to the nearest 10 cents in [10, 2500], not a bet level: flat $25 with the daily on spin 1 gets >= $24.90, flat $5 >= $4.90, flat $1 unchanged (2000-lead list)', () => {
+    const e = mkEng({ list: 2000 }), DAY = '2026-10-06';
+    for (const [bet, atLeast] of [[2500, 2490], [500, 490], [100, 100]]) {
+      let st = E.newState(), n = 0; const rng = E.rngFrom(5 + bet);
+      while (!st.cb && n < 100000) { st = e.playRound(rng, { bet, state: st, now: 1e6 + n, day: DAY, script: false, auto: true }, []).newState; n++; }
+      assert.ok(st.cb, 'a Callback armed'); assert.ok(st.cb.bet >= atLeast, 'bet ' + bet + ' -> Callback at ' + st.cb.bet + ' (want >= ' + atLeast + ')');
+      assert.strictEqual(st.cb.bet % 10, 0); if (bet === 100) assert.strictEqual(st.cb.bet, 100);
+    }
+    // a single $10 spin inside a flat $25 list no longer collapses the Callback to a level
+    let st = freeze(st0({ lt: 4900, avg: 2500, day: DAY })); const r = e.playRound(strict(gridVals(e, 0)), { bet: 1000, state: st, now: 1, day: DAY }, []);
+    assert.strictEqual(r.newState.cb, null); const r2 = e.playRound(strict(gridVals(e, 0)), { bet: 1000, state: freeze(st0({ lt: 19995, avg: 2500, day: DAY })), now: 1, day: DAY }, []);
+    assert.ok(r2.newState.cb.bet >= 2490 && r2.newState.cb.bet <= 2500, 'one $10 spin: ' + r2.newState.cb.bet);
+  });
+
+  await test('F2 every multiple of 10 cents in [10, 2500] is a legal Callback bet: Eng.cents exact, the Callback round plays and pays whole cents at it', () => {
+    const e = E0;
+    for (let b = 10; b <= 2500; b += 10) {
+      assert.strictEqual(E.cbBet(b), b); assert.strictEqual(E.cbBet(b + 4.9), Math.min(b, 2500));
+      assert.doesNotThrow(() => E.cents(10, b)); assert.doesNotThrow(() => E.cents(7, b));
+    }
+    for (const b of [10, 30, 70, 490, 2360, 2490, 2500]) {
+      const r = e.playRound(E.rngFrom(b), { bet: 100, state: freeze(st0({ lt: 20, avg: b, cb: { bet: b }, day: '2026-10-06' })), now: 1, day: '2026-10-06', auto: true }, []);
+      assert.strictEqual(r.betCents, b); assert.strictEqual(r.callback, true); assert.ok(Number.isInteger(E.cents(r.winTenths, b))); assert.ok(r.winTenths <= T);
+    }
+    assert.strictEqual(E.cbBet(0), 10); assert.strictEqual(E.cbBet(-5), 10); assert.strictEqual(E.cbBet(1e9), 2500);
+  });
+
+  await test('F5 pot.oneInPerDollar <= 0 or not a number means a hit chance of 0 (never), not 1', () => {
+    for (const v of [0, -1, -20000, NaN, undefined, null, 'x', Infinity]) for (const cost of [10, 100, 2500]) assert.strictEqual(E.potHitChance({ pot: { oneInPerDollar: v } }, cost), 0, String(v));
+    assert.strictEqual(E.potHitChance({ pot: { oneInPerDollar: 20000 } }, 100), 1 / 20000);
+    assert.strictEqual(E.potHitChance({ pot: { oneInPerDollar: 0.5 } }, 100), 1, 'a real chance above 1 still caps at 1');
+  });
+
   await test('Play/Chips independence and state shape: newState is a fresh plain object per call; states are JSON-clean and round-trip through JSON', () => {
     const a = E.newState(), b = E.newState(); a.warm.push(1); assert.deepStrictEqual(b.warm, []);
-    assert.deepStrictEqual(Object.keys(E.newState()), ['v', 'lt', 'avg', 'cb', 'warm', 'coldAt', 'day', 'streak', 'rounds', 'callbacks']);
+    assert.deepStrictEqual(Object.keys(E.newState()), ['v', 'lt', 'avg', 'cb', 'warm', 'warmBet', 'coldAt', 'day', 'streak', 'rounds', 'callbacks']);
     let st = E.newState(); const rng = E.rngFrom(8);
     for (let i = 0; i < 400; i++) { const r = E.playRound(rng, { bet: 100, state: JSON.parse(JSON.stringify(st)), now: 1e6 + i, day: '2026-10-06', script: false, auto: true }, []); st = r.newState; assert.deepStrictEqual(JSON.parse(JSON.stringify(st)), st); }
   });

@@ -118,11 +118,13 @@
   function pickCum(rng, cum) { const x = rng(); let i = 0; while (x >= cum[i] && i < cum.length - 1) i++; return i; }
 
   /* ---------------------------------------------------- THE PULL: player state helpers (pure, no clock of their own) ----------------------------------------------------
-     state = { v, lt (tenths of a lead), avg (cents, lead-weighted), cb: null | { bet }, warm: [positions], coldAt: null | ms, day, streak, rounds, callbacks }. */
-  function newState() { return { v: 1, lt: 0, avg: 0, cb: null, warm: [], coldAt: null, day: null, streak: 0, rounds: 0, callbacks: 0 }; }
+     state = { v, lt (tenths of a lead), avg (cents, lead-weighted), cb: null | { bet }, warm: [positions], warmBet (cents the warm squares were made at, 0 = none), coldAt: null | ms, day, streak, rounds, callbacks }. */
+  function newState() { return { v: 1, lt: 0, avg: 0, cb: null, warm: [], warmBet: 0, coldAt: null, day: null, streak: 0, rounds: 0, callbacks: 0 }; }
   const cloneState = (st) => Object.assign({}, st, { warm: st.warm.slice(), cb: st.cb ? Object.assign({}, st.cb) : null });
-  // the Callback is played at the largest bet level <= avg + 0.5 cents (min 10): leads earned small cannot fire a big bet
-  function cbLevel(avg) { let b = BET_LEVELS[0]; for (const l of BET_LEVELS) if (l <= avg + 0.5) b = l; return b; }
+  // the Callback is played at the exact lead-weighted average bet, to the nearest 10 cents, in [10, max bet level]: leads earned small cannot fire a big bet,
+  // and a few cheap leads (the daily gift) cannot knock a big bettor down a whole bet level. Any multiple of 10 cents is a legal Eng.cents bet.
+  const CB_MAX = BET_LEVELS[BET_LEVELS.length - 1];
+  function cbBet(avg) { const a = Number.isFinite(avg) ? avg : 0; return Math.min(CB_MAX, Math.max(BET_LEVELS[0], Math.round(a / 10) * 10)); }
   function nextDay(d) { const [y, m, dd] = d.split('-').map(Number); return new Date(Date.UTC(y, m - 1, dd + 1)).toISOString().slice(0, 10); }
   // add `t` tenths of a lead worked at `bet` cents; arms THE CALLBACK at a full list (returns true if it armed one)
   function addLeads(st, t, bet, P) {
@@ -130,7 +132,7 @@
     st.avg = (st.avg * st.lt + bet * t) / (st.lt + t); st.lt += t;
     const full = Math.round(P.list * 10);
     if (st.lt < full || st.cb) return false;
-    st.cb = { bet: cbLevel(st.avg) };
+    st.cb = { bet: cbBet(st.avg) };
     if (P.carryOver) st.lt -= full; else { st.lt = 0; st.avg = 0; }
     return true;
   }
@@ -139,7 +141,7 @@
     const st = cloneState(state);
     if (st.coldAt == null || !Number.isFinite(now) || now < st.coldAt) return st;
     const step = P.cold.stepMs > 0 ? P.cold.stepMs : Infinity, n = Math.floor((now - st.coldAt) / step) + 1, fl = Math.round(P.cold.floor * 10);
-    st.warm = [];
+    st.warm = []; st.warmBet = 0;
     if (st.lt > fl) st.lt = Math.max(fl, st.lt - n * Math.round(P.cold.batch * 10));
     st.coldAt = st.lt <= fl ? null : st.coldAt + n * step;
     return st;
@@ -155,7 +157,8 @@
   // the OFFICE POT slice of one bet: exact integer cents with the remainder carried (basis points)
   function potSlice(feedBps, costCents, rem) { const n = costCents * feedBps + (rem || 0); return { slice: Math.floor(n / 10000), rem: n % 10000 }; }
   // chance that one paid spin takes the pot: one in `oneInPerDollar` per dollar of cost
-  function potHitChance(pullCfg, costCents) { return Math.min(1, (costCents / 100) / (pullCfg || CFG.pull).pot.oneInPerDollar); }
+  // oneInPerDollar <= 0 (or not a number) switches the pot off: chance 0, never 1
+  function potHitChance(pullCfg, costCents) { const o = (pullCfg || CFG.pull).pot.oneInPerDollar; return o > 0 && Number.isFinite(o) ? Math.min(1, (costCents / 100) / o) : 0; }
 
   function createEngine(cfgIn) {
     const cfg = cfgIn || CFG;
@@ -411,7 +414,7 @@
     const PEND = { pending: true };
     const badDecision = (msg) => { const e = new Error('bad_decision: ' + msg); e.code = 'bad_decision'; return e; };
     const bonusNum = (k) => (k === 'bonus2' ? 2 : 1);
-    function emptyPull(state) { const lt = state ? state.lt : 0; return { leadsBefore: lt, leadsAfter: lt, filled: 0, leaked: 0, warmDied: 0, armed: false, daily: null, warmIn: [], warmOut: [], ghost: null, decisions: [], pick: null, more: null }; }
+    function emptyPull(state) { const lt = state ? state.lt : 0; return { leadsBefore: lt, leadsAfter: lt, filled: 0, leaked: 0, warmDied: 0, warmDropped: 0, armed: false, daily: null, warmIn: [], warmOut: [], ghost: null, decisions: [], pick: null, more: null }; }
 
     function playRound(rng, input, decisions) {
       const P = cfg.pull, buy = input.buy || null, S = input.script !== false, bet0 = input.bet;
@@ -472,6 +475,9 @@
           s.day = day; s.streak = streak;
           if (addLeads(s, Math.round(dl * 10), Math.min(bet, P.daily.stakeCap), P)) pull.armed = true;
         }
+        if (!buy && !callback && s.warm.length && s.warmBet !== bet) {          // warm squares belong to the bet they were made at: any other bet and they are gone before the round is played
+          pull.warmDropped = s.warm.length; s.warm = []; s.warmBet = 0;
+        }
         if (!buy && !callback) pull.warmIn = s.warm.slice();
         const hot = new Uint8Array(N);
         if (!buy && !callback) for (const p of s.warm) if (p >= 0 && p < N) hot[p] = 1;
@@ -528,7 +534,7 @@
                 if (wOn) for (const p of marks) { if (pull.warmOut.length >= P.warm.cap) break; if (sub() < P.warm.chance) pull.warmOut.push(p); }
               }
             }
-            ns.warm = pull.warmOut.slice();
+            ns.warm = pull.warmOut.slice(); ns.warmBet = ns.warm.length ? bet : 0;
           }
           if (Number.isFinite(now)) ns.coldAt = ns.lt <= Math.round(P.cold.floor * 10) && !ns.warm.length ? null : now + P.cold.afterMs;
           pull.leadsAfter = ns.lt;
@@ -573,5 +579,5 @@
   // THE PULL round: (rng, { buy, bet, state, now, day, script, auto, decide }, decisions) -> { status: 'done' | 'pending', ... }
   const playRound = (rng, input, decisions) => engine.playRound(rng, input, decisions);
 
-  return { createEngine, engine, resolveRound, rngFrom, playRound, newState, tickState, coldInfo, potSlice, potHitChance, cbLevel, winTier, cents, TIERS, CFG, SYM, MODES, BUYS, FORCES, TIER_NAMES, BET_LEVELS, COLS, ROWS, N, NREG, WILD, BELL, PHONE, MIN_CLUSTER, MAX_WIN_X, MAX_WIN_T };
+  return { createEngine, engine, resolveRound, rngFrom, playRound, newState, tickState, coldInfo, potSlice, potHitChance, cbBet, cbLevel: cbBet, winTier, cents, TIERS, CFG, SYM, MODES, BUYS, FORCES, TIER_NAMES, BET_LEVELS, COLS, ROWS, N, NREG, WILD, BELL, PHONE, MIN_CLUSTER, MAX_WIN_X, MAX_WIN_T };
 });
