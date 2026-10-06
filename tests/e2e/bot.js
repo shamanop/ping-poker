@@ -14,4 +14,6 @@ s.on('game_state', gs => {
   setTimeout(() => s.emit('player_action', { roomId: room, action: toCall > 0 ? 'call' : 'check' }), 400);
 });
 s.on('error', e => console.log('bot error', e && e.message));
-console.log('bot', name, 'up');
+console.log('bot', name, 'up'); s.onAny((ev, d) => { if (ev === 'error') console.log('bot error event', JSON.stringify(d)); });
+// leave the table when stopped (one seat per account on the v2 server), then exit
+process.on('SIGTERM', () => { s.emit('table_leave', { tableId: room || table }); setTimeout(() => process.exit(0), 500); });

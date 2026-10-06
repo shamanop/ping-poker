@@ -368,8 +368,12 @@ function bindSocket() {
     const gu = gs.unit || gs.table?.unit;
     if (gu) setTableUnit(gu);
     if (!state.myName && gs.players[state.myIdx]) state.myName = gs.players[state.myIdx].name;
-    const idxNow = gs.players.findIndex(p => p.name === state.myName);
+    const idxNow = gs.you && gs.you.idx != null ? gs.you.idx : gs.players.findIndex(p => p.name === state.myName);
     if (idxNow >= 0) state.myIdx = idxNow;
+    if (gs.players[state.myIdx] && gs.players[state.myIdx].chips > 0 && !$('bust-panel').classList.contains('hidden')) { // the rebuy was seated
+      $('bust-panel').classList.add('hidden');
+      if (state.rebuyField) { state.rebuyField.destroy(); state.rebuyField = null; $('bust-amt').replaceChildren(); }
+    }
     if (!prev || prev.handNum !== gs.handNum) { resetDeal(); state.dealt = {}; state.heroKey = ''; state.reveal = null; hideShowdown(); }
     if (!prev && gs.street && gs.street !== 'preflop') state.noDealHand = gs.handNum;
     noteTable(prev, gs);
@@ -611,11 +615,14 @@ function appendChatMsg(name, text) {
 function initBust() {
   $('btn-rebuy').addEventListener('click', () => {
     if (!state.roomId) return;
-    // the amount sent is the number in the AmountInput (the same number the button label promises); never a guess
+    // the amount sent is the number in the AmountInput (the same number the button label promises); never a guess.
+    // The panel stays until the server seats the chips (game_state with chips > 0): an error (range, bank, rebuy_off...) leaves it open.
     const f = state.rebuyField;
-    if (f) { if (f.value() === null) { f.submit(); return; } state.socket.emit('rebuy', { roomId: state.roomId, amount: f.value() }); f.destroy(); state.rebuyField = null; $('bust-amt').replaceChildren(); }
-    else state.socket.emit('rebuy', { roomId: state.roomId });
-    $('bust-panel').classList.add('hidden');
+    if (!f) return;
+    const v = f.value(); if (v === null) { f.submit(); return; }
+    const fund = state.lastRebuy && state.lastRebuy.fund;
+    state.socket.emit('rebuy', fund ? { roomId: state.roomId, amount: v, fund } : { roomId: state.roomId, amount: v });
+    const btn = $('btn-rebuy'); btn.disabled = true; setTimeout(() => { if (state.rebuyField) btn.disabled = state.rebuyField.value() === null; }, 900);
   });
   $('btn-spectate').addEventListener('click', () => {
     state.spectating = true;
@@ -634,7 +641,8 @@ function showBust(balance, rebuy) {
   state.lastBust = balance;
   state.spectating = false;
   $('bust-panel').classList.remove('hidden');
-  $('bust-balance').textContent = `Bank ${fmt(balance)}`;
+  const rbd = rebuy || state.lastRebuy || {};
+  $('bust-balance').textContent = `${rbd.fund === 'play' ? 'Play $' : 'Bank'} ${fmt(balance)}`;
   const rebuyBtn = $('btn-rebuy');
   const brokeMsg = $('bust-broke-msg');
   const slot = $('bust-amt');
@@ -644,7 +652,7 @@ function showBust(balance, rebuy) {
   const lo = rb.min ?? bi.min ?? bustMin();
   const hi = Math.min(rb.max ?? bi.max ?? balance, balance);
   const def = Math.min(hi, Math.max(lo, rb.default ?? buyInDefault()));
-  if (balance >= lo && hi >= lo) {
+  if (rb.allowed !== false && balance >= lo && hi >= lo) {
     rebuyBtn.classList.remove('hidden');
     brokeMsg.classList.add('hidden');
     const presets = [{ label: 'Min', units: lo }, { label: 'Default', units: def }, { label: 'Max', units: hi }];
@@ -662,6 +670,7 @@ function showBust(balance, rebuy) {
   } else {
     if (state.rebuyField) { state.rebuyField.destroy(); state.rebuyField = null; slot.replaceChildren(); }
     rebuyBtn.classList.add('hidden');
+    brokeMsg.textContent = rb.allowed === false && balance >= lo ? 'Rebuys are closed at this table.' : (rb.fund === 'play' ? 'Your Play $ is empty. Top up from the wallet.' : 'Your bank is empty. GG.');
     brokeMsg.classList.remove('hidden');
   }
 }
@@ -929,6 +938,7 @@ function planHoleDeal(gs) {
 
 // ─── Seats ────────────────────────────────────────────────────────
 function seatStatus(p) {
+  if (p.leaving)     return ['Leaving', ''];
   if (p.connected === false && !p.isBot) return ['Offline', 'offline'];
   if (p.allIn)       return ['All-in', 'allin'];
   if (p.sittingOut)  return [p.sitOutRequest ? 'Away' : 'Joining', ''];
@@ -977,7 +987,7 @@ function renderSeats(gs) {
       if (age < BUBBLE_MS) bubble = `<div class="seat-bubble k-${b.kind} ${peekUp ? 'below' : 'above'}" style="animation-delay:${-age}ms">${esc(b.text)}</div>`;
     }
 
-    const cls = ['seat', hero ? 'hero' : '', peekUp ? '' : 'upper', p.isActive ? 'active' : '', p.folded ? 'folded' : '', p.sittingOut ? 'away' : '', state.winners?.has(p.name) ? 'winner' : ''].filter(Boolean).join(' ');
+    const cls = ['seat', hero ? 'hero' : '', peekUp ? '' : 'upper', p.isActive ? 'active' : '', p.folded ? 'folded' : '', p.sittingOut ? 'away' : '', p.leaving ? 'leaving' : '', state.winners?.has(p.name) ? 'winner' : ''].filter(Boolean).join(' ');
     const inner = `
       ${peek}
       <div class="seat-pill">
