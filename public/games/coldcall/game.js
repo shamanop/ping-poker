@@ -112,6 +112,7 @@
     }
     if (spin.phone) await CC.phone.run(spin, ctx);
     else if (spin.steps.length && o.bonus) await wait(150);
+    if (spin.hotOut.length && Bd.hotList().join() !== spin.hotOut.join()) dbg.mismatch.push({ what: 'hotOut', shown: Bd.hotList(), script: spin.hotOut });   // leads that carry on must already be lit
     Bd.setHot(spin.hotOut);                                    // base: all leads clear; bonus 1: clear if a phone fired; bonus 2 / 3: they stay
     if (spin.capped) ctx.capped = true;
   }

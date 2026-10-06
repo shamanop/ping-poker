@@ -17,9 +17,13 @@ const cents = (t) => (/^-?\$[\d,]+\.\d\d$/.test(t) ? Math.round(parseFloat(t.rep
     let last = 0;
     while (true) {
       const r = await page.evaluate(() => ({ n: CC.dbg.rounds.length, busy: CC.core.st.busy, err: CC.dbg.error || null }));
-      if (r.n !== last) { last = r.n; if (last % 25 === 0) console.log('rounds', last, ((Date.now() - t0) / 1000).toFixed(0) + 's'); }
+      if (r.n !== last) { last = r.n; if (last % 25 === 0 || N <= 30) console.log('rounds', last, ((Date.now() - t0) / 1000).toFixed(0) + 's'); }
       if (r.err) { console.log('PAGE ERROR', r.err); break; }
-      if (r.n >= N) { await page.evaluate(() => { CC.core.st.auto = false; }); break; }
+      if (r.n >= N) {                      // the Nth round: keep auto on until its intro dial (if any) has been dialled, then stop further rounds
+        const bonus = await page.evaluate(() => CC.dbg.rounds[CC.dbg.rounds.length - 1].bonus);
+        while (bonus && !(await page.evaluate(() => CC.core.st.pace < 1 || !CC.core.st.busy))) await sleep(300);
+        await page.evaluate(() => { CC.core.st.auto = false; }); break;
+      }
       if (Date.now() - t0 > 3 * 3600e3) { console.log('time limit'); break; }
       await sleep(500);
     }

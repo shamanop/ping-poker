@@ -14,7 +14,7 @@ const { launch, shot, sleep, OUT } = require('./lib');
     out.live = await page.evaluate(() => { const c = document.querySelector('.sh-win[data-game=coldcall] iframe').contentWindow.CC.core; return { kind: c.T.kind, bets: c.st.bets, mode: c.st.mode }; });
     const walletBefore = await page.evaluate(() => document.getElementById('sh-play').textContent);
     for (let i = 0; i < 2; i++) { await fr.locator('#spin').click(); await page.waitForFunction(() => !document.querySelector('.sh-win[data-game=coldcall] iframe').contentWindow.CC.core.st.busy, null, { timeout: 40000 }); }
-    out.wallet = { before: walletBefore, after: await page.evaluate(() => document.getElementById('sh-play').textContent), game: await fr.locator('#bal').textContent() };
+    await sleep(1300); out.wallet = { before: walletBefore, after: await page.evaluate(() => document.getElementById('sh-play').textContent), game: await fr.locator('#bal').textContent() };
     
     // docked narrow
     await page.evaluate(() => { const g = Shell.state().games.coldcall; g.w = 360 / 1280; Shell.dock('coldcall', 'right'); Shell.layout(); }); await sleep(900);
