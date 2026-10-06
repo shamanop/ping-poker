@@ -10,7 +10,7 @@ const BET_LEVELS = Eng.BET_LEVELS;   // cents: 1, 2, 5 (DENOMS), then 10 and up
 const BUYS = Eng.BUYS;   // call, bonus1, bonus2, hunt (prices in Eng.CFG.buyCost, tenths of the bet; whole cents at every bet through Eng.buyPrice)
 const RATE_MS = 150;
 const HISTORY_MAX = 20;
-const RTP_LABEL = '97.93% (long-run, 450M-spin stratified sim, +-0.11)';
+const RTP_LABEL = '98.0% (long-run, 200M-spin sim, +-0.22, includes the Callback and the office pot)';
 const rtpLabel = () => L.rtp(RTP_LABEL);   // the label that goes with the math in force: the shipped line, the one that came with the overrides, or "custom settings, not measured"
 
 // QA hook: forces a feature so the front end can be driven by a test. It runs ONLY when the server process was started

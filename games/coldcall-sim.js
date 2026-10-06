@@ -241,7 +241,9 @@ if (!isMainThread) {
   const ONLY = onlyArg && onlyArg !== true ? onlyArg.split(',') : ['call', 'bonus1', 'bonus2', 'hunt'];
   const nums = argv.filter((a) => !a.startsWith('--')).map(Number);
   const cfgText = cfgArg && cfgArg !== true ? (cfgArg[0] === '@' ? fs.readFileSync(cfgArg.slice(1), 'utf8') : cfgArg) : '{}';   // --cfg '@file.json' reads the override from a file
-  const cfg = merged(Eng.CFG, JSON.parse(cfgText));
+  const presetArg = flag('--preset');   // --preset file.json: a cold-call/presets/*.json file (or a bare overrides object) applied through games/coldcall-livecfg.js merge(): the same validation and deep merge the server uses
+  let cfg = merged(Eng.CFG, JSON.parse(cfgText));
+  if (presetArg && presetArg !== true) { const pj = JSON.parse(fs.readFileSync(presetArg, 'utf8')); cfg = require('./coldcall-livecfg.js').merge(pj && pj.overrides !== undefined ? pj.overrides : pj); }
   const threads = Math.min(MAX_THREADS, Math.max(1, +thrArg || MAX_THREADS));
 
   if (bool('--pot-room')) {

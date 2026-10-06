@@ -526,3 +526,40 @@ node games\coldcall-sim.js --pull 100000 2000 121 --pickpolicy best --nowarmdiff
 node games\coldcall-sim.js --buys-pull 30000000 121 --bet B --pickpolicy best --more bank --threads 24 --out DEN_buysB.json          # B = 1 2 5 100
 ```
 
+
+## 8.13 RTP presets: 98 / 96 / 94 (PRESETS)
+
+Measured 2026-10-06 on shaman (24 threads, scratch `E:\bricklord-test\coldcall-presets`, nothing on C:), engine and sim as in 8.12, no engine change. A preset is a file in `cold-call/presets/` with the POST body of `/api/admin/coldcall-config` (`{ overrides, rtpLabel, note }`); the sim reads it with `--preset file.json` (same deep merge and validation as the server, through `games/coldcall-livecfg.js merge()`). `tests/coldcall-presets.js` checks that every file is accepted by the validator and the smoke test, swaps in and out through `setLiveConfig`, and moves no knob in `weights, extra, pay, reveal, bubbles, upsell, adjacency`.
+
+**Method.** The Callback is the only part of the RTP that scales with one knob and touches nothing the player sees in the base game: its part is 22.34 x (450 / `pull.list`). Shipped 22.34 at list 450; list 495 gives 20.3, list 550 gives 18.3. Hit rate (21.67% paid base, same to the digit), cluster, base phone and natural bonus parts do not move (29.4 / 19.5 / 25.8, noise only: the Callback consumes draws from the same random stream, so a different list size re-rolls the same distribution; natural bonus 1 in 420 / 420 / 421 spins). The buys are re-priced so they pay back about what the game does: price (tenths of a bet) = shipped price x shipped payback / target, whole tenths only. The hunt buy's payback is also tuned with `hunt.bellMult` (it is the only knob that moves it without touching the base game). Same setup as 8.10 to 8.12: `--pull 100000 2000 121 --pickpolicy best --nowarmdiff --bet B --preset ...` (200M paid spins, seed 121, best picks, Callback floor + carry, pot rule B5000), buys `--buys-pull 30000000 121 --bet 100` (hunt 200M).
+
+| Preset | Knobs (everything else shipped) | Flat $1 total | Flat 10c | Flat 1c (pot cut at the batch edge, see 8.12; steady = flat $1) | Ex-pot | Callback part | Chaser total |
+|---|---|---|---|---|---|---|---|
+| rtp98 (shipped) | none | **98.016 +- 0.219** | 97.979 | 97.682 | 97.022 | 22.34 | 98.69 |
+| rtp96 | `pull.list` 495; `buyCost` call 28, bonus1 982, bonus2 2971; `hunt.bellMult` 1.828 | **96.143 +- 0.199** (target 96.0, +0.14) | 96.107 | 95.809 | 95.147 | 20.37 | 96.81 |
+| rtp94 | `pull.list` 550; `buyCost` call 28, bonus1 1003, bonus2 3034, hunt 21; `hunt.bellMult` 1.85 | **94.045 +- 0.222** (target 94.0, +0.05) | 94.009 | 93.711 | 93.050 | 18.32 | 94.72 |
+
+All three are inside target +- 0.3. Chaser total = ex-pot + `capCents` 5000 / 100 / `oneInPerDollar` 3000 = ex-pot + 1.667 (the pot-chaser bar of 98.7 from 8.11): 98.69 shipped (0.013 under the bar), 96.81 and 94.72 for the lower presets, i.e. 1.9 and 4.0 points under it. A lower preset can only help on that bar. Pot part is unchanged (0.995 at $1).
+
+Buys at $1 (paid payback, +- 95%; call, bonus1, bonus2 30M rounds, hunt 200M):
+
+| Preset | call | bonus1 | bonus2 | hunt |
+|---|---|---|---|---|
+| rtp98 | 98.04 +- 0.22 | 97.81 +- 0.06 | 98.01 +- 0.04 | 98.12 +- 0.44 (8.12; 98.58 +- 0.36 at 60M) |
+| rtp96 | 94.54 +- 0.21 | 96.02 +- 0.06 | 96.00 +- 0.04 | 96.27 +- 0.20 |
+| rtp94 | 94.54 +- 0.21 | 94.01 +- 0.06 | 94.00 +- 0.04 | 94.21 +- 0.20 |
+
+Honest caveat on the call buy: its price is a whole number of tenths and 27 pays back 98.04, 28 pays back 94.54, so 96 is not reachable. rtp96 uses 28 (1.5 under its target; 27 would be 2.0 over), and rtp94 uses 28 (0.5 over target). Pass 1 of rtp94 used 29 (91.28, 2.7 under) and hunt 21 at bellMult 1.845 (93.62); pass 2 changed those two knobs only (the flat figures do not depend on them). rtp96 needed one pass. Two passes of three used. The bellMult scan by the first builder (60M hunt rounds at price 20: 1.60 72.5, 1.66 78.4, 1.72 84.5, 1.76 88.8, 1.80 93.3, 1.845 98.6) fixes the slope: about 1.2 points of payback per 0.01 of bellMult.
+
+Labels shown in the lobby (`rtpLabel`, 160 characters at most, what was measured and nothing more): rtp98 "98.0% (long-run, 200M-spin sim, +-0.22, includes the Callback and the office pot)" (= `RTP_LABEL` in `games/coldcall.js`; 98.016 +- 0.219 from 8.12; the old 97.93 line was the 5c flat figure without the steady pot); rtp96 "96.1% ... +-0.20 ..."; rtp94 "94.0% ... +-0.22 ...". Totals are for flat play at $1 or any bet from 10c up within 0.04; at 1c the label would read 0.3 lower in the sim, which is the batch edge of the pot (8.12), not the game.
+
+Not done: no preset was measured with mixed bets (8.10 / 8.12 mixers sit 1.8 to 3.4 below flat at the shipped math, so they sit below at the presets too) and the bonus buy 100x-cap tails were not re-measured (cap hits 2,071 / 4,538 per 30M at rtp96, unchanged knobs in the pay table).
+
+Raw files `levers-runs/PRE_p1_flat100|flat10|flat1_rtp96|rtp94.json|txt`, `PRE_p1_buys_rtp96|rtp94` (call, bonus1, bonus2), `PRE_p1_hunt_rtp96|rtp94` (200M), `PRE_p2_callbuy_rtp94`, `PRE_p2_hunt_rtp94` (pass 2). The rtp94 pass-1 call and hunt lines in `PRE_p1_buys_rtp94` / `PRE_p1_hunt_rtp94` are superseded by pass 2.
+
+Commands (shaman, `CC_MAX_THREADS=24`, files copied to `E:\bricklord-test\coldcall-presets`):
+```
+node games\coldcall-sim.js --pull 100000 2000 121 --pickpolicy best --nowarmdiff --bet B --threads 24 --preset presets\rtpNN.json --out out\PRE_p1_flatB_rtpNN.json   # B = 100 10 1
+node games\coldcall-sim.js --buys-pull 30000000 121 --bet 100 --pickpolicy best --more bank --only call,bonus1,bonus2 --threads 24 --preset presets\rtpNN.json
+node games\coldcall-sim.js --buys-pull 200000000 121 --bet 100 --pickpolicy best --more bank --only hunt --threads 24 --preset presets\rtpNN.json
+```

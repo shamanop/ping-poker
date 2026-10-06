@@ -1,0 +1,17 @@
+{
+  "overrides": {
+    "pull": {
+      "list": 495
+    },
+    "buyCost": {
+      "call": 28,
+      "bonus1": 982,
+      "bonus2": 2971
+    },
+    "hunt": {
+      "bellMult": 1.828
+    }
+  },
+  "rtpLabel": "96.1% (200M-spin sim at $1, +-0.20, includes the Callback and the office pot)",
+  "note": "rtp96: pass 1 measured 96.14, in band, kept. LEVERS.md 8.13."
+}

@@ -1,0 +1,5 @@
+{
+  "overrides": {},
+  "rtpLabel": "98.0% (long-run, 200M-spin sim, +-0.22, includes the Callback and the office pot)",
+  "note": "rtp98: the shipped math, no overrides. Measured in LEVERS.md 8.12 / 8.13."
+}
