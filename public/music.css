@@ -50,3 +50,10 @@ body.sh-on .sh-top { grid-template-columns: auto auto auto minmax(0, 1fr) auto a
 @media (max-width: 1060px) { .mu-txt { width: 100px; } .mu-ic { display: none; } }
 @media (max-width: 900px) { .mu-mute { display: none; } .mu-txt .mu-tr { display: none; } .mu-txt { width: auto; max-width: 110px; } }
 @media (prefers-reduced-motion: reduce) { .mu-bar.blocked .mu-play { animation: none; } }
+@media (max-width: 600px) {
+  body.sh-on .sh-top { z-index: 9100; }
+  .mu-bar { position: fixed; top: calc(var(--sh-top, 48px) + 6px); right: 6px; z-index: 9100; flex: none; padding: 0 6px 0 4px; }
+  .mu-txt, .mu-ic, .mu-mute, .mu-vol { display: none; }
+  .mu-now { flex: none; }
+  .mu-pop { width: min(320px, calc(100vw - 16px)); }
+}
