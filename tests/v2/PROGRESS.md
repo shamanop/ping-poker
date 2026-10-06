@@ -56,6 +56,7 @@ Ports 3500-3559: run.js gives file number k the block 3500+2k (+0, +1). The targ
 - `rebuyLimit` caps buy-ins per night: initial buy-in plus the limit, even through leave + sit (15).
 - Table create is rejected for BB above max buy-in, min buy-in below BB, and seats above the maximum (or the count is kept as asked) (13).
 - `__audit` fields used: `bank`, `wallet`, `accounts`, `minted`, `slotNet`, `rooms[].{id,status,unit,pot,handNum,players[].{key,name,chips,handBet,isBot,fund,connected}}`. The rig also emits `sb, bb, street, currentBet, roundBet, folded, allIn, sittingOut`; no test relies on those.
+- `minted` may include `mint:topup` (V2-DESIGN open question 10): no check depends on the old behaviour (15 compares wallets directly; nothing else tops up).
 - Bug ID `HL` = the 10/6 hand-log finding (no ID in the reports); `S3-5` = money audit S3-5 (formatted amounts in server text).
 - Checks that stand for the old server's interface and are meant to flip on v2: the 7 `v2-legacy-event-*` checks (08), `v2-*` in 27, the `net` checks (26).
 
