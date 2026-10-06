@@ -44,8 +44,14 @@ function parseAmt(text, unit) {
 }
 function ladder(unit, min, max, extra = []) {
   const set = new Set([min, max, ...extra.filter((v) => v >= min && v <= max)]);
-  if (unit === 'chips') { const st = max - min > 5000 ? 100 : 50; for (let v = Math.ceil(min / st) * st; v <= max; v += st) set.add(v); }
-  else for (let v = Math.ceil(min / 100) * 100; v <= max; v += v < 5000 ? 100 : 500) set.add(v);
+  const N = 60, lo = Math.max(1, min);
+  for (let i = 1; i < N; i++) {
+    const raw = lo * Math.pow(Math.max(max, lo) / lo, i / N);
+    const p = Math.pow(10, Math.max(0, Math.floor(Math.log10(raw)) - 1));
+    let v = Math.round(raw / p) * p;
+    if (v >= 100) v = Math.round(v / 100) * 100;
+    if (v > min && v < max) set.add(v);
+  }
   return [...set].sort((a, b) => a - b);
 }
 const nearIdx = (vals, v) => { let bi = 0, bd = Infinity; vals.forEach((x, i) => { const d = Math.abs(x - v); if (d < bd) { bd = d; bi = i; } }); return bi; };
@@ -339,7 +345,7 @@ function buyInPicker(t, mySettled) {
   const fill = h('div', { class: 'fill' });
   const typed = h('input', { class: 'text-input', id: 'lb-buyin-input', type: 'text', inputmode: 'decimal', autocomplete: 'off', value: plain(val) });
   const msg = h('div', { class: 'lb-err', id: 'lb-buyin-err' });
-  function plain(v) { return unit === 'chips' || (window.Money && window.Money.getMode && window.Money.getMode() === 'chips') ? String(v) : '$' + (v % 100 ? (v / 100).toFixed(2) : v / 100); }
+  function plain(v) { return window.Money ? window.Money.fmt(v, { symbol: false }).replace(/,/g, '') : String(v); }
   const paint = () => { const a = range.value / Math.max(1, vals.length - 1); fill.style.left = 'var(--p8)'; fill.style.width = 'calc((100% - var(--p16)) * ' + a + ')'; };
   range.addEventListener('input', () => { val = vals[+range.value]; typed.value = plain(val); msg.textContent = ''; paint(); drawBal(); });
   const commit = () => {
