@@ -507,7 +507,7 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
       for (const k of ['pull', 'pot', 'callback', 'betCents', 'status', 'pending']) assert.ok(!(k in r), 'legacy result has no ' + k);
     }
     a.send('g:coldcall:state'); const st = last(a, 'g:coldcall:state'); for (const k of ['pull', 'pot', 'feed', 'open']) assert.ok(!(k in st), 'legacy state has no ' + k);
-    assert.strictEqual(all(b, 'floor:feed').length, 0); assert.deepStrictEqual(s.store()._data().players, {}); assert.deepStrictEqual(s.store()._data().pot, {});
+    assert.strictEqual(all(b, 'floor:feed').length, 0); assert.deepStrictEqual(Object.keys(s.store()._data().players), []); assert.deepStrictEqual(Object.keys(s.store()._data().pot), []);
   });
 
   await test('QA hook with pull on: force plays that feature as a normal paid spin (state and Callback untouched, pot fed), ignored without COLDCALL_TEST', async () => {
@@ -546,7 +546,8 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
     for (const rec of [...s.open.values()]) rec.socket.send('disconnect');
     assert.strictEqual(s.open.size, 0); assert.strictEqual(s.store().allOpen().length, 0);
     const delta = { play: 0, chips: 0 };
-    for (const k of socks) for (const r of all(k, 'g:coldcall:result')) if (r.status === 'done') { delta[r.mode] += -r.cost + r.totalWin + (r.pot ? r.pot.amount : 0); spent += r.cost; won += r.totalWin; if (r.pot) prizes++; }
+    const seen = new Set();   // a settled round that was open goes to every live socket of the account: count each round once
+    for (const k of socks) for (const r of all(k, 'g:coldcall:result')) if (r.status === 'done' && !seen.has(r.roundId) && seen.add(r.roundId)) { delta[r.mode] += -r.cost + r.totalWin + (r.pot ? r.pot.amount : 0); spent += r.cost; won += r.totalWin; if (r.pot) prizes++; }
     for (const mode of ['play', 'chips']) {
       const sum = names.reduce((a, n) => a + s.wallet.get(n)[mode] - w0[n][mode], 0); assert.strictEqual(sum, delta[mode], mode + ' wallets = the results'); potOk(s.potOf(mode));
     }
@@ -560,6 +561,150 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
     const r = toPending(s, a, 'more'); const n = draws.length;
     decide(s, a, r, { k: 'more', take: false });
     const fresh = draws.length - n; assert.ok(fresh <= 2, 'only the draws after the decision are new (' + fresh + ')');
+  });
+
+  // ------------------------------------------------------------------------------------------------ server fix round (wave 1 critics)
+  const dayMs = 86400000;
+  // first ONE MORE CALL decision of a bought bonus; any pick before it is answered by the policy (so `after` = decisions already made)
+  const toMore = (s, sock, wantPick) => {
+    for (let i = 0; i < 600; i++) {
+      let r = spin(s, sock, { bet: 10, mode: 'play', buyBonus: i % 3 === 2 ? 'bonus2' : 'bonus1' }), n = 0;
+      while (r.status === 'pending' && r.pending.k !== 'more') r = decide(s, sock, r, policy(i + n++, r.pending));
+      if (r.status === 'pending' && (!wantPick || s.open.get(r.roundId).decisions.length > 0)) return r;
+      while (r.status === 'pending') r = decide(s, sock, r, { k: 'more', take: false });
+    }
+    throw new Error('no ONE MORE CALL found');
+  };
+  const resultsOf = (sock, id) => all(sock, 'g:coldcall:result').filter((r) => r.roundId === id);
+
+  await test('F3: knobs edited or pull.on flipped while a decision is open: default / timeout / decide pay exactly the shown bonus, never void', async () => {
+    const wreck = {
+      off: () => { E.CFG.pull.on = false; },
+      knobs: () => { const P = E.CFG.pull; P.more.on = false; P.more.mult = 5; P.more.minTenths = 99999; P.pick.on = false; P.pick.minLeads = 99; P.pick.mult = { bronze: 9, silver: 9, gold: 9, upsell: 9, close: 9 }; P.list = 7; P.fill.dead = 0.1; P.ghost.on = false; P.warm.chance = 0; },
+      offKnobs: () => { E.CFG.pull.on = false; E.CFG.pull.more.on = false; E.CFG.pull.pick.on = false; },
+    };
+    for (const how of ['disconnect', 'decide']) for (const [name, edit] of Object.entries(wreck)) {
+      const s = setup({ rng: E.rngFrom(81) }); const a = s.sock('ann'); rich(s, 'ann');
+      const r = toMore(s, a, true);
+      const mid = s.wallet.get('ann').play, W = r.pending.W, shown = clone(r.partial.spin);
+      edit();
+      let f;
+      if (how === 'disconnect') { a.send('disconnect'); f = last(a, 'g:coldcall:result'); } else f = decide(s, a, r, { k: 'more', take: false });
+      assert.strictEqual(all(a, 'g:coldcall:voided').length, 0, name + '/' + how + ': not voided');
+      assert.strictEqual(f.roundId, r.roundId); assert.strictEqual(f.status, 'done', name + '/' + how);
+      assert.strictEqual(f.pull.more.W, W, 'the bonus total is the one that was shown'); assert.strictEqual(f.pull.more.take, false);
+      assert.deepStrictEqual(f.script.spin, shown); assert.strictEqual(f.wallet.play, mid + f.totalWin + (f.pot ? f.pot.amount : 0), 'paid, not refunded');
+      assert.strictEqual(s.open.size, 0);
+    }
+  });
+
+  await test('F4: a throw while settling (pot / feed knob block removed) ends in exactly one refund, never a bare lost cost; every live socket of the account hears it', async () => {
+    for (const knob of ['pot', 'feed']) {
+      const s = setup({ rng: E.rngFrom(82) }); const a = s.sock('ann'), a2 = s.sock('ann'); const start = s.wallet.get('ann').play;
+      delete E.CFG.pull[knob];
+      const n = all(a, 'g:coldcall:result').length;
+      s.clock.advance(200); a.send('g:coldcall:spin', { bet: 2500, mode: 'play' });
+      const bal = s.wallet.get('ann').play, voids = all(a, 'g:coldcall:voided'), done = all(a, 'g:coldcall:result').slice(n).filter((r) => r.status === 'done');
+      assert.ok(!all(a, 'error').some((e) => e.code === 'internal'), knob + ': no router "Server error"');
+      if (voids.length) { assert.strictEqual(voids.length, 1); assert.strictEqual(bal, start, knob + ': refunded exactly once'); assert.strictEqual(voids[0].refund, 2500); assert.strictEqual(all(a2, 'g:coldcall:voided').length, 1, 'the other tab hears it'); }
+      else { assert.strictEqual(done.length, 1); assert.strictEqual(bal, start - 2500 + done[0].totalWin + (done[0].pot ? done[0].pot.amount : 0)); }
+      assert.strictEqual(s.open.size, 0); assert.strictEqual(s.store().allOpen().length, 0);
+    }
+  });
+
+  await test('F7: pull.leaked and pull.warmDied are reported after idle days (the server hands the engine the stored, un-ticked state)', async () => {
+    const s = setup({ rng: E.rngFrom(83) }); const a = s.sock('ann');
+    const st = E.newState(); st.lt = 300; st.avg = 100; st.warm = [3, 4]; st.coldAt = s.clock.now() + 1000; st.day = '2000-01-01';
+    s.store().setPlayer('ann', 'play', st);
+    s.clock.advance(3 * dayMs);
+    const r = play(s, a, { bet: 100, mode: 'play' });
+    assert.strictEqual(r.status, 'done'); assert.ok(r.pull.leaked > 0, 'leaked ' + r.pull.leaked); assert.strictEqual(r.pull.warmDied, 2);
+    a.send('g:coldcall:state');   // the views still show the cold clock applied
+    assert.ok(last(a, 'g:coldcall:state').pull.play.lt <= 300);
+  });
+
+  await test('F8: a stored state of the wrong shape resets that one state; spin and the state handler keep working for both currencies, balances move only by the real cost and win', async () => {
+    const bads = [{ v: 2 }, 'junk', 42, { v: 1, warm: 'x' }, { v: 1, lt: 50, avg: 100, cb: { bet: 15 }, warm: [1] }, { v: 1, warm: [1, 'a', 99] }, { v: 1, lt: 'many' }, { v: 1, cb: { bet: 2600 } }, { v: 1, cb: 'x' }, { v: 1, warmBet: -3 }, { v: 1, lt: null }];
+    for (const bad of bads) for (const mode of ['chips', 'play']) {
+      const other = mode === 'play' ? 'chips' : 'play';
+      const s = setup({ rng: E.rngFrom(84) }); const a = s.sock('ann'); rich(s, 'ann', mode);
+      s.store().setPlayer('ann', mode, bad);
+      a.send('g:coldcall:state'); const st = last(a, 'g:coldcall:state'); assert.ok(st && st.pull && st.pull[mode] && st.pull[other], 'state handler works: ' + JSON.stringify(bad));
+      assert.ok(!all(a, 'error').length, 'no error: ' + JSON.stringify(all(a, 'error')));
+      const before = s.wallet.get('ann')[mode];
+      const r = play(s, a, { bet: 100, mode }); assert.strictEqual(r.status, 'done', JSON.stringify(bad));
+      assert.strictEqual(r.wallet[mode], before - r.cost + r.totalWin + (r.pot ? r.pot.amount : 0));
+      const r2 = play(s, a, { bet: 100, mode: other }); assert.strictEqual(r2.status, 'done');
+    }
+    // a good state is kept as it is (leads, warm squares), an old one without warmBet gets 0
+    const s = setup({ rng: E.rngFrom(85) }); const a = s.sock('ann'); const g = E.newState(); g.lt = 120; g.avg = 100; g.warm = [3, 4];
+    s.store().setPlayer('ann', 'play', g); a.send('g:coldcall:state'); const v = last(a, 'g:coldcall:state').pull.play;
+    assert.strictEqual(v.lt, 120); assert.deepStrictEqual(v.warm, [3, 4]);
+  });
+
+  await test('F9a: the rate limit is per account (three sockets in one ms: one spin), and a clock stepped back is not a lockout', async () => {
+    const s = setup({ rng: E.rngFrom(86) }); const [x, y, z] = [s.sock('ann'), s.sock('ann'), s.sock('ann')];
+    s.clock.advance(200);
+    for (const k of [x, y, z]) k.send('g:coldcall:spin', { bet: 10, mode: 'play', auto: true });
+    assert.strictEqual(all(x, 'g:coldcall:result').length, 1); assert.strictEqual(last(y, 'error').code, 'rate'); assert.strictEqual(last(z, 'error').code, 'rate');
+    assert.strictEqual(all(y, 'g:coldcall:result').length + all(z, 'g:coldcall:result').length, 0);
+    s.clock.advance(200); y.send('g:coldcall:spin', { bet: 10, mode: 'play', auto: true }); assert.strictEqual(all(y, 'g:coldcall:result').length, 1, 'allowed again after the gap');
+    s.clock.advance(-3600000); x.send('g:coldcall:spin', { bet: 10, mode: 'play', auto: true });
+    assert.strictEqual(all(x, 'g:coldcall:result').length, 2, 'clock stepped back 1 h: not a lockout');
+    const b = s.sock('bo'); b.send('g:coldcall:spin', { bet: 10, mode: 'play', auto: true }); assert.strictEqual(all(b, 'g:coldcall:result').length, 1, 'another account is its own limit');
+  });
+
+  await test('F9b: history is keyed by the normalised account key, pull path and legacy path', async () => {
+    for (const on of [true, false]) {
+      const s = setup({ rng: E.rngFrom(87) }); E.CFG.pull.on = on; const a = s.sock('ANN '), b = s.sock('ann');
+      play(s, a, { bet: 10, mode: 'play', auto: true }); play(s, b, { bet: 10, mode: 'play', auto: true });
+      a.send('g:coldcall:history'); b.send('g:coldcall:history');
+      assert.strictEqual(last(a, 'g:coldcall:history').rounds.length, 2, 'pull ' + on); assert.strictEqual(last(b, 'g:coldcall:history').rounds.length, 2);
+      assert.ok(SRV._history.has('ann') && !SRV._history.has('ANN '));
+    }
+  });
+
+  await test('F9c: reserved names (__proto__, constructor, prototype) are refused at every handler; the store keeps its maps prototype-free', async () => {
+    try {
+      for (const name of ['__proto__', 'constructor', 'prototype']) {
+        const s = setup({ rng: E.rngFrom(88) }); const a = s.sock(name);
+        for (const ev of ['state', 'history', 'floor', 'spin', 'decide']) { const n = all(a, 'error').length; a.send('g:coldcall:' + ev, { bet: 10, mode: 'play', roundId: 'x' }); assert.ok(all(a, 'error').length > n, name + ' ' + ev + ' answers an error'); assert.strictEqual(last(a, 'error').code === 'internal', false); }
+        assert.strictEqual(({}).play, undefined, 'Object.prototype untouched by ' + name); assert.strictEqual(({}).chips, undefined);
+        assert.strictEqual(all(a, 'g:coldcall:result').length, 0);
+      }
+    } finally { delete Object.prototype.play; delete Object.prototype.chips; }
+    const store = require('../games/coldcall-store.js').createStore(null); const st = E.newState();
+    store.setPlayer('__proto__', 'play', st); store.putOpen({ roundId: 'r', key: '__proto__', mode: 'play', cost: 1, bet: 10, buy: null, t: 1 });
+    assert.strictEqual(({}).play, undefined, 'Object.prototype not polluted by the store'); assert.deepStrictEqual(store.player('__proto__', 'play'), st); assert.strictEqual(store.player('someone', 'play'), null);
+    assert.strictEqual(store.allOpen().length, 1); assert.strictEqual(store.delOpen('__proto__', 'play'), true);
+    const f = path.join(tmp, 'proto.json'); fs.writeFileSync(f, '{"v":1,"players":{"__proto__":{"play":{"v":1,"lt":77}}},"pot":{},"open":{}}');
+    const loaded = require('../games/coldcall-store.js').createStore(f); assert.strictEqual(({}).play, undefined); assert.strictEqual(loaded.player('__proto__', 'play').lt, 77); assert.strictEqual(loaded.player('x', 'play'), null);
+  });
+
+  await test('F9d: a pot prize is flushed to disk before it is credited (the pot file never still holds a prize the wallet has)', async () => {
+    const s = setup({ rng: E.rngFrom(89), potRng: () => 0 }); const a = s.sock('ann');
+    E.CFG.pull.pot.minBal = 1; E.CFG.pull.pot.oneInPerDollar = 1;
+    let seenOnDisk = null;
+    const credit = s.wallet.credit.bind(s.wallet);
+    s.wallet.credit = (key, mode, amt, ref) => { if (ref && ref.pot) { try { seenOnDisk = JSON.parse(fs.readFileSync(path.join(s.dir, 'coldcall-pull.json'), 'utf8')).pot[mode]; } catch { seenOnDisk = null; } } return credit(key, mode, amt, ref); };
+    const r = spin(s, a, { bet: 2500, mode: 'play', auto: true });
+    assert.strictEqual(r.status, 'done'); assert.ok(r.pot && r.pot.won, 'the pot was won');
+    assert.ok(seenOnDisk && seenOnDisk.paid === r.pot.amount, 'at the moment of the prize credit the pot file already says paid ' + r.pot.amount + ': ' + JSON.stringify(seenOnDisk));
+  });
+
+  await test('F9e / W2 / W6: a settled round goes to every live socket of the account, never to a socket that has since signed in as someone else', async () => {
+    const s = setup({ rng: E.rngFrom(90) }); const a1 = s.sock('ann'), a2 = s.sock('ann'), b = s.sock('bob'); rich(s, 'ann');
+    E.CFG.pull.decision.timeoutMs = 60;
+    const r = toMore(s, a1); const mine = (k) => k.out.filter((o) => o[0] === 'g:coldcall:result' || o[0] === 'g:coldcall:voided').length; const n1 = mine(a1);
+    a1.data.acct = { key: 'bob' };                       // the socket re-signed-in as bob (no disconnect)
+    await sleep(160);
+    assert.strictEqual(resultsOf(a2, r.roundId).filter((x) => x.status === 'done').length, 1, 'the other tab of ann hears the settlement'); assert.strictEqual(resultsOf(a2, r.roundId).filter((x) => x.status === 'done')[0].auto, 'timeout');
+    assert.strictEqual(mine(a1), n1, 'the re-signed-in socket gets nothing of ann'); assert.strictEqual(mine(b), 0, 'bob hears nothing of ann');
+    assert.strictEqual(s.open.size, 0);
+    // owner disconnect: the other tab hears the default
+    const c1 = s.sock('cy'), c2 = s.sock('cy'); rich(s, 'cy'); E.CFG.pull.decision.timeoutMs = 20000;
+    const r2 = toMore(s, c1); c1.send('disconnect');
+    assert.strictEqual(resultsOf(c2, r2.roundId).filter((x) => x.status === 'done' && x.auto === 'disconnect').length, 1);
   });
 
   console.log(pass + ' passed' + (process.exitCode ? ', with failures' : ''));
