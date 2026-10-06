@@ -15,9 +15,10 @@ switches, QA hook and the skin stay. The ways engine remains in git history (las
 | 1. Plan | done 17:50; superseded by the v2 plan below |
 | 2. Engine + sim + tests (v1, 243 ways) | done, 98.10% measured; now RETIRED |
 | 3. Art: concept menu, pick, symbol set | look locked to A1; 30 pieces cut; 12 symbols + hero in the game (`2c18f07`) |
-| 4. Playable front end (v1 board) | done `5c74fdd`; base-screen skin in the A1 look in progress (`8d7a931`, `e5a6af6`) |
-| **2b. Engine v2 (6x5 clusters, super cascade, hot leads, 3 bonuses) + sim + tests** | **IN PROGRESS since 20:10; no numbers yet** |
-| 4b. Board front end for v2 (cascades, hot leads, reveal / upsell / close, bonuses, buys) | not started (after 2b) |
+| 4. Playable front end (v1 board) | done `5c74fdd`; retired with the v1 engine |
+| **2b. Engine v2 (6x5 clusters, super cascade, hot leads, 3 bonuses) + sim + tests** | **written, tuned to 98.0, merged into this branch 21:35 (46 tests pass); the 450M-spin final check is still running: NO final numbers yet.** Contract: `cold-call/ENGINE-V2.md` (lands with the final numbers) |
+| 4a. Skin in the A1 look (base screen, splash, hero moods, dial, size-agnostic board) | done `3c75d02`; shots in `qa/coldcall-skin/` |
+| **4b. Board front end for v2 (cascades, hot leads, reveal / upsell / close, bonuses, buys)** | **IN PROGRESS since 21:35. Until it lands the game on this branch does NOT play: the old 5x3 board cannot read v2 rounds.** |
 | 5. QA pass, screenshots + numbers | not started |
 
 ### v2 plan (Le Bandit's rules, Cold Call's names)
@@ -134,6 +135,9 @@ Server events `g:coldcall:state|history|spin` -> `g:coldcall:result`; buy ids `r
   sheets, swapped in through `public/games/coldcall/assets/symbols.json` with no code change. Screenshots: `qa/coldcall-art/`.
 - **Milestone 4 is built** (`5c74fdd`): playable front end with both bonuses, buys, SFX/MUSIC switches, the gated QA hook.
   Its own honest gaps are listed at the end of the Milestone 4 section. I re-ran the tests after the art went in: 31 + 17 pass.
+- **Chris's delegated calls (21:30, "just use your best judgement"), settled, no more sign-off needed:** (1) the checkout form is
+  dropped as its own bonus, the dial stays as the bonus intro, the top bonus is QUOTE ACCEPTED; (2) the bonus rate follows
+  Le Bandit, about 1 in 200, not your 1 in 100; (3) it ships as a Bender cousin.
 - **Engine direction changed by Chris at 20:02 (see Status at the top):** Le Bandit style 6x5 clusters. This overrides your
   "feel different from Bender" line, and the bonus rate target moves to about 1 in 150-200 unless you or Chris say otherwise.
 - **In progress now (skin wave):** frame/buttons/bar from the blue placeholder skin to the painted boiler-room look, the two bonus
@@ -175,6 +179,7 @@ Next, after Chris's notes and the credit top-up: each kept piece painted alone a
 (closer, cash, pile, rx, headset, can, mug, note, ball, phone, quote), plus the A1 scene as the background.
 
 ## Log
+- 2026-10-05 21:35 Skin wave verified (tests 31 + 17 before the merge; shots read). Engine v2 merged at `33ca611` (46 + 17 pass, copies identical). Board v2 builder started.
 - 2026-10-05 20:10 Direction change (Chris): engine v2, Le Bandit style. v1 engine retired, kept in history. Engine v2 builder started.
 - 2026-10-05 19:50 Milestone 4 verified by Frank (tests 31 + 17, engine copies identical, screenshots read). Skin wave started.
 - 2026-10-05 18:58 Look locked to A1 (Chris). Tile design sheets committed (milestone 3b).
