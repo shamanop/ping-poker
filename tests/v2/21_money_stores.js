@@ -6,7 +6,8 @@ const { startServer, Bot, waitFor, sleep, audit, moneyTotal, suite, expect } = r
 const T = suite(__filename);
 let seed = 2024;
 const rnd = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
-const NAMES = ['Ann', 'Bob', 'Cat', 'Dee'], PP = 'POKERPING';
+// one seat per account (contract H6, check 13): eight accounts, each at exactly one table at a time
+const NAMES = ['Ann', 'Bob', 'Cat', 'Dee', 'Eve', 'Fay', 'Gus', 'Hal'], PP = 'POKERPING';
 const hold = (a, k) => { let n = 0; for (const r of a.rooms) for (const p of r.players) if (!p.isBot && p.key === k) n += p.chips + (r.status === 'playing' && r.pot > 0 ? p.handBet : 0); return (a.bank[k] ?? 10000) + (a.wallet[k] ?? 1000000) + n; };
 const holdings = a => Object.fromEntries(NAMES.map(n => [n.toLowerCase(), hold(a, n.toLowerCase())]));
 const sameHoldings = (x, y) => NAMES.map(n => n.toLowerCase()).filter(k => x[k] !== y[k]).map(k => `${k} ${x[k]}->${y[k]}`).join(', ');
@@ -51,8 +52,8 @@ async function scenario() {
     if (!c1.table || !c2.table) throw new Error('create tables: ' + (c1.__err || c2.__err));
     T1 = c1.table.id; N1 = c1.table.nightId; T2 = c2.table.id; N2 = c2.table.nightId;
     const s1 = [await seat('Ann', T1, 2000, 'chips'), await seat('Bob', T1, 2000, 'play', true), await seat('Cat', T1, 1500, 'chips')];
-    const s2 = [await seat('Bob', T2, 3000, 'play'), await seat('Cat', T2, 2000, 'chips', true), await seat('Dee', T2, 2500, 'play')];
-    const s3 = [await seat('Dee', PP, 1000, 'chips'), await seat('Ann', PP, 1500, 'chips', true)];
+    const s2 = [await seat('Eve', T2, 3000, 'play'), await seat('Fay', T2, 2000, 'chips', true), await seat('Dee', T2, 2500, 'play')];
+    const s3 = [await seat('Gus', PP, 1000, 'chips'), await seat('Hal', PP, 1500, 'chips', true)];
     s1[0].emit('table_start', { tableId: T1 }); s2[0].emit('table_start', { tableId: T2 });
     for (let i = 0; i < 6; i++) { boot.Ann.emit('g:bender:spin', { bet: 50, mode: 'chips' }); await sleep(60); boot.Dee.emit('g:bender:spin', { bet: 100, mode: 'play' }); await sleep(60); }
     boot.Cat.emit('bonus:claim', {});
@@ -76,7 +77,7 @@ async function scenario() {
     // phase 2: re-seat, play, SIGKILL ~150 ms after a T1 showdown that moved money
     const t1b = [await seat('Ann', T1, 1000, 'chips'), await seat('Cat', T1, 1000, 'play', true)];
     const t2b = [await seat('Bob', T2, 1000, 'play'), await seat('Dee', T2, 1000, 'play', true)];
-    const ppb = [await seat('Bob', PP, 800, 'chips', true), await seat('Cat', PP, 800, 'chips')];
+    const ppb = [await seat('Eve', PP, 800, 'chips', true), await seat('Fay', PP, 800, 'chips')];
     if (t1b[0]) t1b[0].emit('table_start', { tableId: T1 }); if (t2b[0]) t2b[0].emit('table_start', { tableId: T2 });
     await rebuyLoop([...t1b, ...t2b, ...ppb], 4000);
     let killed = null;
