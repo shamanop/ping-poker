@@ -648,6 +648,38 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
     assert.strictEqual(v.lt, 120); assert.deepStrictEqual(v.warm, [3, 4]);
   });
 
+  await test('N1-CARRY (c, server): the carry is stored per currency and is not in the client view; a garbage stored carry reads as 0 without resetting the rest of the state or locking the account', async () => {
+    const stored = (s, mode) => s.store().player('ann', mode);
+    // per currency: Play $ and Chips lists arm at their own pace, each keeps its own carry
+    const s = setup({ rng: E.rngFrom(66) }); const a = s.sock('ann'); rich(s, 'ann'); rich(s, 'ann', 'chips');
+    E.CFG.pull.list = 5; E.CFG.pull.daily.base = 0; E.CFG.pull.daily.perStreak = 0;
+    const seedSt = (carry, avg) => Object.assign(E.newState(), { lt: 40, avg, carry, day: '2026-10-06' });
+    s.store().setPlayer('ann', 'play', seedSt(3.5, 99.96)); s.store().setPlayer('ann', 'chips', seedSt(8.25, 19.99));
+    let n = 0; while (!stored(s, 'play').cb && n++ < 60) { const r = spin(s, a, { bet: 100, mode: 'play', auto: true }); assert.ok(!r.error, JSON.stringify(r.error)); }
+    assert.ok(stored(s, 'play').cb, 'play armed'); assert.strictEqual(stored(s, 'chips').carry, 8.25, 'the chips carry did not move when the Play $ list armed');
+    assert.strictEqual(stored(s, 'play').cb.bet, 100, 'avg 99.96 + carry 3.5 = 103.46: the Callback plays at $1, the 3.46c left over is carried'); assert.ok(Math.abs(stored(s, 'play').carry - 3.46) < 0.01, 'play carry ' + stored(s, 'play').carry);
+    n = 0; while (!stored(s, 'chips').cb && n++ < 60) { const r = spin(s, a, { bet: 10, mode: 'chips', auto: true }); assert.ok(!r.error, JSON.stringify(r.error)); }
+    assert.ok(stored(s, 'chips').cb && stored(s, 'chips').cb.bet % 10 === 0 && stored(s, 'chips').carry < 10 && stored(s, 'chips').carry >= 0);
+    // the screen never sees it
+    a.send('g:coldcall:state'); const v = last(a, 'g:coldcall:state').pull; for (const m of ['play', 'chips']) assert.ok(!('carry' in v[m]), 'the view of ' + m + ' has no carry');
+    const rr = spin(s, a, { bet: 100, mode: 'play', auto: true }); assert.ok(!('carry' in rr.pull.state), 'the result view has no carry');
+    // garbage carry: reads as 0, the rest of the state is kept, both currencies keep working, money moves only by cost and win
+    for (const bad of [NaN, -3, 'x', null, 50, 10, {}, [], true, Infinity, 1e300]) for (const mode of ['play', 'chips']) {
+      const t = setup({ rng: E.rngFrom(86) }); const b = t.sock('ann'); rich(t, 'ann', mode); E.CFG.pull.list = 5;
+      const g = Object.assign(E.newState(), { lt: 40, avg: 99.96, warm: [3, 4], warmBet: 100, day: '2026-10-06' }); g.carry = bad;   // NaN / Infinity become null in the store file; the raw object covers the in-memory case
+      t.store().setPlayer('ann', mode, g);
+      b.send('g:coldcall:state'); const vv = last(b, 'g:coldcall:state').pull[mode]; assert.strictEqual(vv.lt, 40, 'garbage carry ' + String(bad) + ' does not reset the list'); assert.deepStrictEqual(vv.warm, [3, 4]);
+      assert.ok(!all(b, 'error').length);
+      let m = 0, armed = null; while (!armed && m++ < 60) { const before = t.wallet.get('ann')[mode]; const r = play(t, b, { bet: 100, mode }); assert.strictEqual(r.status, 'done'); assert.strictEqual(r.wallet[mode], before - r.cost + r.totalWin + (r.pot ? r.pot.amount : 0)); if (t.store().player('ann', mode).cb) armed = t.store().player('ann', mode); }
+      assert.ok(armed, 'armed with a garbage carry ' + String(bad)); assert.ok(armed.carry >= 0 && armed.carry < 10, 'carry reset to a clean value: ' + armed.carry); assert.strictEqual(armed.cb.bet % 10, 0);
+    }
+    // a store file written by the old code (no carry at all) loads as carry 0
+    const dir = fs.mkdtempSync(path.join(tmp, 'old')); const old = Object.assign(E.newState(), { lt: 12, avg: 100 }); delete old.carry;
+    fs.writeFileSync(path.join(dir, 'coldcall-pull.json'), JSON.stringify({ v: 1, players: { ann: { play: old } }, pot: {}, open: {} }));
+    const o = setup({ dir, rng: E.rngFrom(87) }); const oa = o.sock('ann'); rich(o, 'ann'); oa.send('g:coldcall:state'); assert.strictEqual(last(oa, 'g:coldcall:state').pull.play.lt, 12, 'an old state keeps its leads');
+    const r0 = play(o, oa, { bet: 100, mode: 'play' }); assert.strictEqual(r0.status, 'done'); assert.strictEqual(o.store().player('ann', 'play').carry, 0, 'missing carry reads as 0 and is written back as 0');
+  });
+
   await test('F9a: the rate limit is per account (three sockets in one ms: one spin), and a clock stepped back is not a lockout', async () => {
     const s = setup({ rng: E.rngFrom(86) }); const [x, y, z] = [s.sock('ann'), s.sock('ann'), s.sock('ann')];
     s.clock.advance(200);

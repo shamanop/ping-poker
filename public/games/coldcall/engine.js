@@ -118,15 +118,26 @@
   function pickCum(rng, cum) { const x = rng(); let i = 0; while (x >= cum[i] && i < cum.length - 1) i++; return i; }
 
   /* ---------------------------------------------------- THE PULL: player state helpers (pure, no clock of their own) ----------------------------------------------------
-     state = { v, lt (tenths of a lead), avg (cents, lead-weighted), cb: null | { bet }, warm: [positions], warmBet (cents the warm squares were made at, 0 = none), coldAt: null | ms, day, streak, rounds, callbacks }. */
-  function newState() { return { v: 1, lt: 0, avg: 0, cb: null, warm: [], warmBet: 0, coldAt: null, day: null, streak: 0, rounds: 0, callbacks: 0 }; }
-  const cloneState = (st) => Object.assign({}, st, { warm: st.warm.slice(), cb: st.cb ? Object.assign({}, st.cb) : null });
+     state = { v, lt (tenths of a lead), avg (cents, lead-weighted), cb: null | { bet }, warm: [positions], warmBet (cents the warm squares were made at, 0 = none), coldAt: null | ms, day, streak, rounds, callbacks, carry (cents, [0, 10): the part of the lead stake the last Callback bet could not carry, see cbArm) }. */
+  function newState() { return { v: 1, lt: 0, avg: 0, cb: null, warm: [], warmBet: 0, coldAt: null, day: null, streak: 0, rounds: 0, callbacks: 0, carry: 0 }; }
+  // a stored carry is a finite number in [0, 10) cents; anything else (missing, NaN, negative, text, 10 or more) reads as 0
+  const cleanCarry = (c) => (typeof c === 'number' && c > 0 && c < 10 ? c : 0);
+  const cloneState = (st) => Object.assign({}, st, { warm: st.warm.slice(), cb: st.cb ? Object.assign({}, st.cb) : null, carry: cleanCarry(st.carry) });
   // the Callback is played at the lead-weighted average bet ROUNDED DOWN to a multiple of 10 cents, in [10, max bet level]: leads earned small cannot fire a big bet,
   // and a few cheap leads (the daily gift) cannot knock a big bettor down a whole bet level. Any multiple of 10 cents is a legal Eng.cents bet.
   // Floor, never nearest (W1B N1): nearest let a player who mixes bet sizes sit just over a half step and arm every Callback up to 5 cents above what the leads were
   // worth. With the floor, cb.bet <= the average always, so no bet mix gains; a flat bettor whose average is already a multiple of 10 is exact (1e-9 absorbs float noise).
+  // FLOOR + CARRY (N1-CARRY): the floor alone threw the remainder away (a flat $1 player whose daily gift pulled the average to 99.96c played every Callback at 90c).
+  // cbArm adds the carry the last Callback left to this list's average, plays the floor of the sum and keeps the rest: over time the stake handed out is the stake the leads
+  // were worth, never more (the carry is always >= 0 and < 10 cents, so any prefix of lists is at or under the worth). The clamps [10, 2500] only ever lower the stake handed
+  // out; a remainder that does not fit [0, 10) after a clamp is dropped, not banked.
   const CB_MAX = BET_LEVELS[BET_LEVELS.length - 1];
-  function cbBet(avg) { const a = Number.isFinite(avg) ? avg : 0; return Math.min(CB_MAX, Math.max(BET_LEVELS[0], Math.floor(a / 10 + 1e-9) * 10)); }
+  function cbArm(avg, carry) {
+    const t = (Number.isFinite(avg) && avg > 0 ? avg : 0) + cleanCarry(carry);
+    const bet = Math.min(CB_MAX, Math.max(BET_LEVELS[0], Math.floor(t / 10 + 1e-9) * 10)), rest = t - bet;
+    return { bet, carry: rest >= 0 && rest < 10 ? rest : 0 };
+  }
+  const cbBet = (avg) => cbArm(avg, 0).bet;      // the floor alone (no carry): the Callback bet of an average
   function nextDay(d) { const [y, m, dd] = d.split('-').map(Number); return new Date(Date.UTC(y, m - 1, dd + 1)).toISOString().slice(0, 10); }
   // add `t` tenths of a lead worked at `bet` cents; arms THE CALLBACK at a full list (returns true if it armed one)
   function addLeads(st, t, bet, P) {
@@ -134,7 +145,7 @@
     st.avg = (st.avg * st.lt + bet * t) / (st.lt + t); st.lt += t;
     const full = Math.round(P.list * 10);
     if (st.lt < full || st.cb) return false;
-    st.cb = { bet: cbBet(st.avg) };
+    const arm = cbArm(st.avg, st.carry); st.cb = { bet: arm.bet }; st.carry = arm.carry;
     if (P.carryOver) st.lt -= full; else { st.lt = 0; st.avg = 0; }
     return true;
   }
@@ -581,5 +592,5 @@
   // THE PULL round: (rng, { buy, bet, state, now, day, script, auto, decide }, decisions) -> { status: 'done' | 'pending', ... }
   const playRound = (rng, input, decisions) => engine.playRound(rng, input, decisions);
 
-  return { createEngine, engine, resolveRound, rngFrom, playRound, newState, tickState, coldInfo, potSlice, potHitChance, cbBet, cbLevel: cbBet, winTier, cents, TIERS, CFG, SYM, MODES, BUYS, FORCES, TIER_NAMES, BET_LEVELS, COLS, ROWS, N, NREG, WILD, BELL, PHONE, MIN_CLUSTER, MAX_WIN_X, MAX_WIN_T };
+  return { createEngine, engine, resolveRound, rngFrom, playRound, newState, tickState, coldInfo, potSlice, potHitChance, cbBet, cbArm, cbLevel: cbBet, winTier, cents, TIERS, CFG, SYM, MODES, BUYS, FORCES, TIER_NAMES, BET_LEVELS, COLS, ROWS, N, NREG, WILD, BELL, PHONE, MIN_CLUSTER, MAX_WIN_X, MAX_WIN_T };
 });

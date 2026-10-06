@@ -67,7 +67,7 @@ const logf = (...a) => { const f = module.exports.log; if (f) f(...a); };
 function clearTimers() { for (const rec of open.values()) if (rec.timer) { clearTimeout(rec.timer); rec.timer = null; } }
 
 // A stored state of the wrong shape must never lock an account out: every field is checked, a missing one gets its default, a malformed one resets
-// the whole state (newState). cb.bet is any multiple of 10 in [10, 2500]; warmBet (cents of the bet the warm squares were made at) is 0 when absent.
+// the whole state (newState). cb.bet is any multiple of 10 in [10, 2500]; warmBet (cents of the bet the warm squares were made at) is 0 when absent, carry (cents, [0, 10)) is 0 when absent or damaged.
 const isInt = (n) => Number.isSafeInteger(n);
 const isFiniteNum = (n) => typeof n === 'number' && Number.isFinite(n);
 function normState(st) {
@@ -85,6 +85,7 @@ function normState(st) {
   out.streak = get('streak', 0, (x) => isInt(x) && x >= 0);
   out.rounds = get('rounds', 0, (x) => isInt(x) && x >= 0);
   out.callbacks = get('callbacks', 0, (x) => isInt(x) && x >= 0);
+  out.carry = typeof st.carry === 'number' && st.carry > 0 && st.carry < 10 ? st.carry : 0;   // N1-CARRY: cents left over by the last Callback; missing or damaged reads as 0 and never resets the rest of the state
   if (Object.values(out).includes(BAD)) return d;
   return Object.assign(clone(st), out, { v: 1 });
 }

@@ -585,19 +585,103 @@ const NODAY = { day: null };
     assert.strictEqual(E.cbBet(0), 10); assert.strictEqual(E.cbBet(-5), 10); assert.strictEqual(E.cbBet(1e9), 2500);
   });
 
-  await test('W1B N1 the Callback bet is the lead-weighted average ROUNDED DOWN to 10 cents: no bet mix arms a Callback above what its leads were worth; a flat bettor stays exact', () => {
+  await test('W1B N1 the Callback bet is the lead-weighted average (plus the carry, N1-CARRY) ROUNDED DOWN to 10 cents: no bet mix arms a Callback above what its leads were worth; a flat bettor stays exact', () => {
     for (const [a, want] of [[10, 10], [14.99, 10], [15.5, 10], [19.999, 10], [20, 20], [24.99, 20], [25, 20], [100, 100], [2499.99, 2490], [2500, 2500], [2500 - 1e-10, 2500], [9, 10], [1e9, 2500]]) assert.strictEqual(E.cbBet(a), want, 'cbBet(' + a + ')');
     const e = mkEng({ list: 50, daily: { base: 0, perStreak: 0 } }), DAY = '2026-10-06';
-    // the steerer from the critic: 20 cents while the average is under 15.5, else 10 cents. Every arming must satisfy cb.bet <= avg, and the sum of Callback bets <= the sum of averages.
+    // the steerer from the critic: 20 cents while the average is under 15.5, else 10 cents. Every arming must satisfy cb.bet <= avg + the carry it held, and the sum of Callback bets <= the sum of averages.
     let st = E.newState(), n = 0, armed = 0, sumBet = 0, sumAvg = 0; const rng = E.rngFrom(77);
     while (armed < 300 && n < 400000) {
       if (st.cb) { st = e.playRound(rng, { bet: 10, state: freeze(st), now: 1e6 + n, day: DAY, script: false, auto: true }, []).newState; n++; continue; }
       const bet = st.avg < 15.5 ? 20 : 10;
       const r = e.playRound(rng, { bet, state: freeze(st), now: 1e6 + n, day: DAY, script: false, auto: true }, []); n++;
-      if (r.newState.cb && !st.cb) { armed++; assert.ok(r.newState.cb.bet <= r.newState.avg + 1e-6, 'cb.bet ' + r.newState.cb.bet + ' > avg ' + r.newState.avg); assert.strictEqual(r.newState.cb.bet % 10, 0); sumBet += r.newState.cb.bet; sumAvg += r.newState.avg; }
+      if (r.newState.cb && !st.cb) { armed++; assert.ok(r.newState.cb.bet <= r.newState.avg + (st.carry || 0) + 1e-6, 'cb.bet ' + r.newState.cb.bet + ' > avg ' + r.newState.avg + ' + carry ' + st.carry); assert.strictEqual(r.newState.cb.bet % 10, 0); sumBet += r.newState.cb.bet; sumAvg += r.newState.avg; }
       st = r.newState;
     }
     assert.ok(armed >= 300, 'armed ' + armed); assert.ok(sumBet <= sumAvg + 1e-6, 'steered Callback bets ' + sumBet + ' vs averages ' + sumAvg);
+  });
+
+  // ---------------------------------------------------------------- N1-CARRY: floor + carry (cold-call/PULL-ENGINE.md, cbBet / carry)
+  // A harness that plays one player through `lists` Callbacks and accounts every cent staked into the lead list: stakeIn = sum over base spins of bet x tenths of lead worked
+  // (the daily gift at min(bet, stakeCap)). One list is worth stakeIn / list-size-in-tenths cents of Callback stake; a Callback hands out cb.bet.
+  const realDaily = { base: 0.2, perStreak: 0.05, streakMax: 4, stakeCap: 10 };
+  function dayN(i) { return new Date(Date.UTC(2026, 0, 1 + i)).toISOString().slice(0, 10); }
+  function runLists(patch, lists, pickBet, o) {
+    const cfgX = pcfg(patch), e = E.createEngine(cfgX), full = Math.round(cfgX.pull.list * 10), rng = E.rngFrom((o && o.seed) || 5);
+    let st = E.newState(), n = 0, dayI = 0, stakeIn = 0, sumBet = 0, sumAvg = 0, arms = 0, worstOver = -Infinity, maxCarry = 0;
+    const cap = cfgX.pull.daily.stakeCap;
+    while (arms < lists && n < 3000000) {
+      if (st.cb) { const r = e.playRound(rng, { bet: 10, state: freeze(st), now: 1e6 + n, day: dayN(dayI), script: false, auto: true }, []); n++; assert.ok(r.callback); st = JSON.parse(JSON.stringify(r.newState)); assert.ok(!(st.carry >= 10), 'carry < 10 after a Callback'); continue; }
+      const bet = pickBet(st);
+      const day = dayN(dayI);
+      const r = e.playRound(rng, { bet, state: freeze(st), now: 1e6 + n, day, script: false, auto: true }, []); n++;
+      stakeIn += r.pull.filled * bet + (r.pull.daily ? Math.round(r.pull.daily.leads * 10) * Math.min(bet, cap) : 0);
+      if (r.newState.cb && !st.cb) {
+        arms++; dayI++;                                          // one daily claim per list: the next list starts on a new day
+        sumBet += r.newState.cb.bet; sumAvg += r.newState.avg; assert.strictEqual(r.newState.cb.bet % 10, 0); assert.ok(r.newState.cb.bet >= 10 && r.newState.cb.bet <= 2500);
+        worstOver = Math.max(worstOver, sumBet - stakeIn / full);
+        const c = r.newState.carry; assert.ok(typeof c === 'number' && c >= 0 && c < 10, 'carry in [0,10) at every arm, got ' + c); maxCarry = Math.max(maxCarry, c);
+      }
+      st = JSON.parse(JSON.stringify(r.newState));               // every round trips through JSON, like the store
+    }
+    assert.strictEqual(arms, lists, 'armed ' + arms);
+    return { sumBet, sumAvg, stakeIn, full, worstOver, maxCarry, st };
+  }
+
+  await test('N1-CARRY (a): flat $1 with one daily claim per list: over 20 lists the Callback stakes sum to within 10 cents of the lead-weighted stakes paid in (floor alone lost about 10c a list)', () => {
+    const r = runLists({ list: 450, daily: realDaily }, 20, () => 100);
+    const worth = r.stakeIn / r.full;
+    assert.ok(Math.abs(r.sumBet - worth) < 10, 'handed out ' + r.sumBet + ' vs worth ' + worth.toFixed(2));
+    assert.ok(r.sumBet <= worth + 1e-6, 'never more than the leads were worth');
+    assert.ok(Math.abs(r.sumBet - r.sumAvg) < 10, 'sum of bets ' + r.sumBet + ' vs sum of averages ' + r.sumAvg);
+  });
+
+  await test('N1-CARRY (b): the critic N1 attacker (20c while the average is under 15.5c, else 10c), a carry-reading attacker and a coin-flip mixer never receive more Callback stake than their leads were worth, on every prefix and in total', () => {
+    const flip = E.rngFrom(31);
+    const attackers = { critic: (st) => (st.avg < 15.5 ? 20 : 10), carryReader: (st) => ((st.carry || 0) >= 5 || st.avg < 15 ? 20 : 10), coin: () => (flip() < 0.5 ? 10 : 20), nearHalf: (st) => (st.avg < 25 ? 50 : 10) };
+    for (const k of Object.keys(attackers)) {
+      const r = runLists({ list: 50, daily: { base: 0, perStreak: 0, streakMax: 0, stakeCap: 10 } }, 150, attackers[k], { seed: 77 });
+      assert.ok(r.worstOver <= 1e-6, k + ': a prefix received ' + r.worstOver.toFixed(4) + 'c more than its leads were worth');
+      assert.ok(r.sumBet <= r.stakeIn / r.full + 1e-6, k + ': total');
+      assert.ok(r.sumBet >= r.stakeIn / r.full - 10 - 20, k + ': and it loses no more than a carry (< 10c) plus the unarmed rest of a list (< one average, <= 20c): ' + (r.stakeIn / r.full - r.sumBet));
+    }
+  });
+
+  await test('N1-CARRY (d): cbArm(avg, carry): bet is a multiple of 10 in [10, 2500], the new carry is in [0, 10), bet + carry out never exceeds avg + carry in, and is exact unless the clamps act; garbage reads as 0', () => {
+    assert.strictEqual(typeof E.cbArm, 'function');
+    const rng = E.rngFrom(3);
+    for (let i = 0; i < 20000; i++) {
+      const avg = 10 + rng() * 2490, carry = rng() * 9.999999, o = E.cbArm(avg, carry);
+      assert.strictEqual(o.bet % 10, 0); assert.ok(o.bet >= 10 && o.bet <= 2500); assert.ok(o.carry >= 0 && o.carry < 10, 'carry out ' + o.carry);
+      assert.ok(o.bet + o.carry <= avg + carry + 1e-9); assert.ok(Math.abs(o.bet + o.carry - (avg + carry)) < 1e-9 || o.bet === 2500, 'exact: ' + [avg, carry, o.bet, o.carry]);
+    }
+    for (const [avg, carry, bet, c] of [[99.96, 0, 90, 9.96], [99.96, 9.96, 100, 9.92], [100, 0, 100, 0], [19.99, 0, 10, 9.99], [19.99, 9.99, 20, 9.98], [2500, 0, 2500, 0], [2500, 9.9, 2500, 9.9 > 0 ? 9.9 : 0], [10, 0, 10, 0], [0, 0, 10, 0]]) {
+      const o = E.cbArm(avg, carry); assert.strictEqual(o.bet, bet, JSON.stringify([avg, carry])); assert.ok(Math.abs(o.carry - c) < 1e-9, JSON.stringify([avg, carry, o])); }
+    for (const bad of [undefined, null, NaN, -4, 'x', Infinity, 10, 250, {}, [], true]) { const o = E.cbArm(99.96, bad); assert.deepStrictEqual([o.bet, +o.carry.toFixed(6)], [90, 9.96], 'garbage carry ' + String(bad)); }
+    for (const bad of [NaN, -1, undefined, Infinity, 1e9]) { const o = E.cbArm(bad, 0); assert.ok(o.bet >= 10 && o.bet <= 2500 && o.bet % 10 === 0 && o.carry >= 0 && o.carry < 10, 'garbage avg ' + bad); }
+  });
+
+  await test('N1-CARRY (c, engine): the carry is part of the state (0 in newState), is under 10c after every Callback, survives JSON, the cold clock and the idle days untouched, a garbage stored carry reads as 0 and the round plays; Play and Chips states carry apart', () => {
+    assert.strictEqual(E.newState().carry, 0);
+    const e = mkEng({ list: 50, daily: { base: 0, perStreak: 0 } });
+    // a list that arms with avg 99.96: carry 9.96 comes out, bet 90 goes in
+    const s0 = freeze(st0({ lt: 490, avg: 99.96, day: '2026-10-06' }));
+    const r = spin(e, strict([...gridVals(e, 0)]), s0, { bet: 100 }); assert.deepStrictEqual(r.newState.cb, { bet: 90 }); assert.ok(Math.abs(r.newState.carry - 9.96) < 0.01 && Math.abs(r.newState.carry - (r.newState.avg - 90)) < 1e-9, 'carry ' + r.newState.carry);
+    // the cold clock never touches it: ticks, coldInfo and the view of leaked leads leave it alone, and it never turns into leads or into a bet
+    const parked = Object.assign(JSON.parse(JSON.stringify(r.newState)), { cb: null, lt: 400, coldAt: 1e6 });
+    for (const now of [1e6 - 1, 1e6, 1e6 + 21600000, 1e6 + 86400000 * 30]) { const t = E.tickState(parked, now); assert.strictEqual(t.carry, parked.carry, 'tick at ' + now); E.coldInfo(parked, now); }
+    assert.strictEqual(parked.carry, r.newState.carry);
+    // a garbage stored carry reads as 0 in the engine (the server also resets it): the arm gives the plain floor and a clean carry
+    for (const bad of [NaN, -3, 'x', null, undefined, 50, Infinity, {}]) {
+      const g = Object.assign(JSON.parse(JSON.stringify(s0)), { carry: bad }); if (bad === undefined) delete g.carry;
+      const rr = spin(e, strict([...gridVals(e, 0)]), g, { bet: 100 });
+      assert.deepStrictEqual(rr.newState.cb, { bet: 90 }, 'carry ' + String(bad)); assert.ok(Math.abs(rr.newState.carry - (rr.newState.avg - 90)) < 1e-9, 'carry ' + String(bad) + ' -> ' + rr.newState.carry);
+    }
+    // states are separate objects: one currency's carry never reaches the other's
+    const play = E.newState(), chips = E.newState(); play.carry = 7; assert.strictEqual(chips.carry, 0);
+    // buys and a Callback round leave the carry as it is
+    const held = freeze(st0({ lt: 20, avg: 100, cb: { bet: 100 }, carry: 6.5, day: '2026-10-06' }));
+    const cr = spin(e, E.rngFrom(4), held, { auto: true }); assert.ok(cr.callback); assert.strictEqual(cr.newState.carry, 6.5);
+    const by = e.playRound(E.rngFrom(5), { buy: 'call', bet: 100, state: held, now: 1, day: '2026-10-06', auto: true }, []); assert.strictEqual(by.newState, held);
   });
 
   await test('F5 pot.oneInPerDollar <= 0 or not a number means a hit chance of 0 (never), not 1', () => {
@@ -608,7 +692,7 @@ const NODAY = { day: null };
 
   await test('Play/Chips independence and state shape: newState is a fresh plain object per call; states are JSON-clean and round-trip through JSON', () => {
     const a = E.newState(), b = E.newState(); a.warm.push(1); assert.deepStrictEqual(b.warm, []);
-    assert.deepStrictEqual(Object.keys(E.newState()), ['v', 'lt', 'avg', 'cb', 'warm', 'warmBet', 'coldAt', 'day', 'streak', 'rounds', 'callbacks']);
+    assert.deepStrictEqual(Object.keys(E.newState()), ['v', 'lt', 'avg', 'cb', 'warm', 'warmBet', 'coldAt', 'day', 'streak', 'rounds', 'callbacks', 'carry']);
     let st = E.newState(); const rng = E.rngFrom(8);
     for (let i = 0; i < 400; i++) { const r = E.playRound(rng, { bet: 100, state: JSON.parse(JSON.stringify(st)), now: 1e6 + i, day: '2026-10-06', script: false, auto: true }, []); st = r.newState; assert.deepStrictEqual(JSON.parse(JSON.stringify(st)), st); }
   });
