@@ -37,7 +37,7 @@ if (!isMainThread) {
       const rng = Eng.rngFrom(seedOf(o.seed, k));
       const a = { k, paid: 0, cbRounds: 0, cluster: 0, phone: 0, nat: 0, cb: 0, moreNet: 0, sq: 0, hit: 0, under1: 0, eq1: 0, ladder: new Array(LADDER.length).fill(0), eventLadder: new Array(LADDER.length).fill(0),
         dead: 0, nat1: [0, 0, 0, 0], natSum: [0, 0, 0, 0], natBand: new Array(BEDGES.length + 1).fill(0), cbBand: new Array(BEDGES.length + 1).fill(0), natN: 0, cbN: 0, cbSum: 0, cbSq: 0,
-        gap: {}, gapMax: {}, gapN: {}, gapSum: {}, arms: 0, armGap: new Uint32Array(GAPMAX + 2), warmSpins: 0, warmPhone: 0, warmPhonePay: 0, warmCreated: 0, marked: 0, ghostN: 0, ghostSum: 0, ghostGe1: 0, ghostLt1: 0, ghostShownNoCl: 0, filled: 0, dailyLeads: 0, caps: 0, bells2: 0, pickN: 0, offers: 0 };
+        gap: {}, gapMax: {}, gapN: {}, gapSum: {}, arms: 0, armGap: new Uint32Array(GAPMAX + 2), bandN: new Array(8).fill(0), bandSum: new Array(8).fill(0), warmSpins: 0, warmPhone: 0, warmPhonePay: 0, warmCreated: 0, marked: 0, ghostN: 0, ghostSum: 0, ghostGe1: 0, ghostLt1: 0, ghostShownNoCl: 0, filled: 0, dailyLeads: 0, caps: 0, bells2: 0, pickN: 0, offers: 0 };
       for (const s of SERIES) { a.gap[s] = new Uint32Array(GAPMAX + 2); a.gapMax[s] = 0; a.gapN[s] = 0; a.gapSum[s] = 0; }
       const last = {}; for (const s of SERIES) last[s] = 0;
       const mark = (s, t) => { const g = Math.ceil(t - last[s]); last[s] = t; if (g <= 0) return; a.gap[s][Math.min(g, GAPMAX + 1)]++; a.gapN[s]++; a.gapSum[s] += g; if (g > a.gapMax[s]) a.gapMax[s] = g; };
@@ -61,6 +61,7 @@ if (!isMainThread) {
         if (w >= capT) a.caps++;
         if (w > 0) a.hit++; if (w > 0 && w < 10) a.under1++; if (w === 10) a.eq1++;
         const x = w / 10; for (let j = 0; j < LADDER.length; j++) if (x >= LADDER[j]) { a.ladder[j]++; a.eventLadder[j]++; }
+        { const bd = w === 0 ? 0 : w < 10 ? 1 : w < 20 ? 2 : w < 50 ? 3 : w < 200 ? 4 : w < 1000 ? 5 : w < 10000 ? 6 : 7; a.bandN[bd]++; a.bandSum[bd] += w; }
         const dead = w === 0; if (dead) a.dead++; else mark('dead', T);   // gap between paying spins = dead runs
         if (R.bonusKind) { mark('bonus', T); mark('natbonus', T); }
         if (x >= 5) mark('win5', T); if (x >= 20) mark('win20', T);
@@ -83,7 +84,7 @@ if (!isMainThread) {
     for (const k of chunks) {
       const rng = Eng.rngFrom(seedOf(o.seed, k));
       for (let s = 0; s < o.sessions; s++) {
-        let st = Eng.newState(), bal = o.bankX * 10, spins = 0, t = 1e9, cbSeen = 0, nat = 0, big20 = false, big100 = false, dbl = false, firstB = 0;
+        let st = Eng.newState(); if (o.carry) { st.lt = Math.floor(rng() * P.list * 10); st.avg = o.bet; st.day = '2026-01-01'; } let bal = o.bankX * 10, spins = 0, t = 1e9, cbSeen = 0, nat = 0, big20 = false, big100 = false, dbl = false, firstB = 0;
         while (bal >= 10 && spins < o.cap) {
           let r = e.playRound(rng, { bet: o.bet, state: st, now: t, day: '2026-01-01', script: false, auto: true, decide }, []);
           t += 1000; st = r.newState;
@@ -114,7 +115,7 @@ if (!isMainThread) {
   const argv = process.argv.slice(2);
   const flag = (f) => { const i = argv.indexOf(f); if (i < 0) return null; const v = argv[i + 1]; argv.splice(i, v && !v.startsWith('--') ? 2 : 1); return v && !v.startsWith('--') ? v : true; };
   const bool = (f) => { const i = argv.indexOf(f); if (i < 0) return false; argv.splice(i, 1); return true; };
-  const cfgArg = flag('--cfg'), outFile = flag('--out'), thrArg = flag('--threads'), pickA = flag('--pick'), moreA = flag('--more'), dayA = flag('--day'), betA = flag('--bet'), capA = flag('--cap'), asJson = bool('--json');
+  const cfgArg = flag('--cfg'), outFile = flag('--out'), thrArg = flag('--threads'), pickA = flag('--pick'), moreA = flag('--more'), dayA = flag('--day'), betA = flag('--bet'), capA = flag('--cap'), carryA = bool('--carry'), asJson = bool('--json');
   const streamM = bool('--stream'), sessM = bool('--sessions'), buysM = bool('--buys');
   const nums = argv.filter((a) => !a.startsWith('--')).map(Number);
   const cfgText = cfgArg && cfgArg !== true ? (cfgArg[0] === '@' ? fs.readFileSync(cfgArg.slice(1), 'utf8') : cfgArg) : '{}';
@@ -148,6 +149,7 @@ if (!isMainThread) {
         ladderPaid: LADDER.map((x, j) => ({ x, oneIn: paid / sumArr('ladder')[j] })), ladderEvents: LADDER.map((x, j) => ({ x, oneIn: paid / sumArr('eventLadder')[j] })),
         natBonus: { n: natN, oneIn: paid / natN, kinds: null, avgX: sum('nat') / natN / 10, avgFinalX: (sum('nat') + sum('moreNet')) / natN / 10, band: natBand.map((n) => n / natN) },
         callback: { n: cbN, perPaid: cbN / paid, spinsPer: { mean: arms ? paid / arms : null, ...dist(armH, arms) }, avgX: sum('cbSum') / cbN / 10, band: cbBand.map((n) => n / cbN) },
+        bands: { names: ['0', '<1x', '1-2x', '2-5x', '5-20x', '20-100x', '100-1000x', '1000x+'], spinPct: [0, 1, 2, 3, 4, 5, 6, 7].map((i) => sum('bandN') ? C.reduce((a, c) => a + c.bandN[i], 0) / paid * 100 : 0), rtpPts: [0, 1, 2, 3, 4, 5, 6, 7].map((i) => C.reduce((a, c) => a + c.bandSum[i], 0) / (paid * 10) * 100), callbackPts: cbp.mean + mn.mean },
         anyBonusOneIn: paid / (natN + cbN), gaps, bellsTeasePerSpin: sum('bells2') / paid,
         warm: { markedNoPhonePer100: sum('marked') / paid * 100, createdPerSpin: sum('warmCreated') / paid, spinsWithWarmPer100: sum('warmSpins') / paid * 100, phoneOnWarmPer100: sum('warmPhone') / paid * 100, avgPhonePayOnWarmX: sum('warmPhone') ? sum('warmPhonePay') / sum('warmPhone') / 10 : null },
         ghost: { per100: sum('ghostN') / paid * 100, avgX: sum('ghostN') ? sum('ghostSum') / sum('ghostN') / 10 : null, ge1x: sum('ghostGe1') / Math.max(1, sum('ghostN')) },
@@ -160,10 +162,10 @@ if (!isMainThread) {
   } else if (sessM) {
     const bankX = nums[0] || 100, sessions = nums[1] || 200000, seed = nums[2] || 1, cap = +capA || 20000, per0 = 500, nChunks = Math.ceil(sessions / per0);
     const per = Array.from({ length: threads }, () => []); for (let k = 0; k < nChunks; k++) per[k % threads].push(k);
-    spawn(per, { sessions: per0, seed, pick, more, bankX, bet, cap }, 'sessions').then((parts) => {
+    spawn(per, { sessions: per0, seed, pick, more, bankX, bet, cap, carry: carryA }, 'sessions').then((parts) => {
       const A = parts.reduce((a, p) => { for (const k of Object.keys(p)) { if (k === 'spins') { for (let i = 0; i < p.spins.length; i++) a.spins[i] += p.spins[i]; } else a[k] += p[k]; } return a; }, { n: 0, spins: new Array(cap + 2).fill(0), sawCb: 0, sawBonus: 0, sawNat: 0, saw20: 0, saw100: 0, doubled: 0, cap: 0, firstBonusSum: 0, firstBonusN: 0, cbSum: 0, natSum: 0, finalSum: 0, cbPerSession: 0, bonuses: 0 });
       const q = (p) => { let acc = 0; for (let i = 0; i < A.spins.length; i++) { acc += A.spins[i]; if (acc >= p * A.n) return i; } return cap; };
-      const o = { mode: 'sessions', bankX, sessions: A.n, seed, pick, more, cap, secs: (Date.now() - t0) / 1000, spins: { p10: q(0.1), median: q(0.5), p90: q(0.9) }, hitCapShare: A.spins[cap] / A.n + A.spins[cap + 1] / A.n, sawCallback: A.sawCb / A.n, sawAnyBonus: A.sawBonus / A.n, sawNaturalBonus: A.sawNat / A.n, saw20x: A.saw20 / A.n, saw100x: A.saw100 / A.n, doubled: A.doubled / A.n, firstBonusMeanSpin: A.firstBonusN ? A.firstBonusSum / A.firstBonusN : null, bonusesPerSession: A.bonuses / A.n, capHits: A.cap };
+      const o = { mode: 'sessions', carry: carryA, bankX, sessions: A.n, seed, pick, more, cap, secs: (Date.now() - t0) / 1000, spins: { p10: q(0.1), median: q(0.5), p90: q(0.9) }, hitCapShare: A.spins[cap] / A.n + A.spins[cap + 1] / A.n, sawCallback: A.sawCb / A.n, sawAnyBonus: A.sawBonus / A.n, sawNaturalBonus: A.sawNat / A.n, saw20x: A.saw20 / A.n, saw100x: A.saw100 / A.n, doubled: A.doubled / A.n, firstBonusMeanSpin: A.firstBonusN ? A.firstBonusSum / A.firstBonusN : null, bonusesPerSession: A.bonuses / A.n, capHits: A.cap };
       if (outFile) fs.writeFileSync(outFile, JSON.stringify(o));
       console.log(JSON.stringify(o, null, 1));
     }).catch((e) => { console.error(e); process.exit(1); });

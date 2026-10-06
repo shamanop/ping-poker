@@ -1,7 +1,7 @@
 # COLD CALL levers: Hacksaw's real numbers vs ours, then the knobs for THE PULL
 
 Owner: levers agent (Frank, session `coldcall-levers`). Brief: `cold-call/LEVERS-BRIEF.md`. Branch `coldcall-pull`, config c24 (the engine as it stands).
-Status: **Part 1 and Part 2 done (2026-10-06).** Part 3 (the knobs for the six mechanics) is open: it starts when the lead says a mechanism has landed. Early Part 3 findings that the lead needs now are in section 5.
+Status: **Parts 1, 2 and 3 done (2026-10-06).** Sections 5 and 6 are the early, provisional Part 3 notes and are SUPERSEDED by section 8 (the knobs that are now in `CFG`, with their sims). Where 5 and 8 differ, 8 wins.
 Full sourced research, game by game, is kept in `cold-call/levers-runs/research-hacksaw-A.md` (Le Bandit, Wanted Dead or a Wild, Chaos Crew 2, RIP City) and `research-hacksaw-B.md` (Le Pharaoh, Le Viking, Le Zeus / Le Fisherman, studio norms and UK rules, Nolimit City, Pragmatic Play). Raw sim output: `cold-call/levers-runs/p2_*.json`. Sim code: `tools/levers-sim.js` (feel numbers), `tools/pull-model.js` (lead-list model), `tools/levers-run.sh` (runs on shaman, E: drive only).
 
 Rule used throughout: a number without a URL beside it is ours (measured by sim, run named). "not published" means searched and not found. "estimate (reason)" is arithmetic or inference, labelled.
@@ -233,6 +233,110 @@ Lead-list fill and Callback (exact model above; sim confirmation pending), warm 
 - R5: **Tease staging in the skin:** bells landing one by one with the tease sound as they land; the odds do not change.
 - R6: Ask the lead for an optional spread on the fill if the Callback feels like a timer.
 
-## 8. Part 3 results
+## 8. Part 3 results: the knobs for THE PULL (final, 2026-10-06)
 
-(open; filled after the lead's mechanisms land: knob table with sim behind each, before / after band table, total payback with CI, what I would change in the targets)
+Everything below is measured with `tools/levers-pull.js` (the engine's own `playRound`, state carried, a real daily streak, 1,000 paid spins a day, flat 1.00 bet, PICK played "best" = the hot square with the most hot neighbours, ONE MORE CALL banked) on shaman, 24 threads. Cross-check with the lead's own `games/coldcall-sim.js --pull` (20,000 sessions x 2,000 spins, seed 7, best pick): 97.82 +- 0.46 including the pot, 0.996% of stake paid out by the pot (`X_pull_best.json`). Runs and configs: `cold-call/levers-runs/` (D1_*, D2_*, E1_*, F_*, G_*, B0_before, X_*) and `levers-runs/cfg/`. Working notes: `levers-runs/P3-NOTES.md`.
+
+### 8.0 The answer in one table
+
+**Total payback 98.03% +- 0.12 (95%)**: 97.03 from the game (700M paid spins, two seeds: 97.05 +- 0.16 on 400M, 97.00 +- 0.17 on 300M) plus 1.00 returned by the office pot (feed 100 bps, every cent paid back as prizes; the sim's one-bettor pot paid 0.996). That is for a player who plays 1,000 spins a day, plays PICK well, and never lets the list go cold. Other players (all measured):
+
+| Player | Payback | Run |
+|---|---|---|
+| default picks / autoplay / timeouts ("first hot square") | 96.73 +- 0.14 | D1_first, 400M |
+| best picks (the headline) | 98.03 +- 0.12 | D1_best + D2_best |
+| ONE MORE CALL taken every time | 97.83 +- 0.28 (neutral: -0.2 +- 0.3, the sd of a spin goes 12.9x -> 15.9x) | D1_take |
+| 300 spins a day (daily gift weighs more) | 99.02 +- 0.29 | D2_day300 |
+| 3,000 spins a day | 97.73 +- 0.32 | D2_day3000 |
+| no daily appointment at all | 97.42 +- 0.30 | D2_nodaily |
+| flat 10-cent / flat $25 bettor | 98.09 +- 0.30 / 97.94 +- 0.32 | F_bet10, F_bet2500 |
+| bonus1 BUY / bonus2 BUY, best pick | 97.9 / 98.0 (+- 0.1) | D1_buys_best, D2_buys_best |
+| bonus1 BUY / bonus2 BUY, default pick | 95.0 / 97.3 | D1_buys_first |
+| a pot chaser (bets only when the pot is at its cap) | at most 97.0 + 1.67 = 98.7 | analytic, 8.8 |
+| a player away for days | lower, see 8.4 | analytic |
+
+No policy I could construct pays more than 100%: the best PICK heuristic is worth 6.5% on a bonus1 over the default (search over six heuristics, `tools/lv-pickpol.js`: first 99.4, most-neighbours 105.9, neighbour-of-neighbour 106.1, centre 101.7, least-neighbours 98.3, edge 99.6 on the PICK as it was before I weakened it), and the sim's "best" is the practical maximum. The buys are priced against it so a buy never beats 98% even for a perfect picker. That matters most in Chips, which is the poker bank.
+
+### 8.1 Every knob, its value, the reason, the sim behind it
+
+| Knob | Value | Was | Reason and evidence |
+|---|---|---|---|
+| `pull.list` | **450** | 50 | A Callback every **422 paid spins** (mean 412 in the sim + the daily gift; median 415, P90 425: the spread is 2%). 450 leads ticks the "LEADS 312 / 450" number on every spin (fills are 1.2 and 0.6). Cadence sets the budget: Callback costs 22.9 RTP points at this rate (94.3x average bonus / 412). At 50 leads it cost 200 points. A returning 100x-bankroll player sees a Callback in 55% of sessions, a 300x player in 99.9% (D3_sess100c, D3_sess300c) = "about once a real session". Alternative tried (E1: list 600, bell 1.27): any-bonus share in a fresh 100x session 41% vs 36%, nothing else moves; not worth the slower meter. |
+| `pull.fill` | dead 1.2, win 0.6, bonus 0.6 (unchanged) | same | The lead's ratio is right: a dead spin works twice a win. **Spread (open ask answered): the first passage has a coefficient of variation of 2%** (P10-P90 about 10 spins around 412) because the only randomness is dead vs paid. It is clockwork. I recommend leaving it: the surprise lives in the natural bonuses, the meter is the goal-gradient; adding spread needs a weighted-outcome fill (mechanism code) and would not change a number above. If Chris wants it unpredictable, ask the lead for a two-point `fill.dead` (1.2 for 90%, 3.0 for 10%, same mean). |
+| `pull.callback.kind` | `bonus1` | same | Bonus 1 at a 412-spin cadence is the guaranteed bonus a player can count on; bonus 2 (286x) at 1 in 1,200 spins would feel like a lottery again. Average 94.3x (P10 under 1x: 6.8%, same shape as a natural bonus 1). |
+| `pull.carryOver` | `true` | same | Leads above the list stay: no wasted spins. |
+| `pull.pick` | `minLeads 2`, `mult bronze 0.3, silver 2, gold 3, upsell 1, close 1` | bronze 0, silver 2, gold 3, upsell 2, close 2 | Bronze is the lever, not the others. Sweep (`--bonus`, 400k runs a cell, `bonus_P0..P4.json`), bonus1 average first / best / PICK off: default 98.2 / 104.7 / 82.9; upsell 1: 99.4 / 104.7; (0,1.5,2,1,1): 97.8 / 103.5; **(0.3,2,3,1,1): 91.4 / 94.1**; (0,1.5,2,1.5,1.5): 97.7 / 103.9. The chosen one lifts a bonus1 +10 to +13% (bonus2 +2 to +3%) and keeps the best-over-default edge at 3% instead of 6.5%. It also keeps combined bonus value near 100x (see 8.2) and lets the bonus1 buy sit at 96.4x. Cost: the picked square is a bronze 36% of the time instead of never. |
+| `pull.more` | `rtp 1.0`, `mult 2`, `minTenths 50` | rtp 0.98, minTenths 20 | **A fair coin: win probability exactly 1/2, pays x2.** Payback neutral for every player and policy (taken always: -0.2 +- 0.3 pts, D1_take), so the 98% holds whatever people do and the info screen can say "double or nothing, 50 / 50". Offered from a 5x bonus up (a gamble on a 2x bonus is not a decision). |
+| `pull.warm` | `chance 0.35`, `cap 4` | same | The value is real and large: **+4.3 points of payback** (base phone part 14.64 -> 18.90, D1_nowarm vs D1_best, 200M / 400M), hit rate 20.69% -> 21.80%, 30.8% of spins start with a warm square. Paid for by the base phone weight (8.2). Warm hits: 1.49 phone fires per 100 spins at 5.9x. Bet switching is not an exploit (the critics' F1 attack): in the sim's `--bet-switch` mode the $25 spins that lose their warm squares pay 67.7% and the whole switcher about 70% (`X_pull_switch`). |
+| `pull.ghost` | `on`, `maxWinTenths 10`, **`minTenths 50`** | minTenths 0 | Shown only if the base spin paid under 1x AND the call you did not get would have paid 5x or more. Frequency per 100 spins by `minTenths` (G_0..G_100, 50M spins): 0 -> 27.5 (avg 3.9x), 10 -> 19.6, 20 -> 14.5 (6.7x), **50 -> 6.0 (avg 11.7x)**, 100 -> 2.1 (21.3x). Every value shown is the real counterfactual and none is altered. **This is a judgment call, flagged for Frank:** showing only the 5x+ ones is selective (a line that appears 6 times in 100 spins rather than 27), still true. Needs one sentence on the info screen: "this line appears only when the unplayed call would have paid 5x or more, about 6 spins in 100". If you want zero selection set `minTenths 0` and let the UI make small ones quiet. **Wording (open ask answered): "IF A PHONE HAD LANDED: 12x"**, not "would have closed": the phone did not land, the number is a draw of what it would have paid. |
+| `pull.cold` | `afterMs 36 h`, `stepMs 12 h`, `batch 8`, `floor 300` | 24 h / 6 h / 3 / 10 | A daily visitor (even a late one) never leaks. After 36 h idle, 8 leads (1.8%) go cold every 12 h, never below 300 of 450. Worth 0.215 bets per lead (Callback part 22.94 pts / 1.069 leads a spin x 1/100): 2 days away costs 8 leads = 1.7 bets, 3 days 32 leads = 6.9 bets, 7 days 88 leads = 18.9 bets, worst case about 150 leads = 32 bets. Not measurable in the sim (S5, no idle time): analytic. See 8.4. |
+| `pull.daily` | `base 8`, `perStreak 4`, `streakMax 4`, `stakeCap 100` | 3 / 1 / 4 / 100 | 8, 12, 16, 20, 24 leads a day = 1.8% to 5.3% of a list = 1.7 to 5.2 bets of free Callback progress at a $1 stake (a $25 bettor gets almost nothing from it: a lead worked at $1 dilutes the average Callback bet, so its value is about its cost). Costs +0.6 points at 1,000 spins a day, +1.6 at 300 (table 8.0). |
+| `pull.pot` | `feedBps 100`, `oneInPerDollar 3000`, `seed 0`, `minBal 1000` ($10), `maxPayX 50` | 50 / 20000 / 0 / 100 / 10000 | See 8.3. |
+| `pull.feed.minWinX` | 100 | same | Wins of 100x or more are 1 in 553 spins counting Callbacks (D2_best); with every bonus also pushed (about 1 a 210 spins) a group of five at 300 spins a day each sees 7 bonus lines and 3 win lines a day. Enough. |
+| `pull.decision.timeoutMs` | 20000 | same | Not a payback knob. |
+| `extra.base.bell` | **1.175** | 1.52 | Natural bonus 1 in 207 -> **1 in 420** (average 108x, b1 1/447 at 95x, b2 1/7,392 at 286x, b3 1/150,094 at 1,112x). Teases (two bells) 1 in 24.4 -> 1 in 37.6. This pays for the Callback: any bonus (natural + Callback) stays **1 in 208**. Not a CFG.pull knob; an engine value. |
+| `extra.base.phone` | **0.2205** | 0.308 | Pays for warm squares: base phone part 20.2 (+4.3 warm) -> 18.9 including warm. Phone feature gaps: mean 43.6 spins (was 63.8, warm squares make more of them). Engine value. |
+| `buyCost` | **call 27 (2.7x), bonus1 964 (96.4x), bonus2 2910 (291.0x), hunt 20 (2.0x)** | 29 / 849 / 2824 / 35 | Re-priced at the best-pick average / 0.98 (30M-run `buys`, D2_buys_best): call 97.7 +- 0.2, **bonus1 97.8 +- 0.1, bonus2 98.0 +- 0.04, hunt 97.9 +- 0.6**. Default picks: 95.0 / 97.3 / hunt 95.7. Cheapest full bonus 96.4x: Chris's "about 100x" holds. Hunt still makes a bonus 5.3x more likely (1.25% vs 0.24%), so the "5x more likely" label stays true; it costs 2.0x, not 3.5x, because bonuses are now rarer and worth less per spin. `hunt.bellMult` unchanged (1.845). |
+
+### 8.2 The budget, before and after (flat 1.00 bet, 1,000 spins a day)
+
+| | Before (c24, no PULL) | After |
+|---|---|---|
+| Clusters | 28.9 | 29.5 |
+| Base phone (incl warm after) | 19.8 | 18.9 (warm is 4.3 of it) |
+| Natural bonus | 49.3 | 25.7 |
+| Callback | 0 | 22.9 |
+| Pot (feed returned as prizes) | 0 | 1.0 |
+| **Total** | 97.9 (+- 0.1) | **98.0 (+- 0.12)** |
+| Bonus share of payback | 50.3% | 50.2% |
+
+Chris's targets, one by one: hit rate 20.63% -> **21.80%** (target 20-24, warm squares add 1.1); wins under 1x 4.04% -> **4.53%** of spins (at most 5%); any bonus 1 in 207 -> **1 in 208** averaging **101x** (90-120) if "any bonus" counts the Callback, natural alone is 1 in 420; bonuses **50.2%** of payback (45-55); cheapest buy **96.4x** (about 100); cap 10,000x reached 1 in 2.41M events (was 1 in 2.75M).
+
+### 8.3 The pot (W8, F6, W9)
+
+- **Seed stays 0** (W9). **F6 stays as decided**: the prize is outside the 10,000x cap; the info screen says "the pot is extra".
+- **Chasing (W8): solved with `maxPayX / oneInPerDollar`, not with a prize cap tied to what the player fed.** A bettor's pot EV per dollar staked is `min(pot / bet, maxPayX) / oneInPerDollar`, so the most a chaser can ever add is `maxPayX / oneInPerDollar` = 50 / 3000 = **1.67 points**. The game itself pays 97.0 with the 1.0 feed taken, so even a player who only bets when the pot is at the cap gets **at most 98.7%**: never above 100%, whatever the pot size. (At the old defaults 10,000 / 20,000 the ceiling was 50 points: a money printer.) Rule if you move one: keep `maxPayX <= 0.0167 x oneInPerDollar`.
+- Size: the pot at a hit is on average `feed x oneIn` = 1% x $3,000 = **$30** of wagers (the prize is `min(pot, 50 x bet)`: a $1 bettor can take up to $50, a 10-cent bettor up to $5, a $25 bettor the lot; what is not paid stays in the pot). `minBal $10`: a hit on a pot under $10 pays nothing and waits.
+- **Frequency needs the group's real spending, which I do not have**: the server keeps history in memory only (20 rounds an account) and the game is not live, so there is no log to read. Hits per week = 7 x (dollars wagered a day) / 3,000: $300 a day -> one hit in 10 days; **$1,000 a day -> one every 3 days**; $3,000 a day -> one a day. The aim (every regular has seen a friend take it) is met at about $1,000 a day, which is five players at 200 spins at $1. After the first live week set `oneInPerDollar = 7 x (dollars a day) / 2` (two hits a week) and `maxPayX = 0.0167 x oneInPerDollar` together.
+
+### 8.4 Cold leads (open ask: should the value of leads that go cold go to the pot?)
+
+Yes in principle, and it is the better design, but it needs one engine and server change (the house credits `0.215 x list-average bet` per lead to the pot; the pot already tracks house money as `seeded`), so I did not do it. What I did instead: a leak small enough that it costs nothing a daily player ever sees, and the info screen says **"98% for continuous play"**. Cost of being away (analytic, 0.215 bets a lead): 2 days 1.7 bets, 3 days 6.9, 7 days 18.9. A player who plays 400 spins once a week gives up about 19 bets to the leak on top of the 8 the house edge takes from 400 spins at 98%: **about 93% for that player**; a player who plays daily loses nothing. If Chris wants the "7 leads go cold in 3 h" line to bite harder, the pot route is the one that does not move the payback.
+
+### 8.5 What changed in the feel, honestly
+
+| Measure | Before | After |
+|---|---|---|
+| Tease (two bells) | 1 in 24.4 spins | 1 in 37.6 |
+| Natural bonus | 1 in 207, gap P99 950, longest 3,404 | 1 in 420, gap median 292, P99 1,930, longest 5,751 |
+| **Any bonus (natural + Callback) gap** | mean 207, median 144, P90 475, **P99 950, longest 3,404** | mean 208, median 186, P90 414, **P99 427, longest 445** |
+| Wins of 5x+ gap | mean 48.7, P99 223, longest 860 | 51.8, 232, 679 |
+| Wins of 20x+ gap | mean 145, P99 666 | 148, 563 |
+| Phone feature gap | mean 63.8 | 43.6 |
+| Any event (5x+ win, tease, phone, bonus) gap | mean 15.6, P99 70, longest 305 | 17.5, 79, 291 |
+| Dead-spin run | median 4, P99 20, longest 80 | median 3, P99 20, longest 80 |
+| Win ladder, event 20x / 100x / 1,000x | 1 in 145 / 574 / 29,774 | 1 in 148 / 553 / 37,629 |
+| Natural bonus under 1x / under 10x / under 20x of the stake | 6.6% / 13.4% / 21.7% | 6.7% / 11.3% / 18.1% (PICK helped; not fixed, see 8.7) |
+
+The PULL removes the long drought (any bonus, 3,404 spins -> 445) and pays for it with rarer teases and rarer natural bonuses.
+
+| Time on device, flat 1x bet to bust, 20,000-spin cap | P10 / median / P90 spins | See a bonus | See a Callback | Touch 2x | See 100x+ |
+|---|---|---|---|---|---|
+| 100x bankroll, before | 132 / 229 / 2,355 | 57.5% | n/a | 27.2% | 31.5% |
+| 100x, a **returning** player (list part full, D3_sess100c) | 135 / 241 / 2,096 | 61.9% | 54.9% | 27.0% | 32.3% |
+| 100x, a **first-time** player (empty list, D2_sess100) | 131 / 183 / 1,003 | **36.2%** | 17.5% | 15.9% | 20.0% |
+| 300x, before | 519 / 1,255 / 14,598 | 92.4% | n/a | 32.2% | 68.0% |
+| 300x, returning (D3_sess300c) | 570 / 1,358 / 11,810 | 99.9% | 99.9% | 30.1% | 72.2% |
+
+**The cost lands on the first session of a new player**: half as many see a bonus in a 100x session (36% vs 57%). A returning player is where he was. The lead list is persistent by design, so this is a one-time dip; if Chris cares about it, the lever is a head start (a larger first daily gift) or list 600 (E1: 41%), not the cadence.
+
+### 8.6 Tests (the lead / Frank must act)
+Two old tests pin the old base game and fail with the new `bell` / `phone`: `tests/coldcall.js:588` (any bonus 1 in 120-250; natural is now 1 in 420, widen to about 120-600) and `tests/coldcall-pull-engine.js:61` (legacy-equality digest: golden of the old weights, needs the new digest). Everything else passes (47 with those two, server 43). They are outside my write scope; I asked Frank. The edit of `games/coldcall-engine.js` is in the working tree and the public copy is re-synced (cmp clean), not committed until the two tests are decided.
+
+### 8.7 What I would change in Chris's targets, and what is still open
+- **Read "any bonus 1 in 180-220" as natural + Callback.** Natural alone is 1 in 420. Say it that way on the info screen too.
+- **Add a payback sentence to the targets: "98% with the best PICK, about 97% with default picks, for continuous play at 1,000 spins a day"; a casual player gets up to +1 from the daily gift and loses a few points to the cold leak.** One number cannot cover all of them.
+- **Add a floor target: natural bonuses under 10x at most 8%.** Now 11.3% (was 13.4%). PICK helped, the rest needs the bonus 1 reveal / spin tables retuned, which is a base-game change I did not make inside the PULL pass.
+- Hold the rest: hit rate (21.8%), under 1x (4.5%), bonus share (50%), buy (96.4x), cap. No fanfare for a win of 1.0x or less (12.7% of spins returned the bet or less before, 13.6% now).
+- The tease dropping to 1 in 38 is the visible price of the Callback. If Chris wants teases back, the one lever is a rarer Callback (list 600 gives natural 1 in 338 and tease 1 in 33) at the cost of the persistent meter.
+- Open for Frank: (a) the ghost filter `minTenths 50` (8.1, ghost row), (b) the two tests (8.6), (c) the cold-lead-to-pot change (8.4), (d) real group volume for the pot (8.3).
