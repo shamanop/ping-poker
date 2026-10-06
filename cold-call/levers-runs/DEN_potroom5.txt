@@ -1,0 +1,3 @@
+COLD CALL --pot-room: 20 rooms x 10000000 ticks, feeders 1 x 5c, no chaser, rule {"feedBps":100,"oneInPerDollar":3000,"seed":0,"minBal":1000,"capCents":5000}, seed 121, 0.3s
+  feeder      5c  spins 200000000  stake 10000000  pot part 0.991% +- 0.004 (expected-prize estimate 1.002% +- 0.039)  hits 2701  prize avg 733.9 bets, largest 1000.0 bets
+  pot             fed 10000000 seed 0 paid 9911180 left 88820 (cents, all rooms); average balance 43.75  largest 268.27; fed + seeded = paid + left: YES, to the cent

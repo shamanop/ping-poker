@@ -454,3 +454,75 @@ Runs: `POT_<rule>_flat<bet>` (flat, full sim), `POT_room_<rule>_flat<bet>` (the 
 - **B3000: PASS** too (flats 97.89, 97.92, 97.98, 98.01; chaser 98.02 at every bet, a margin of 0.68) and not chosen: 5000 does not leave a chaser above the bar, so 3000 was not needed, and 3000 leaves the pot unpaid at big bets (at flat $25 the pot averages $1,429 at a hit, $2,193 stays in it per 1M spins, while a hit pays $30: the pot display would show a number no one can win). Not "a third rule".
 
 **Rule chosen: B, `capCents` 5000** (`prize = min(bal, capCents)`, one cap for every bet; `CFG.pull.pot.capCents`, new `Eng.potPrize(pullCfg, bal)` used by both the server and the sim; `maxPayX` removed). It pays every bet what it is fed (0.957 / 0.980 / 0.995 / 1.000, the 10c and 20c gaps are the batch edge), keeps the pot near $45 (average balance $45 in R1 and R2), and bounds a chaser at 1.67 points at every bet. Costs: a $25 bettor's hit now pays at most $50 (2 bets, not up to 50 bets; his hits are 25 times as frequent, the pot part is unchanged at 1.00), and a 10c bettor's hit can pay $50 = 500 bets. The info screen must change (see PULL-STATE FIX POT-CAP). A `capCents` under 3000 would leave part of the feed unpaid (B3000 is already at the limit).
+
+## 8.12 Small bets: 1c / 2c / 5c (DENOMS)
+
+Measured 2026-10-06 on shaman (24 threads, scratch `E:\bricklord-test\coldcall-denoms`, nothing on C:), engine `games/coldcall-engine.js` sha256 6664a356a0dc8620... and sim `games/coldcall-sim.js` 272f7338d39b441f... (both from the DENOMS commit; the engine has the whole-cent rounding, buy pricing and the 1c Callback step, no pay knob moved). Same setup as 8.10 / 8.11: `--pull 100000 2000 121 --pickpolicy best --nowarmdiff --bet B` (200M paid spins, seed 121, best picks, Callback floor + carry, pot rule B5000). Raw files `levers-runs/DEN_*` (`.json` + `.txt`, 216 KB), one batch script on shaman. Design: `PULL-ENGINE.md` section 7.
+
+**Check that nothing moved at 10c and up: PASS, bit for bit.** `DEN_flat10` = `POT_B5000_flat10` and `DEN_flat100` = `POT_B5000_flat100` to the last printed digit (97.9793646 +- 0.2194 and 98.0159901 +- 0.2190, every part identical); the engine's 5,760-round `playRound` transcript digest (written on the old engine) and the legacy digest match in the test suites.
+
+### Flat bets (best picks), per paid spin, money in real cents
+
+| Bet | Total as the sim prints | Ex-pot | Base (cluster + phone) | Natural bonus | Callback part | Pot part (1M-spin batch) | Pot part, long horizon (pot-only room) | Total, steady pot | Callback bet |
+|---|---|---|---|---|---|---|---|---|---|
+| 1c | **97.682 +- 0.222** | 97.022 | 48.95 (29.45 + 19.50) | 25.74 +- 0.17 | 22.34 +- 0.11 | 0.660 +- 0.038 | 0.996 +- 0.002 | 98.018 | 1.00c |
+| 2c | **97.821 +- 0.222** | 97.022 | 48.95 | 25.74 | 22.34 | 0.799 +- 0.024 | 0.998 +- 0.001 | 98.020 | 2.00c |
+| 5c | **97.929 +- 0.221** | 97.022 | 48.95 | 25.74 | 22.34 | 0.906 +- 0.013 | 0.999 +- 0.000 | 98.021 | 5.00c |
+| 10c (check) | **97.979 +- 0.219** | 97.022 | 48.95 | 25.74 | 22.34 | 0.957 +- 0.006 | 0.995 +- 0.002 (10M-tick rooms) | 98.017 | 10.00c |
+| $1 (check) | **98.016 +- 0.219** | 97.021 | 48.95 | 25.74 | 22.34 | 0.995 +- 0.001 | 1.000 | 98.021 | 99.99c |
+
+Runs: `DEN_flat1|2|5|10|100`; long-horizon pot parts `DEN_potroomLong1|2|5` (100M ticks x 20 rooms, one feeder, `--pot-room`) and `DEN_potroom1|2|5|10|100` (10M ticks). Ex-pot is identical at every bet (the same seed plays the same rounds; only the rounding of the wallet differs), and so is the wallet: "paid cents" (what the wallet gets, ex pot, rounding included) is 97.021 / 97.023 / 97.022 / 97.022 / 97.021 against the exact 97.022 / 97.022 / 97.022 / 97.022 / 97.021, drift -0.0011 +- 0.0020, +0.0009 +- 0.0010, +0.0002 +- 0.0004, 0, 0 points: the rounding is unbiased.
+
+**Pass bar, flat totals inside 98.0 +- 0.3 (97.7 to 98.3) within the interval: PASS, with one marginal reading.** 2c, 5c, 10c, $1 are inside as printed. 1c prints 97.682 +- 0.222 (interval 97.46 to 97.90): the point estimate is 0.018 under 97.70 and the interval overlaps the band, so it passes by the "within its interval" rule used in 8.10 / 8.11, not by the point estimate. The whole gap to 98.0 is the pot part and it is a measurement edge, not a leak: the sim's pot is one bettor per 1M-spin batch, a 1c bettor feeds only $100 per batch (2.3 hits), so the pot is still holding its last $34 when the batch ends (6,809 cents left across 20 batches, `fed = paid + left` to the cent). With the horizon removed (`--pot-room`, 100M ticks per room, 20 rooms, 5,420 / 10,859 / 27,380 hits) the pot pays 0.996 / 0.998 / 0.999 of what it is fed at 1c / 2c / 5c (the rest is the pot's last balance, 84k of 20M cents at 1c), so the steady total is 98.02 at every bet. In the real shared pot nothing is truncated. Item 6: the pot part is about 1.0 at 1c, 2c and 5c too; `potSlice` carries the remainders (tested over 100,000 spins at each bet: `fed x 10000 + rem = cost x bps`) and `fed + seeded = paid + left` held to the cent in every one of the 8 pot-room runs and the 5 flat runs.
+
+### Buys at 1c / 2c / 5c against $1 (30M rounds per buy per bet, seed 121, best picks, gamble banked, PICK + ONE MORE CALL through `playRound`; `DEN_buys1|2|5|100`)
+
+Payback = cents paid / cents of price. Price is the exact price rounded to the nearest cent (min 1c), the round is played at the fair stake (price / cost multiple). The same seed gives the same rounds at every bet, so the exact payback is the same to the last digit and the paid column differs only by rounding.
+
+| Buy | $1: price, payback | 1c: price (exact), payback, paid - exact | 2c: price (exact), payback, paid - exact | 5c: price (exact), payback, paid - exact |
+|---|---|---|---|---|
+| call | 270c, 98.041 +- 0.216 | 3c (2.7), 98.030 +- 0.212, -0.0107 +- 0.0097 | 5c (5.4), 98.041 +- 0.216, -0.0003 +- 0.0013 | 14c (13.5), 98.037 +- 0.215, -0.0042 +- 0.0034 |
+| bonus1 | 9640c, 97.814 +- 0.063 | 96c (96.4), 97.814 +- 0.063, 0.0000 +- 0.0002 | 193c (192.8), 97.813 +- 0.063, -0.0007 +- 0.0001 | 482c (481.8), 97.814 +- 0.063, 0.0000 |
+| bonus2 | 29100c, 98.008 +- 0.040 | 291c, 98.008 +- 0.040, 0.0000 | 582c, 98.008 +- 0.040, 0.0000 | 1455c, 98.008 +- 0.040, 0.0000 |
+| hunt | 200c, 98.124 +- 0.439 | 2c, 98.124 +- 0.440, +0.0006 +- 0.0026 | 4c, 98.124 +- 0.439, +0.0001 +- 0.0010 | 10c, 98.124 +- 0.439, -0.0001 +- 0.0005 |
+
+**Pass bar, every buy within its interval of the $1 figure: PASS** (largest gap 0.011 points, call at 1c, 1 sigma of its paired interval). No buy is locked below 10c. Two honest footnotes, both from pricing at a fair stake: (a) the call at 1c is played at 1.111c per x, so its 10,000x cap (11,111c) is clamped to $100.00, which costs exactly the -0.0107 above (9 cap hits in 30M x 1,111c / 90M cents of price); (b) the bonus1 buy at 1c plays at 0.996c per x, so its top win is 100,000 tenths x 0.996c = $99.58, not $100.00. Neither can exceed 10,000 x the bet.
+
+### Decision policy at 1c (item 3; `DEN_policy1_*`, 200M paid spins each, 867,161 ONE MORE CALL offers each, the shown bank amount rounded UP on 44.6% of them)
+
+The sim's decision ledger = for every offer, (expected value of the option the policy took, computed from the SHOWN whole cents) minus (the exact value of banking), in cents. A design that cannot be gamed by reading the shown amount gives 0.
+
+| Policy at 1c | Ledger, cents per offer | Paid cents, % of stake (ex pot) | Total with the sim's pot |
+|---|---|---|---|
+| bank always (the exact-value policy: the live `more.rtp` is 1.0, bank and take are equal) | -0.00003 +- 0.00089 | 97.021 +- 0.219 | 97.682 +- 0.222 |
+| take always | -0.00024 +- 0.00084 | 97.053 +- 0.302 | 97.713 +- 0.302 |
+| bank when rounded UP, gamble when rounded down (the trap policy) | -0.00012 +- 0.00087 | 97.110 +- 0.251 | 97.767 +- 0.248 |
+| gamble when rounded up, bank when rounded down | -0.00052 +- 0.00083 | 97.150 +- 0.244 | 97.810 +- 0.248 |
+
+**Pass bar: PASS.** No policy beats the exact-value policy beyond the interval: every ledger entry is zero within +- 0.0009 cents per offer (a leaky design pays about 0.15 cents per offer on a 12.3c bonus: engine test "the leak trap" computes the naive `floor(exact + u)` design at +0.15 and this one at 0.000), and the paid-cents totals differ by at most 0.13 points with intervals of +- 0.22 to +- 0.30 (the policies play different main-stream draws after the first gamble, so the totals are not paired; the ledger is the sharp test).
+
+### Mixers (`--bet-mix lo,hi,T`: bet hi while the lead-weighted average is under T, else lo; the N1 attacker generalised) and `--bet-switch`
+
+| Mixer | Total | Ex-pot | Flat at its larger bet (same run family) | Average stake / average Callback bet | Run |
+|---|---|---|---|---|---|
+| 1c / 2c, T 1.5 | 94.908 +- 0.251 | 94.174 | 2c: 97.821 +- 0.222 | 1.50c / 1.50c | DEN_mix1_2 |
+| 1c / 10c, T 5.5 | 95.035 +- 0.277 | 94.122 | 10c: 97.979 +- 0.219 | 5.50c / 5.50c | DEN_mix1_10 |
+| 5c / 10c, T 7.5 | 95.018 +- 0.227 | 94.079 | 10c: 97.979 +- 0.219 | 7.50c / 7.50c | DEN_mix5_10 |
+| 2c / $1, T 55.5 | 95.497 +- 0.278 | 94.505 | $1: 98.016 +- 0.219 | 55.50c / 55.47c | DEN_mix2_100 |
+| 5c / 20c, T 10.5 (the average sits at the 10c line, extra) | 94.653 +- 0.257 | 93.694 | 20c: 98.00 (8.11, not re-run) | 10.50c / 10.50c | DEN_mix5_20x |
+| `--bet-switch` (10c, then $25 after >= 3 warm squares) | 96.239 +- 0.649 | 95.241 | $25: 98.02 (8.10 / 8.11) | 10c / $25 (switching), Callback bet 220.7c on average | DEN_betswitch |
+
+**Pass bar, no mixer above flat play at its larger bet: PASS** (every mixer is 1.8 to 3.4 points BELOW flat; the mix drops warm squares at every bet change: base phone 15.97 to 17.53 against 19.50). The Callback part of every mixer is 22.45 to 22.67 against 22.34 flat (+0.1 to +0.3, about 1 to 2 sigma of its +- 0.11 to +- 0.14, the same size as in 8.10), and the average Callback bet is 99.9% to 100.1% of the average stake per paid spin (the proven invariant is in lead-weighted stake, sum of Callback bets <= sum of list averages; the 0.1% is the lead weighting): the carry across the 10c line (the 5c / 20c run arms at average 10.5c, step 10, and the 5c / 10c run at 7.5c, step 1) does not create stake. The fuzz proof (`DENOMS Callback invariant`) covers pure `cbArm` and real flows with random bets from the whole list.
+
+### Open / decisions
+No decision of Frank's was changed and no pay knob moved. Implementation choices that are mine and are documented in `PULL-ENGINE.md` section 7: (1) the Callback step follows the average of the list being armed (below 10c: 1 cent, from 10c: the old rule, bit for bit); (2) a round pays its base spin and its bonus rounded apart (paid within 2c of exact, mean exact), so ONE MORE CALL can show whole-cent bank / win / base amounts rounded once; (3) buys are played at the fair stake with the price rounded to the nearest cent, and the 10,000x cap is `min(cap at the fair stake, 10,000 x bet)` in cents. The sim's pot part is truncated at a batch edge for the smallest bets; use `--pot-room` for the steady figure.
+
+Commands (shaman, scratch on E:, 24 threads; the engine and sim copied to `E:\bricklord-test\coldcall-denoms\games`):
+```
+node games\coldcall-sim.js --pull 100000 2000 121 --pickpolicy best --nowarmdiff --bet B --threads 24 --out DEN_flatB.json           # B = 1 2 5 10 100
+node games\coldcall-sim.js --pot-room 10000000 121 --feeders B:1 --batches 20 --threads 24 --out DEN_potroomB.json                  # B = 1 2 5 10 100 (long: 100000000 ticks, B = 1 2 5, 4 threads)
+node games\coldcall-sim.js --pull 100000 2000 121 --pickpolicy best --nowarmdiff --bet 1 --more P --threads 24 --out DEN_policy1_P.json   # P = bank take bankup takeup
+node games\coldcall-sim.js --pull 100000 2000 121 --pickpolicy best --nowarmdiff --bet-mix 1,2,1.5 | 1,10,5.5 | 5,10,7.5 | 2,100 | 5,20,10.5 | --bet-switch
+node games\coldcall-sim.js --buys-pull 30000000 121 --bet B --pickpolicy best --more bank --threads 24 --out DEN_buysB.json          # B = 1 2 5 100
+```
+
