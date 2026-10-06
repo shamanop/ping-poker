@@ -33,6 +33,7 @@ const clone = (o) => JSON.parse(JSON.stringify(o));
 const snap = (o) => structuredClone(o);
 // knobs outside CFG.pull that a replay reads live: frozen into the record beside CFG.pull, so an edit while a decision is open cannot change the bonus the player was shown (W1B N6)
 const SNAP_KNOBS = ['spins', 'retrigger', 'maxSpins', 'maxRevealRounds', 'maxCascades', 'buyCost'];
+const CEILING_MS = 180000;           // a decision's timer is armed to max(timeoutMs, this) when the pending result is sent; the first `ready` brings it down to timeoutMs from then (U4)
 const DEFAULT_TIMEOUT_MS = 20000;   // armTimer's fallback when decision.timeoutMs is missing or not a finite positive number (W1B N4)
 // names that would address Object.prototype if they ever became a plain-object key (wallet.js still keys a plain object)
 const RESERVED = new Set(['__proto__', 'constructor', 'prototype']);
@@ -166,12 +167,14 @@ function pendingView(rec) {
   };
 }
 
-// a new decision: a full timeoutMs, and its one re-arm (`ready`) is available again
+// a new decision: armed to a long CEILING (the client plays the whole bonus, 15 to 50 s, before the prompt is on screen), stored per round; the first `ready`
+// of the decision brings the timer down to a full timeoutMs from then. A client that never sends `ready` defaults at the ceiling (U4)
 function armTimer(rec) {
   const t = rec.cfg.decision && rec.cfg.decision.timeoutMs;
   rec.timeoutMs = Number.isFinite(t) && t > 0 ? t : DEFAULT_TIMEOUT_MS;
+  rec.ceilingMs = Math.max(rec.timeoutMs, CEILING_MS);
   rec.armedAt = C.now(); rec.readyDone = false;
-  setTimer(rec, rec.timeoutMs);
+  setTimer(rec, rec.ceilingMs);
 }
 function setTimer(rec, ms) {
   if (rec.timer) clearTimeout(rec.timer);
@@ -418,8 +421,8 @@ module.exports = {
       }
       settle(rec, r, null, socket);
     },
-    // The prompt is on screen: give the open decision a full timeoutMs from now, ONCE per decision (the ONE MORE CALL event carries the whole bonus,
-    // whose animation runs longer than the timer that started when the event was sent). Never past armedAt + 2 x timeoutMs. Answers every socket of the account.
+    // The prompt is on screen: the open decision gets a full timeoutMs from now, ONCE per decision (the ONE MORE CALL event carries the whole bonus,
+    // whose animation runs longer than timeoutMs, so the timer was armed to the ceiling). Never past armedAt + ceiling. Answers every socket of the account.
     ready(socket, payload, ctx) {
       const t = ctx.now(), rk = nkey(keyOf(socket)), prev = readyLast.get(rk);
       if (prev != null && t >= prev && t - prev < RATE_MS) return err(socket, 'rate', 'Slow down');
@@ -430,7 +433,7 @@ module.exports = {
       if (!rec) return err(socket, 'no_round', 'No open decision');
       if (rec.nk !== rk) return err(socket, 'forbidden', 'Not your round');
       if (!rec.readyDone) {
-        const room = rec.armedAt + 2 * rec.timeoutMs - t;       // what is left of the 2 x timeoutMs this decision may ever be held
+        const room = rec.armedAt + rec.ceilingMs - t;           // what is left of the ceiling this decision may ever be held
         if (room <= 0) return;                                  // too late: the running timer decides
         rec.readyDone = true;
         setTimer(rec, Math.min(rec.timeoutMs, room));

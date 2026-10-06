@@ -257,12 +257,15 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
     assert.strictEqual(spin(s, a, { bet: 10, mode: 'play' }).error, undefined, 'free again once settled');
   });
 
+  // U4: a decision is armed to the 180 s ceiling when the pending result is sent; the prompt's `ready` brings it down to timeoutMs (the tests that wait for a default send it)
+  const rdy = (s, sock, id) => { s.clock.advance(200); sock.send('g:coldcall:ready', { roundId: id }); };
+
   await test('default on timeout: the safe default (first square, bank) settles exactly like a chosen round, marked auto: timeout, in the result and in the history; timer fires once', async () => {
     const s = setup({ rng: E.rngFrom(49) }); const a = s.sock('ann'); rich(s, 'ann');
     E.CFG.pull.decision.timeoutMs = 40;
     for (const kind of ['pick', 'more']) {
       const r = toPending(s, a, kind); const n = all(a, 'g:coldcall:result').length; const mid = s.wallet.get('ann').play;
-      await sleep(120);
+      rdy(s, a, r.roundId); await sleep(120);
       const rs = all(a, 'g:coldcall:result'); assert.strictEqual(rs.length, n + 1, 'exactly one settlement');
       const f = rs[rs.length - 1]; assert.strictEqual(f.roundId, r.roundId); assert.strictEqual(f.status, 'done'); assert.strictEqual(f.auto, 'timeout'); assert.strictEqual(f.resolved, true);
       assert.strictEqual(f.wallet.play, mid + f.totalWin + (f.pot ? f.pot.amount : 0));
@@ -281,8 +284,8 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
       if (r.status === 'pending' && r.pending.k === 'pick') {
         const p = r.pending.choices[r.pending.choices.length - 1];
         const f = decide(s, a, r, { k: 'pick', p });
-        if (f.status === 'pending') { more = f; await sleep(100); const fin = last(a, 'g:coldcall:result'); assert.strictEqual(fin.roundId, r.roundId); assert.strictEqual(fin.pull.pick.p, p); assert.strictEqual(fin.pull.pick.auto, false); assert.strictEqual(fin.pull.more.auto, true); assert.strictEqual(fin.auto, 'timeout'); return; }
-      } else if (r.status === 'pending') { await sleep(100); }
+        if (f.status === 'pending') { more = f; rdy(s, a, r.roundId); await sleep(100); const fin = last(a, 'g:coldcall:result'); assert.strictEqual(fin.roundId, r.roundId); assert.strictEqual(fin.pull.pick.p, p); assert.strictEqual(fin.pull.pick.auto, false); assert.strictEqual(fin.pull.more.auto, true); assert.strictEqual(fin.auto, 'timeout'); return; }
+      } else if (r.status === 'pending') { rdy(s, a, r.roundId); await sleep(100); }
     }
     assert.fail('never saw a pick followed by a more');
   });
@@ -698,7 +701,7 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
   await test('F9e / W2 / W6: a settled round goes to every live socket of the account, never to a socket that has since signed in as someone else', async () => {
     const s = setup({ rng: E.rngFrom(90) }); const a1 = s.sock('ann'), a2 = s.sock('ann'), b = s.sock('bob'); rich(s, 'ann');
     E.CFG.pull.decision.timeoutMs = 60;
-    const r = toMore(s, a1); const mine = (k) => k.out.filter((o) => o[0] === 'g:coldcall:result' || o[0] === 'g:coldcall:voided').length; const n1 = mine(a1);
+    const r = toMore(s, a1); rdy(s, a1, r.roundId); const mine = (k) => k.out.filter((o) => o[0] === 'g:coldcall:result' || o[0] === 'g:coldcall:voided').length; const n1 = mine(a1);
     a1.data.acct = { key: 'bob' };                       // the socket re-signed-in as bob (no disconnect)
     await sleep(160);
     assert.strictEqual(resultsOf(a2, r.roundId).filter((x) => x.status === 'done').length, 1, 'the other tab of ann hears the settlement'); assert.strictEqual(resultsOf(a2, r.roundId).filter((x) => x.status === 'done')[0].auto, 'timeout');
@@ -762,20 +765,20 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
       if (r.status !== 'pending') continue;
       if (r.pending.k === 'more') { decide(s, a, r, { k: 'more', take: false }); continue; }
       const rec = s.open.get(r.roundId); s.clock.advance(400);
-      readyOf(a, r.roundId); const t1 = timers(a, r.roundId); assert.strictEqual(t1.length, 1); assert.strictEqual(t1[0].expiresAt, s.clock.now() + 5000); assert.ok(t1[0].expiresAt > r.expiresAt, 're-armed later than the pick\'s own arm');
+      readyOf(a, r.roundId); const t1 = timers(a, r.roundId); assert.strictEqual(t1.length, 1); assert.strictEqual(t1[0].expiresAt, s.clock.now() + 5000); assert.ok(t1[0].expiresAt < r.expiresAt, 'brought down from the ceiling the pick was armed to');
       s.clock.advance(200); readyOf(a, r.roundId); assert.strictEqual(timers(a, r.roundId).length, 2); assert.strictEqual(timers(a, r.roundId)[1].expiresAt, t1[0].expiresAt, 'the second ready of the pick is a no-op');
       const m = decide(s, a, r, { k: 'pick', p: r.pending.choices[0] });
       if (m.status !== 'pending') continue;                                  // no ONE MORE CALL behind this pick: look for another round
       assert.strictEqual(m.pending.k, 'more'); assert.strictEqual(rec.timer !== null, true);
       s.clock.advance(400); readyOf(a, r.roundId); const ts = timers(a, r.roundId); assert.strictEqual(ts.length, 3, 'the second decision gets its own re-arm');
-      assert.strictEqual(ts[2].expiresAt, s.clock.now() + 5000); assert.ok(ts[2].expiresAt > m.expiresAt);
+      assert.strictEqual(ts[2].expiresAt, s.clock.now() + 5000); assert.ok(ts[2].expiresAt < m.expiresAt);
       s.clock.advance(200); readyOf(a, r.roundId); assert.strictEqual(timers(a, r.roundId).length, 4); assert.strictEqual(timers(a, r.roundId)[3].expiresAt, ts[2].expiresAt, 'and only one');
       const f = decide(s, a, m, { k: 'more', take: false }); assert.strictEqual(f.status, 'done'); done = true;
     }
     assert.ok(done, 'saw a pick followed by a more');
   });
 
-  await test('ready: goes through a rate limit (150 ms per account; a refused ready does not use the re-arm up), and can never hold a round open past 2 x timeoutMs (a late ready is ignored)', async () => {
+  await test('ready: goes through a rate limit (150 ms per account; a refused ready does not use the re-arm up), and can never hold a round open past its ceiling (a late ready is ignored)', async () => {
     const s = setup({ rng: E.rngFrom(104) }); const a = s.sock('ann'), a2 = s.sock('ann'); rich(s, 'ann');
     E.CFG.pull.decision.timeoutMs = 5000;
     const r = toMore(s, a); const rec = s.open.get(r.roundId); s.clock.advance(1000);
@@ -785,11 +788,26 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
     assert.strictEqual(timers(a, r.roundId).length, 1); assert.strictEqual(last(a2, 'error').code, 'rate'); assert.strictEqual(rec.expiresAt, s.clock.now() + 5000);
     const s2 = setup({ rng: E.rngFrom(105) }); const c = s2.sock('cy'); rich(s2, 'cy'); E.CFG.pull.decision.timeoutMs = 5000;
     const r2 = toMore(s2, c); const rec2 = s2.open.get(r2.roundId), timer2 = rec2.timer, exp2 = rec2.expiresAt;
-    s2.clock.advance(5000 * 2 + 1);                                             // the clock says the decision is already past 2 x timeoutMs
+    s2.clock.advance(180000 + 1);                                               // the clock says the decision is already past the ceiling
     readyOf(c, r2.roundId); assert.strictEqual(timers(c).length, 0, 'no re-arm'); assert.strictEqual(rec2.timer, timer2); assert.strictEqual(rec2.expiresAt, exp2);
     const s3 = setup({ rng: E.rngFrom(106) }); const d = s3.sock('di'); rich(s3, 'di'); E.CFG.pull.decision.timeoutMs = 5000;
     const r3 = toMore(s3, d); s3.clock.advance(4000); readyOf(d, r3.roundId);   // late but inside: the cap clips it
-    const t3 = timers(d, r3.roundId)[0]; assert.ok(t3.expiresAt <= r3.expiresAt - 0 + 5000 + 4000 && t3.expiresAt <= r3.expiresAt + 5000, 'expiresAt never beyond armedAt + 2 x timeoutMs: ' + t3.expiresAt);
+    const t3 = timers(d, r3.roundId)[0]; assert.ok(t3.expiresAt <= r3.expiresAt - 0 + 5000 + 4000 && t3.expiresAt <= r3.expiresAt + 5000, 'expiresAt never beyond armedAt + ceiling: ' + t3.expiresAt);
+  });
+
+  await test('U4: the decision timer is armed to max(timeoutMs, 180000) when the pending result is sent; the first ready (after the whole bonus has played) brings it to a full timeoutMs from then; a client that never sends ready keeps the ceiling; a ready past the ceiling is ignored', async () => {
+    const s = setup({ rng: E.rngFrom(107) }); const a = s.sock('ann'); rich(s, 'ann'); E.CFG.pull.decision.timeoutMs = 20000;
+    const r = toMore(s, a); const rec = s.open.get(r.roundId);
+    assert.strictEqual(rec.timeoutMs, 20000); assert.strictEqual(rec.ceilingMs, 180000); assert.strictEqual(rec.expiresAt, rec.armedAt + 180000, 'armed to the ceiling');
+    assert.strictEqual(r.timeoutMs, 20000, 'the view still states the decision time');
+    s.clock.advance(45000); readyOf(a, r.roundId);                              // 45 s of bonus animation later: more than timeoutMs, still open
+    assert.strictEqual(s.open.size, 1); assert.strictEqual(rec.expiresAt, s.clock.now() + 20000); const t = timers(a, r.roundId); assert.strictEqual(t.length, 1); assert.strictEqual(t[0].timeoutMs, 20000); assert.strictEqual(t[0].expiresAt, rec.expiresAt);
+    const s2 = setup({ rng: E.rngFrom(108) }); const b = s2.sock('bo'); rich(s2, 'bo'); E.CFG.pull.decision.timeoutMs = 200000;
+    const r2 = toMore(s2, b); const rec2 = s2.open.get(r2.roundId); assert.strictEqual(rec2.ceilingMs, 200000, 'a longer decision time is never cut to the ceiling');
+    E.CFG.pull.decision.timeoutMs = 20000;
+    const s3 = setup({ rng: E.rngFrom(109) }); const c = s3.sock('cy'); rich(s3, 'cy');
+    const r3 = toMore(s3, c); const rec3 = s3.open.get(r3.roundId); s3.clock.advance(179000); readyOf(c, r3.roundId);
+    assert.strictEqual(rec3.expiresAt, rec3.armedAt + 180000, 'a late ready is clipped to the ceiling');
   });
 
   await test('state.pull.rules: a plain JSON copy of the live CFG.pull (what pullCfg() returns), follows a knob edit on the next state, editing the payload cannot move the live knobs', async () => {
@@ -888,7 +906,7 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
       }
       potOk(s.potOf('play')); potOk(s.potOf('chips')); assert.ok(!all(a, 'error').length, JSON.stringify(all(a, 'error')));
       // a decision left to time out settles without a throw in the timer
-      E.CFG.pull.decision.timeoutMs = 30; const p = toPending(s, a, 'more', 'play', 10); const before = s.wallet.get('ann').play; await sleep(120);
+      E.CFG.pull.decision.timeoutMs = 30; const p = toPending(s, a, 'more', 'play', 10); rdy(s, a, p.roundId); const before = s.wallet.get('ann').play; await sleep(120);
       assert.strictEqual(s.open.size, 0, 'the timer settled it'); assert.ok(all(a, 'g:coldcall:result').some((r) => r.roundId === p.roundId && r.status === 'done'));
       assert.ok(s.wallet.get('ann').play >= before, 'settled, win credited');
     }
