@@ -261,7 +261,19 @@ function liveInfo(shipped) {
 // ---------------------------------------------------------------------------------------------------------------- snapshots (item 3)
 // The whole live config at this instant plus an engine built from THAT copy. A round runs, replays, defaults and settles on its snapshot, whatever is swapped meanwhile:
 // every table the engine bakes (weights, pay, reveal, ...) and every knob it reads live comes from the copy. structuredClone keeps Infinity / NaN as they are.
-function snapshot() { const cfg = clone(Eng.CFG); return { cfg, eng: Eng.createEngine(cfg) }; }
+// FIX D6: built ONCE per distinct config, not twice per spin: the snapshot is memoised on the content of Eng.CFG (a swap changes it; so does a test that edits a knob in place) and handed, deep-frozen,
+// to every round, every `state` request and every settle. A round keeps its own reference, so "an open round finishes on the config it started on" still holds after a swap (a new object is built then).
+// Non-finite numbers are named in the key (JSON would turn Infinity / NaN into null and a knob going from one to the other would reuse a stale engine).
+const deepFreeze = (o) => { if (o !== null && typeof o === 'object' && !Object.isFrozen(o)) { Object.freeze(o); for (const k of Object.keys(o)) deepFreeze(o[k]); } return o; };
+const keyOf = (k, v) => (typeof v === 'number' && !Number.isFinite(v) ? '#' + v : v);
+let snapMemo = null;
+function snapshot() {
+  const j = JSON.stringify(Eng.CFG, keyOf);
+  if (snapMemo && snapMemo.json === j) return snapMemo.K;
+  const cfg = deepFreeze(clone(Eng.CFG)), K = { cfg, eng: Eng.createEngine(cfg) };
+  snapMemo = { json: j, K };
+  return K;
+}
 // the stateless round of the old game (pull off, the QA hook) on a snapshot; same shape as Eng.resolveRound
 function resolveRound(K, rng, buy, opts) {
   const r = K.eng.round(rng, buy, { script: true, ...(opts || {}) });

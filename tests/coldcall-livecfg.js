@@ -411,6 +411,21 @@ const BIG_SWAP = {
     try { assert.throws(() => SRV.setLiveConfig({ overrides: { buyCost: { bonus1: 640 } } })); assert.strictEqual(E.CFG.buyCost.bonus1, SHIPPED.buyCost.bonus1, 'memory untouched when the write fails'); assert.deepStrictEqual(SRV.liveInfo().overrides, {}); }
     finally { process.env.COLDCALL_CFG_FILE = keep; }
   });
+  await test('FIX D6: the snapshot is built once per distinct config and handed deep-frozen to every round: the same object between swaps, a new one after a swap, the old one untouched (an open round finishes on its own), nothing can write to it', async () => {
+    resetLive(); const s = setup({ rng: E.rngFrom(88), roundRng: E.rngFrom(89) }); const a = s.sock('ann'); rich(s, 'ann');
+    const K1 = need().snapshot(); assert.strictEqual(L.snapshot(), K1, 'the same snapshot object on the next call'); assert.ok(Object.isFrozen(K1.cfg) && Object.isFrozen(K1.cfg.pull) && Object.isFrozen(K1.cfg.pull.pot) && Object.isFrozen(K1.cfg.pay.mug), 'deep-frozen');
+    assert.throws(() => { K1.cfg.pull.pot.capCents = 1; }, TypeError); assert.deepStrictEqual(K1.cfg, SHIPPED);
+    for (let i = 0; i < 20; i++) spin(s, a, { bet: 100, mode: 'play', auto: true }); a.send('g:coldcall:state');
+    assert.strictEqual(L.snapshot(), K1, 'twenty spins and a state request built nothing new');
+    const r = toPending(s, a, 'more'); const rec = s.open.get(r.roundId); assert.strictEqual(rec.K, L.snapshot(), 'the open round holds the shared snapshot');
+    SRV.setLiveConfig({ overrides: { payScale: 2 } }); const K2 = L.snapshot();
+    assert.notStrictEqual(K2, K1, 'a swap builds a new snapshot'); assert.strictEqual(K2.cfg.payScale, 2); assert.strictEqual(rec.K.cfg.payScale, 1, 'the open round still holds the config it started on'); assert.strictEqual(L.snapshot(), K2);
+    let fin = r; while (fin.status === 'pending') fin = decide(s, a, fin, fin.pending.k === 'pick' ? { k: 'pick', p: fin.pending.choices[0] } : { k: 'more', take: false }); assert.strictEqual(fin.status, 'done');
+    E.CFG.pull.list = 77; const K3 = L.snapshot(); assert.notStrictEqual(K3, K2); assert.strictEqual(K3.cfg.pull.list, 77, 'an in-place edit of a knob (tests only) is seen too');
+    E.CFG.pull.pot.oneInPerDollar = Infinity; const K4 = L.snapshot(); assert.strictEqual(K4.cfg.pull.pot.oneInPerDollar, Infinity, 'Infinity survives the snapshot'); E.CFG.pull.pot.oneInPerDollar = 0; assert.strictEqual(L.snapshot().cfg.pull.pot.oneInPerDollar, 0, 'and a knob moving from Infinity to 0 is not mistaken for the same config');
+    resetLive();
+  });
+
   await test('a swap takes well under a second (smoke test included, measured)', async () => {
     resetLive(); setup({ rng: E.rngFrom(12) }); let worst = 0;
     for (let i = 0; i < 5; i++) { const t0 = process.hrtime.bigint(); SRV.setLiveConfig({ overrides: { buyCost: { bonus1: 900 + i } } }); worst = Math.max(worst, Number(process.hrtime.bigint() - t0) / 1e6); }
