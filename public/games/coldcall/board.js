@@ -95,12 +95,32 @@
   const cellsOf = (name) => cells.map((el, p) => (el && el.dataset.s === name ? p : -1)).filter((p) => p >= 0);
   const el = (p) => cells[p];
   function pulse(name, on = true) { cellsOf(name).forEach((p) => cells[p].classList.toggle('pulse', on)); }
-  function clean() {                                          // after a round: exactly 30 cells, nothing else
+  function clean(keepHot) {                                   // after a round: exactly 30 cells, nothing else (keepHot: the warm squares shown while idle stay lit)
     ovl.replaceChildren(); [...reelsEl.children].forEach((n) => { if (!cells.includes(n)) n.remove(); });
-    cells.forEach((c) => c && c.classList.remove('hit', 'dim', 'pulse', 'sweep', 'under')); clearHot();
-    slots.querySelectorAll('i').forEach((s) => s.classList.remove('hot', 'cool', 'still'));
+    cells.forEach((c) => c && c.classList.remove('hit', 'dim', 'pulse', 'sweep', 'under'));
+    slots.querySelectorAll('i').forEach((s) => { s.classList.remove('pick'); s.style.outline = ''; s.style.cursor = ''; });
+    pickOff();
+    if (keepHot) return;
+    clearHot(); slots.querySelectorAll('i').forEach((s) => s.classList.remove('hot', 'cool', 'still'));
+  }
+  // PICK YOUR LEAD: taps on the lit squares. cb(p) once with the tapped square; returns dispose(). The board listens in the capture phase and swallows a tap that hits a
+  // choice (game.js treats any other board tap as "speed up"). Squares get the class `pick` (look layer styles it; the outline is only a fallback).
+  let pickDispose = null;
+  function pickOff() { if (pickDispose) pickDispose(); }
+  function pickTargets(choices, cb) {
+    pickOff();
+    const set = new Set(choices), bd = $('board');
+    set.forEach((p) => { const s = slots.children[p]; if (s) { s.classList.add('pick'); s.style.outline = '3px dashed #fff'; s.style.outlineOffset = '-4px'; s.style.cursor = 'pointer'; } });
+    const at = (e) => { for (const p of set) { const s = slots.children[p]; if (!s) continue; const r = s.getBoundingClientRect(); if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) return p; } return -1; };
+    const on = (e) => { const p = at(e); if (!set.has(p)) return; e.stopPropagation(); e.preventDefault(); dispose(); cb(p); };
+    function dispose() {
+      if (pickDispose !== dispose) return; pickDispose = null; bd.removeEventListener('click', on, true);
+      set.forEach((p) => { const s = slots.children[p]; if (s) { s.classList.remove('pick'); s.style.outline = ''; s.style.cursor = ''; } });
+    }
+    pickDispose = dispose; bd.addEventListener('click', on, true);
+    return dispose;
   }
   const state = () => ({ cells: reelsEl.children.length, ovl: ovl.children.length, hot: slots.querySelectorAll('i.hot').length });
 
-  CC.board = { build, show, idle, drop, step, setHot, clearHot, hotList, cellsOf, el, pulse, clean, state, domGrid, xy, A, ovl: () => ovl, CELL, PITCH, PAD };
+  CC.board = { build, show, idle, drop, step, setHot, clearHot, hotList, cellsOf, el, pulse, clean, pickTargets, state, domGrid, xy, A, ovl: () => ovl, CELL, PITCH, PAD };
 })();

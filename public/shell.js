@@ -339,12 +339,17 @@
       toBender({ type: 'result', reqId, payload: p }); refreshDock();
     });
     s.on('g:bender:error', (e) => benderErr(e));
-    s.on('g:coldcall:state', (st) => { ccReady = true; if (st && st.balances) setWallet(st.balances); toCC({ type: 'init', wallet: Object.assign({}, wallet), mode: wmode, bets: (st && (st.bets || st.betLevels)) || undefined, state: st }); });
+    s.on('g:coldcall:state', (st) => { ccReady = true; if (st && st.balances) setWallet(st.balances); toCC({ type: 'init', wallet: Object.assign({}, wallet), mode: wmode, bets: (st && (st.bets || st.betLevels)) || undefined, state: st, name: (user() && (user().display || user().key)) || undefined }); });
     s.on('g:coldcall:result', (p) => {
       const reqId = ccQ.shift(); if (p && typeof p.totalWin === 'number' && typeof p.cost === 'number') ccNet += p.totalWin - p.cost;
       if (p && p.balances) setWallet(p.balances);
       toCC({ type: 'result', reqId, payload: p }); refreshDock();
     });
+    // THE PULL: a decision timer restart, the shared floor (feed + pot) and a refunded round go to the game as they are; the game keys everything by roundId
+    s.on('g:coldcall:timer', (p) => toCC({ type: 'timer', payload: p }));
+    s.on('g:coldcall:voided', (p) => { if (p && p.wallet) setWallet(p.wallet); toCC({ type: 'voided', payload: p }); refreshDock(); });
+    s.on('floor:feed', (p) => toCC({ type: 'floor', kind: 'feed', payload: p }));
+    s.on('floor:pot', (p) => toCC({ type: 'floor', kind: 'pot', payload: p }));
     s.on('error', (e) => { if (e && e.game === 'coldcall') return ccErr(e); if (spinQ.length) benderErr(e); });
     if (user()) { setSignedIn(true); s.emit('wallet_get'); s.emit('account:stats'); bonusShown = false; s.emit('bonus:status'); }
     return true;
@@ -432,15 +437,19 @@
   let ccReady = false, ccNet = 0; const ccQ = [];
   const ccFrame = () => { const g = games.get('coldcall'); return g && g.el ? g.el.querySelector('iframe') : null; };
   function toCC(m) { const f = ccFrame(); if (f && f.contentWindow) f.contentWindow.postMessage(m, '*'); }
-  function ccErr(e) { toCC({ type: 'error', reqId: ccQ.shift(), message: (e && e.message) || 'Spin refused.' }); }
+  function ccErr(e) { toCC({ type: 'error', reqId: ccQ.shift(), message: (e && e.message) || 'Spin refused.', code: e && e.code, open: e && e.open }); }
   window.addEventListener('message', (ev) => {
     const f = ccFrame(); if (!f || ev.source !== f.contentWindow) return;
     const m = ev.data || {}, s = sock();
     if (m.type === 'hello') { if (!s || !signedIn) return; ccReady = false; s.emit('g:coldcall:state', {}); }
     else if (m.type === 'spin') {
       if (!s) return toCC({ type: 'error', reqId: m.reqId, message: 'Not connected.' });
-      ccQ.push(m.reqId); const p = { bet: m.bet, mode: m.mode }; if (m.buy) p.buyBonus = m.buy; s.emit('g:coldcall:spin', p);
-    } else if (m.type === 'mode') { wmode = m.mode === 'chips' ? 'chips' : 'play'; }
+      ccQ.push(m.reqId); const p = { bet: m.bet, mode: m.mode, auto: m.auto === true }; if (m.buy) p.buyBonus = m.buy; s.emit('g:coldcall:spin', p);
+    } else if (m.type === 'decide') {                          // THE PULL: PICK YOUR LEAD / ONE MORE CALL (the answer comes as a result keyed by roundId)
+      if (!s) return toCC({ type: 'error', reqId: m.reqId, message: 'Not connected.' });
+      const d = { roundId: m.roundId, k: m.k }; if (m.k === 'pick') d.p = m.p; else d.take = m.take === true; s.emit('g:coldcall:decide', d);
+    } else if (m.type === 'ready') { if (s && m.roundId) s.emit('g:coldcall:ready', { roundId: m.roundId }); }
+    else if (m.type === 'mode') { wmode = m.mode === 'chips' ? 'chips' : 'play'; }
     else if (m.type === 'round') refreshDock();
     else if (m.type === 'esc') focus('poker');
   });

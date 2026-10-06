@@ -21,7 +21,8 @@
 
   // ------------------------------------------------------------------ state
   const st = { bets: DEFAULT_BETS.slice(), betIdx: 3, busy: false, auto: false, turbo: false, skip: false, tap: 0, mode: 'play', live: false, s: 1,
-    bal: 100000, balShown: 100000, winShown: 0, winTarget: 0, modal: 0, pracBal: 100000, server: null, rounds: 0, dead: 0 };
+    bal: 100000, balShown: 100000, winShown: 0, winTarget: 0, modal: 0, pracBal: 100000, server: null, rounds: 0, dead: 0,
+    pv: { play: null, chips: null }, pot: { play: null, chips: null }, cbBet: null, ctx: null, me: '', feedAll: [], feedShown: new Set() };   // pv: the pull state view per mode (leads, cb, warm, warmBet, cold, daily); cbBet: bet of the Callback round on screen
   const RAGE_STREAK = 4;                                       // paid spins in a row with no win before the hero loses it (then the count restarts)
   const money = { wallet: { play: 0, chips: 0 } };
   const bet = () => st.bets[st.betIdx];
@@ -35,7 +36,11 @@
   const avail = () => (st.live ? walletBal() : st.pracBal);
   const pick = (a) => a[(Math.random() * a.length) | 0];
   const rand = (a, b) => a + Math.random() * (b - a);
-  const dbg = (CC.dbg = { mismatch: [], rounds: [], calls: 0 });
+  const dbg = (CC.dbg = { mismatch: [], rounds: [], calls: 0, pull: [] });
+  // builder B's look layer (CC.pull) may not exist, or may throw: every call is guarded and a failure never stops a round
+  const P = (fn, ...a) => { try { const f = CC.pull && CC.pull[fn]; if (typeof f === 'function') return f.apply(CC.pull, a); } catch (e) { dbg.pull.push(fn + ': ' + (e && e.message)); } };
+  const PA = async (fn, ...a) => { try { return await P(fn, ...a); } catch (e) { dbg.pull.push(fn + ': ' + (e && e.message)); } };
+  const pview = () => (st.live ? st.pv[st.mode] : null);
 
   // ------------------------------------------------------------------ one shared rAF ticker (count-ups). The other loop is fx.js.
   const Tick = (() => { const fns = new Set(); let raf = 0; const loop = (now) => { for (const f of [...fns]) if (!f(now)) fns.delete(f); raf = fns.size ? requestAnimationFrame(loop) : 0; }; return { add(f) { fns.add(f); if (!raf) raf = requestAnimationFrame(loop); } }; })();
@@ -62,8 +67,8 @@
 
   // ------------------------------------------------------------------ readouts (never blank, win only ever adds within a round)
   const showWin = (w, c) => { w.textContent = dollars(c); if (st.mirror) st.mirror(w.textContent); };   // the bonus HUD total mirrors the WIN meter itself
-  function setWin(cents, animate = true, ms = 450) {
-    cents = Math.max(cents, st.winTarget); st.winTarget = cents; const w = $('win'); w.dataset.c = cents;
+  function setWin(cents, animate = true, ms = 450, drop = false) {   // drop: the one place the meter may go down (ONE MORE CALL taken and lost)
+    cents = drop ? cents : Math.max(cents, st.winTarget); st.winTarget = cents; const w = $('win'); w.dataset.c = cents;
     const from = st.winShown, tok = (setWin.tok = (setWin.tok || 0) + 1);
     if (!animate || cents === from) { st.winShown = cents; showWin(w, cents); return Promise.resolve(); }
     w.classList.remove('pop'); void w.offsetWidth; w.classList.add('pop');
@@ -83,8 +88,14 @@
     const t0 = performance.now(), dur = 600 * speed();
     Tick.add((now) => { if (tok !== setBal.tok) return false; const k = Math.max(0, Math.min(1, (now - t0) / dur)); st.balShown = Math.round(from + (v - from) * (1 - Math.pow(1 - k, 3))); el.textContent = f(st.balShown); return k < 1; });
   }
+  // THE CALLBACK pending (or running): the SPIN button reads CALLBACK and the bet shown is the Callback's own bet; the bet buttons do nothing then
+  const cbPending = () => { const v = pview(); return st.cbBet != null || (!!v && !!v.cb); };
+  const cbBetNow = () => (st.cbBet != null ? st.cbBet : (pview() || {}).cb ? pview().cb.bet : null);
   function drawBet() {
-    $('bet').textContent = dollars(bet()); $('betDn').disabled = st.busy || st.betIdx === 0; $('betUp').disabled = st.busy || st.betIdx === st.bets.length - 1;
+    const cb = cbPending(), sp = $('spin') && $('spin').firstElementChild;
+    if (sp) { sp.textContent = cb ? 'CALLBACK' : 'SPIN'; sp.style.fontSize = cb ? '15px' : ''; }
+    $('spin').classList.toggle('cb', cb);
+    $('bet').textContent = dollars(cb ? cbBetNow() : bet()); $('betDn').disabled = st.busy || cb || st.betIdx === 0; $('betUp').disabled = st.busy || cb || st.betIdx === st.bets.length - 1;
     const bp = buyPrices(); $('buy').disabled = st.busy || !bp.length; $('buyFrom').textContent = bp.length ? 'from ' + dollars(Math.min(...bp.map((x) => x[1])) * bet() / 10) : 'n/a';
   }
   function setBusy(b) { st.busy = b; $('spin').classList.toggle('run', b); $('spin').classList.toggle('idle', !b); drawBet(); }
@@ -102,15 +113,20 @@
   const say = (g, t) => CC.caption.say(g, t);
 
   // ------------------------------------------------------------------ one spin (base or free): the grid drops in, the cascade replays, then the phone feature
+  // o.hold: a PICK decision spin (spin.pickPending): the drop and the cascades only, the phone waits for the player (hotOut is null, the lit squares stay).
+  // o.resume: the same spin after the pick: only the phone feature runs (no drop, no steps), the board is exactly as the hold left it.
   async function playSpin(ctx, spin, o = {}) {
     const Bd = CC.board;
-    Bd.setHot(spin.hotIn, true);                               // leads carried in stay lit while the symbols drop
-    if (o.bonus) SFX_.spin();
-    await Bd.drop(spin.grid, { fast: o.bonus });
-    for (let i = 0; i < spin.steps.length; i++) {
-      if (i === 0) CC.hero.mood('hype');
-      await Bd.step(spin.steps[i], i, ctx); await wait(i < spin.steps.length - 1 ? 40 : spin.phone ? 120 : 320);
+    if (!o.resume) {
+      Bd.setHot(spin.hotIn, true);                             // leads carried in stay lit while the symbols drop
+      if (o.bonus) SFX_.spin();
+      await Bd.drop(spin.grid, { fast: o.bonus });
+      for (let i = 0; i < spin.steps.length; i++) {
+        if (i === 0) CC.hero.mood('hype');
+        await Bd.step(spin.steps[i], i, ctx); await wait(i < spin.steps.length - 1 ? 40 : spin.phone ? 120 : 320);
+      }
     }
+    if (o.hold) { if (spin.capped) ctx.capped = true; return; }
     if (spin.phone) await CC.phone.run(spin, ctx);
     else if (spin.steps.length && o.bonus) await wait(150);
     if (spin.hotOut.length && Bd.hotList().join() !== spin.hotOut.join()) dbg.mismatch.push({ what: 'hotOut', shown: Bd.hotList(), script: spin.hotOut });   // leads that carry on must already be lit
@@ -157,37 +173,151 @@
   // ------------------------------------------------------------------ the round
   const MAXTXT = 'MAX ' + E.MAX_WIN_X.toLocaleString('en-US') + 'x';
   const RIB_IDLE = '5+ touching = win';
+  const DEFAULT_TXT = { pick: 'first lead picked', more: 'banked' };    // what the server does when nobody decides (timeout, disconnect, autoplay)
+  const LOST_MS = 9000;                                                 // an answer the server owes us (after the timer ran out, or after a decide) must come within this
+  class Abort extends Error {}                                          // the round cannot go on on this screen (voided, refused, line lost): the server settles it, the screen cleans up
+  const delay = (ms) => new Promise((r) => setTimeout(r, ms));
+  const mkTimer = () => ({ timeoutMs: 0, expiresAt: 0, at: 0, synced: false, left() { return Math.max(0, this.expiresAt - Date.now()); } });
+  // ctx lives for the WHOLE round: every result of the round (pending, pending, done) is applied to it with advance(), the animation keeps going from where it is
   function makeCtx(p, b, kind) {
-    const run = { t: 0, raw: 0, total: p.totalWinTenths };
+    const final = p.status !== 'pending';
+    const run = { t: 0, raw: 0, total: final ? p.totalWinTenths : Infinity };   // the final total is only known on the done result
     const ctx = {
-      bet: b, kind, E, st, run, p, script: p.script, dollars, wait, anim, tween, say, toast, stamp, floatAt, stagePt, localPt, stage, board, sceneEl, ov, SFX: SFX_, FX: CC.fx, modal, waitTap, setWin, reduce, capped: false,
+      bet: b, kind, E, st, run, p, script: p.script || p.partial, callback: !!p.callback, timer: mkTimer(), decisions: [], cur: { base: false, intro: false, spins: 0 },
+      dollars, wait, anim, tween, say, toast, stamp, floatAt, stagePt, localPt, stage, board, sceneEl, ov, SFX: SFX_, FX: CC.fx, modal, waitTap, setWin, reduce, capped: false,
       cents: (t) => t * b / 10,
       bonusOn() { stage.classList.add('bonus'); SFX_.music('bonus'); }, bonusOff() { stage.classList.remove('bonus'); SFX_.music('base'); },
       // ribbon: left = mode name while a bonus runs (else the first text), right = the status text
       rib(l, r) { if (ctx.modeName) { $('ribL').textContent = ctx.modeName; $('ribR').textContent = l === ctx.modeName ? (r || '') : l + (r ? ' ' + r : ''); } else { $('ribL').textContent = l; $('ribR').textContent = r == null ? '' : r; } },
       // add tenths to the running total (never decreases, never exceeds the server's round total); `raw` is what the script asked for, for the self-check
       addWin(t, ms) { run.raw += t; const add = Math.max(0, Math.min(t, run.total - run.t)); run.t += add; return setWin(run.t * b / 10, true, ms || 450); },
-      willBig: E.winTier(p.totalWinTenths / 10) in TIER_LVL, isLast: true
+      willBig: final && E.winTier(p.totalWinTenths / 10) in TIER_LVL, isLast: true,
+      pickTargets: (choices, cb) => CC.board.pickTargets(choices, cb)       // for the pick prompt (CC.pull.askPick): taps on the lit squares
     };
     ctx.playSpin = (sp, o) => playSpin(ctx, sp, o);
+    ctx.decide = { pick: (pend) => decisionPoint(ctx, 'pick', pend), more: (pend) => decisionPoint(ctx, 'more', pend) };
+    ctx.moreOutcome = () => moreOutcome(ctx);
+    advance(ctx, p);
     return ctx;
   }
-  async function animateRound(p, b, kind) {
-    const S = p.script, ctx = makeCtx(p, b, kind);
+  function advance(ctx, r) {                                   // a newer result of the same round: longer script, maybe the final totals
+    ctx.p = r; ctx.script = r.script || r.partial || ctx.script;
+    if (r.status === 'pending') { const ms = r.timeoutMs || (st.server && st.server.pull && st.server.pull.decisionMs) || 20000, t = ctx.timer; t.timeoutMs = ms; t.at = Date.now(); t.expiresAt = t.at + ms; t.synced = false; }
+    else { ctx.run.total = r.totalWinTenths; ctx.willBig = E.winTier(r.totalWinTenths / 10) in TIER_LVL; }
+  }
+
+  // ---- decisions: PICK YOUR LEAD (pick) and ONE MORE CALL (more). The prompt comes from CC.pull (builder B) or the plain placeholder below.
+  // Returns when the round has its next result (applied to ctx). Never decides for the player; the server's own default arrives as an unsolicited result.
+  async function nextResult(ctx, box, ms) {
+    for (;;) {
+      const got = await Promise.race([boxWait(box), delay(ms).then(() => LOST)]);
+      if (got === LOST) throw new Abort('lost');
+      const it = box.q.shift(); if (!it) continue;
+      if (it._voided) throw new Abort('voided');
+      if (it._err) { if (it._err.code === 'no_round') continue; throw new Abort(it._err.message || 'refused'); }   // no_round: the round was settled already, its done result is (or is about to be) in the inbox
+      return it;
+    }
+  }
+  const LOST = Symbol('lost');
+  async function decisionPoint(ctx, k, pend) {
+    const id = ctx.p.roundId, box = inbox.get(id); if (!box) throw new Abort('no inbox');
+    const dflt = DEFAULT_TXT[k], dbgRow = { k, shown: false, how: null };
+    (ctx.decisions || (ctx.decisions = [])).push(dbgRow);
+    // the server already settled this round (timeout / disconnect default while the animation ran): no prompt, just the caption
+    while (box.q.length) {
+      const it = box.q.shift(); if (it._voided) throw new Abort('voided'); if (it._err) continue;
+      advance(ctx, it); dbgRow.how = it.auto || 'early'; say('idle', "TIME'S UP: " + dflt); await wait(500); return it;
+    }
+    // autoplay with a server that still asked: take the default, no prompt
+    if (st.auto) {
+      const v = k === 'pick' ? Math.min(...pend.choices) : false; T.decide(id, k, v); dbgRow.how = 'auto';
+      say('idle', 'AUTO: ' + dflt); const r = await nextResult(ctx, box, LOST_MS); advance(ctx, r); return r;
+    }
+    const reg = { closed: false, close() {} }, iv = { id: 0 };
+    ctx.promptOpen = k; dbgRow.shown = true; T.ready(id);
+    const prompt = ask(ctx, k, pend, reg);
+    const expiry = new Promise((res) => { iv.id = setInterval(() => { if (ctx.timer.left() <= 0) { clearInterval(iv.id); res({ expired: true }); } }, 150); });
+    let w;
+    try {
+      w = await Promise.race([prompt.then((v) => ({ v })), boxWait(box).then(() => ({ q: 1 })), expiry]);   // the queue branch only SIGNALS: a loser must never shift an item the next wait needs
+      if (w.expired) {                                          // the UI never decides on its own: show TIME'S UP and wait for the server's default
+        reg.close('timeout'); P('expired', 'timeout', { k, default: dflt }); say('idle', "TIME'S UP: " + dflt); dbgRow.how = 'timeout';
+        const r = await nextResult(ctx, box, LOST_MS); advance(ctx, r); await wait(900); return r;   // the caption stays readable before the animation goes on
+      }
+      if ('q' in w) {                                           // an unsolicited result while the prompt was up
+        const it = box.q.shift(); if (!it) throw new Abort('empty'); if (it._voided) throw new Abort('voided'); if (it._err) throw new Abort(it._err.message || 'refused');
+        reg.close(it.auto || 'timeout'); P('expired', it.auto || 'timeout', { k, default: dflt }); say('idle', "TIME'S UP: " + dflt); dbgRow.how = it.auto || 'unsolicited';
+        advance(ctx, it); await wait(900); return it;
+      }
+      reg.close(null); T.decide(id, k, w.v); dbgRow.how = 'player'; dbgRow.v = w.v;
+      const r = await nextResult(ctx, box, LOST_MS); advance(ctx, r); st.skip = false; return r;
+    } finally { clearInterval(iv.id); ctx.promptOpen = null; if (!reg.closed) reg.close(null); }
+  }
+  function ask(ctx, k, pend, reg) {                             // Promise<value> (pick: the square, more: take?). reg.close(why) removes the prompt.
+    const fn = CC.pull && CC.pull[k === 'pick' ? 'askPick' : 'askMore'];
+    const mine = () => placeholder(ctx, k, pend, reg);
+    if (typeof fn !== 'function') return mine();
+    reg.close = () => { reg.closed = true; };                   // the hook closes its own prompt once it has a value; decisionPoint tells it about a server default with CC.pull.expired
+    return Promise.resolve().then(() => fn.call(CC.pull, pend, ctx)).catch((e) => { dbg.pull.push('ask ' + k + ': ' + (e && e.message)); return reg.closed ? new Promise(() => {}) : mine(); });
+  }
+  // plain buttons in a scrim that leaves the board visible and tappable (squares for a pick); builder B's CC.pull.askPick / askMore replace it
+  function placeholder(ctx, k, pend, reg) {
+    return new Promise(async (res) => {
+      let dispose = null, tick = 0;
+      reg.close = (why) => { reg.closed = true; clearInterval(tick); if (dispose) dispose(); const sc = ov.querySelector('.scrim.ph'); if (sc && sc._done) sc._done('x'); };
+      while (!reg.closed) {
+        const secs = () => Math.ceil(ctx.timer.left() / 1000);
+        let html;
+        if (k === 'pick') {
+          const b = pend.choices.map((p) => `<button class="btn alt" data-v="${p}" data-pick="${p}" style="padding:6px 12px;font-size:16px">R${((p / E.COLS) | 0) + 1} C${(p % E.COLS) + 1}</button>`).join('');
+          html = `<div class="card"><h2>PICK A LEAD</h2><p>Tap a lit square (or a button). That lead gets the better call. <small>Time left: <span class="ccT">${secs()}</span>s</small></p><div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center">${b}</div></div>`;
+        } else {
+          const W = ctx.dollars(ctx.cents(pend.W)), X = ctx.dollars(ctx.cents(pend.W * pend.mult));
+          html = `<div class="card"><h2>ONE MORE CALL?</h2><p>The bonus paid <b>${W}</b>. Hang up and keep it, or call once more: ${Math.round(pend.pWin * 1000) / 10}% to win <b>${X}</b>, otherwise <b>${ctx.dollars(0)}</b>. <small>Time left: <span class="ccT">${secs()}</span>s</small></p><button class="btn" id="cc_more_take" data-v="take">ONE MORE CALL</button><button class="btn alt" id="cc_more_bank" data-v="bank">HANG UP: KEEP ${W}</button></div>`;
+        }
+        const pm = modal(html), sc = ov.lastElementChild; sc.classList.add('ph'); sc.style.background = 'none'; sc.style.pointerEvents = 'none'; sc.style.alignItems = 'end';
+        const card = sc.firstElementChild; if (card) card.style.pointerEvents = 'auto';
+        clearInterval(tick); tick = setInterval(() => { const e = sc.querySelector('.ccT'); if (e) e.textContent = secs(); }, 250);
+        if (k === 'pick') dispose = CC.board.pickTargets(pend.choices, (p) => sc._done(String(p)));
+        const v = await pm; clearInterval(tick); if (dispose) { dispose(); dispose = null; }
+        if (reg.closed) return;
+        if (k === 'pick') { const p = +v; if (pend.choices.includes(p)) return res(p); }
+        else if (v === 'take' || v === 'bank') return res(v === 'take');
+        // Escape / Space closed it: ask again (a decision is never skipped)
+      }
+    });
+  }
+  // after a taken ONE MORE CALL: the reveal (CC.pull.moreOutcome or a stamp), then the WIN meter moves to the final total (the one place it may go DOWN)
+  async function moreOutcome(ctx) {
+    const p = ctx.p, m = p.pull && p.pull.more; if (!m || p.status === 'pending') return;
+    if (m.take) {
+      const shown = await PA('moreOutcome', m, ctx);
+      if (shown === undefined && !(CC.pull && CC.pull.moreOutcome)) { ctx.stamp(m.won ? 'ONE MORE CALL: WON' : 'ONE MORE CALL: LOST', m.won ? 'x' + m.mult : 'the bonus is gone', 1500, null, m.won ? 'hi' : ''); if (m.won) SFX_.win(2); else SFX_.sting(); await wait(1500); }
+      const delta = ctx.run.total - ctx.run.t; ctx.run.raw += delta; ctx.run.t = ctx.run.total;
+      await setWin(ctx.run.total * ctx.bet / 10, true, 700, delta < 0);
+    } else if (m.auto || p.auto) { say('idle', 'AUTO: banked'); }
+    ctx.cur.more = m.take ? (m.won ? 'won' : 'lost') : 'banked';
+  }
+
+  async function animateRound(ctx) {
+    const p = ctx.p, S = ctx.script;
     if (S.spin) {
       ctx.rib(S.buy === 'call' ? 'THE CALL' : S.buy === 'hunt' ? 'BELL HUNT' : 'DIALING', ''); await playSpin(ctx, S.spin);
       ctx.rib(RIB_IDLE, MAXTXT);
       if (S.spin.bells === 2 && !S.bonus) await tease(ctx);
-    } else { say('buy'); SFX_.sting(); await wait(500); }
-    if (S.bonus) { if (S.spin) CC.hero.mood('hype', 1800); await CC.bonus.run(S.bonus, ctx); }
-    if (ctx.run.t !== ctx.run.total) { dbg.mismatch.push({ round: p.roundId, what: 'running total', shown: ctx.run.t, script: ctx.run.total }); await ctx.addWin(ctx.run.total - ctx.run.t, 400); }
+    } else if (ctx.callback) { ctx.rib('THE CALLBACK', ''); say('buy', 'Callback time. This one is free.'); SFX_.sting(); await wait(700); }
+    else { say('buy'); SFX_.sting(); await wait(500); }
+    ctx.cur.base = true;
+    if (S.bonus) { if (S.spin) CC.hero.mood('hype', 1800); await CC.bonus.run(ctx); }
+    if (ctx.p.status === 'pending') throw new Abort('still open');
+    if (ctx.run.t !== ctx.run.total) { dbg.mismatch.push({ round: ctx.p.roundId, what: 'running total', shown: ctx.run.t, script: ctx.run.total }); await ctx.addWin(ctx.run.total - ctx.run.t, 400); }
     ctx.rib(RIB_IDLE, MAXTXT);
     return ctx;
   }
-  function sweep() {                                           // end-of-round cleanup: nothing created for a round may outlive it
+  function sweep(keepHot) {                                    // end-of-round cleanup: nothing created for a round may outlive it (keepHot: the warm squares shown while idle stay lit)
     ov.querySelectorAll('.scrim,#tier,#tierbg,.fly,.banner').forEach((n) => n.remove()); stage.querySelectorAll('.toast.keep').forEach((n) => n.remove());
     floatsEl.replaceChildren(); board.querySelectorAll('.stamp,.accept').forEach((n) => n.remove()); $('head').querySelectorAll('.stamp').forEach((n) => n.remove()); stage.querySelectorAll(':scope > .stamp').forEach((n) => n.remove()); sceneEl.replaceChildren(); $('bh').hidden = true;
-    stage.classList.remove('bonus', 'bw'); st.pace = 1; CC.fx.clear(); SFX_.duck(false); CC.board.clean(); st.modal = ov.querySelectorAll('.scrim').length;
+    stage.classList.remove('bonus', 'bw'); st.pace = 1; CC.fx.clear(); SFX_.duck(false); CC.board.clean(keepHot); st.modal = ov.querySelectorAll('.scrim').length; st.mirror = null;
   }
   // the screen against the script, after every round: win readout, 30 cells, no leftovers, final grid. Anything off lands in CC.dbg.mismatch.
   function selfCheck(p, ctx) {
@@ -200,28 +330,53 @@
     const left = floatsEl.children.length + ov.children.length + sceneEl.children.length + stage.querySelectorAll('.stamp,.accept,.banner,.fly,.flash').length; if (left) bad('leftover nodes', left, 0);
     const last = S.bonus && S.bonus.spins.length ? S.bonus.spins[S.bonus.spins.length - 1] : S.spin; if (last) { const g = last.steps.length ? last.steps[last.steps.length - 1].grid : last.grid, dom = CC.board.domGrid(); for (let i = 0; i < 30; i++) if (dom[i] !== E.SYM[g[i]]) { bad('final grid', dom.join(), g.map((x) => E.SYM[x]).join()); break; } }
     if (CC.fx.running()) bad('fx loop running', 1, 0);
+    // ONE MORE CALL: the meter must have landed on the server's final total whichever way it went (a lost gamble is the only drop)
+    const m = p.pull && p.pull.more; if (m && m.take && ctx.run.t !== ctx.run.total) bad('more total', ctx.run.t, ctx.run.total);
+    if (ctx.callback && p.cost !== 0) bad('callback cost', p.cost, 0);
   }
   const allSpins = (S) => [...(S.spin ? [S.spin] : []), ...(S.bonus ? S.bonus.spins : [])];
   let autoT = 0;
+
+  // ---- one request: balance bookkeeping and the spin, then the shared round runner
   async function play(kind) {
     if (st.busy) { if (kind === 'spin') { st.skip = true; st.tap++; if (CC.bonus && CC.bonus.poke) CC.bonus.poke(); } return; }
     if (st.modal) return;
-    const b = bet(), cost = costT(kind) * b / 10;
+    const v = pview(), cbv = st.live && kind === 'spin' && v && v.cb ? v.cb : null;       // a Callback is pending: this spin is it (free, at its own bet)
+    const b = bet(), cost = cbv ? 0 : costT(kind) * b / 10;
     if (avail() < cost) { toast(kind === 'spin' ? 'Not enough funds. Lower your bet.' : 'Not enough funds for that bonus.'); st.auto = false; $('auto').classList.remove('on'); return; }
-    SFX_.init(); wake(); dbg.started = (dbg.started || 0) + 1; setBusy(true); st.skip = false; CC.hero.set('idle'); sweep(); resetWin(); setBal(st.bal - cost, true); SFX_.spin(); say(kind === 'spin' ? 'spin' : 'buy');
+    SFX_.init(); wake(); dbg.started = (dbg.started || 0) + 1; setBusy(true); st.skip = false; CC.hero.set('idle'); sweep(true); resetWin(); st.cbBet = cbv ? cbv.bet : null; drawBet(); setBal(st.bal - cost, true); SFX_.spin(); say(kind === 'spin' ? 'spin' : 'buy');
     let p;
-    try { p = await T.spin(b, st.mode, kind === 'spin' ? null : kind); }
-    catch (e) { setBal(st.live ? walletBal() : st.pracBal, true); setBusy(false); if (e.server) { toast(e.message || 'Spin refused.', 2400); st.auto = false; $('auto').classList.remove('on'); } else toast('No answer from the server.', 2400); return; }
-    dbg.rounds.push({ id: p.roundId, kind, forced: p.forced || null, tease: !!(p.script.spin && p.script.spin.bells === 2 && !p.script.bonus), cluster: p.script.spin ? p.script.spin.cluster : 0, bigClose: allSpins(p.script).some((s) => s.phone && s.phone.rounds.some((r) => r.collects.some((c) => c.value >= 250))), bonus: p.script.bonus ? p.script.bonus.kind : null, phone: !!((p.script.spin && p.script.spin.phone) || (p.script.bonus && p.script.bonus.spins.some((s) => s.phone))), tier: p.tier, win: p.totalWinTenths });
-    let ctx = null;
-    try { ctx = await animateRound(p, b, kind); }
-    catch (e) { console.error(e); dbg.error = String(e && e.stack || e); }
+    try { p = await T.spin(b, st.mode, kind === 'spin' ? null : kind, st.auto); }
+    catch (e) {
+      st.cbBet = null;
+      if (e.open && st.live) { setBal(walletBal(), true); toast('Finishing your open call.', 2000); return runRound(e.open, e.open.buyBonus || 'spin', true); }   // another tab / a reload left a decision open: play it out
+      setBal(st.live ? walletBal() : st.pracBal, true); setBusy(false); drawBet(); syncWarm();
+      if (e.server) { toast(e.message || 'Spin refused.', 2400); st.auto = false; $('auto').classList.remove('on'); } else toast('No answer from the server.', 2400);
+      return;
+    }
+    return runRound(p, kind, false);
+  }
+  // animate a round from its first result to its done result, then settle the screen. `adopted`: a round that was already open (reload, other tab): nothing was charged here.
+  async function runRound(p, kind, adopted) {
+    const b = p.betCents || p.bet || bet(), S0 = p.script || p.partial;
+    if (adopted) { setBusy(true); st.skip = false; CC.hero.set('idle'); sweep(true); resetWin(); setBal(walletBal(), false); }
+    st.cbBet = p.callback ? b : null; drawBet();
+    const cost = p.cost != null ? p.cost : 0;
+    const row = { id: p.roundId, kind, forced: p.forced || null, tease: !!(S0.spin && S0.spin.bells === 2 && !S0.bonus), cluster: S0.spin ? S0.spin.cluster : 0, bigClose: allSpins(S0).some((s) => s.phone && s.phone.rounds.some((r) => r.collects.some((c) => c.value >= 250))), bonus: S0.bonus ? S0.bonus.kind : null, phone: !!((S0.spin && S0.spin.phone) || (S0.bonus && S0.bonus.spins.some((s) => s.phone))), tier: p.tier, win: p.totalWinTenths, callback: !!p.callback, adopted: !!adopted, first: p.status || 'done' };
+    dbg.rounds.push(row);
+    let ctx = null, aborted = null;
+    try { ctx = makeCtx(p, b, kind); st.ctx = ctx; ctx.rd = inbox.get(p.roundId) || mkBox(p.roundId); await animateRound(ctx); }
+    catch (e) { if (e instanceof Abort) aborted = e; else { console.error(e); dbg.error = String(e && e.stack || e); } }
+    if (aborted) return abortRound(p, ctx, aborted, row);
     // finish: whatever happened above, show the exact server total and balance, then clean up
+    const f = ctx ? ctx.p : p;                                  // the final (done) result of the round
+    if (f.status === 'pending') return abortRound(p, ctx, new Abort('never settled'), row);
+    Object.assign(row, { tier: f.tier, win: f.totalWinTenths, auto: f.auto || null, decisions: ctx ? ctx.decisions.map((d) => d.how) : [], more: ctx ? ctx.cur.more || null : null });
     try {
       if (ctx && ctx.run.t !== ctx.run.total) await ctx.addWin(ctx.run.total - ctx.run.t, 200);
-      if (!ctx) { st.winTarget = 0; await setWin(p.totalWin, false); }
-      const winX = p.totalWinTenths / 10, tier = E.winTier(winX), amt = p.totalWin;
-      if (p.maxed || (ctx && ctx.capped) || p.script.capped) { stamp('MAX WIN', E.MAX_WIN_X.toLocaleString('en-US') + 'x. The round stops here.', 1700, null, 'hi'); SFX_.win(3); say('bigWin'); await wait(1400); }
+      if (!ctx) { st.winTarget = 0; await setWin(f.totalWin, false); }
+      const winX = f.totalWinTenths / 10, tier = E.winTier(winX), amt = f.totalWin;
+      if (f.maxed || (ctx && ctx.capped) || (f.script && f.script.capped)) { stamp('MAX WIN', E.MAX_WIN_X.toLocaleString('en-US') + 'x. The round stops here.', 1700, null, 'hi'); SFX_.win(3); say('bigWin'); await wait(1400); }
       if (tier in TIER_LVL) await bigWin(winX, amt, tier);
       else if (tier === 'sweet' || tier === 'nice') { stamp(tier === 'sweet' ? 'SWEET!' : 'NICE!', 'x' + (winX >= 10 ? Math.round(winX) : winX.toFixed(1).replace(/\.0$/, '')), 1300); SFX_.win(tier === 'sweet' ? 2 : 1); say(tier === 'sweet' ? 'nice' : 'smallWin'); await wait(900); }
       else if (amt > 0) { SFX_.coin(); say('smallWin'); }
@@ -231,29 +386,67 @@
         else if (Math.random() < 0.5) say('lose');
       }
       if (amt > 0) st.dead = 0;
+      // pull extras: the pot prize (on top of the win), the would-have-closed ghost (a dead-ish base spin only, off in turbo, never with a bonus)
+      if (st.live && f.pot && f.pot.won) { row.pot = f.pot.amount; if (CC.pull && CC.pull.potWin) await PA('potWin', f.pot, ctx); else { toast('POT WON: ' + dollars(f.pot.amount), 2600); SFX_.win(3); await wait(1200); } }
+      const gh = st.live && f.pull && f.pull.ghost;
+      if (gh && gh.pay > 0 && !st.turbo && !(f.script && f.script.bonus)) { row.ghost = gh.pay; await PA('ghost', gh, ctx); }
     } catch (e) { console.error(e); dbg.error = String(e && e.stack || e); }
     sweep();
-    if (ctx) selfCheck(p, ctx); else dbg.mismatch.push({ round: p.roundId, what: 'animation error', shown: dbg.error || '', script: '' });
-    st.rounds++;
-    if (st.live) { setBal(walletBal(), true); dbg.lastBal = { shown: st.bal, wallet: walletBal() }; toParent({ type: 'round', win: p.totalWin, bet: b, mode: st.mode, tier: p.tier }); }
-    else { st.pracBal += p.totalWin - cost; if (st.pracBal < bet()) { st.pracBal = 100000; toast('Out of practice money. Free refill.', 2200); } setBal(st.pracBal, true); }
-    st.skip = false; setBusy(false); wake();
+    if (ctx) selfCheck(f, ctx); else dbg.mismatch.push({ round: f.roundId, what: 'animation error', shown: dbg.error || '', script: '' });
+    st.rounds++; st.ctx = null; st.cbBet = null; inbox.delete(f.roundId);
+    if (st.live) {
+      if (f.pull && f.pull.state) st.pv[f.mode || st.mode] = f.pull.state;
+      setBal(walletBal(), true); dbg.lastBal = { shown: st.bal, wallet: walletBal() };
+      row.cost = cost; row.totalWin = f.totalWin; row.potWon = f.pot && f.pot.won ? f.pot.amount : 0; row.wallet = walletBal();
+      toParent({ type: 'round', win: f.totalWin, bet: b, mode: st.mode, tier: f.tier });
+      if (f.pull) { await Promise.race([PA('leadGain', f.pull), delay(4000)]); }
+      syncView();
+    } else { st.pracBal += f.totalWin - cost; if (st.pracBal < bet()) { st.pracBal = 100000; toast('Out of practice money. Free refill.', 2200); } setBal(st.pracBal, true); }
+    st.skip = false; setBusy(false); wake(); syncWarm();
     if (st.auto) { clearTimeout(autoT); autoT = setTimeout(() => { if (st.auto && !st.busy) play('spin'); }, 450 * speed()); }
+  }
+  // the screen cannot finish this round (voided by the server, a decision refused, the line went quiet): clean up and let the server's state decide what is true
+  function abortRound(p, ctx, why, row) {
+    row.aborted = why.message; dbg.aborted = (dbg.aborted || 0) + 1; sweep(); st.ctx = null; st.cbBet = null; inbox.delete(p.roundId); st.skip = false;
+    toast(why.message === 'voided' ? 'That call was cancelled. Your bet is refunded.' : 'Lost the line. Your round is settled on the server.', 3000);
+    if (st.live) { setBal(walletBal(), true); toParent({ type: 'hello' }); if (T.sock) T.sock.emit('g:coldcall:state', {}); }
+    setBusy(false); wake(); syncWarm();
+  }
+  // a round that was open when the page loaded (state.open) or that another tab of the account started: play it from the beginning of what the server says was seen
+  function adopt(p) {
+    if (!p || !st.live || st.busy || st.modal) return false;
+    if (p.mode && p.mode !== st.mode) { st.mode = p.mode; modeUi(); toParent({ type: 'mode', mode: st.mode }); }
+    mkBox(p.roundId); dbg.adopted = (dbg.adopted || 0) + 1; applyWallet(p.wallet || p.balances);
+    runRound(p, p.buyBonus || 'spin', true); return true;
   }
 
   // ------------------------------------------------------------------ transports: practice (local engine), shell bridge, standalone socket
+  // One request per spin; after that everything is keyed by roundId: every result of a round lands in that round's inbox (pending, the next pending, done, or an
+  // unsolicited done from a server timeout / disconnect default), and the animation takes them in order. Nothing waits on queue position.
   const pend = new Map(); let reqSeq = 0;
   const toParent = (m) => { if (BRIDGE) window.parent.postMessage(m, '*'); };
+  const inbox = new Map();                                      // roundId -> { q: [result | { _err } | { _voided }], prom, res }
+  const mkBox = (id) => { let e = inbox.get(id); if (!e) { e = { id, q: [], prom: null, res: null }; inbox.set(id, e); } return e; };
+  const boxPush = (e, it) => { e.q.push(it); if (e.res) { const r = e.res; e.res = e.prom = null; r(); } };
+  const boxWait = (e) => (e.q.length ? Promise.resolve() : (e.prom = e.prom || new Promise((r) => { e.res = r; })));   // resolves when the queue is not empty; the consumer shifts
   const T = {
     kind: 'practice',
-    spin(b, mode, buy) {
+    spin(b, mode, buy, auto) {
       if (!st.live) return Promise.resolve(localRound(b, buy));
       return new Promise((resolve, reject) => {
         const id = ++reqSeq, t = setTimeout(() => { pend.delete(id); reject(new Error('timeout')); }, 20000);
         pend.set(id, { ok: (x) => { clearTimeout(t); resolve(x); }, err: (e) => { clearTimeout(t); reject(e); } });
-        if (BRIDGE) toParent({ type: 'spin', reqId: id, bet: b, mode: st.mode, buy });
-        else T.sock.emit('g:coldcall:spin', { bet: b, mode: st.mode, ...(buy ? { buyBonus: buy } : {}), ...(QFORCE ? { force: QFORCE } : {}) });
+        if (BRIDGE) toParent({ type: 'spin', reqId: id, bet: b, mode: st.mode, buy, auto: !!auto });
+        else T.sock.emit('g:coldcall:spin', { bet: b, mode: st.mode, ...(buy ? { buyBonus: buy } : {}), auto: !!auto, ...(QFORCE ? { force: QFORCE } : {}) });
       });
+    },
+    decide(roundId, k, v) {                                     // k 'pick': v = the square; k 'more': v = take (boolean)
+      if (!st.live) return; const m = k === 'pick' ? { roundId, k, p: v } : { roundId, k, take: !!v };
+      if (BRIDGE) toParent({ type: 'decide', reqId: ++reqSeq, ...m }); else if (T.sock) T.sock.emit('g:coldcall:decide', m);
+    },
+    ready(roundId) {                                            // the prompt is on screen: the server restarts the decision timer (and answers with g:coldcall:timer)
+      if (!st.live) return;
+      if (BRIDGE) toParent({ type: 'ready', roundId }); else if (T.sock) T.sock.emit('g:coldcall:ready', { roundId });
     }
   };
   function localRound(b, buy) {                                 // practice only (no wallet at stake). Same engine file, same script.
@@ -261,12 +454,45 @@
     const r = E.resolveRound(rng, buy, !buy && QFORCE ? { force: QFORCE } : undefined);
     return { roundId: 'p' + seed.toString(16), script: r.script, costTenths: r.costTenths, totalWinTenths: r.winTenths, totalWinMult: r.winX, cost: E.cents(r.costTenths, b), totalWin: E.cents(r.winTenths, b), tier: r.tier, maxed: r.capped, forced: QFORCE || undefined };
   }
-  function settle(m) {                                          // a server result (bridge message or socket event) for the in-flight request
-    const w = pend.values().next().value; const id = pend.keys().next().value; if (!w) return; pend.delete(id);
-    if (m.error) return w.err(Object.assign(new Error(m.error), { server: true }));
-    const p = m.payload; if (!p || !p.script) return w.err(new Error('bad result'));
+  const firstPend = () => { const id = pend.keys().next().value, w = pend.get(id); if (w) pend.delete(id); return w; };
+  function onResult(p) {                                        // a g:coldcall:result (socket event or bridge message)
+    if (!p || typeof p !== 'object') return;
     if (p.wallet || p.balances) applyWallet(p.wallet || p.balances);
-    w.ok(p);
+    const box = p.roundId && inbox.get(p.roundId);
+    if (box) return boxPush(box, p);                            // a result of the round on screen (the answer to a decide, or unsolicited)
+    const w = firstPend();
+    if (w) { if (!(p.script || p.partial)) return w.err(new Error('bad result')); mkBox(p.roundId); return w.ok(p); }   // the answer to the spin request
+    (dbg.stray = dbg.stray || []).push({ id: p.roundId, status: p.status });
+    if (st.live && !st.busy && p.status === 'pending') adopt(p);   // another tab of the account started a round with a decision
+    else if (st.live && p.status === 'done' && p.resolved) { toast('A call you left open was settled.', 2200); if (!st.busy) syncView(); }
+  }
+  function onError(e) {                                         // a refused request: the spin in flight, else a decide of the round on screen
+    e = e || {};
+    const w = firstPend();
+    if (w) return w.err(Object.assign(new Error(e.message || 'Spin refused.'), { server: true, code: e.code, open: e.open }));
+    const c = st.ctx, box = c && inbox.get(c.p.roundId);
+    if (box) boxPush(box, { _err: e }); else if (e.message && st.live && !st.busy) toast(e.message, 2400);
+  }
+  function onVoided(m) {                                        // the server refunded a round it could not finish
+    if (!m) return; if (m.wallet) applyWallet(m.wallet);
+    const box = m.roundId && inbox.get(m.roundId);
+    if (box) boxPush(box, { _voided: m }); else if (!st.busy) { toast('A call was cancelled. Your bet is refunded.', 2600); toParent({ type: 'hello' }); }
+  }
+  function onTimer(m) {                                         // the server (re)started the decision timer: count down from its timeoutMs, measured on our clock
+    const c = st.ctx; if (!m || !c || c.p.roundId !== m.roundId || !(m.timeoutMs > 0)) return;
+    const t = c.timer; t.timeoutMs = m.timeoutMs; t.at = Date.now(); t.expiresAt = t.at + m.timeoutMs; t.synced = true; P('timer', t, c);
+  }
+  function onFloor(kind, ev) {                                  // floor:feed / floor:pot. Play $ events never show in Chips mode and the reverse.
+    if (!st.live || !ev) return;
+    if (kind === 'feed') {
+      if (ev.id != null) { if (st.feedAll.some((x) => x.id === ev.id)) return; st.feedAll.push(ev); if (st.feedAll.length > 50) st.feedAll.shift(); }   // the state's last 20 and the live events overlap: each id once
+      if (ev.mode && ev.mode !== st.mode) return; st.feedShown.add(ev.id); P('feed', { ...ev, you: !!st.me && ev.who === st.me });
+    }
+    else if (kind === 'pot') { const md = ev.mode; if (md !== 'play' && md !== 'chips') return; st.pot[md] = { ...(st.pot[md] || {}), bal: ev.bal }; if (md === st.mode) P('setPot', st.pot[md]); }
+  }
+  function feedReplay() {                                       // the ticker follows the mode: clear it, then show the recent events of this mode again
+    st.feedShown.clear(); P('feedClear');
+    st.feedAll.filter((ev) => !ev.mode || ev.mode === st.mode).slice(-20).forEach((ev) => { st.feedShown.add(ev.id); P('feed', { ...ev, you: !!st.me && ev.who === st.me }); });
   }
   function applyWallet(w) {
     if (!w) return;
@@ -281,38 +507,62 @@
     $('balL').textContent = !st.live ? 'PRACTICE' : st.mode === 'chips' ? 'CHIPS' : 'BALANCE';
     $('fine').textContent = !st.live ? 'Practice (no wallet). Free play only.' : 'No deposits, no payouts. Chips are your poker bank.';
   }
+  // the pull view of the current mode to the look layer; the warm squares on the board; the bet readout (Callback)
+  function syncView() {
+    drawBet();
+    if (!st.live) return;
+    const v = pview(); if (v) { P('setView', { ...v, at: Date.now() }, st.mode); P('onBetChange', bet()); }
+    const pot = st.pot[st.mode]; if (pot) P('setPot', pot);
+    syncWarm();
+  }
+  function syncWarm() {                                         // warm squares are tied to a bet: lit only at the bet they were made at (any other bet drops them at the spin)
+    if (!st.live || st.busy || !CC.board || !CC.board.setHot) return;
+    const v = pview(); CC.board.setHot(v && v.warm && v.warm.length && v.warmBet === bet() ? v.warm : [], true);
+  }
   function goLive(m) {
     if (m.state) st.server = m.state;
+    if (m.name) st.me = m.name;
     if (!st.live) { st.live = true; T.kind = BRIDGE ? 'bridge' : 'socket'; setBets(Array.isArray(m.bets) && m.bets.length ? m.bets : DEFAULT_BETS); }
     if (m.mode === 'play' || m.mode === 'chips') st.mode = m.mode;
-    applyWallet(m.wallet || m.balances); modeUi(); if (!st.busy) setBal(walletBal(), false); drawBet();
+    applyWallet(m.wallet || m.balances); modeUi(); if (!st.busy) setBal(walletBal(), false);
+    const s = m.state, pl = s && s.pull;
+    if (pl && !st.busy) {
+      for (const md of ['play', 'chips']) if (pl[md]) st.pv[md] = pl[md];
+      if (s.pot) st.pot = { play: s.pot.play || null, chips: s.pot.chips || null };
+      P('rules', pl.rules || E.CFG.pull);
+      if (Array.isArray(s.feed)) s.feed.forEach((ev) => onFloor('feed', ev));
+    }
+    if (!st.busy) syncView(); else drawBet();
+    if (s && s.open && !st.busy && !st.modal) adopt(s.open);    // a decision was left open (reload, another tab): play it out
   }
-  function goPractice(msg) { st.live = false; T.kind = 'practice'; pend.clear(); setBets(DEFAULT_BETS); setBal(st.pracBal, false); modeUi(); drawBet(); if (msg) toast(msg, 2400); }
+  function goPractice(msg) { st.live = false; T.kind = 'practice'; pend.clear(); inbox.clear(); setBets(DEFAULT_BETS); setBal(st.pracBal, false); modeUi(); drawBet(); if (msg) toast(msg, 2400); }
   function setBets(list) { st.bets = list.slice(); const i = st.bets.indexOf(100); st.betIdx = i >= 0 ? i : Math.min(3, st.bets.length - 1); }
   function initTransport() {
     const bar = document.createElement('div'); bar.id = 'modebar';
     bar.innerHTML = '<div class="mb"><button data-m="play">Play $</button><button data-m="chips">Chips</button></div><span id="modenote"></span>'; stage.appendChild(bar);
-    bar.addEventListener('click', (e) => { const x = e.target.closest('button'); if (!x || !st.live || st.busy) return; st.mode = x.dataset.m; SFX_.click(); setBal(walletBal(), false); modeUi(); toParent({ type: 'mode', mode: st.mode }); });
+    bar.addEventListener('click', (e) => { const x = e.target.closest('button'); if (!x || !st.live || st.busy) return; st.mode = x.dataset.m; SFX_.click(); setBal(walletBal(), false); modeUi(); feedReplay(); syncView(); toParent({ type: 'mode', mode: st.mode }); });
     modeUi();
     if (BRIDGE) {
       addEventListener('message', (ev) => {
         if (ev.source !== window.parent) return; const m = ev.data || {};
         if (m.type === 'init') goLive(m); else if (m.type === 'wallet') { if (st.live) applyWallet(m.wallet || m); else goLive(m); }
-        else if (m.type === 'result') settle({ payload: m.payload }); else if (m.type === 'error') settle({ error: m.message || 'Spin refused.' });
+        else if (m.type === 'result') onResult(m.payload); else if (m.type === 'error') onError({ message: m.message || 'Spin refused.', code: m.code, open: m.open });
+        else if (m.type === 'floor') onFloor(m.kind, m.payload); else if (m.type === 'timer') onTimer(m.payload); else if (m.type === 'voided') onVoided(m.payload);
       });
       addEventListener('keydown', (e) => { if (e.key === 'Escape') toParent({ type: 'esc' }); });
       toParent({ type: 'hello' }); setTimeout(() => { if (!st.live) toParent({ type: 'practice' }); }, 2000);
     } else if (LIVE_SOCKET) {
-      const name = Q.get('name') || 'ccdev', pin = Q.get('pin') || '4321', s = document.createElement('script'); s.src = '/socket.io/socket.io.js';
+      const name = Q.get('name') || 'ccdev', pin = Q.get('pin') || '4321', s = document.createElement('script'); s.src = '/socket.io/socket.io.js'; st.me = name;
       s.onload = () => {
         const sock = (T.sock = io()); let triedSignup = false;
         sock.on('connect', () => sock.emit('auth_login', { name, pin }));
         sock.on('auth_error', () => { if (!triedSignup) { triedSignup = true; sock.emit('auth_signup', { name, pin, avatar: 'a01' }); } });
         sock.on('auth_ok', () => sock.emit('g:coldcall:state', {}));
-        sock.on('g:coldcall:state', (s2) => goLive({ wallet: s2.wallet, bets: s2.bets, state: s2, mode: 'play' }));
+        sock.on('g:coldcall:state', (s2) => goLive({ wallet: s2.wallet, bets: s2.bets, state: s2, mode: st.live ? st.mode : 'play' }));
         sock.on('wallet', (w) => applyWallet(w));
-        sock.on('g:coldcall:result', (p) => settle({ payload: p }));
-        sock.on('error', (e) => { if (pend.size) settle({ error: (e && e.message) || 'Spin refused.' }); });
+        sock.on('g:coldcall:result', onResult); sock.on('g:coldcall:timer', onTimer); sock.on('g:coldcall:voided', onVoided);
+        sock.on('floor:feed', (e) => onFloor('feed', e)); sock.on('floor:pot', (e) => onFloor('pot', e));
+        sock.on('error', onError);
       };
       document.head.appendChild(s);
     }
@@ -331,8 +581,8 @@
   function bindControls() {
     $('spin').addEventListener('click', () => { SFX_.init(); st.tap++; if (st.busy) { st.skip = true; return; } play('spin'); });
     board.addEventListener('click', () => { st.tap++; if (st.busy) st.skip = true; });
-    $('betDn').addEventListener('click', () => { if (st.busy) return; st.betIdx = Math.max(0, st.betIdx - 1); SFX_.click(); drawBet(); });
-    $('betUp').addEventListener('click', () => { if (st.busy) return; st.betIdx = Math.min(st.bets.length - 1, st.betIdx + 1); SFX_.click(); drawBet(); });
+    $('betDn').addEventListener('click', () => { if (st.busy) return; st.betIdx = Math.max(0, st.betIdx - 1); SFX_.click(); drawBet(); P('onBetChange', bet()); syncWarm(); });
+    $('betUp').addEventListener('click', () => { if (st.busy) return; st.betIdx = Math.min(st.bets.length - 1, st.betIdx + 1); SFX_.click(); drawBet(); P('onBetChange', bet()); syncWarm(); });
     $('turbo').addEventListener('click', () => { st.turbo = !st.turbo; $('turbo').classList.toggle('on', st.turbo); SFX_.click(); });
     $('auto').addEventListener('click', () => { SFX_.init(); st.auto = !st.auto; $('auto').classList.toggle('on', st.auto); SFX_.click(); if (st.auto && !st.busy) play('spin'); });
     tog($('sfxBtn'), SFX_.isSfx()); tog($('musicBtn'), SFX_.isMusic());
@@ -394,5 +644,7 @@
     wake();
     CC.ready = true;
   }
-  CC.core = { boot, st, play, dollars, wait, anim, tween, speed, say, toast, stamp, floatAt, stagePt, localPt, modal, waitTap, setWin, bigWin, sweep, Tick, T, money, applyWallet, goLive, goPractice, E, stage, board, sceneEl, SFX: SFX_, FX: CC.fx };
+  CC.core = { boot, st, play, dollars, wait, anim, tween, speed, say, toast, stamp, floatAt, stagePt, localPt, modal, waitTap, setWin, bigWin, sweep, Tick, T, money, applyWallet, goLive, goPractice, E, stage, board, sceneEl, SFX: SFX_, FX: CC.fx,
+    // pull hooks (transport -> look layer); also the way tests and builder B reach the round machinery
+    onResult, onError, onTimer, onVoided, onFloor, adopt, syncView, syncWarm, pview, inbox, cbPending };
 })();
