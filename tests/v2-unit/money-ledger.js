@@ -288,6 +288,16 @@ t('10,000 random transfers match a model; reopen is identical', () => {
   eq(l2.transfer('mint:signup', 'bank:a', 1, 'chips', 'late', 'r-new').id, last + 1);
 });
 
+t('a rejected write does not consume its ref; closed ledger refuses writes', () => {
+  const l = mk();
+  throwsCode(() => l.transfer('bank:a', 'seat:T:a', 5, 'chips', 'buyin', 'same-ref'), 'insufficient');
+  ok(!l.has('same-ref'));
+  l.transfer('mint:signup', 'bank:a', 5, 'chips', 'signup', 's');
+  eq(l.transfer('bank:a', 'seat:T:a', 5, 'chips', 'buyin', 'same-ref').dup, false, 'the retry after funding goes through');
+  l.close();
+  throwsCode(() => l.transfer('mint:signup', 'bank:a', 5, 'chips', 'signup', 'after-close'), 'closed');
+});
+
 t('fsync option does not change behaviour', () => {
   for (const mode of ['all', 'none', 'batch']) {
     const l = open(fresh(), { fsync: mode });

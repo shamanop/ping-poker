@@ -1,0 +1,49 @@
+{
+ "version": 1,
+ "accounts": {
+  "chris": {
+   "id": "a_63687269",
+   "key": "chris",
+   "display": "Chris",
+   "avatar": "a01",
+   "kdf": null,
+   "salt": null,
+   "pinHash": null,
+   "claimed": true,
+   "isAdmin": true,
+   "createdAt": 1790000000000,
+   "lastLoginAt": 1790000100000,
+   "prefs": {
+    "currency": "auto",
+    "sound": true
+   },
+   "stats": {},
+   "sessions": [],
+   "legacy": {
+    "bankKey": "chris"
+   }
+  },
+  "newbie": {
+   "id": "a_6e657762",
+   "key": "newbie",
+   "display": "Newbie",
+   "avatar": "a01",
+   "kdf": null,
+   "salt": null,
+   "pinHash": null,
+   "claimed": true,
+   "isAdmin": false,
+   "createdAt": 1790000000000,
+   "lastLoginAt": 1790000100000,
+   "prefs": {
+    "currency": "auto",
+    "sound": true
+   },
+   "stats": {},
+   "sessions": [],
+   "legacy": {
+    "bankKey": "newbie"
+   }
+  }
+ }
+}
