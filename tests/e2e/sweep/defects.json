@@ -1,0 +1,52 @@
+[
+ {
+  "id": "Q01",
+  "sev": "S2",
+  "title": "Heads-up: SB and BB badges are swapped on the seats",
+  "shot": "Q01.jpg",
+  "where": "public/game.js:958-959 (client derives SB/BB as the two seats after the dealer; heads-up the dealer IS the small blind; also wrong when a seat is sitting out). The server knows hand.sbSeat/bbSeat but game_state does not carry them.",
+  "steps": "Heads-up table (2 seats), start a hand. Hero is the button.",
+  "expected": "Button seat shows SB (posts the small blind, acts first preflop), the other shows BB.",
+  "actual": "Hero (dealer, posted 25, first to act) is badged BB; the opponent (posted 50) is badged SB. Verified with players[0].isDealer true and roundBet 25 vs 50."
+ },
+ {
+  "id": "Q02",
+  "sev": "S2",
+  "title": "Phone width (390): header, lobby buttons and the action bar are off screen; the table cannot be played",
+  "shot": "Q02.jpg",
+  "where": "public/*.css has no phone @media pass (client defects 1, 2, 14 from ui/REPORT were never started)",
+  "steps": "Open the site at 390x844, sign in. Lobby, then sit at a table and wait for your turn.",
+  "expected": "Every control reachable; Fold / Call / Raise usable.",
+  "actual": "Lobby: money toggle, daily bonus, account and Sign out sit at x 430-749 and CREATE TABLE / JOIN reach x 435 (page does not scroll). Table: the 210 px chat rail takes half the screen, FOLD is 22 px wide, CALL, RAISE and the raise box are cut off, the table is clipped. Moving the rail to the other side only mirrors it. A phone player can neither sign out nor act; the turn clock folds them."
+ },
+ {
+  "id": "Q03",
+  "sev": "S2",
+  "title": "Returning to a busted seat through JOIN: the buy-in is ignored silently and the table shows a dead hand",
+  "shot": "Q03.jpg",
+  "where": "tables/table.js rejoin path (seat exists -> rebind, buyIn ignored, no bust_out re-sent); public/game.js enter()",
+  "steps": "Bust at a table (stack 0), close the tab. Within 2 minutes sign in again, JOIN the same table from the lobby, type a buy-in (20000) and press Sit.",
+  "expected": "Either the buy-in is taken (rebuy) or the rebuy panel appears, or the join is refused with a reason.",
+  "actual": "table_joined stack 0, no money moved (bank still 80,000), the screen shows the previous hand's board and old hole cards, the text \"Waiting for a second player\" and the seat reads \"JOINING\". No rebuy panel, no message. The player has typed a buy-in and nothing tells them it was dropped."
+ },
+ {
+  "id": "Q04",
+  "sev": "S2",
+  "title": "Daily bonus window prints raw cents with no unit",
+  "shot": "Q04.jpg",
+  "where": "public/juice.js streakCalendar (renders schedule cents with toLocaleString); public/shell.js:331",
+  "steps": "Sign up a new account. The daily bonus window opens.",
+  "expected": "$100 / $125 ... $1,000 (Play $), as the header pill says \"Day 1 $100\".",
+  "actual": "The window shows \"10,000\", \"12,500\" ... \"100,000\" and a CLAIM 10,000 button. The values are Play $ cents; a Chips-mode player reads them as 10,000 chips."
+ },
+ {
+  "id": "Q05",
+  "sev": "S3",
+  "title": "A busted seat is labelled \"JOINING\"",
+  "shot": "Q03.jpg",
+  "where": "public/game.js:945 (sittingOut without sitOutRequest -> \"Joining\")",
+  "steps": "Lose all chips at a table; look at your seat and the opponent's seat.",
+  "expected": "\"Busted\" / \"Out of chips\" (or Rebuying).",
+  "actual": "Stack 0 seats read \"JOINING\", the same word used for a seat waiting for the next deal."
+ }
+]
