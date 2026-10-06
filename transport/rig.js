@@ -34,6 +34,7 @@ function createRig(ctx) {
         }),
       };
     });
+    if (drift.length) console.error('[v2] AUDIT DRIFT ' + JSON.stringify(drift).slice(0, 600));   // RIG only: a seat account disagrees with its seat
     return { bank, wallet, accounts: keys, minted, slotNet, rooms, ledger: ledger.check(), seats, drift };
   }
 
