@@ -5,6 +5,13 @@ This file is the status line: Isabelle reads it on GitHub. Newest milestone at t
 
 ## Status (updated 2026-10-06 01:40)
 
+> **02:30 note from the lead (read before the table below).** Chris, 02:11: the current skin is not good next to Ballot Bender
+> (brown on brown, soft small symbols, no scene, no title, plain frame). **THE SKIN IS BEING REPLACED. Visuals are NOT signed
+> off**, and every screenshot under `qa/` shows the old skin. Engine, math (`c24`), settlement and byte-sync work all stand.
+> The QA pass now running is FUNCTIONAL only (money to the cent, fast clicks, stuck rounds, each bonus and buy, three sizes,
+> Play $ and Chips); the three-size screenshot review is deferred to the new skin. A comp is with Chris; no skin spec yet.
+> Hold unchanged: nothing to master, no PR, no deploy.
+
 **Not green yet.** Retune pass 2 (config `c24`, `505a0eb`) is DONE and merged with board v2 and master into `coldcall` at `d772fe0` (pushed to `coldcall` only). Pass 2 met all six targets; the 80% stretch for 5x+ share of RTP is not reached (78.9%), and margins on 5x+ base share (1.622% vs 1.6%) rest on one plain run. Tests at this commit: `tests/coldcall.js` 47 pass, `tests/bender.js` 19 pass, engine copies identical (run by me 01:35). The dev server on 4610 was restarted on this tree at 01:40. The full three-size QA pass (1440x900, 540x960, docked; Play $ and Chips; win meter = credited; fast clicks) has NOT run: it starts next from `qa/coldcall-v2/critic-r1.md`. Nothing goes to master (Chris's hold, see Rules). The retune table below is the c14 (pass 1) reading; the c24 table is in the pass 2 report and `cold-call/RETUNE.md`.
 
 | Part | State |
