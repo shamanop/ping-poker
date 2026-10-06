@@ -210,7 +210,7 @@
     if (changed) $('bank-players').querySelectorAll('.bp-bal b.editable').forEach(b => b.addEventListener('click', () => editBank(b)));
   }
 
-  const inputText = v => (Money.getMode() === 'usd' && Money.getUnit() === 'cents') ? (v % 100 ? (v / 100).toFixed(2) : String(v / 100)) : String(v);
+  const inputText = v => Money.getMode() === 'usd' ? (v % 100 ? (v / 100).toFixed(2) : String(v / 100)) : String(v);
   function editBank(b) {
     const name = b.dataset.name;
     const input = document.createElement('input');

@@ -42,7 +42,7 @@ const TURN_MS       = 30000;
 const BIG_BLIND     = 20;
 const buyInDefault = () => state.table?.buyIn?.default ?? state.gameState?.table?.buyIn?.default ?? 1500;
 const bustMin      = () => state.gameState?.bb || state.table?.bb || 20;
-const inputText    = v => (Money.getMode() === 'usd' && Money.getUnit() === 'cents')
+const inputText    = v => Money.getMode() === 'usd'
   ? (v % 100 ? (v / 100).toFixed(2) : String(v / 100)) : String(v);
 const readInput    = txt => Money.parse(txt);
 const niceStep     = () => Money.niceStep(state.gameState?.bb || BIG_BLIND);
