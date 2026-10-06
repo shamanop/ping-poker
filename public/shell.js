@@ -329,7 +329,8 @@
       PingJuice.streakCalendar(b, { targetEl: $('sh-wallet'), onClaim: () => s.emit('bonus:claim') });
     });
     s.on('bonus:claimed', (r) => { if (r && r.ok && r.wallet) setWallet(r.wallet); if (r && r.ok && window.PingJuice) PingJuice.toast('Day **' + (r.day || r.streak) + '** bonus **' + dollars(r.amountCents) + '** claimed. Streak **' + r.streak + '**', { sticker: 'vp-chip' }); });
-    s.on('g:bender:state', (st) => { benderReady = true; if (st && st.balances) setWallet(st.balances); toBender({ type: 'init', wallet: Object.assign({}, wallet), mode: wmode, bets: (st && (st.bets || st.betLevels)) || undefined }); });
+    s.on('g:bender:state', (st) => { benderReady = true; if (st && st.balances) setWallet(st.balances); toBender({ type: 'init', wallet: Object.assign({}, wallet), mode: wmode, bets: (st && (st.bets || st.betLevels)) || undefined, cfg: st && st.cfg }); });
+    s.on('g:bender:cfg', (c) => { if (c && c.cfg) toBender({ type: 'cfg', cfg: c.cfg }); });
     s.on('g:bender:result', (p) => {
       const reqId = spinQ.shift(); lastWin = p && typeof p.totalWin === 'number' ? p.totalWin : lastWin;
       if (p && typeof p.totalWin === 'number' && typeof p.cost === 'number') sessNet += p.totalWin - p.cost;

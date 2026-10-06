@@ -1,7 +1,31 @@
 'use strict';
 // Ballot Bender: server-authoritative slot. Math lives in bender-engine.js (same file the client copy uses).
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 const Eng = require('./bender-engine.js');
+
+// Live math: overrides saved on the data volume, loaded at boot, swappable at runtime (no deploy). See setLiveConfig.
+const DATA_DIR = process.env.DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH || path.join(__dirname, '..');
+const CFG_FILE = process.env.BENDER_CFG_FILE || path.join(DATA_DIR, 'bender-config.json');
+let live = { overrides: {}, rtpLabel: null, note: '', updatedAt: null };
+function loadLiveConfig() {
+  try {
+    const j = JSON.parse(fs.readFileSync(CFG_FILE, 'utf8'));
+    Eng.setConfig(j.overrides || {});
+    live = { overrides: j.overrides || {}, rtpLabel: j.rtpLabel || null, note: j.note || '', updatedAt: j.updatedAt || null };
+  } catch (e) { if (e.code !== 'ENOENT') console.error('[bender] live config not loaded, using defaults:', e.message); }
+}
+function setLiveConfig({ overrides, rtpLabel, note } = {}) {
+  Eng.setConfig(overrides || {});                  // throws on a bad config; nothing changes in that case
+  live = { overrides: overrides || {}, rtpLabel: typeof rtpLabel === 'string' && rtpLabel ? rtpLabel.slice(0, 160) : null, note: String(note || '').slice(0, 300), updatedAt: new Date().toISOString() };
+  const tmp = CFG_FILE + '.tmp';
+  fs.writeFileSync(tmp, JSON.stringify(live, null, 2)); fs.renameSync(tmp, CFG_FILE);
+  return liveInfo();
+}
+const rtpLabel = () => live.rtpLabel || RTP_LABEL;
+function clientCfg() { const c = Eng.currentConfig(); return { weights: c.weights, pay: c.pay, scatterPay: c.scatterPay, spinsFor: c.spinsFor, retrigger: c.retrigger, buyCost: c.buyCost }; }
+function liveInfo() { return { file: CFG_FILE, rtpLabel: rtpLabel(), note: live.note, updatedAt: live.updatedAt, overrides: live.overrides, cfg: Eng.currentConfig() }; }
 
 const BET_LEVELS = Eng.BET_LEVELS;
 const RATE_MS = 150;
@@ -28,12 +52,13 @@ module.exports = {
   kind: 'solo',
   betLevels: BET_LEVELS,
   RTP_LABEL,
-  init(ctx) { this.rng = ctx.rng || cryptoRng(); },
+  init(ctx) { this.rng = ctx.rng || cryptoRng(); loadLiveConfig(); },
+  setLiveConfig, liveInfo, clientCfg, loadLiveConfig,
   onDisconnect(socket) { if (socket.data) delete socket.data.benderLast; },
   handlers: {
     state(socket, payload, ctx) {
       socket.emit('g:bender:state', {
-        betLevels: BET_LEVELS, modes: ['play', 'chips'], rtp: RTP_LABEL,
+        betLevels: BET_LEVELS, modes: ['play', 'chips'], rtp: rtpLabel(), cfg: clientCfg(),
         buyCostX: { election: Eng.CFG.buyCost.election, landslide: Eng.CFG.buyCost.landslide },
         wallet: ctx.wallet.get(keyOf(socket)), balances: ctx.wallet.get(keyOf(socket)), bets: BET_LEVELS,
       });

@@ -213,7 +213,52 @@
 if (typeof module === 'object' && module.exports) {
   const Eng = module.exports;
   const BET_LEVELS = [10, 20, 50, 100, 200, 500, 1000, 2500];
-  const engine = Eng.createEngine();
+  let engine = Eng.createEngine();
+  // Live-tunable math: overrides are deep-merged onto the shipped defaults, validated, smoke-tested, then swapped in
+  // between rounds (a round resolves synchronously, so no spin ever sees half a config). Eng.CFG is mutated in place
+  // so every holder of the object (bender.js buy costs, tests) sees the live values.
+  const DEFAULT_CFG = JSON.parse(JSON.stringify(Eng.CFG));
+  const clone = (o) => JSON.parse(JSON.stringify(o));
+  function mergeChecked(base, over, at) {
+    if (over === null || typeof over !== 'object' || Array.isArray(over)) throw new Error(at + ': expected an object');
+    for (const k of Object.keys(over)) {
+      if (!(k in base)) throw new Error(at + '.' + k + ': unknown setting');
+      const b = base[k], v = over[k], here = at + '.' + k;
+      if (typeof b === 'number') {
+        if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) throw new Error(here + ': must be a number >= 0');
+        base[k] = v;
+      } else if (Array.isArray(b)) {
+        if (!Array.isArray(v) || !v.length) throw new Error(here + ': must be a non-empty list');
+        if (!v.every((x) => (Array.isArray(b[0]) ? Array.isArray(x) && x.length === b[0].length && x.every((y) => typeof y === 'number' && Number.isFinite(y) && y >= 0) : typeof x === 'number' && Number.isFinite(x) && x >= 0))) throw new Error(here + ': list entries must be numbers >= 0 shaped like the default');
+        if (!Array.isArray(b[0]) && b.length !== v.length) throw new Error(here + ': must have ' + b.length + ' entries');
+        base[k] = v;
+      } else if (b && typeof b === 'object') mergeChecked(b, v, here);
+      else throw new Error(here + ': not tunable');
+    }
+    return base;
+  }
+  function buildConfig(over) {
+    const next = mergeChecked(clone(DEFAULT_CFG), over || {}, 'cfg');
+    if (!(next.buyCost.election > 0 && next.buyCost.landslide > 0)) throw new Error('cfg.buyCost: prices must be > 0');
+    const e = Eng.createEngine(next), rng = Eng.rngFrom(20261005);
+    for (let i = 0; i < 300; i++) {
+      const r = e.round(rng, i % 30 === 0 ? 'buy-election' : i % 30 === 15 ? 'buy-landslide' : 'spin');
+      if (!(Number.isFinite(r.win) && r.win >= 0 && Number.isFinite(r.cost) && r.cost > 0)) throw new Error('cfg: smoke test produced a bad round');
+    }
+    return { next, e };
+  }
+  function setConfig(over) {
+    const { next, e } = buildConfig(over);
+    for (const k of Object.keys(Eng.CFG)) delete Eng.CFG[k];
+    Object.assign(Eng.CFG, next);
+    engine = e; Eng.engine = e;
+    return clone(Eng.CFG);
+  }
+  Eng.DEFAULT_CFG = DEFAULT_CFG;
+  Eng.validateConfig = (over) => { buildConfig(over); return true; };
+  Eng.setConfig = setConfig;
+  Eng.resetConfig = () => setConfig({});
+  Eng.currentConfig = () => clone(Eng.CFG);
   // Resolves one full paid round (base spin + cascades + bonus) with the injected rng (() => [0,1)).
   // buy: null | 'election' | 'landslide'. Win multiple is x bet; cost multiple is x bet.
   function resolveRound(rng, buy) {

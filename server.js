@@ -266,6 +266,32 @@ app.get('/apic/:key/:ver', (req, res) => {
   res.send(Buffer.from(m[2], 'base64'));
 });
 
+// Live slot math (no deploy): GET current, POST {overrides, rtpLabel?, note?} to swap; POST {reset:true} restores defaults.
+// Token-only (BENDER_ADMIN_TOKEN env). Disabled when the env var is unset.
+function benderAdminOk(req) {
+  const want = process.env.BENDER_ADMIN_TOKEN || '';
+  const got = String(req.get('x-admin-token') || '');
+  if (!want || got.length !== want.length) return false;
+  return require('crypto').timingSafeEqual(Buffer.from(got), Buffer.from(want));
+}
+function benderMod() { try { return require('./games/bender.js'); } catch { return null; } }
+app.get('/api/admin/bender-config', (req, res) => {
+  if (!benderAdminOk(req)) return res.status(403).json({ error: 'forbidden' });
+  const m = benderMod(); if (!m) return res.status(404).json({ error: 'no slot' });
+  res.json(m.liveInfo());
+});
+app.post('/api/admin/bender-config', express.json({ limit: '64kb' }), (req, res) => {
+  if (!benderAdminOk(req)) return res.status(403).json({ error: 'forbidden' });
+  const m = benderMod(); if (!m) return res.status(404).json({ error: 'no slot' });
+  const b = req.body || {};
+  try {
+    const info = m.setLiveConfig(b.reset ? { overrides: {}, note: b.note || 'reset to defaults' } : { overrides: b.overrides || {}, rtpLabel: b.rtpLabel, note: b.note });
+    io.emit('g:bender:cfg', { cfg: m.clientCfg(), rtp: info.rtpLabel });
+    console.log('[bender] live config updated:', info.note || '(no note)');
+    res.json({ ok: true, ...info });
+  } catch (e) { res.status(400).json({ ok: false, error: e.message }); }
+});
+
 app.get('/api/bank-summary', (req, res) => {
   if (req.query.password !== ROOM_PASSWORD) return res.status(403).json({ error: 'Incorrect password' });
   const roomId = typeof req.query.room === 'string' && req.query.room ? req.query.room : ROOM_ID;

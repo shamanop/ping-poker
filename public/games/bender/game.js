@@ -849,7 +849,10 @@
     BETS.length = 0; list.forEach((x) => BETS.push(x));
     st.betIdx = Math.min(BETS.length - 1, Math.max(0, BETS.indexOf(100) >= 0 ? BETS.indexOf(100) : 3));
   }
+  // live math from the server (pay table / buy prices shown in the UI); the server always settles with its own copy
+  function applyCfg(c) { if (!c || typeof c !== 'object') return; for (const k of Object.keys(c)) if (k in E.CFG) E.CFG[k] = c[k]; if (!st.busy) drawBet(); }
   function goLive(m) {
+    applyCfg(m.cfg);
     if (!money.live) { money.live = true; setBets(Array.isArray(m.bets) && m.bets.length ? m.bets : DEFAULT_BETS.concat([2500])); }
     if (m.mode === 'play' || m.mode === 'chips') money.mode = m.mode;
     fmt = liveFmt();
@@ -871,7 +874,7 @@
     if (!BRIDGE) return;
     addEventListener('message', (ev) => {
       if (ev.source !== window.parent) return; const m = ev.data || {};
-      if (m.type === 'init') goLive(m); else if (m.type === 'wallet') { if (money.live) applyWallet(m.wallet || m); else goLive(m); }
+      if (m.type === 'init') goLive(m); else if (m.type === 'cfg') applyCfg(m.cfg); else if (m.type === 'wallet') { if (money.live) applyWallet(m.wallet || m); else goLive(m); }
       else if (m.type === 'result' || m.type === 'error') onResult(m);
     });
     addEventListener('keydown', (e) => { if (e.key === 'Escape') toParent({ type: 'esc' }); });
