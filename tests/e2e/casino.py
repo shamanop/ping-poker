@@ -65,7 +65,7 @@ def main():
             errs = []
             a.on('pageerror', lambda e: errs.append(str(e) + ' | ' + str(getattr(e, 'stack', ''))[:300]))
             signup(a, 'Alice'); signup(c, 'Bob')
-            check(a.locator('#sh-play').inner_text().replace('\n', ' ').count('$') == 1, 'wallet bar shows Play $ after sign-in')
+            check(__import__('re').sub(r'play\s*\$', '', a.locator('#sh-play').inner_text().replace('\n', ' '), flags=__import__('re').I).count('$') == 1, 'wallet bar shows Play $ after sign-in (label "Play $" plus one dollar value)')
             t = emit_wait(a, 'table_create', {'settings': {'name': 'E2E Night', 'mode': 'play', 'buyIn': {'min': 500, 'max': 50000, 'default': 10000},
                                                               'blinds': {'sb': 50, 'bb': 100}, 'seats': 6, 'actionTimerSec': 0, 'isPrivate': False}}, 'table_created')
             tid = (t.get('table') or t)['id']

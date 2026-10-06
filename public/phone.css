@@ -15,17 +15,18 @@ body.sh-on { --sh-top: 104px; --sh-dock: 0px; --sh-bot: 56px; }
 .sh-top > :nth-child(6) { grid-area: 2 / 1; }                    /* daily bonus */
 .sh-top > :nth-child(7) { grid-area: 2 / 2; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; font-size: 14px; }   /* account */
 .sh-top > :nth-child(8) { grid-area: 2 / 3; }                    /* Sign out */
-.sh-wallet span { padding: 4px 6px; font-size: 12px; }
-.sh-wallet small { margin-right: 3px; }
-.sh-btn { min-height: 44px; padding: 6px 12px; font-size: 14px; }
-.sh-bonus { min-height: 44px; padding: 4px 8px; font-size: 12px; letter-spacing: .04em; }
-.sh-acct { min-height: 44px; }
+.sh-wallet { gap: 4px; justify-content: stretch; }
+.sh-plate { flex: 1 1 0; flex-direction: column; gap: 0; min-height: 44px; padding: 2px 6px; }
+.sh-plate .plate__value { font-size: 18px; }
+.sh-out, .sh-bonus, .sh-acct { min-height: 44px; }
+.sh-bonus { padding: 0 8px; font-size: 14px; letter-spacing: .04em; }
 .sh-top [data-money-toggle] button, .sh-top [data-money-toggle] { min-height: 44px; }
 .sh-dock {
   top: auto; bottom: 0; left: 0; right: 0; width: auto; height: 56px; flex-direction: row; justify-content: center; align-items: center; gap: 10px; padding: 0 8px;
   border-right: 0; border-top: 2px solid #000; box-shadow: inset 0 3px 0 rgba(184, 137, 58, .55);
 }
 .sh-di { width: 52px; height: 44px; }
+.sh-di .tag--soon { bottom: -7px; }
 .sh-di .tip, .sh-di.pulse::after { display: none !important; }
 .sh-sep { width: 1px; height: 28px; margin: 0 2px; }
 body.sh-on:has(#game-screen.active) { --sh-top: 0px; }   /* the table has its own head; the game dock stays so other games stay one tap away */
@@ -38,7 +39,6 @@ body.sh-on:has(#game-screen.active) .sh-top { display: none; }
 /* ── Lobby, sign in, create, share: one column ─────────────────────────────────────────────────────── */
 .lb-main { padding: 12px 10px 20px; }
 .lb-cols, .lb-create, .lb-share { grid-template-columns: minmax(0, 1fr); }
-.lb-card { padding: 14px; }
 .lb-center { padding: 12px; }
 .lb-sign { width: 100%; max-width: 480px; }
 .lb-sign .logo b { font-size: 40px; }
@@ -48,13 +48,17 @@ body.sh-on:has(#game-screen.active) .sh-top { display: none; }
 .lb-seatlist { grid-template-columns: minmax(0, 1fr); }
 .lb-set { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .lb-stats b { font-size: 22px; }
-.lb-btn { min-height: 48px; }
-.lb-btn.big { min-height: 56px; }
-.lb-ghost, .lb-link { min-height: 40px; }
-.lb-seg { grid-auto-flow: row; grid-auto-columns: auto; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); }
-.lb-seg button { border-bottom: 1px solid var(--line); }
-.lb-seg.tabs { grid-auto-flow: column; grid-auto-columns: 1fr; grid-template-columns: none; }
-.lb-root .text-input, .text-input { min-height: 44px; font-size: 16px; }   /* 16 px stops iOS zooming the page when a field gets focus */
+.btn { min-height: 48px; }
+.btn--sm { min-height: 44px; }
+.btn--lg { min-height: 56px; }
+.btn--icon, .btn--icon.btn--sm { width: 44px; height: 44px; min-height: 44px; }
+.seg { grid-auto-flow: row; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); }
+.seg > button, .seg > i, .seg > b { min-height: 44px; border-bottom: 1px solid var(--line); }
+.seg--tabs, .seg--stepper, .money-toggle, .bank-view, .adm-tabs { grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); grid-template-columns: none; }
+.seg--stepper { grid-template-columns: 44px minmax(0, 1fr) 44px; grid-auto-flow: row; }
+.money-toggle { display: inline-flex; }
+.field, .lb-root .field { min-height: 44px; font-size: 16px; }   /* 16 px stops iOS zooming the page when a field gets focus */
+.panel__close { width: 44px; height: 44px; }
 .lb-join { grid-template-columns: minmax(0, 1fr) auto; }
 .lb-btns { flex-wrap: wrap; }
 .lb-net { grid-template-columns: 22px 34px minmax(0, 1fr) auto; }
@@ -62,7 +66,7 @@ body.sh-on:has(#game-screen.active) .sh-top { display: none; }
 .lb-net .amt { min-width: 0; font-size: 24px; }
 .lb-pay { grid-template-columns: minmax(0, 1fr) auto; }
 .lb-modal { width: 100%; }
-.lb-frame { border-width: 14px; }
+.lb-modal-body { padding-right: 2px; }
 .host-drawer { left: 8px; right: 8px; width: auto; }
 .pj-modal { max-width: 100vw; }
 
@@ -106,21 +110,22 @@ body.sh-on:has(#game-screen.active) .sh-top { display: none; }
 .g-head {
   grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "l l" "m r"; row-gap: 2px; column-gap: 6px; padding: 6px 8px;
 }
-.hd-left { grid-area: l; flex-wrap: wrap; gap: 6px; }
+.hd-left { grid-area: l; gap: 6px; }
 .hd-mid { grid-area: m; gap: 10px; }
 .hd-right { grid-area: r; gap: 6px; }
 #pl-level-wrap, #pl-next-wrap { display: none; }
-.hd-mid .pl label { font-size: 9px; }
-.hd-mid .pl b { font-size: 13px; }
-.plate-btn, .g-head .bank-chip { height: 36px; min-width: 56px; padding: 0 8px; font-size: 12px; border-width: 6px; }
-.g-head .room-chip { height: 32px; font-size: 11px; padding: 0 6px; gap: 4px; }
-.g-head .room-chip b { font-size: 14px; }
-.g-head .icon-btn { width: 36px; height: 36px; }
-.blinds-plate { min-width: 70px; height: 32px; padding: 0 6px; }
+.hd-mid .pl label { display: none; }
+.hd-mid .pl b { font-size: 14px; }
+.g-head .btn { min-height: 38px; padding: 0 8px; font-size: 14px; letter-spacing: .06em; }
+.g-head .btn--icon { width: 38px; height: 38px; padding: 0; }
+.hd-left { flex-wrap: nowrap; }
+.g-head .room-chip { gap: 4px; }
+.g-head .room-chip > span:first-child { display: none; }
+.blinds-plate { min-width: 70px; padding: 2px 8px; }
 .rail-toggle { display: inline-block; }
 .g-stage { margin: 0; }
 .emote-strip { left: 4px; top: 4px; bottom: auto; gap: 4px; padding: 4px; }
-.emote-btn { width: 38px; height: 38px; min-width: 38px; min-height: 38px; }
+.emote-btn { width: 40px; height: 40px; min-width: 40px; min-height: 40px; }
 .toasts, .panel-right .toasts { left: 8px; right: 8px; top: 8px; align-items: stretch; }
 
 /* ── Chat rail: bottom sheet, closed by default (Chat button in the head) ──────────────────────────── */
@@ -130,10 +135,10 @@ body.sh-on:has(#game-screen.active) .sh-top { display: none; }
 }
 #game-screen.rail-open .g-rail { visibility: visible; transform: none; transition: transform .2s ease-out; }
 .rail-flip { display: none; }
-.chat-input { min-height: 44px; font-size: 16px; }
-.chat-send { min-width: 44px; min-height: 44px; }
+.chat-input { padding-right: 52px; }
+.chat-send { width: 44px; height: 44px; }
 .sticker-grid, .throw-grid { gap: 6px; }
-.sticker-item, .throw-item { height: 44px; min-height: 44px; padding: 2px; }
+.sticker-item, .throw-item { aspect-ratio: auto; width: 100%; height: 44px; min-height: 44px; padding: 2px; }
 .sticker-item img, .sticker-item svg, .throw-item img, .throw-item svg { max-height: 100%; width: auto; max-width: 100%; margin: 0 auto; display: block; }
 .chat-messages { min-height: 72px; }
 .g-rail { overflow: hidden; }
@@ -146,35 +151,49 @@ body.sh-on:has(#game-screen.active) .sh-top { display: none; }
 .bar-acts, .bar-pre { grid-column: 1 / -1; column-gap: 6px; }
 .g-bar.preselect .bar-pre { column-gap: 6px; }
 .g-bar.preselect .act-pre { height: 56px; }
-.act { height: 56px; min-height: 44px; padding: 0 2px; border-width: 8px; }
-.act-main, .act-fold .act-main { font-size: 17px; letter-spacing: .06em; }
-.act-sub { font-size: 13px; min-height: 12px; }
-.act-pre .act-main, .act-pre .act-sub { font-size: 14px; }
+.act { height: 56px; min-height: 48px; padding: 0 2px; }
+.act-main { font-size: 22px; letter-spacing: .06em; }
+.act-sub { font-size: 16px; min-height: 14px; }
+.act-pre .act-main, .act-pre .act-sub { font-size: 17px; }
 .bar-help { height: auto; min-height: 22px; padding: 0 6px; gap: 6px; flex-wrap: wrap; white-space: normal; text-align: center; line-height: 1.2; }
-.bar-help b, .bar-help b.me { font-size: 13px; }
-.bar-help span { font-size: 11px; }
+.bar-help b, .bar-help b.me { font-size: 14px; }
+.bar-help span { font-size: 12px; }
 .raise-box { padding: 0; overflow: visible; }
 #raise-box .amt { grid-template-columns: minmax(0, 1fr) 96px; gap: 6px; }
 #raise-box .amt-presets { gap: 4px; }
 #raise-box .amt-pre { min-height: 44px; padding: 0 2px; min-width: 0; }
-#raise-box .amt-pre-l { font-size: 10px; }
-#raise-box .amt-pre-v { font-size: 12px; }
+#raise-box .amt-pre-l { font-size: 12px; }
+#raise-box .amt-pre-v { font-size: 14px; }
 #raise-box .amt-slider { height: 44px; }
 #raise-box .amt-text { height: 44px; min-height: 44px; font-size: 16px; }
 #raise-box .amt-row { gap: 4px; }
 #raise-box .amt-suffix { font-size: 12px; }
-.raise-slider { height: 44px; }
 
 /* ── Seat plates and table text stay readable at the small unit ───────────────────────────────────── */
-.seat-name { font-size: 10px; }
+.seat-name { font-size: 11px; }
 .seat-chips { font-size: 12px; }
-.blinds-plate label { font-size: 8px; }
-.blinds-plate b { font-size: 12px; }
-.seat-tag, .seat-status { font-size: 8px; letter-spacing: .04em; }
+.seat-status { font-size: 11px; letter-spacing: .04em; }
+.seat-tag { position: absolute; z-index: 5; right: -4px; top: -10px; width: 22px; height: 22px; font-size: 11px; border-width: 1px; }   /* the blind chip sits on the plate corner so the name keeps its width */
+.seat.hero { translate: 0 8px; }   /* the hero plate drops below the hole cards instead of covering their bottom edge (Q02 leftover) */
 .seat-status.secs { font-size: 12px; }
-.hero-label { width: 90px; font-size: 10px; }
-.pot-row { font-size: 11px; }
+.hero-label { width: 90px; font-size: 11px; }
+.pot-row { font-size: 12px; bottom: calc(100% + 32px); }   /* above the far seat's plate, not behind it (Q02 leftover) */
 
 /* ── Panels laid over the table ────────────────────────────────────────────────────────────────────── */
 .wait-panel, .bust-panel, .show-panel { max-width: calc(100% - 16px); }
 .showdown-overlay { max-width: calc(100% - 8px); }
+
+/* ── Bank dashboard: full width, one column, scrolls ──────────────────────────────────────────────── */
+.bank-panel, .panel-right .bank-panel { left: 0; right: 0; top: 0; bottom: 0; z-index: 14; }
+.bank-head { flex-wrap: wrap; gap: 6px 10px; padding: 6px 10px; }
+.bank-title { font-size: 22px; }
+.bank-sub { display: none; }
+.bank-view { margin-left: auto; }
+.bank-total { order: 5; flex: 1 0 100%; margin-left: 0; flex-wrap: wrap; gap: 6px 18px; }
+.bank-close { order: 3; }
+.bank-body { grid-template-columns: minmax(0, 1fr); overflow-y: auto; }
+.bank-col { min-height: auto; }
+.bank-chartcard { flex: none; min-height: 240px; }
+.bank-row2 { flex: none; height: auto; grid-template-columns: minmax(0, 1fr); }
+.bank-row2 > .bank-card { min-height: 220px; }
+.bank-players { flex: none; }
