@@ -63,7 +63,7 @@ const isAdmin = () => !!(S.user && (S.user.isAdmin || S.user.admin || S.user.key
 const myKey = () => S.user && S.user.key;
 function toast(msg) {
   document.querySelectorAll('.lb-toast').forEach((n) => n.remove());
-  const t = h('div', { class: 'lb-toast', role: 'status' }, msg); document.body.append(t); setTimeout(() => t.remove(), 2200);
+  const t = h('div', { class: 'lb-toast panel panel--toast', role: 'status' }, msg); document.body.append(t); setTimeout(() => t.remove(), 2200);
 }
 function copy(text, what) {
   const done = () => toast(what + ' copied');
@@ -117,7 +117,7 @@ function renderTop() {
     h('button', { class: 'lb-acct', id: 'lb-acct', style: 'background:none;border:0;color:inherit;font:inherit;text-align:left;cursor:pointer', onclick: openProfile, title: 'Profile' },
       h('img', { src: avSrc(u), alt: '' }),
       h('div', null, h('div', { class: 'nm' }, u.display || u.key), h('div', { class: 'nt' }, h('span', { class: cls }, net), net && play ? '  /  ' : '', play))),
-    h('button', { class: 'lb-link', id: 'lb-signout', onclick: signOut }, 'Sign out'));
+    h('button', { class: 'btn btn--danger btn--sm', id: 'lb-signout', onclick: signOut }, 'Sign out'));
   mountToggles();
   renderAchHint();
 }
@@ -157,15 +157,15 @@ function viewSignin() {
   const wrap = h('div', { class: 'lb-center' });
   const draw = () => {
     const err = h('div', { class: 'lb-err', id: 'lb-err', role: 'alert' });
-    const name = h('input', { class: 'text-input', id: 'lb-name', type: 'text', maxlength: 16, autocomplete: 'username', autocapitalize: 'off', autocorrect: 'off', spellcheck: 'false', placeholder: 'Your name', value: LS.get('ping.name') || '' });
-    const pin = h('input', { class: 'text-input pin-mask', id: 'lb-pin', type: 'text', inputmode: 'numeric', pattern: '[0-9]*', maxlength: 6, autocomplete: 'off', autocorrect: 'off', autocapitalize: 'off', spellcheck: 'false', 'data-1p-ignore': 'true', 'data-lpignore': 'true', placeholder: '4 to 6 digits',
+    const name = h('input', { class: 'field', id: 'lb-name', type: 'text', maxlength: 16, autocomplete: 'username', autocapitalize: 'off', autocorrect: 'off', spellcheck: 'false', placeholder: 'Your name', value: LS.get('ping.name') || '' });
+    const pin = h('input', { class: 'field pin-mask', id: 'lb-pin', type: 'text', inputmode: 'numeric', pattern: '[0-9]*', maxlength: 6, autocomplete: 'off', autocorrect: 'off', autocapitalize: 'off', spellcheck: 'false', 'data-1p-ignore': 'true', 'data-lpignore': 'true', placeholder: '4 to 6 digits',
       oninput: (e) => { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6); } });
-    const room = h('input', { class: 'text-input', id: 'lb-room', type: 'password', autocomplete: 'off', autocapitalize: 'off', autocorrect: 'off', spellcheck: 'false', placeholder: 'Room password' });
-    const submit = h('button', { class: 'lb-btn big', id: 'lb-submit', type: 'submit' }, tab === 'in' ? 'Sign in' : claim ? 'Claim name' : 'Create account');
+    const room = h('input', { class: 'field', id: 'lb-room', type: 'password', autocomplete: 'off', autocapitalize: 'off', autocorrect: 'off', spellcheck: 'false', placeholder: 'Room password' });
+    const submit = h('button', { class: 'btn btn--primary btn--lg btn--block', id: 'lb-submit', type: 'submit' }, tab === 'in' ? 'Sign in' : claim ? 'Claim name' : 'Create account');
     const fieldsAv = tab === 'up' ? h('div', { class: 'lb-field' }, h('label', null, 'Avatar'),
       h('div', { class: 'lb-avatars', id: 'lb-avatars' }, Array.from({ length: 12 }, (_, i) => { const id = 'a' + String(i + 1).padStart(2, '0');
         return h('button', { type: 'button', 'data-av': id, class: id === avatar ? 'on' : '', onclick: (e) => { avatar = id; LS.set('ping.avatar', id); wrap.querySelectorAll('.lb-avatars button').forEach((b) => b.classList.toggle('on', b.dataset.av === id)); } }, h('img', { src: avUrl(id), alt: id })); }))) : null;
-    const form = h('form', { class: 'lb-sign lb-frame', id: 'lb-signform', novalidate: true,
+    const form = h('form', { class: 'lb-sign panel', id: 'lb-signform', novalidate: true,
       onsubmit: (ev) => {
         ev.preventDefault(); if (Date.now() < S.lockUntil) return;
         const n = name.value.trim(), p = pin.value;
@@ -179,10 +179,10 @@ function viewSignin() {
         else emit('auth_signup', { name: n, pin: p, avatar });
       } },
       h('div', { class: 'logo' }, h('img', { src: 'images/ui/vp-mark.png', alt: '' }), h('b', null, 'THE ', h('em', null, 'PING')), h('span', { class: 'lb-eyebrow' }, 'Private poker tables for friends')),
-      h('div', { class: 'lb-seg tabs', role: 'tablist' },
+      h('div', { class: 'seg seg--tabs seg--block', role: 'tablist' },
         h('button', { type: 'button', 'data-tab': 'in', class: tab === 'in' ? 'on' : '', onclick: () => { tab = 'in'; claim = false; draw(); } }, 'Sign in'),
         h('button', { type: 'button', 'data-tab': 'up', class: tab === 'up' ? 'on' : '', onclick: () => { tab = 'up'; draw(); } }, 'New account')),
-      claim ? h('div', { class: 'lb-notice', id: 'lb-claim' }, 'This name is already on the books. Set a PIN to claim it, and enter the room password.') : null,
+      claim ? h('div', { class: 'note', id: 'lb-claim' }, 'This name is already on the books. Set a PIN to claim it, and enter the room password.') : null,
       h('div', { class: 'lb-field' }, h('label', { for: 'lb-name' }, 'Name'), name),
       h('div', { class: 'lb-field' }, h('label', { for: 'lb-pin' }, 'PIN'), pin),
       claim ? h('div', { class: 'lb-field' }, h('label', { for: 'lb-room' }, 'Room password'), room) : null,
@@ -215,20 +215,20 @@ function tableLine(t) {
 }
 function viewLobby() {
   emit('lobby_list', {}); emit('tables_mine', {}); emit('get_leaderboard', {}); emit('profile_get', {}); setTimeout(() => { if (S.view === 'lobby') emit('get_leaderboard', {}); }, 1500);
-  const codeIn = h('input', { class: 'text-input code', id: 'lb-code', maxlength: 9, placeholder: 'CODE', autocomplete: 'off',
+  const codeIn = h('input', { class: 'field field--code', id: 'lb-code', maxlength: 9, placeholder: 'CODE', autocomplete: 'off',
     oninput: (e) => { e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6); }, onkeydown: (e) => { if (e.key === 'Enter') go(); } });
   const jerr = h('div', { class: 'lb-err', id: 'lb-joinerr' });
   const go = () => { const c = code6(codeIn.value); if (c.length < 6) { jerr.textContent = 'Codes are 6 characters.'; return; } jerr.textContent = ''; S.onError = (m) => { jerr.textContent = m; }; openJoin(c); };
   setMain(scrollWrap(h('div', { class: 'lb-wrap' }, h('div', { class: 'lb-cols' },
     h('div', { class: 'lb-stack' },
-      h('section', { class: 'lb-card' }, h('h2', null, 'Your tables'), h('div', { id: 'lb-mine', class: 'lb-rows' })),
-      h('section', { class: 'lb-card' }, h('h2', null, 'Open tables', h('small', null, 'Listed by their hosts')), h('div', { id: 'lb-open', class: 'lb-rows' }))),
+      h('section', { class: 'panel' }, h('h2', { class: 'panel__title' }, 'Your tables'), h('div', { id: 'lb-mine', class: 'lb-rows' })),
+      h('section', { class: 'panel' }, h('h2', { class: 'panel__title' }, 'Open tables', h('small', null, 'Listed by their hosts')), h('div', { id: 'lb-open', class: 'lb-rows' }))),
     h('div', { class: 'lb-stack' },
-      h('section', { class: 'lb-best', id: 'lb-best', 'aria-label': 'Biggest win today' }),
-      h('button', { class: 'lb-btn big', id: 'lb-create-btn', onclick: () => show('create') }, 'Create table'),
-      h('section', { class: 'lb-card' }, h('h2', null, 'Join by code'), h('div', { class: 'lb-stack', style: 'gap:var(--p12)' }, codeIn, h('button', { class: 'lb-btn blue full', id: 'lb-join-btn', onclick: go }, 'Join'), jerr)),
-      h('section', { class: 'lb-card' }, h('h2', null, 'Leaderboard', h('small', null, 'Lifetime net')), h('div', { id: 'lb-board' })),
-      h('section', { class: 'lb-card lb-feed-card' }, h('h2', null, 'Around the table', h('small', null, 'Live')), h('div', { id: 'lb-feed', class: 'lb-feed' })))))));
+      h('section', { class: 'lb-best panel panel--tight', id: 'lb-best', 'aria-label': 'Biggest win today' }),
+      h('button', { class: 'btn btn--primary btn--lg btn--block', id: 'lb-create-btn', onclick: () => show('create') }, 'Create table'),
+      h('section', { class: 'panel' }, h('h2', { class: 'panel__title' }, 'Join by code'), h('div', { class: 'lb-stack', style: 'gap:var(--p12)' }, codeIn, h('button', { class: 'btn btn--secondary btn--block', id: 'lb-join-btn', onclick: go }, 'Join'), jerr)),
+      h('section', { class: 'panel' }, h('h2', { class: 'panel__title' }, 'Leaderboard', h('small', null, 'Lifetime net')), h('div', { id: 'lb-board' })),
+      h('section', { class: 'panel' }, h('h2', { class: 'panel__title' }, 'Around the table', h('small', null, 'Live')), h('div', { id: 'lb-feed', class: 'lb-feed' })))))));
   drawLists(); drawFeed(); drawBest(); emit('social:feed'); emit('social:biggest');
 }
 // ── activity feed ─────────────────────────────────────────────────
@@ -282,17 +282,17 @@ function drawLists() {
       const unit = t.unit || unitOf(t.mode), n = S.net[tId(t)];
       const ended = t.state === 'ended';
       return h('div', { class: 'lb-row', 'data-table': tId(t) },
-        h('div', null, h('div', { class: 't' }, t.name, tHost(t) === myKey() ? h('span', { class: 'lb-tag' }, 'Host') : null, t.state === 'paused' ? h('span', { class: 'lb-tag' }, 'Paused') : null, ended ? h('span', { class: 'lb-tag' }, 'Ended') : null),
+        h('div', null, h('div', { class: 't' }, t.name, tHost(t) === myKey() ? h('span', { class: 'tag' }, 'Host') : null, t.state === 'paused' ? h('span', { class: 'tag' }, 'Paused') : null, ended ? h('span', { class: 'tag' }, 'Ended') : null),
           h('div', { class: 's' }, tableLine(t), n != null ? h('span', null, '  /  Tonight ', h('b', { class: n > 0 ? 'up' : n < 0 ? 'down' : '' }, fm(n, unit, { signed: true }))) : null)),
-        ended ? h('button', { class: 'lb-btn sm blue', onclick: () => emit('night_get', { nightId: t.nightId }) }, 'Settle up')
-          : h('button', { class: 'lb-btn sm', 'data-resume': tId(t), onclick: () => { S.resume = tId(t); openJoin(tId(t)); } }, 'Resume'));
+        ended ? h('button', { class: 'btn btn--secondary btn--sm', onclick: () => emit('night_get', { nightId: t.nightId }) }, 'Settle up')
+          : h('button', { class: 'btn btn--secondary btn--sm', 'data-resume': tId(t), onclick: () => { S.resume = tId(t); openJoin(tId(t)); } }, 'Resume'));
     }) : [h('div', { class: 'lb-empty' }, 'No tables yet. Create one, or join with a code.')]));
   }
   if (open) {
     const list = S.tables.filter((t) => !t.isPrivate && t.state !== 'ended');
     open.replaceChildren(...(list.length ? list.map((t) => h('div', { class: 'lb-row', 'data-table': tId(t) },
       h('div', null, h('div', { class: 't' }, t.name, t.host ? h('span', { class: 'lb-muted' }, 'hosted by ' + (t.host.display || t.host.key)) : null), h('div', { class: 's' }, tableLine(t))),
-      h('button', { class: 'lb-btn sm blue', onclick: () => openJoin(tId(t)) }, 'Join'))) : [h('div', { class: 'lb-empty' }, 'No open tables right now.')]));
+      h('button', { class: 'btn btn--secondary btn--sm', onclick: () => openJoin(tId(t)) }, 'Join'))) : [h('div', { class: 'lb-empty' }, 'No open tables right now.')]));
   }
   if (board) {
     const rows = S.board.slice(0, 5), me = S.boardMe;
@@ -308,9 +308,16 @@ function drawLists() {
 
 // ── modal ─────────────────────────────────────────────────────────
 function closeModal() { document.querySelectorAll('.lb-scrim').forEach((n) => n.remove()); if (root) root.classList.remove('lb-overlay'); S.modalKey && document.removeEventListener('keydown', S.modalKey); S.modalKey = null; S.onModalClose && S.onModalClose(); S.onModalClose = null; }
+// A modal is a panel: title bar first, a scrolling body, and the .acts footer last so it never covers the body
+function modalBox(kids) {
+  const k = kids.filter(Boolean), isT = (n) => n.classList && n.classList.contains('panel__title'), isA = (n) => n.classList && n.classList.contains('acts');
+  const title = k.filter(isT), foot = k.filter(isA), body = k.filter((n) => !isT(n) && !isA(n));
+  return h('div', { class: 'lb-modal panel', role: 'dialog' }, ...title, h('div', { class: 'lb-modal-body' }, ...body), ...foot);
+}
+const closeBtn = () => h('button', { class: 'panel__close', type: 'button', 'aria-label': 'Close', onclick: closeModal }, '\u00d7');
 function openModal(...kids) {
   closeModal(); ensureRoot();
-  const sc = h('div', { class: 'lb-scrim', onmousedown: (e) => { if (e.target === sc) closeModal(); } }, h('div', { class: 'lb-modal lb-frame', role: 'dialog' }, ...kids));
+  const sc = h('div', { class: 'lb-scrim', onmousedown: (e) => { if (e.target === sc) closeModal(); } }, modalBox(kids));
   S.modalKey = (e) => { if (e.key === 'Escape') closeModal(); }; document.addEventListener('keydown', S.modalKey);
   root.append(sc); return sc;
 }
@@ -319,7 +326,7 @@ function openModal(...kids) {
 function settingsCard(t) {
   const unit = t.unit || unitOf(t.mode), bb = t.blinds ? t.blinds.bb : t.bb, sb = t.blinds ? t.blinds.sb : t.sb, bi = t.buyIn || {};
   const cell = (k, v) => h('div', null, h('small', null, k), h('b', null, v));
-  return h('div', { class: 'lb-set', id: 'lb-settings' },
+  return h('div', { class: 'lb-set panel panel--inset', id: 'lb-settings' },
     cell('Mode', modeLabel(t.mode)), cell('Blinds', fm(sb, unit) + ' / ' + fm(bb, unit)),
     cell('Buy-in', fm(bi.min, unit) + ' to ' + fm(bi.max, unit)), cell('Seats', t.seats),
     cell('Clock', t.actionTimerSec ? t.actionTimerSec + 's' : 'None'), cell('Host', (t.host && t.host.display) || (t.hostKey || '')),
@@ -344,14 +351,14 @@ function buyInPicker(t, mySettled) {
       + (short() ? '. Not enough for the minimum buy-in of ' + fm(bi.min, unit) + '.' : '')
       + (cross && v != null ? '. This buy-in costs ' + (fund === 'play' ? fm(v, 'cents') : fm(v, 'chips')) + ' (1 chip = $0.01).' : '');
   };
-  const fundBtn = (k, label) => h('button', { type: 'button', class: 'lb-btn' + (fund === k ? '' : ' blue'), id: 'lb-fund-' + k, onclick: () => {
+  const fundBtn = (k, label) => h('button', { type: 'button', class: fund === k ? 'on' : '', 'aria-pressed': fund === k ? 'true' : 'false', id: 'lb-fund-' + k, onclick: () => {
     if (fund === k) return; fund = k; bank = bankOf(fund); hi = hiOf(bank);
     const top = Math.max(bi.min, hi), cur = f.value();
     f.setBounds({ min: bi.min, max: top, presets: presetsFor(top) });
     f.set(cur == null ? bi.default : Math.min(top, Math.max(bi.min, cur)), { source: 'fund' });
     fundRow.replaceChildren(fundBtn('chips', 'Chips'), fundBtn('play', 'Play $')); drawBal();
   } }, label);
-  const fundRow = h('div', { class: 'lb-field', id: 'lb-fund' }, fundBtn('chips', 'Chips'), fundBtn('play', 'Play $'));
+  const fundRow = h('div', { class: 'seg seg--block', id: 'lb-fund' }, fundBtn('chips', 'Chips'), fundBtn('play', 'Play $'));
   drawBal();
   const night = mySettled != null ? h('div', { class: 'lb-muted' }, 'Your night so far: ', h('b', { class: mySettled > 0 ? 'up' : mySettled < 0 ? 'down' : '' }, fm(mySettled, unit, { signed: true }))) : null;
   // the fund picker sits above the slider so the modal footer can never hide it (ui 11)
@@ -393,26 +400,28 @@ function modalJoin(info, me) {
   const t = info.table, id = tId(t), unit = t.unit || unitOf(t.mode);
   const pick = buyInPicker(t, S.net[id]);
   const err = h('div', { class: 'lb-err', id: 'lb-joinmsg' });
-  const sit = h('button', { class: 'lb-btn', id: 'lb-sit', onclick: () => {
+  const sit = h('button', { class: 'btn btn--primary', id: 'lb-sit', onclick: () => {
     const v = me ? (me.stack || t.buyIn.default) : pick.get(); if (v == null) { err.textContent = pick.short() ? 'Your balance is below the minimum buy-in.' : 'Fix the buy-in amount first.'; return; }
     sit.disabled = true; err.textContent = ''; S.onError = (m) => { sit.disabled = false; err.textContent = m; };
     emit('table_join', { tableId: id, buyIn: v, fund: pick.getFund() });
   } }, me ? 'Return to seat' : 'Sit down');
   openModal(
-    h('div', null, h('span', { class: 'lb-eyebrow' }, 'Table ' + id), h('h3', null, t.name)),
-    settingsCard(t),
-    h('div', { class: 'lb-seatlist' }, seatCells(info)),
+    h('h3', { class: 'panel__title' }, t.name, h('small', null, 'Table ' + id), closeBtn()),
     me ? h('div', { class: 'lb-muted' }, 'You are already seated here with ' + fm(me.stack, unit) + '.') : pick.el,
-    h('div', { class: 'lb-copy' }, modeNote(t.mode)), err,
-    h('div', { class: 'acts' }, h('button', { class: 'lb-btn blue', id: 'lb-cancel', onclick: closeModal }, 'Cancel'), sit));
+    err,
+    settingsCard(t),
+    h('div', { class: 'lb-seatlist' }, seatCells(info, true)),
+    h('div', { class: 'lb-copy' }, modeNote(t.mode)),
+    h('div', { class: 'acts' }, h('button', { class: 'btn btn--secondary', id: 'lb-cancel', onclick: closeModal }, 'Cancel'), sit));
 }
-function seatCells(info) {
+function seatCells(info, compact) {
   const t = info.table, unit = t.unit || unitOf(t.mode);
-  const cells = (info.seated || []).map((p) => h('div', { class: 'lb-seat' }, h('img', { src: avSrc(p), alt: '' }), h('div', null, h('b', null, p.display || p.key), h('span', null, fm(p.stack, unit)))));
-  const away = (info.away || []).map((p) => h('div', { class: 'lb-seat away' }, h('div', null, h('b', null, (p.key === myKey() ? 'You' : p.display || p.key) + ' (away)'), h('span', null, fm(p.stack, unit)))));
+  const cells = (info.seated || []).map((p) => h('div', { class: 'lb-seat panel panel--inset' }, h('img', { src: avSrc(p), alt: '' }), h('div', null, h('b', null, p.display || p.key), h('span', null, fm(p.stack, unit)))));
+  const away = (info.away || []).map((p) => h('div', { class: 'lb-seat away panel panel--inset' }, h('div', null, h('b', null, (p.key === myKey() ? 'You' : p.display || p.key) + ' (away)'), h('span', null, fm(p.stack, unit)))));
   cells.push(...away);
   const open = Math.max(0, (info.openSeats ?? t.seats - (info.seated || []).length));
-  for (let i = 0; i < open; i++) cells.push(h('div', { class: 'lb-seat open' }, 'Open seat'));
+  if (compact) { if (open) cells.push(h('div', { class: 'lb-seat open panel panel--inset' }, open + (open === 1 ? ' open seat' : ' open seats'))); return cells; }
+  for (let i = 0; i < open; i++) cells.push(h('div', { class: 'lb-seat open panel panel--inset' }, 'Open seat'));
   return cells;
 }
 
@@ -427,16 +436,16 @@ function freshForm(mode, prev) {
 function blindsOf(f) { if (f.custom) return { sb: f.csb, bb: f.cbb }; const p = PRESETS[f.unit][f.preset]; return { sb: p[0], bb: p[1] }; }
 function viewCreate() {
   const f = S.form = S.form || freshForm('play');
-  const host = h('div', { class: 'lb-form lb-card', id: 'lb-form' }), side = h('div', { class: 'lb-stack' });
+  const host = h('div', { class: 'lb-form panel', id: 'lb-form' }), side = h('div', { class: 'lb-stack' });
   const grid = h('div', { class: 'lb-create' }, host, side);
-  setMain(scrollWrap(h('div', { class: 'lb-wrap' }, h('div', { style: 'display:flex;justify-content:space-between;align-items:center' }, h('button', { class: 'lb-link', onclick: () => show('lobby') }, 'Back to lobby')), grid)));
+  setMain(scrollWrap(h('div', { class: 'lb-wrap' }, h('div', { style: 'display:flex;justify-content:space-between;align-items:center' }, h('button', { class: 'btn btn--ghost btn--sm', onclick: () => show('lobby') }, 'Back to lobby')), grid)));
   const draw = () => {
     const sc = mainEl.firstChild.scrollTop; host.replaceChildren(...formBody(f, draw, refreshSum).filter(Boolean)); side.replaceChildren(sumCard()); mainEl.firstChild.scrollTop = sc;
   };
   const sumCard = () => {
-    const el = h('section', { class: 'lb-card lb-sum', id: 'lb-sum' }); S.sumEl = el; fillSummary(f, el);
+    const el = h('section', { class: 'panel lb-sum', id: 'lb-sum' }); S.sumEl = el; fillSummary(f, el);
     const err = h('div', { class: 'lb-err', id: 'lb-createerr' });
-    const btn = h('button', { class: 'lb-btn big', id: 'lb-create-submit', onclick: () => submitCreate(f, err, btn) }, 'Create table');
+    const btn = h('button', { class: 'btn btn--primary btn--lg btn--block', id: 'lb-create-submit', onclick: () => submitCreate(f, err, btn) }, 'Create table');
     return h('div', { class: 'lb-stack' }, el, err, btn);
   };
   const refreshSum = () => fillSummary(f, S.sumEl);
@@ -456,13 +465,13 @@ function fillSummary(f, el) {
     h('div', { class: 'lb-copy' }, modeNote(f.mode)));
 }
 function seg(opts, cur, onPick, id) {
-  return h('div', { class: 'lb-seg', id }, opts.map(([v, label, sub]) => h('button', { type: 'button', 'data-v': String(v), class: String(v) === String(cur) ? 'on' : '', onclick: () => onPick(v) }, label, sub ? h('small', null, sub) : null)));
+  return h('div', { class: 'seg seg--block', id }, opts.map(([v, label, sub]) => h('button', { type: 'button', 'data-v': String(v), class: String(v) === String(cur) ? 'on' : '', onclick: () => onPick(v) }, label, sub ? h('small', null, sub) : null)));
 }
 function formBody(f, redraw, sum) {
   const u = f.unit, g = (label, ...k) => h('div', { class: 'grp' }, h('span', { class: 'lb-label' }, label), ...k);
   const set = (k) => (v) => { f[k] = v; redraw(); };
   const modeSeg = seg([['play', 'Play $', 'fake money'], ['chips', 'Chips', 'bank chips']], f.mode, (m) => { if (m !== f.mode) { S.form = Object.assign(f, freshForm(m, f)); } redraw(); }, 'lb-mode');
-  const name = h('input', { class: 'text-input', id: 'lb-tname', maxlength: 24, value: f.name, oninput: (e) => { f.name = e.target.value; sum(); } });
+  const name = h('input', { class: 'field', id: 'lb-tname', maxlength: 24, value: f.name, oninput: (e) => { f.name = e.target.value; sum(); } });
   // buy-in range: the three typed boxes are AmountInputs (the number is the truth); the dual slider only drives them.
   // The slider span always covers what is typed (S3-2), the server accepts 1..MAX_UNITS.
   const LO = 500, HI = u === 'chips' ? 1000000 : 50000, MAX_UNITS = 100000000;
@@ -486,7 +495,7 @@ function formBody(f, redraw, sum) {
   rh.addEventListener('input', () => { if (+rh.value < +rl.value) rh.value = rl.value; f.max = vals[+rh.value]; inMax.set(f.max, { source: 'slider' }); paint(); cross(); sum(); });
   paint(); cross();
   const b = blindsOf(f);
-  const blindSeg = h('div', { class: 'lb-seg', id: 'lb-blinds' }, PRESETS[u].map((p, i) => h('button', { type: 'button', 'data-v': i, class: !f.custom && i === f.preset ? 'on' : '', onclick: () => { f.custom = false; f.preset = i; redraw(); } }, fm(p[0], u) + '/' + fm(p[1], u))),
+  const blindSeg = h('div', { class: 'seg seg--block', id: 'lb-blinds' }, PRESETS[u].map((p, i) => h('button', { type: 'button', 'data-v': i, class: !f.custom && i === f.preset ? 'on' : '', onclick: () => { f.custom = false; f.preset = i; redraw(); } }, fm(p[0], u) + '/' + fm(p[1], u))),
     h('button', { type: 'button', 'data-v': 'custom', class: f.custom ? 'on' : '', onclick: () => { f.custom = true; f.csb = b.sb; f.cbb = b.bb; redraw(); } }, 'Custom'));
   const mkBlind = (key, id, label, lo) => {
     const a = AmountInput({ units: f[key], min: lo, max: MAX_UNITS, unit: u, scale: 'ladder', compact: true, label, rangeLabel: label, onChange: (v) => { if (v != null && v !== f[key]) { f[key] = v; sum(); } } });
@@ -495,7 +504,7 @@ function formBody(f, redraw, sum) {
   const custom = f.custom ? h('div', { class: 'lb-two' },
     h('div', { class: 'lb-field' }, h('label', null, 'Small blind'), mkBlind('csb', 'lb-csb', 'Small blind', 1).el),
     h('div', { class: 'lb-field' }, h('label', null, 'Big blind'), mkBlind('cbb', 'lb-cbb', 'Big blind', 2).el)) : null;
-  const seats = h('div', { class: 'lb-seats', id: 'lb-seats' }, h('button', { type: 'button', 'aria-label': 'Fewer seats', onclick: () => { f.seats = Math.max(2, f.seats - 1); redraw(); } }, '−'), h('b', null, f.seats), h('button', { type: 'button', 'aria-label': 'More seats', onclick: () => { f.seats = Math.min(8, f.seats + 1); redraw(); } }, '+'));
+  const seats = h('div', { class: 'seg seg--stepper seg--block', id: 'lb-seats' }, h('button', { type: 'button', 'aria-label': 'Fewer seats', onclick: () => { f.seats = Math.max(2, f.seats - 1); redraw(); } }, '−'), h('b', null, f.seats), h('button', { type: 'button', 'aria-label': 'More seats', onclick: () => { f.seats = Math.min(8, f.seats + 1); redraw(); } }, '+'));
   const onOff = (k, id) => seg([[true, 'On'], [false, 'Off']], f[k], set(k), id);
   return [
     g('Game', modeSeg),
@@ -540,21 +549,21 @@ function drawShare() {
   const setErr = (m) => { S.shareErr = m || ''; err.textContent = S.shareErr; };
   let right;
   if (me) {
-    right = h('section', { class: 'lb-card lb-stack' }, h('h2', null, 'You are seated'), h('div', { class: 'lb-muted' }, 'Stack ' + fm(me.stack, unit) + '. The hand deals automatically when a second player sits.'),
-      isHost && n >= 2 ? h('button', { class: 'lb-btn blue full', id: 'lb-start', onclick: () => emit('table_start', { tableId: id }) }, 'Start when ready') : null,
-      h('button', { class: 'lb-btn full', id: 'lb-enter', onclick: () => { setErr(''); S.onError = (m) => { setErr(m); }; emit('table_join', { tableId: id, buyIn: me.stack || t.buyIn.default }); } }, 'Go to the table'), err);
+    right = h('section', { class: 'panel lb-stack' }, h('h2', { class: 'panel__title' }, 'You are seated'), h('div', { class: 'lb-muted' }, 'Stack ' + fm(me.stack, unit) + '. The hand deals automatically when a second player sits.'),
+      isHost && n >= 2 ? h('button', { class: 'btn btn--secondary btn--block', id: 'lb-start', onclick: () => emit('table_start', { tableId: id }) }, 'Start when ready') : null,
+      h('button', { class: 'btn btn--primary btn--block', id: 'lb-enter', onclick: () => { setErr(''); S.onError = (m) => { setErr(m); }; emit('table_join', { tableId: id, buyIn: me.stack || t.buyIn.default }); } }, 'Go to the table'), err);
   } else {
     const pick = S.sharePick && S.sharePick.id === id ? S.sharePick.p : (S.sharePick = { id, p: buyInPicker(t, S.net[id]) }).p;
-    const sit = h('button', { class: 'lb-btn full', id: 'lb-sit', onclick: () => { setErr(''); const v = pick.get(); if (v == null) { setErr(pick.short() ? 'Your balance is below the minimum buy-in.' : 'Fix the buy-in amount first.'); return; } sit.disabled = true; S.onError = (m) => { sit.disabled = false; setErr(m); }; emit('table_join', { tableId: id, buyIn: v, fund: pick.getFund() }); } }, 'Sit down');
-    right = h('section', { class: 'lb-card lb-stack' }, h('h2', null, 'Take your seat'), pick.el, h('div', { class: 'lb-copy' }, modeNote(t.mode)), err, sit);
+    const sit = h('button', { class: 'btn btn--primary btn--block', id: 'lb-sit', onclick: () => { setErr(''); const v = pick.get(); if (v == null) { setErr(pick.short() ? 'Your balance is below the minimum buy-in.' : 'Fix the buy-in amount first.'); return; } sit.disabled = true; S.onError = (m) => { sit.disabled = false; setErr(m); }; emit('table_join', { tableId: id, buyIn: v, fund: pick.getFund() }); } }, 'Sit down');
+    right = h('section', { class: 'panel lb-stack' }, h('h2', { class: 'panel__title' }, 'Take your seat'), pick.el, h('div', { class: 'lb-copy' }, modeNote(t.mode)), err, sit);
   }
   S.shareBox.replaceChildren(
-    h('div', { style: 'display:flex;justify-content:space-between;align-items:center' }, h('button', { class: 'lb-link', onclick: () => show('lobby') }, 'Back to lobby')),
+    h('div', { style: 'display:flex;justify-content:space-between;align-items:center' }, h('button', { class: 'btn btn--ghost btn--sm', onclick: () => show('lobby') }, 'Back to lobby')),
     h('div', { class: 'lb-share' },
       h('div', { class: 'lb-stack' },
-        h('section', { class: 'lb-card lb-frame' }, h('div', { class: 'lb-eyebrow', style: 'text-align:center' }, t.name + '  /  share this code'), h('div', { class: 'lb-code', id: 'lb-sharecode' }, id),
-          h('div', { class: 'lb-btns' }, h('button', { class: 'lb-btn blue', id: 'lb-copylink', onclick: () => copy(link, 'Link') }, 'Copy link'), h('button', { class: 'lb-btn blue', id: 'lb-copycode', onclick: () => copy(id, 'Code') }, 'Copy code'))),
-        h('section', { class: 'lb-card lb-stack' }, h('h2', null, 'Who is sitting', h('small', null, n + ' of ' + t.seats)), info ? h('div', { class: 'lb-seatlist' }, seatCells(info)) : null, settingsCard(t))),
+        h('section', { class: 'panel' }, h('div', { class: 'lb-eyebrow', style: 'text-align:center' }, t.name + '  /  share this code'), h('div', { class: 'lb-code', id: 'lb-sharecode' }, id),
+          h('div', { class: 'lb-btns' }, h('button', { class: 'btn btn--secondary', id: 'lb-copylink', onclick: () => copy(link, 'Link') }, 'Copy link'), h('button', { class: 'btn btn--secondary', id: 'lb-copycode', onclick: () => copy(id, 'Code') }, 'Copy code'))),
+        h('section', { class: 'panel lb-stack' }, h('h2', { class: 'panel__title' }, 'Who is sitting', h('small', null, n + ' of ' + t.seats)), info ? h('div', { class: 'lb-seatlist' }, seatCells(info)) : null, settingsCard(t))),
       right));
 }
 
@@ -643,11 +652,11 @@ function openProfile() {
   const p = S.profile || {}, u = S.user, st = p.stats || {};
   let av = u.avatar;
   const net = p.netCents ?? 0, msg = h('div', { class: 'lb-err', id: 'lb-profmsg' });
-  const oldPin = h('input', { class: 'text-input', type: 'text', inputmode: 'numeric', pattern: '[0-9]*', maxlength: 6, autocomplete: 'off', 'data-1p-ignore': 'true', 'data-lpignore': 'true', placeholder: 'Current PIN', id: 'lb-oldpin', oninput: (e) => { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6); } });
-  const newPin = h('input', { class: 'text-input', type: 'text', inputmode: 'numeric', pattern: '[0-9]*', maxlength: 6, autocomplete: 'off', 'data-1p-ignore': 'true', 'data-lpignore': 'true', placeholder: 'New PIN', id: 'lb-newpin', oninput: (e) => { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6); } });
+  const oldPin = h('input', { class: 'field', type: 'text', inputmode: 'numeric', pattern: '[0-9]*', maxlength: 6, autocomplete: 'off', 'data-1p-ignore': 'true', 'data-lpignore': 'true', placeholder: 'Current PIN', id: 'lb-oldpin', oninput: (e) => { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6); } });
+  const newPin = h('input', { class: 'field', type: 'text', inputmode: 'numeric', pattern: '[0-9]*', maxlength: 6, autocomplete: 'off', 'data-1p-ignore': 'true', 'data-lpignore': 'true', placeholder: 'New PIN', id: 'lb-newpin', oninput: (e) => { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6); } });
   const recent = (p.recent || []).slice(0, 5);
   const nameMsg = h('div', { class: 'lb-err', id: 'lb-namemsg' }), photoMsg = h('div', { class: 'lb-err', id: 'lb-photomsg' });
-  const nameIn = h('input', { class: 'text-input', id: 'lb-dispname', type: 'text', maxlength: 16, value: u.display || u.key, autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', onkeydown: (e) => { if (e.key === 'Enter') saveName(); } });
+  const nameIn = h('input', { class: 'field', id: 'lb-dispname', type: 'text', maxlength: 16, value: u.display || u.key, autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', onkeydown: (e) => { if (e.key === 'Enter') saveName(); } });
   const fileIn = h('input', { type: 'file', accept: 'image/*', id: 'lb-photofile', style: 'display:none', onchange: () => { const f = fileIn.files && fileIn.files[0]; fileIn.value = ''; if (!f) return; photoMsg.classList.remove('ok'); photoMsg.textContent = 'Preparing photo...'; photoToAvatar(f).then((url) => { photoMsg.textContent = ''; emit('profile_update', { avatarPic: url }); }, (m) => { photoMsg.textContent = m; }); } });
   function saveName() {
     const raw = nameIn.value.replace(/\s+/g, ' ').trim(), bad = nameProblem(raw);
@@ -658,24 +667,25 @@ function openProfile() {
     emit('profile_update', { display: raw });
   }
   openModal(
+    h('h3', { class: 'panel__title' }, 'Profile', closeBtn()),
     h('div', { class: 'lb-prof-hd' }, h('img', { id: 'lb-profav', class: 'lb-prof-av', src: avSrc(u), alt: '' }), h('div', { class: 'lb-prof-id' }, h('h3', { id: 'lb-profname' }, u.display || u.key), h('div', { class: 'lb-muted' }, 'Signed in'))),
     h('div', { class: 'lb-field' }, h('label', { for: 'lb-dispname' }, 'Display name'),
-      h('div', { class: 'lb-inline' }, nameIn, h('button', { type: 'button', class: 'lb-btn blue sm', id: 'lb-namesave', onclick: saveName }, 'Save')),
+      h('div', { class: 'lb-inline' }, nameIn, h('button', { type: 'button', class: 'btn btn--secondary btn--sm', id: 'lb-namesave', onclick: saveName }, 'Save')),
       nameMsg),
     h('div', { class: 'lb-field' }, h('label', null, 'Avatar'),
-      h('div', { class: 'lb-inline lb-photo' }, h('button', { type: 'button', class: 'lb-btn blue sm', id: 'lb-photobtn', onclick: () => fileIn.click() }, 'Upload photo'), fileIn,
-        h('button', { type: 'button', class: 'lb-ghost', id: 'lb-usepreset', style: u.pic ? '' : 'display:none', onclick: () => { photoMsg.textContent = ''; emit('profile_update', { avatarPic: null }); } }, 'Use preset instead')),
+      h('div', { class: 'lb-inline lb-photo' }, h('button', { type: 'button', class: 'btn btn--secondary btn--sm', id: 'lb-photobtn', onclick: () => fileIn.click() }, 'Upload photo'), fileIn,
+        h('button', { type: 'button', class: 'btn btn--ghost btn--sm', id: 'lb-usepreset', style: u.pic ? '' : 'display:none', onclick: () => { photoMsg.textContent = ''; emit('profile_update', { avatarPic: null }); } }, 'Use preset instead')),
       photoMsg,
       h('div', { class: 'lb-avatars' }, Array.from({ length: 12 }, (_, i) => { const id = 'a' + String(i + 1).padStart(2, '0');
         return h('button', { type: 'button', class: !u.pic && id === String(av).replace(/\.png$/, '') ? 'on' : '', onclick: (e) => { av = id; photoMsg.textContent = ''; emit('profile_update', u.pic ? { avatar: id, avatarPic: null } : { avatar: id }); S.user.avatar = id; S.user.pic = null; refreshProfile(); } }, h('img', { src: avUrl(id), alt: id })); }))),
     h('div', { class: 'lb-xprow', id: 'lb-profxp' }, h('b', null, 'LV ' + (S.acctStats ? S.acctStats.level : 1)), h('span', { class: 'lb-xptrack' }, h('i', { style: 'width:' + Math.max(2, S.acctStats ? S.acctStats.xpPct : 0) + '%' })), h('small', null, S.acctStats ? S.acctStats.xp + ' / ' + S.acctStats.nextXp + ' XP' : '')),
-    h('div', { class: 'lb-stats' }, h('div', null, h('b', { class: net > 0 ? 'up' : net < 0 ? 'down' : '' }, fm(net, 'cents', { signed: true })), h('small', null, 'Net')),
-      h('div', null, h('b', null, st.nights ?? st.nightsPlayed ?? (p.recent || []).length), h('small', null, 'Nights')), h('div', null, h('b', null, st.hands ?? st.handsPlayed ?? 0), h('small', null, 'Hands'))),
+    h('div', { class: 'lb-stats' }, h('div', { class: 'panel panel--inset' }, h('b', { class: net > 0 ? 'up' : net < 0 ? 'down' : '' }, fm(net, 'cents', { signed: true })), h('small', null, 'Net')),
+      h('div', { class: 'panel panel--inset' }, h('b', null, st.nights ?? st.nightsPlayed ?? (p.recent || []).length), h('small', null, 'Nights')), h('div', { class: 'panel panel--inset' }, h('b', null, st.hands ?? st.handsPlayed ?? 0), h('small', null, 'Hands'))),
     recent.length ? h('div', { class: 'lb-rows' }, recent.map((r) => h('div', { class: 'lb-row' }, h('div', null, h('div', { class: 't' }, r.name || r.tableName || r.nightId), h('div', { class: 's' }, r.date || '')), h('b', { class: r.net > 0 ? 'up' : 'down' }, fm(r.net, r.unit || 'cents', { signed: true }))))) : null,
     achSection(),
-    h('div', { class: 'lb-field' }, h('label', null, 'Sound'), (() => { const on = () => !(window.PPSound && window.PPSound.muted); const b = h('button', { type: 'button', class: 'lb-btn blue', id: 'lb-sound', onclick: () => { const t = document.getElementById('sound-toggle'); if (t) t.click(); else if (window.PPSound) window.PPSound.setMuted(on()); b.textContent = on() ? 'Sound: on' : 'Sound: off'; } }, on() ? 'Sound: on' : 'Sound: off'); return b; })()),
+    h('div', { class: 'lb-field' }, h('label', null, 'Sound'), (() => { const on = () => !(window.PPSound && window.PPSound.muted); const b = h('button', { type: 'button', class: 'btn btn--secondary', id: 'lb-sound', onclick: () => { const t = document.getElementById('sound-toggle'); if (t) t.click(); else if (window.PPSound) window.PPSound.setMuted(on()); b.textContent = on() ? 'Sound: on' : 'Sound: off'; } }, on() ? 'Sound: on' : 'Sound: off'); return b; })()),
     h('div', { class: 'lb-field' }, h('label', null, 'Change PIN'), h('div', { class: 'lb-two' }, oldPin, newPin)), msg,
-    h('div', { class: 'acts' }, h('button', { class: 'lb-btn blue', onclick: () => { if (!/^\d{4,6}$/.test(newPin.value)) { msg.textContent = 'New PIN must be 4 to 6 digits.'; return; } S.onError = (m) => { msg.textContent = m; }; emit('pin_change', { oldPin: oldPin.value, newPin: newPin.value }); } }, 'Save PIN'), h('button', { class: 'lb-btn', onclick: closeModal }, 'Done')));
+    h('div', { class: 'acts' }, h('button', { class: 'btn btn--secondary', onclick: () => { if (!/^\d{4,6}$/.test(newPin.value)) { msg.textContent = 'New PIN must be 4 to 6 digits.'; return; } S.onError = (m) => { msg.textContent = m; }; emit('pin_change', { oldPin: oldPin.value, newPin: newPin.value }); } }, 'Save PIN'), h('button', { class: 'btn btn--primary', onclick: closeModal }, 'Done')));
   drawAch(); renderAchHint();
 }
 
@@ -687,15 +697,15 @@ function viewSettle(d) {
   const tid = d.tableId || (d.table && d.table.id) || String(d.nightId || '').split('_').pop();
   setMain(scrollWrap(h('div', { class: 'lb-settle' },
     h('div', { class: 'hd' }, h('span', { class: 'lb-eyebrow' }, (d.table && d.table.name) || 'The Ping'), h('h1', { id: 'lb-settle-h' }, 'Night closed')),
-    h('section', { class: 'lb-card' }, h('h2', null, 'Final results'), players.map((p, i) => h('div', { class: 'lb-net', 'data-key': p.key },
+    h('section', { class: 'panel' }, h('h2', { class: 'panel__title' }, 'Final results'), players.map((p, i) => h('div', { class: 'lb-net', 'data-key': p.key },
       h('span', { class: 'rk' }, i + 1), h('img', { src: avSrc(p), alt: '' }),
       h('div', { class: 'nm' }, p.display || p.key, h('div', { class: 'sub' }, 'In ' + fm((p.buyIns || 0) + (p.rebuys || 0), unit) + '  /  Out ' + fm(p.cashedOut, unit))),
       h('span'), h('span', { class: 'amt ' + (p.net > 0 ? 'up' : p.net < 0 ? 'down' : '') }, fm(p.net, unit, { signed: true }))))),
     h('div', { class: 'lb-copy', style: 'margin:var(--p12) 0' }, modeNote(d.table && d.table.mode)),
     h('div', { class: 'lb-btns' },
-      h('button', { class: 'lb-btn blue', id: 'lb-copytext', onclick: () => copy(d.text || '', 'Results') }, 'Copy as text'),
-      h('button', { class: 'lb-btn blue', id: 'lb-clone', onclick: () => { S.onError = (m) => toast(m); emit('table_clone', { tableId: tid }); } }, 'New table, same settings'),
-      h('button', { class: 'lb-btn', id: 'lb-back', onclick: () => { S.night = null; show('lobby'); } }, 'Back to lobby')))));
+      h('button', { class: 'btn btn--secondary', id: 'lb-copytext', onclick: () => copy(d.text || '', 'Results') }, 'Copy as text'),
+      h('button', { class: 'btn btn--secondary', id: 'lb-clone', onclick: () => { S.onError = (m) => toast(m); emit('table_clone', { tableId: tid }); } }, 'New table, same settings'),
+      h('button', { class: 'btn btn--primary', id: 'lb-back', onclick: () => { S.night = null; show('lobby'); } }, 'Back to lobby')))));
 }
 
 // ── host drawer ───────────────────────────────────────────────────
@@ -706,7 +716,7 @@ function hostUi(on) {
   if (plate) { plate.classList.toggle('editable', !!on); plate.title = on ? 'Change blinds' : ''; }
   if (!on) return;
   const slot = $('host-slot'); if (!slot) return;
-  hostBtn = h('button', { class: 'host-btn', id: 'host-btn', type: 'button', onclick: toggleDrawer }, 'Host'); slot.append(hostBtn);
+  hostBtn = h('button', { class: 'btn btn--secondary btn--sm', id: 'host-btn', type: 'button', onclick: toggleDrawer }, 'Host'); slot.append(hostBtn);
 }
 let drawerPoll = null, blindsEl = null, blindsFor = null;
 function closeDrawer() {
@@ -725,7 +735,7 @@ function toggleDrawer() {
   if (hostDrawer) { closeDrawer(); return; }
   const t = S.cur; if (!t) return; const id = tId(t);
   emit('table_preview', { code: id });
-  hostDrawer = h('div', { class: 'host-drawer', id: 'host-drawer' }); drawDrawer(); document.body.append(hostDrawer);
+  hostDrawer = h('div', { class: 'host-drawer panel', id: 'host-drawer' }); drawDrawer(); document.body.append(hostDrawer);
   drawerPoll = setInterval(() => { if (S.cur) emit('table_preview', { code: tId(S.cur) }); }, 2000);
   document.addEventListener('pointerdown', drawerOutside, true);
   document.addEventListener('keydown', drawerEsc, true);
@@ -763,7 +773,7 @@ function blindsEditor(t, id, unit) {
   const el = h('div', { class: 'lb-stack', style: 'gap:var(--p8)' },
     h('div', { class: 'lb-label' }, 'Blinds'),
     h('div', { style: 'display:grid;grid-template-columns:1fr auto 1fr;gap:var(--p8);align-items:start' }, sbF.el, h('span', null, '/'), bbF.el),
-    h('button', { class: 'lb-btn sm full', id: 'host-blinds-save', type: 'button', onclick: save }, 'Set blinds'),
+    h('button', { class: 'btn btn--secondary btn--sm btn--block', id: 'host-blinds-save', type: 'button', onclick: save }, 'Set blinds'),
     note);
   return { el, update };
 }
@@ -777,18 +787,21 @@ function drawDrawer(confirmEnd) {
   const t = S.cur, id = tId(t), info = S.info[id], paused = t.state === 'paused';
   const unit = t.unit || unitOf(t.mode);
   hostDrawer.replaceChildren(
-    h('h4', null, 'Host controls', h('small', null, t.name + '  /  ' + id),
-      h('button', { class: 'host-x', id: 'host-close', type: 'button', 'aria-label': 'Close host controls', onclick: closeDrawer }, '\u00d7')),
-    h('div', { class: 'lb-btns' },
-      h('button', { class: 'lb-btn sm', id: 'host-start', onclick: () => emit('table_start', { tableId: id }) }, 'Start'),
-      h('button', { class: 'lb-btn sm blue', id: 'host-pause', onclick: () => emit('table_pause', { tableId: id, paused: !paused }) }, paused ? 'Resume table' : 'Pause table')),
-    (blindsFor === id && blindsEl) ? (blindsEl.update(t), blindsEl.el) : (blindsFor = id, blindsEl = blindsEditor(t, id, unit), blindsEl.el),
-    h('div', { class: 'lb-label' }, 'Players'),
-    ...((info && info.seated) || []).map((p) => h('div', { class: 'lb-seat' }, h('img', { src: avSrc(p), alt: '' }), h('div', null, h('b', null, p.display || p.key), h('span', null, fm(p.stack, unit))),
-      p.key !== myKey() ? h('button', { class: 'lb-ghost', onclick: () => emit('table_kick', { tableId: id, key: p.key }) }, 'Kick') : null)),
-    confirmEnd ? h('div', { class: 'lb-stack', style: 'gap:var(--p10)' }, h('div', { class: 'lb-notice' }, 'End the night? The current hand finishes, then everyone cashes out.'),
-      h('div', { class: 'lb-btns' }, h('button', { class: 'lb-btn sm blue', onclick: () => drawDrawer(false) }, 'Keep playing'), h('button', { class: 'lb-btn sm', id: 'host-end-confirm', onclick: () => { emit('table_end_night', { tableId: id }); toggleDrawer(); } }, 'End night'))) :
-      h('button', { class: 'lb-btn sm blue full', id: 'host-end', onclick: () => drawDrawer(true) }, 'End night'));
+    h('h4', { class: 'panel__title' }, 'Host controls', h('small', null, t.name + '  /  ' + id),
+      h('button', { class: 'panel__close host-x', id: 'host-close', type: 'button', 'aria-label': 'Close host controls', onclick: closeDrawer }, '\u00d7')),
+    h('div', { class: 'host-body' },
+      h('div', { class: 'lb-btns' },
+        h('button', { class: 'btn btn--secondary btn--sm', id: 'host-start', onclick: () => emit('table_start', { tableId: id }) }, 'Start'),
+        h('button', { class: 'btn btn--secondary btn--sm', id: 'host-pause', onclick: () => emit('table_pause', { tableId: id, paused: !paused }) }, paused ? 'Resume table' : 'Pause table')),
+      (blindsFor === id && blindsEl) ? (blindsEl.update(t), blindsEl.el) : (blindsFor = id, blindsEl = blindsEditor(t, id, unit), blindsEl.el),
+      h('hr', { class: 'divider' }),
+      h('div', { class: 'lb-label' }, 'Players'),
+      ...((info && info.seated) || []).map((p) => h('div', { class: 'lb-seat panel panel--inset' }, h('img', { src: avSrc(p), alt: '' }), h('div', null, h('b', null, p.display || p.key), h('span', null, fm(p.stack, unit))),
+        p.key !== myKey() ? h('button', { class: 'btn btn--danger btn--sm', onclick: () => emit('table_kick', { tableId: id, key: p.key }) }, 'Kick') : null))),
+    h('div', { class: 'host-foot' },
+      confirmEnd ? h('div', { class: 'lb-stack', style: 'gap:var(--p10)' }, h('div', { class: 'note' }, 'End the night? The current hand finishes, then everyone cashes out.'),
+        h('div', { class: 'lb-btns' }, h('button', { class: 'btn btn--secondary btn--sm', onclick: () => drawDrawer(false) }, 'Keep playing'), h('button', { class: 'btn btn--danger btn--sm', id: 'host-end-confirm', onclick: () => { emit('table_end_night', { tableId: id }); toggleDrawer(); } }, 'End night'))) :
+        h('button', { class: 'btn btn--danger btn--sm btn--block', id: 'host-end', onclick: () => drawDrawer(true) }, 'End night')));
 }
 
 // ── socket events ─────────────────────────────────────────────────

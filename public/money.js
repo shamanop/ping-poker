@@ -113,7 +113,7 @@
     const doc = root.document;
     const el = doc.createElement('button');
     el.type = 'button';
-    el.className = 'money-toggle';
+    el.className = 'money-toggle seg';
     el.title = 'Switch between dollars and chips';
     el.dataset.unit = unit || 'chips';
     el.innerHTML = '<i data-m="usd">$</i><i data-m="chips">chips</i>';
