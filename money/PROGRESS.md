@@ -27,6 +27,10 @@ settleHand(tableId, handNo, tableCur, { committed, payouts, returned })
                                                      -> { id, dup }           ONE batch, ref hand:<t>:<n>; not_conserved throws before anything is written
 mint(kind, key, amount, cur, ref)                    kind = bonus | achv | topup
 houseSpend / houseCredit(game, key, amount, cur, ref)   game = bender | coldcall
+houseRound(game, key, cost, win, cur, ref)           -> { id, dup }           one slot round as ONE batch: <game>:spend (player -> house:<game>) then <game>:credit (house -> player),
+                                                                              same accounts and reasons as the two calls above. The bet is checked first, so insufficient funds for cost
+                                                                              throw even when win > cost. win 0 = spend only, cost 0 = credit only, both 0 = { noop: true }.
+                                                                              Same ref + content = dup, different = ref_conflict. houseSpend/houseCredit are unchanged.
 adminAdjust(key, delta, cur, reason, ref)            signed delta, bank/play only, insufficient throws (no "set total")
 topUpEligible(key)                                   -> { eligible, why: null|'not_needed'|'cooldown', total, wallet, seats, retryMs }
 topUp(key, ref)                                      convenience over mint('topup'): brings wallet + Play seats back up to 1,000,000

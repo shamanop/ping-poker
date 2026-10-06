@@ -170,6 +170,21 @@ function createService(ledger, opts = {}) {
     return ledger.transfer('house:' + game, store(cur, key), amount, cur, game + ':credit', ref);
   }
 
+  // One slot round as ONE batch: the bet (player -> house) then the win (house -> player), so a crash can never take the
+  // bet and lose the win. Same accounts and reasons as houseSpend / houseCredit (<game>:spend, <game>:credit).
+  // The bet is checked first, so insufficient funds for `cost` throws even when win > cost. win 0 = spend only,
+  // cost 0 = credit only (a free round), both 0 = { noop: true }.
+  function houseRound(game, key, cost, win, cur, ref) {
+    if (!GAMES.includes(game)) throw new MoneyError('bad_game', { game });
+    needStr(key, 'bad_key', 'key'); needCur(cur); needRef(ref);
+    for (const [label, v] of [['cost', cost], ['win', win]]) if (!isInt(v) || v < 0) throw new MoneyError('bad_amount', { amount: v, field: label });
+    if (cost + win === 0) return { id: null, dup: false, noop: true };
+    const items = [];
+    if (cost > 0) items.push({ from: store(cur, key), to: 'house:' + game, amount: cost, cur, reason: game + ':spend' });
+    if (win > 0) items.push({ from: 'house:' + game, to: store(cur, key), amount: win, cur, reason: game + ':credit' });
+    return ledger.batch(items, ref, game + ':round');
+  }
+
   // Admin edits are a signed delta on the bank/wallet only. There is no "set total" (H5).
   function adminAdjust(key, delta, cur, reason, ref) {
     needStr(key, 'bad_key', 'key'); needCur(cur); needRef(ref);
@@ -319,7 +334,7 @@ function createService(ledger, opts = {}) {
   }
 
   return {
-    ensureAccount, buyIn, cashOut, settleHand, mint, houseSpend, houseCredit, adminAdjust,
+    ensureAccount, buyIn, cashOut, settleHand, mint, houseSpend, houseCredit, houseRound, adminAdjust,
     topUpEligible, topUp, bootRecover, mirror, nightSummary, balances, seatFund, ledger,
     START_CHIPS, START_PLAY, TOPUP_BELOW, TOPUP_COOLDOWN_MS,
   };

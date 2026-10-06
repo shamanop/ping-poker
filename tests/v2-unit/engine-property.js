@@ -71,6 +71,38 @@ function junkAction(rng, la) {
   return a;
 }
 
+// Independent check of the uncalled-bet return (E1). `pre` = snapBets(hand) taken before the step. When a step closes
+// the betting round the top bettor (live, or removed by foldOut) gets back top - second of the round's bets, unless
+// that would empty the pot. A top bettor that folded by its own action gets nothing back.
+function snapBets(hand) {
+  const o = {};
+  for (const s of seatsOf(hand)) { const x = hand.seats[s]; o[s] = { bet: x.bet, committed: x.committed, returned: x.returned }; }
+  return o;
+}
+function checkReturn(pre, hand, events, ctx) {
+  const closed = events.some(e => e.type === 'street' || e.type === 'runout' || e.type === 'showdown');
+  const got = events.filter(e => e.type === 'returned');
+  if (!closed) { assert.strictEqual(got.length, 0, `${ctx}: returned event without a closed round`); return; }
+  const bets = [];
+  let pot = 0;
+  for (const s of seatsOf(hand)) {
+    const added = hand.seats[s].committed - pre[s].committed;
+    bets.push({ s, bet: pre[s].bet + added });
+    pot += pre[s].committed - pre[s].returned + added;
+  }
+  bets.sort((a, b) => b.bet - a.bet);
+  const second = bets.length > 1 ? bets[1].bet : 0;
+  const back = bets[0].bet - second;
+  const top = hand.seats[bets[0].s];
+  const forfeits = top.folded && !top.forced; // a voluntary fold forfeits the bet; only a foldOut seat is refunded
+  const want = back > 0 && pot - back > 0 && !forfeits ? { seat: bets[0].s, amount: back } : null;
+  if (want) {
+    assert.strictEqual(got.length, 1, `${ctx}: expected a returned event ${J(want)}, got ${J(got)}`);
+    assert.strictEqual(got[0].seat, want.seat, `${ctx}: returned to the wrong seat ${J(got)} vs ${J(want)}`);
+    assert.strictEqual(got[0].amount, want.amount, `${ctx}: returned amount ${J(got)} vs ${J(want)}`);
+  } else assert.strictEqual(got.length, 0, `${ctx}: unexpected returned ${J(got)}`);
+}
+
 function checkInvariants(hand, total, ctx) {
   const all = seatsOf(hand);
   let t = 0, live = 0;
@@ -152,6 +184,12 @@ function playOneInner(rng, i, seed, cov, trace) {
   if (setup.seats.length === 9) cov.nine++;
   if (setup.seats.some(x => x.stack < setup.bb)) cov.shortStack++;
   checkInvariants(hand, total, ctx + ' (create)');
+  {
+    const zero = {}; for (const s of seatsOf(hand)) zero[s] = { bet: 0, committed: 0, returned: 0 };
+    const evs = hand.phase === 'betting' ? [] : [{ type: 'runout' }];
+    for (const s of seatsOf(hand)) if (hand.seats[s].returned) evs.push({ type: 'returned', seat: s, amount: hand.seats[s].returned });
+    checkReturn(zero, hand, evs, ctx + ' (create)');
+  }
   if (hand.phase === 'runout') cov.blindRunout++;
 
   let forced = false;
@@ -165,11 +203,14 @@ function playOneInner(rng, i, seed, cov, trace) {
       const seat = pick(rng, seatsOf(hand));
       const before = J(hand);
       trace.log.push(`foldOut(${seat})`);
+      const pre = snapBets(hand);
       const ev = H.foldOut(hand, seat);
+      checkReturn(pre, hand, ev, sctx + ' foldOut');
       if (before !== J(hand)) forced = true;
       twin = clone(twin); H.foldOut(twin, seat);
       assert.strictEqual(J(hand), J(twin), `${sctx}: twin diverged after foldOut`);
       cov.foldOut++;
+      for (const e of ev) if (e.type === 'returned' && hand.seats[e.seat].folded) cov.foldedReturn++;
       void ev;
       checkInvariants(hand, total, sctx + ' foldOut');
       continue;
@@ -204,6 +245,7 @@ function playOneInner(rng, i, seed, cov, trace) {
 
     trace.log.push(`${J(seatArg)}:${J(action)}`);
     const snap = J(hand);
+    const preBets = snapBets(hand);
     let events = null, err = null;
     try { events = H.apply(hand, seatArg, action); } catch (e) { err = e; }
     if (err) {
@@ -221,6 +263,7 @@ function playOneInner(rng, i, seed, cov, trace) {
       continue;
     }
     assert(isOffered, `${sctx}: apply accepted ${J(action)} for seat ${J(seatArg)} but legalActions did not offer it`);
+    checkReturn(preBets, hand, events, sctx);
     twin = clone(twin); H.apply(twin, seatArg, action);
     assert.strictEqual(J(hand), J(twin), `${sctx}: twin diverged after apply`);
     for (const e of events) {
@@ -251,7 +294,7 @@ function playOneInner(rng, i, seed, cov, trace) {
 module.exports = function register(t, env) {
   t.case(`property: ${env.hands} random hands (seed ${env.seed}), legal+illegal actions, foldOut, JSON twin`, () => {
     const cov = { hu: 0, nine: 0, shortStack: 0, blindRunout: 0, foldOut: 0, runout: 0, rejected: 0, raiseClosed: 0, tooSmall: 0, badAmount: 0, notTurn: 0,
-      shortRaise: 0, shove: 0, returned: 0, allInCall: 0, foldWin: 0, showdown: 0, sidePots: 0, sidePots3: 0, split: 0, oddChip: 0, forcedHands: 0 };
+      shortRaise: 0, shove: 0, returned: 0, allInCall: 0, foldWin: 0, showdown: 0, sidePots: 0, sidePots3: 0, split: 0, oddChip: 0, forcedHands: 0, foldedReturn: 0 };
     const rng = mulberry32(env.seed * 1000003 + 17);
     for (let i = 0; i < env.hands; i++) playOne(rng, i, env.seed, cov);
     if (env.hands >= 2000) {
