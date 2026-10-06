@@ -401,7 +401,7 @@
     await CC.assets.load((d, n) => { go.textContent = 'Loading ' + d + '/' + n; });
     const hero = $('hero'); hero.src = CC.assets.heroUrl(); try { await hero.decode(); } catch (e) { /* shown anyway */ }
     $('splashHero').src = CC.assets.heroUrl();
-    if (Q.has('shot')) { const qs = document.createElement('script'); qs.src = 'qa.js'; document.head.appendChild(qs); }   // QA shot flag: see qa.js
+    if (Q.has('shot') || Q.has('mock')) { const qs = document.createElement('script'); qs.src = 'qa.js'; document.head.appendChild(qs); }   // QA shot flag: see qa.js
     idleGrid(); $('ribR').textContent = 'MAX ' + E.MAX_WIN_X.toLocaleString('en-US') + 'x';
     CC.caption.say('idle'); drawBet();
     const start = () => { SFX_.init(); splash.classList.add('out'); SFX_.music('base'); setTimeout(() => splash.remove(), 600); wake(); };

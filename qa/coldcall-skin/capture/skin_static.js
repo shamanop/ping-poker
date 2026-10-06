@@ -11,6 +11,7 @@ const only = process.argv.slice(2);
     if (want('bigwin')) { await ready('?shot=bigwin'); await sleep(6500); await shot(page, 'bigwin_overlay'); await page.mouse.click(270, 400); await sleep(2800); await shot(page, 'bigwin_closed'); }
     if (want('buy')) { await ready('?shot=buy'); await sleep(900); await shot(page, 'buy_confirm'); }
     if (want('info')) { await ready('?shot=info'); await sleep(900); await shot(page, 'info_modal'); }
+    if (want('mock')) { await ready('?mock=6x5'); await sleep(900); await shot(page, 'board_6x5_mock'); }
     console.log('done');
   } finally { console.log(logs.filter((l) => !/404/.test(l)).join('\n')); await b.browser.close(); }
 })().catch((e) => { console.error(e); process.exit(1); });

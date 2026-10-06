@@ -71,5 +71,15 @@
     "Alfa Slab One",
     "Courier Prime",
     "Special Elite"
-  ]
+  ],
+  "extras": {
+    "cups": "img/extra_cups.webp",
+    "cashwad": "img/cashwad.webp",
+    "bell": "img/extra_bell.webp",
+    "quote_bronze": "img/extra_quote_bronze.webp",
+    "quote_silver": "img/extra_quote_silver.webp",
+    "quote_gold": "img/extra_quote_gold.webp",
+    "cardmachine": "img/cardmachine.webp",
+    "seal": "img/seal.webp"
+  }
 }
