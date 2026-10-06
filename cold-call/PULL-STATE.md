@@ -60,25 +60,41 @@ Open, by choice (known limits):
 - Tests: `tests/coldcall-pull-server.js` 47 (4 new: N3, N4, N5, N6), `tests/coldcall-pull-engine.js` 38 (1 new: N1; the two F2 tests updated to the floor). Each new test fails on the old code. Files: `games/coldcall-engine.js` (only the `cbBet` hunk; the levers agent's CFG values are not in my commit), `games/coldcall.js`, `games/coldcall-store.js`, `public/games/coldcall/engine.js` (same hunk).
 - With the levers agent's uncommitted CFG values in the working tree, `coldcall-pull-engine.js` shows 2 failures (the byte-sync and the pre-PULL legacy digest, both from the changed bell / phone / buyCost values); on HEAD + my hunk it is 38 / 38. They clear when the levers agent commits the values with the engine copy and re-pins the legacy digest.
 
-### Wave 2 progress (lead, 2026-10-06 ~08:15; rewritten into the Wave 2 hand-off at the end)
-- Done: contract `PULL-UI.md`; concept comps A/B/C, Opus blind judge picked B (rolodex, decisions in the HUD) + steals; A flow 5120a28; B look c31fd6c; W1B fixes e56db4f.
-- Running now: builder T re-pins the three red tests (coldcall band, pull-engine legacy digest, server "W1B N5"); builder I integrates ASK A (reset ctx.timer on `ready`), shows leads out of the knob (450), daily token, ghost wording "IF A PHONE HAD LANDED", then screenshots 540/1440/360 x Play $ / Chips.
-- Next: Opus critic pass (Frank spawns with collect=true; I will ask), ONE fix round, four suites from a git archive export, hand-off section.
-
-## RE-PIN (levers values)
-Three tests re-pinned to 265dd33 (bell 1.175, phone 0.2275, buyCost 27/964/2910/20); no knob or engine value touched. Results: coldcall.js 47, pull-engine 38, pull-server 47, bender 19, cmp clean.
-- tests/coldcall.js sanity band: natural bonus 1 in 120-250 -> 300-600 (now 1 in 417, levers 1 in 420), RTP 70-130 -> 60-130 (stateless base game 67.6%: full 97.96 less Callback 22.4, warm 4.3, pot 1.0, PICK edge); hit 20.48% stays in 18-26.
-- tests/coldcall-pull-engine.js legacy digest: c808ef7e... -> 2068652a... (regenerate by printing h.digest('hex') from that loop; the comment above the test says so).
-- tests/coldcall-pull-server.js W1B N5: assertions unchanged; toPending now checks every pending step of a round, not only the first (a PICK is often followed by the ONE MORE CALL; with bell 1.175 seed 93 never stopped first at 'more').
-
-### Wave 2 status (lead, fix round spawned, ~11:00)
-- Opus critic W2 (17 reproduced / 4 plausible) merged with builder V's real-server coverage (all PASS, 827dad5 reconnect-voids fix). ONE fix round running: F1 (client flow: U1 skip tap answering a decision, U3 cross-mode stray result, U5 countdown reset, U6/U7/U11/P4 drop/restart/reload lines from history, U8 rate on ready, U14, U15, U16, U17, P1) and F2 (look: U1 arming + safe key under SPIN, U2 ONE MORE CALL shows the round's outcomes when the trigger spin paid, U9, U10, U12, U13, P2, P3).
-- **SERVER NEED FOR FRANK (U4, not fixable in the client): the decision timer starts when the pending result is SENT, and `ready` only re-arms if it arrives before that timer fires.** At normal speed the client plays 15 to 50 s of bonus first, so 3 of 6 real rounds lost ONE MORE CALL (both ALWAYS BE CLOSING; the big ones) and a passive player gets TIME'S UP for a clock never shown. Exact ask: arm the timer at pending creation with a long CEILING (`max(timeoutMs, 180000)`, stored per round), and make the first `ready` re-arm it to `timeoutMs` from now (still never past `armedAt + ceiling`); `timer` reply unchanged. A client that never sends `ready` keeps the old behaviour at the ceiling. Test: pending, wait past `timeoutMs`, send `ready`: still open, timer = full `timeoutMs`; never `ready`: defaults at the ceiling; money unchanged (a default is the same settle).
-- Money findings U1, U2, U3: assigned above; U4 open for the reason above; none left unlisted.
-
 ### FIX N1-CARRY (engine builder, 2026-10-06; critic W1FIX N1 recommendation: round down AND carry the remainder)
 - What: `state.carry` (cents, [0, 10), default 0 in `newState`, last key). `addLeads` arms with `cbArm(avg, carry)` (floor10 of `avg + carry`, clamped [10, 2500]; the rest is the new carry). Exports: `cbArm`; `cbBet(avg)` = `cbArm(avg, 0).bet`. `normState` reads a missing or damaged carry as 0 and keeps the rest of the state (a damaged carry never resets the list). Store file needs no change (state is opaque); old files load with carry 0.
 - Cold clock: leaves the carry alone (it is stake already earned; `tickState`, `coldInfo`, leaks never touch it). Callback rounds and buys do not change it. It is per currency because the state is: Play $ and Chips each carry their own and nothing converts.
 - View: unchanged. `stateView` and every result view (`pull.state`) still send `lt, list, cb, warm, warmBet, cold, daily`; no carry. UI builders: nothing to do (`PULL-UI.md` untouched).
 - Tests: engine 38 -> 42 (N1-CARRY a, b, c, d; the W1B N1 test now asserts `cb.bet <= avg + carry held`), server 48 -> 49 (N1-CARRY c, server). State key order test gained `carry`. Legacy digest unchanged.
 - Measured: `LEVERS.md` 8.10.
+
+## Wave 2 hand-off (2026-10-06 ~13:00, lead wave 2; a FRESH lead starts wave 3 from this file)
+
+### What is on `coldcall-pull` (HEAD afc0797 + later levers commits; nothing pushed, nothing on master, no PR, no deploy)
+- Wave 2 UI is IN: concept B (rolodex, decisions in the HUD) chosen by a blind Opus judge (+ ghost stamp and lead sticky from C, two-sided odds wording from A). Files: `public/games/coldcall/{game.js,bonus.js,board.js,pull.js,pull.css,index.html}`, `public/shell.js` (bridge relay: decide, ready, timer, floor, voided, history, disconnect, dock badge). Contract: `cold-call/PULL-UI.md` (sections 0, 0b, 1-5), notes: `PULL-UI-FLOW-NOTES.md` (A, integration, real-server coverage, fix round F1), `PULL-UI-LOOK-NOTES.md` (B, fix round F2). Concepts: `qa/coldcall-v2/concepts/` (NOTES.md). Screens: `qa/coldcall-v2/pull/` (idle, warm, callback, pick, more, ghost, pot, gain, info, fix2_*, real_*; 540x960, 1440x900, 360x740, Play $ + Chips).
+- Commits (UI): 5120a28 flow, c31fd6c look, 864bff7 integration + display, 0beccf3 + 827dad5 real-server coverage + reconnect-voids, c88b95f/5b9db43 F2, afc0797 F1. Other agents on the same branch: W1B fixes e56db4f, levers values 265dd33 + 8.9/8.10, N1-CARRY e15f151, server U4 68f02d3, tests re-pin 478f6a1.
+- Suites from a `git archive HEAD` export in `/tmp/w2-export` (2026-10-06 ~12:55): `tests/coldcall.js` 47, pull engine 42, pull server 49, `tests/bender.js` 19, all green; `cmp games/coldcall-engine.js public/games/coldcall/engine.js` identical.
+- Real-server runs on 4640 at HEAD: flow scenarios picktimeout + more (Play $) pass; the Opus U4 repro (normal speed, no turbo) now offers BOTH decisions in 3 of 3 (bonus1 38 s, bonus2 46 s, bonus2 64 s, all banked by the player; before: 3 of 6 lost the offer). F1 ran `flow.js all play` and `all chips` green.
+
+### Opus critic W2 (`PULL-CRITIC-W2-OPUS.md`, 17 reproduced / 4 plausible): all fixed, each with a before/after driver (`qa/coldcall-v2/capture/f1_*.js`, F2 offline checks)
+- Money: U1 (a skip tap answered ONE MORE CALL: 600 ms arming gate in game.js + board.js + pull.js, HANG UP sits at the SPIN position, 0 of N answered under 600 ms), U2 (ONE MORE CALL shows the round's outcomes when the trigger spin paid: bank / double / lose = round totals), U3 (a result of another tab / currency is a stray, never the spin in flight), U4 (server ceiling, verified above). Also U5-U17, P1-P3 (see F1 / F2 notes).
+- No second Opus pass has been run on the fix round (F1 + F2 + U4 server). Recommended before wave 4 QA.
+
+### Open, with reasons
+- The shell dock badge still prints `$` for Chips (`shell.js` `dollars2`, pre-existing, outside the pull).
+- Limits found by builders: restart while ONE MORE CALL is open was not driven (same code path as PICK); real-page ONE MORE CALL at 360 / 1440 and Chips with seed 46474 were mock-shot only (contention on the shared 4640); P3: during a bonus animation with no prompt open, another player's pot drop shows a few seconds late; the adopted-round clock falls back to receipt time under a large client clock skew; the server `timer` reply has no `now`, so the countdown uses `expiresAt - Date.now()` when plausible.
+- Practice mode (not signed in, local engine) has no pull UI by design.
+- A 404 for one resource shows in the console of real runs (not investigated; not in the game path).
+- Open from wave 1 (not UI): F6 decided KEEP (pot extra, stated on the info screen), W8 pot chasing, W9 seed 0, crash windows F9/W7, default on logout needs `server.js`.
+
+### Wave 3 (watch a friend's bonus)
+- Spec: PULL.md mechanic 5 "Sweat it": when a friend is in a bonus others get a toast and can watch it live, read-only. NOT in this build: buying a piece of a bonus.
+- Server has no spectator channel yet: `floor:feed` carries a `bonus` event at SETTLE only. Frank decides the mechanism: (a) stream the finished script to watchers a few seconds later as a replay (no money, simplest, safe); (b) live per-spin events. Needed: an event `floor:watch {id, who, mode, bet, script (done) | spin events}` to signed-in sockets in the SAME currency, a `watch` request/ack, and no leak of an open decision (watchers never see the pending partial of a decision before it is made; a watcher is read-only and its taps do nothing).
+- UI work: toast "Matt is in a bonus: WATCH" (feed ticker line becomes a button), a read-only replay of the script through the existing `playSpin` / `bonus.run` with a "WATCHING MATT" frame, no balance or WIN meter change, leave button, never starts while the viewer has a decision open or a round in flight. Reuse the resume cursor and `ctx` structure in `game.js`.
+- Wave 4 QA: real-click driver `qa/coldcall-v2/capture/qa1.js` is hard-wired to 4610 and the old tree (qalib.js OUT path): retarget to 4640 first, then 540x960, 1440x900, 360 wide, Play $ and Chips; `flow.js all` + `real.js all` + `f1_*.js` are the regression set.
+
+### Gotchas (new)
+- ARMING: prompts ignore taps for 600 ms; any driver must wait for `CC.pull.armed()` / 600 ms before clicking a lit square or `#pl_bank` / `#pl_more` (flow.js has `armedWait`). Servers armed with a long ceiling: the client sends `ready` when the prompt is up; do not show a server countdown until `g:coldcall:timer` arrives (the first clock is assumed full `timeoutMs`).
+- 4640 is shared: `_scratch/start4640.sh` (fresh data), `real.js`, `f1_drop.js restart` and `f1_u17.js` restart it. Never 4610. `flow.js` rewrites tracked PNGs under `qa/coldcall-v2/w2flow/`: `git checkout --` them before committing.
+- Tests rewrite tracked `tests/*.json` and drop `accounts.json`, `*.bak-*`: restore by path. Commit by named paths only; the levers agent edits `games/coldcall-engine.js` + its public copy (byte-identical), never stage them.
+- Opus critics/judges: `collect=true` + `agents_wait`, model verified on a `cli exec ... model=claude-opus-5-5` line in `/tmp/openclaw/openclaw-<date>.log` (the wave-2 concept judge was verified; Frank spawned the W2 critic). My own `sessions_send` to Frank/children is not available from a lead session: write needs into this file.
+- Builders A/B/I/V/F1/F2 are DONE; no live children from wave 2.
