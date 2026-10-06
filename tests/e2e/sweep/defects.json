@@ -48,5 +48,35 @@
   "steps": "Lose all chips at a table; look at your seat and the opponent's seat.",
   "expected": "\"Busted\" / \"Out of chips\" (or Rebuying).",
   "actual": "Stack 0 seats read \"JOINING\", the same word used for a seat waiting for the next deal."
+ },
+ {
+  "id": "Q06",
+  "sev": "S3",
+  "title": "Create form: the seat stepper goes to 9, the server refuses 9",
+  "shot": "Q06.jpg",
+  "where": "public/lobby.js:488-489 (Math.min(9, f.seats + 1)); contract: seats 2..8, 9 rejected",
+  "steps": "Create table form, press + on the seats stepper from 8.",
+  "expected": "The stepper stops at 8.",
+  "actual": "It shows 9. Submitting is refused with \"Seat count is not supported (2 to 8, you have 9)\" (a usable message, but the form should not offer it)."
+ },
+ {
+  "id": "Q07",
+  "sev": "S2",
+  "title": "Create-table refusals print amounts as raw cents on a Play $ form",
+  "shot": "Q06.jpg",
+  "where": "public/lobby.js:863 formats server errors with S.cur.unit (no current table while creating -> chips)",
+  "steps": "Create form, Play $: set Minimum buy-in to $0.10 with $0.25/$0.50 blinds, press Create table.",
+  "expected": "\"Minimum buy-in is below the big blind (at least $0.50, you have $0.10)\".",
+  "actual": "\"(at least 50, you have 10)\": the cents are printed bare, so a $ form reads as $50 / $10."
+ },
+ {
+  "id": "Q08",
+  "sev": "S2",
+  "title": "No control to leave a table with chips: the only Leave button is display:none",
+  "shot": "Q08.jpg",
+  "where": "public/style.css:479 `.g-brand { display: none; }` hides #btn-home (public/index.html:60), the only in-game leave path; the bust panel Leave exists only at 0 chips. Same on master (style.css:470).",
+  "steps": "Sit at any table with chips, look for a way to stand up and cash out (header, seat menu, bank panel, dock).",
+  "expected": "A visible Leave / Stand up control that cashes the stack back to the bank.",
+  "actual": "None. #btn-home exists with display:none and 0x0 size. A player can only close the tab and wait for the 2 minute disconnect grace (and only between hands) before the stack goes back to the bank, during which the seat shows as disconnected."
  }
 ]

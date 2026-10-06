@@ -121,6 +121,7 @@ class Bots:
     def state(self, name): return self.call('state', name=name)
     def gs(self, name): return self.state(name).get('gs')
     def rig(self, name, holes, board): return self.call('rig', name=name, holes=holes, board=board)
+    def rig_many(self, name, specs): return self.call('rig', name=name, specs=specs)   # [[holes, board], ...] queued in order
     def policy(self, name, policy): return self.call('policy', name=name, policy=policy)
     def act(self, name, action, amount=None): return self.call('act', name=name, action=action, amount=amount)
     def close(self):
@@ -153,7 +154,7 @@ def nums(t): return [int(x.replace(',', '')) for x in _re.findall(r'[\d,]+\d|\d'
 class Scene:
     """A table made by a bot host, the hero in a real browser, other seats as bots. Seat order = hero first, then bots in the order given.
     Scene(pw, view='desk', mode='chips'|'play', hero_stack=2000, bots=[('b1', 2000, 'call')], settings={}, rig=(holes, board))"""
-    def __init__(self, pw, view='desk', mode='chips', hero_stack=2000, bots=(('b1', 2000, 'call'),), settings=None, rig=None, tag=None, fund=None, hero_fund=None):
+    def __init__(self, pw, view='desk', mode='chips', hero_stack=2000, bots=(('b1', 2000, 'call'),), settings=None, rig=None, tag=None, fund=None, hero_fund=None, hero_host=False):
         self.pw, self.view, self.mode = pw, view, mode
         self.tag = tag or ('%d' % (int(time.time()) % 100000))
         self.hero_name = 'h' + self.tag; self.hero_key = self.hero_name.lower()
@@ -164,20 +165,30 @@ class Scene:
         unit_mul = 1 if mode == 'chips' else 1
         base = {'name': 'Sweep', 'mode': mode, 'buyIn': {'min': 100, 'max': 1000000, 'default': 2000}, 'blinds': {'sb': 25, 'bb': 50}, 'autoStart': False, 'actionTimerSec': 0}
         base.update(settings or {})
-        r = self.B.req(host, 'table_create', {'settings': base}, 'table_created')
-        if r.get('__err'): raise RuntimeError('create: %s' % r)
-        self.tid = r['table']['id']; self.table = r['table']
-        if rig: self.B.rig(host, rig[0], rig[1])
+        self.base_settings = base; self.hero_host = hero_host
+        if not hero_host:
+            r = self.B.req(host, 'table_create', {'settings': base}, 'table_created')
+            if r.get('__err'): raise RuntimeError('create: %s' % r)
+            self.tid = r['table']['id']; self.table = r['table']
+            if rig: self.B.rig(host, rig[0], rig[1])
+        self.rig = rig
         self.s = Sess(pw, view, 'hero'); self.p = self.s.page; self.fr = self.s.fr
         self.hero_stack = hero_stack; self.hero_fund = hero_fund
     def hero_in(self):
         s, p = self.s, self.page if hasattr(self, 'page') else self.p
         s.sign_up(self.hero_name); time.sleep(0.8); s.dismiss_modals()
         p.evaluate("PingSocket.on('game_state', gs => { window.__gs = gs }); PingSocket.on('showdown_result', d => { (window.__sd = window.__sd || []).push(d) }); PingSocket.on('bust_out', d => { window.__bust = d })")
+    def hero_create(self):
+        """Hero hosts: table_create from the signed-in page (the UI create form is covered by s03); queues the rig through a bot."""
+        r = self.p.evaluate("(s) => new Promise(res => { PingSocket.once('table_created', d => res(d)); PingSocket.once('error', e => res({err: e})); PingSocket.emit('table_create', {settings: s}); setTimeout(() => res({err: 'timeout'}), 6000) })", self.base_settings)
+        if r.get('err') or not r.get('table'): raise RuntimeError('hero create: %s' % r)
+        self.tid = r['table']['id']; self.table = r['table']
+        if self.rig: self.B.rig(self.host, self.rig[0], self.rig[1])
     def hero_sit_ui(self, amount=None):
         """Join by code through the lobby, buy in through the picker."""
         p = self.p
-        p.fill('#lb-code', self.tid); p.click('#lb-join-btn')
+        if not p.locator('#lb-buyin-input').count():
+            p.fill('#lb-code', self.tid); p.click('#lb-join-btn')
         p.wait_for_selector('#lb-buyin-input', timeout=8000)
         amt = amount if amount is not None else self.hero_stack
         p.fill('#lb-buyin-input', ('%.2f' % (amt / 100)) if self.mode == 'play' else str(amt))   # a Play $ table is typed in dollars
@@ -189,6 +200,11 @@ class Scene:
             if r.get('__err'): raise RuntimeError('sit %s: %s' % (n, r))
             self.B.policy(self.bn(n), pol)
     def start(self): self.B.emit(self.host, 'table_start', {'tableId': self.tid})
+    def hook(self, page=None):
+        """Record every socket event the page receives into window.__ev (more reliable than websocket frame capture)."""
+        (page or self.p).evaluate("window.__ev = []; PingSocket.onAny((e, d) => { window.__ev.push([e, d]) })")
+    def ev(self, name): return [d for e, d in (self.p.evaluate('window.__ev') or []) if e == name]
+    def ev_clear(self): self.p.evaluate('window.__ev = []')
     def gs(self): return self.p.evaluate('window.__gs')
     def my_turn(self): return bool(self.p.evaluate("!!document.getElementById('btn-fold') && !document.getElementById('btn-fold').disabled && !document.getElementById('btn-check-call').disabled"))
     def wait_turn(self, timeout=30): return wait_for(self.my_turn, timeout, 0.15)
@@ -204,3 +220,24 @@ class Scene:
         try: self.s.close()
         except Exception: pass
         self.B.close()
+
+def play_hero(sc, fn, timeout=60):
+    """Act for the hero whenever it is on turn: fn(gs) -> 'fold'|'call'|'raise:<n>'|'allin'|None; returns when a showdown_result arrived."""
+    t0 = time.time(); n0 = len(sc.p.evaluate('window.__sd || []')); last = None
+    while time.time() - t0 < timeout:
+        if len(sc.p.evaluate('window.__sd || []')) > n0: return True
+        if sc.my_turn():
+            gs = sc.gs(); sig = (gs['handNum'], gs['street'], gs['currentBet'], gs['pot'])
+            if sig == last: time.sleep(.2); continue
+            last = sig; a = fn(gs)
+            if a == 'fold': sc.click('#btn-fold')
+            elif a == 'call': sc.click('#btn-check-call')
+            elif a == 'allin':
+                sc.p.click('#raise-box .amt-pre:last-of-type') if False else None
+                sc.p.locator('#raise-box button', has_text='ALL-IN').first.click(); time.sleep(.2)
+                sc.click('#btn-raise'); time.sleep(.4)
+            elif a and a.startswith('raise:'):
+                v = int(a.split(':')[1]); sc.p.fill('#raise-input', ('%.2f' % (v / 100)) if sc.mode == 'play' else str(v)); sc.click('#btn-raise')
+        time.sleep(.2)
+    return False
+

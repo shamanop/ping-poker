@@ -8,26 +8,6 @@ only = sys.argv[3:]
 c = Checks()
 BOARD = ['2c', '7d', '9h', 'Jc', '4s']
 
-def play_hero(sc, fn, timeout=60):
-    """Act for the hero whenever it is on turn: fn(gs) -> 'fold'|'call'|'raise:<n>'|'allin'|None; returns when a showdown_result arrived."""
-    t0 = time.time(); n0 = len(sc.p.evaluate('window.__sd || []')); last = None
-    while time.time() - t0 < timeout:
-        if len(sc.p.evaluate('window.__sd || []')) > n0: return True
-        if sc.my_turn():
-            gs = sc.gs(); sig = (gs['handNum'], gs['street'], gs['currentBet'], gs['pot'])
-            if sig == last: time.sleep(.2); continue
-            last = sig; a = fn(gs)
-            if a == 'fold': sc.click('#btn-fold')
-            elif a == 'call': sc.click('#btn-check-call')
-            elif a == 'allin':
-                sc.p.click('#raise-box .amt-pre:last-of-type') if False else None
-                sc.p.locator('#raise-box button', has_text='ALL-IN').first.click(); time.sleep(.2)
-                sc.click('#btn-raise'); time.sleep(.4)
-            elif a and a.startswith('raise:'):
-                v = int(a.split(':')[1]); sc.p.fill('#raise-input', ('%.2f' % (v / 100)) if sc.mode == 'play' else str(v)); sc.click('#btn-raise')
-        time.sleep(.2)
-    return False
-
 def seat_stack(text, name=None):
     """First money-looking segment after the name: '1,975' (chips) or '$19.75' (usd pref) -> integer units."""
     segs = [x.strip() for x in text.split('|')]

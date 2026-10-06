@@ -45,7 +45,7 @@ async function handle(m) {
     case 'emit': b.emit(m.ev, m.payload); return 'sent';
     case 'req': return await b.req(m.ev, m.payload, m.okEv, m.ms || 6000);
     case 'state': return { gs: b.gs, cards: b.cards, errors: b.errors.slice(-10), errorObjs: b.errorObjs.slice(-10), busts: b.busts.slice(-3), showdowns: b.showdowns.slice(-3), money: b.money, left: b.left.slice(-3), idx: b.idx(), myTurn: b.myTurn() };
-    case 'rig': return await b.req('__rig', { decks: [rigDeck(m.holes, m.board)] }, '__rig_ok');
+    case 'rig': return await b.req('__rig', { decks: (m.specs || [[m.holes, m.board]]).map(([h, bd]) => rigDeck(h, bd)) }, '__rig_ok');
     case 'policy': policies[m.name] = m.policy; decide(b); return 'ok';
     case 'act': b.act(m.action, m.amount); return 'sent';
     case 'audit': return await Object.values(bots)[0].req('__audit', {}, '__audit');

@@ -2,13 +2,23 @@
  "head": "60fbd32",
  "rerun": "tests/e2e/sweep/run_all.sh",
  "covered": [
-  "tests/e2e/*.py re-run on the merged build (buyin, create, host_drawer, rebuy, bender, admin, bank, showdown, ui-audit, games_shell bender pass; rebuy_v2 and raise fail for stale-script reasons, see PROGRESS.md)",
-  "s01 sign-up/bonus/header vs audit (desk; phone stops at Sign out, off screen)",
-  "s02 hands in the browser: fold win, fold lose, showdown, split, side pots, all-in run-out (desk chips, desk Play $)",
-  "s05 reload mid-hand, second tab take-over, transport drop and return"
+  "tests/e2e/*.py re-run on the merged build: 10 pass, rebuy_v2 and raise fail for stale-script reasons (see PROGRESS.md)",
+  "s01 sign-up / daily bonus / header vs audit / sign out (desk)",
+  "s02 hands vs the server in the browser: fold win, fold lose, showdown, split pot, side pots with a short all-in, all-in run-out, in Chips and Play $ (desk)",
+  "s03 create form: every field vs the table the server made, limits",
+  "s05 reload mid-hand, second tab take-over, transport drop and return",
+  "s06 bust, rebuy default / limit reached / refused with chips, leave from the bust panel; s06b sit out, leave mid-hand and cash-out; s06c disconnect on turn, turn clock, return, 2 minute cash-out",
+  "s07 host tools: pause/resume, blinds change mid-hand, kick mid-hand, end night and settle-up screen vs the server",
+  "s08 admin console: columns vs audit, bank adjust by delta, over-draw refused, Play $ set",
+  "s09 Ballot Bender: spins in both funds, balances vs audit",
+  "s10 login lockout message, /api/admin/bender-config token gate"
  ],
  "not_covered": [
-  "Cold Call: not in v2-core (lives on origin/coldcall)",
-  "Phone hands: the 390 layout cannot be played (Q02)"
+  "Phone (390x844) hands: the layout cannot be played (Q02); phone coverage is geometry on lobby and table only",
+  "Cold Call: not in v2-core (origin/coldcall)",
+  "radio and recap: only on the unmerged branch combo-1006",
+  "Top-up screen: no client UI calls wallet_topup",
+  "Bank panel inside a table with a seated player (Bank button) compared with the ledger: only the admin console columns were checked",
+  "Windows/Safari/real mobile browsers: chromium only"
  ]
 }

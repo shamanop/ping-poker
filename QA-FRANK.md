@@ -10,7 +10,10 @@ Severity: S1 money or stuck table, S2 wrong or misleading, S3 looks. Status: ope
 | Q02 | S2 | open | Phone width (390): header, lobby buttons and the action bar are off screen; the table cannot be played |
 | Q03 | S2 | open | Returning to a busted seat through JOIN: the buy-in is ignored silently and the table shows a dead hand |
 | Q04 | S2 | open | Daily bonus window prints raw cents with no unit |
+| Q07 | S2 | open | Create-table refusals print amounts as raw cents on a Play $ form |
+| Q08 | S2 | open | No control to leave a table with chips: the only Leave button is display:none |
 | Q05 | S3 | open | A busted seat is labelled "JOINING" |
+| Q06 | S3 | open | Create form: the seat stepper goes to 9, the server refuses 9 |
 
 ## Q01 (S2) Heads-up: SB and BB badges are swapped on the seats
 
@@ -48,6 +51,24 @@ Severity: S1 money or stuck table, S2 wrong or misleading, S3 looks. Status: ope
 - Where: public/juice.js streakCalendar (renders schedule cents with toLocaleString); public/shell.js:331
 - Evidence: ![](qa/v2-sweep/Q04.jpg)
 
+## Q07 (S2) Create-table refusals print amounts as raw cents on a Play $ form
+
+- Status: open
+- Steps: Create form, Play $: set Minimum buy-in to $0.10 with $0.25/$0.50 blinds, press Create table.
+- Expected: "Minimum buy-in is below the big blind (at least $0.50, you have $0.10)".
+- Actual: "(at least 50, you have 10)": the cents are printed bare, so a $ form reads as $50 / $10.
+- Where: public/lobby.js:863 formats server errors with S.cur.unit (no current table while creating -> chips)
+- Evidence: ![](qa/v2-sweep/Q06.jpg)
+
+## Q08 (S2) No control to leave a table with chips: the only Leave button is display:none
+
+- Status: open
+- Steps: Sit at any table with chips, look for a way to stand up and cash out (header, seat menu, bank panel, dock).
+- Expected: A visible Leave / Stand up control that cashes the stack back to the bank.
+- Actual: None. #btn-home exists with display:none and 0x0 size. A player can only close the tab and wait for the 2 minute disconnect grace (and only between hands) before the stack goes back to the bank, during which the seat shows as disconnected.
+- Where: public/style.css:479 `.g-brand { display: none; }` hides #btn-home (public/index.html:60), the only in-game leave path; the bust panel Leave exists only at 0 chips. Same on master (style.css:470).
+- Evidence: ![](qa/v2-sweep/Q08.jpg)
+
 ## Q05 (S3) A busted seat is labelled "JOINING"
 
 - Status: open
@@ -57,14 +78,33 @@ Severity: S1 money or stuck table, S2 wrong or misleading, S3 looks. Status: ope
 - Where: public/game.js:945 (sittingOut without sitOutRequest -> "Joining")
 - Evidence: ![](qa/v2-sweep/Q03.jpg)
 
+## Q06 (S3) Create form: the seat stepper goes to 9, the server refuses 9
+
+- Status: open
+- Steps: Create table form, press + on the seats stepper from 8.
+- Expected: The stepper stops at 8.
+- Actual: It shows 9. Submitting is refused with "Seat count is not supported (2 to 8, you have 9)" (a usable message, but the form should not offer it).
+- Where: public/lobby.js:488-489 (Math.min(9, f.seats + 1)); contract: seats 2..8, 9 rejected
+- Evidence: ![](qa/v2-sweep/Q06.jpg)
+
 ## Covered
 
-- tests/e2e/*.py re-run on the merged build (buyin, create, host_drawer, rebuy, bender, admin, bank, showdown, ui-audit, games_shell bender pass; rebuy_v2 and raise fail for stale-script reasons, see PROGRESS.md)
-- s01 sign-up/bonus/header vs audit (desk; phone stops at Sign out, off screen)
-- s02 hands in the browser: fold win, fold lose, showdown, split, side pots, all-in run-out (desk chips, desk Play $)
+- tests/e2e/*.py re-run on the merged build: 10 pass, rebuy_v2 and raise fail for stale-script reasons (see PROGRESS.md)
+- s01 sign-up / daily bonus / header vs audit / sign out (desk)
+- s02 hands vs the server in the browser: fold win, fold lose, showdown, split pot, side pots with a short all-in, all-in run-out, in Chips and Play $ (desk)
+- s03 create form: every field vs the table the server made, limits
 - s05 reload mid-hand, second tab take-over, transport drop and return
+- s06 bust, rebuy default / limit reached / refused with chips, leave from the bust panel; s06b sit out, leave mid-hand and cash-out; s06c disconnect on turn, turn clock, return, 2 minute cash-out
+- s07 host tools: pause/resume, blinds change mid-hand, kick mid-hand, end night and settle-up screen vs the server
+- s08 admin console: columns vs audit, bank adjust by delta, over-draw refused, Play $ set
+- s09 Ballot Bender: spins in both funds, balances vs audit
+- s10 login lockout message, /api/admin/bender-config token gate
 
 ## NOT covered
 
-- Cold Call: not in v2-core (lives on origin/coldcall)
-- Phone hands: the 390 layout cannot be played (Q02)
+- Phone (390x844) hands: the layout cannot be played (Q02); phone coverage is geometry on lobby and table only
+- Cold Call: not in v2-core (origin/coldcall)
+- radio and recap: only on the unmerged branch combo-1006
+- Top-up screen: no client UI calls wallet_topup
+- Bank panel inside a table with a seated player (Bank button) compared with the ledger: only the admin console columns were checked
+- Windows/Safari/real mobile browsers: chromium only
