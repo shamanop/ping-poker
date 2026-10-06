@@ -27,12 +27,6 @@ with sync_playwright() as pw:
         p.fill('#lb-name', 'chris'); p.fill('#lb-pin', '9999')   # NOTE: run against 4702, the lockout is per IP and escalates; p.click('#lb-submit'); time.sleep(1.2)
         e1 = p.inner_text('#lb-err'); print('wrong PIN ->', repr(e1)); c.ok('wrong PIN shows a plain message', 'wrong' in e1.lower() or 'pin' in e1.lower(), e1)
         c.ok('the message does not reveal whether the name exists', 'no account' not in e1.lower() and 'not found' not in e1.lower(), e1)
-        for i in range(6):
-            p.fill('#lb-pin', '9998'); p.click('#lb-submit'); time.sleep(.6)
-            if p.locator('#lb-submit').is_disabled(): break
-        e2 = p.inner_text('#lb-err'); print('after repeated wrong PINs ->', repr(e2), '| submit disabled', p.locator('#lb-submit').is_disabled())
-        c.ok('repeated wrong PINs are rate limited with a visible message', 'wait' in e2.lower() or 'try again' in e2.lower() or 'too many' in e2.lower() or p.locator('#lb-submit').is_disabled(), e2)
-        print(s.shot('s10_login_lock'))
         # claim flow: an existing name that has no PIN claim? use a bot-created name -> normal login; use an unknown name on the Sign in tab
         s.goto(); p.wait_for_selector('#lb-name'); p.fill('#lb-name', 'nobody' + tag); p.fill('#lb-pin', '1234'); p.click('#lb-submit'); time.sleep(1.2)
         e3 = p.inner_text('#lb-err'); print('unknown name on Sign in ->', repr(e3))
@@ -53,6 +47,14 @@ with sync_playwright() as pw:
         # a signed-out socket may not do things
         res = p.evaluate("(() => new Promise(r => { const s = io(); s.on('error', e => { r(e); s.close() }); s.on('connect', () => s.emit('table_join', {tableId: 'POKERPING', buyIn: 500})); setTimeout(() => r(null), 3000) }))()")
         print('unauthenticated table_join ->', res); c.ok('unauthenticated table_join is refused with code auth', res and res.get('code') == 'auth', str(res))
+        # ---- wrong-PIN lockout LAST (it is per name+IP, escalates, and blocks that name's right PIN too)
+        s.goto(); p.wait_for_selector('#lb-name'); p.fill('#lb-name', 'chris'); p.fill('#lb-pin', '9999'); p.click('#lb-submit'); time.sleep(1.2)
+        for i in range(6):
+            p.fill('#lb-pin', '9998'); p.click('#lb-submit'); time.sleep(.6)
+            if p.locator('#lb-submit').is_disabled(): break
+        e2 = p.inner_text('#lb-err'); print('after repeated wrong PINs ->', repr(e2), '| submit disabled', p.locator('#lb-submit').is_disabled())
+        c.ok('repeated wrong PINs are rate limited with a visible message', 'wait' in e2.lower() or 'try again' in e2.lower() or 'too many' in e2.lower() or p.locator('#lb-submit').is_disabled(), e2)
+        print(s.shot('s10_login_lock'))
         # bender-config live push: a signed-in page on the 4702 server hears g:bender:cfg
         print('page errors', s.errors[:4])
     finally:

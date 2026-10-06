@@ -74,7 +74,7 @@ with sync_playwright() as pw:
         rows = sc.p.evaluate("[...document.querySelectorAll('.lb-net')].map(e => ({key: e.dataset.key, text: e.innerText.replace(/\\n/g, ' | '), amt: e.querySelector('.amt').innerText}))")
         print('settle rows', rows)
         a_end = audit()
-        sds = sc.p.evaluate('window.__sd') or []
+        sds = list({d['handNo']: d for d in (sc.p.evaluate('window.__sd') or [])}.values())   # the page listener is registered twice: dedupe by hand
         names = {sc.hero_key: sc.hero_name, keys[1]: sc.bn('b1'), keys[2]: sc.bn('b2')}
         for k in keys:
             net_server = bal(a_end, k) + seat_bal(a_end, k) - start_bal[k]
