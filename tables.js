@@ -17,7 +17,7 @@ const normCode = c => String(c == null ? '' : c).toUpperCase().replace(/[^A-Z0-9
 
 function defaultsFor(mode) {
   return mode === 'chips'
-    ? { buyIn: { min: 500, max: 100000, default: 1500 }, blinds: { sb: 10, bb: 20 } }
+    ? { buyIn: { min: 5, max: 100000, default: 1500 }, blinds: { sb: 10, bb: 20 } }
     : mode === 'play'
       ? { buyIn: { min: 500, max: 50000, default: 2000 }, blinds: { sb: 25, bb: 50 } }
       : { buyIn: { min: 500, max: 50000, default: 10000 }, blinds: { sb: 50, bb: 100 } };
@@ -43,7 +43,6 @@ function validateSettings(raw) {
   if (buyIn.default < buyIn.min || buyIn.default > buyIn.max) return bad('Default buy-in must be between min and max');
   const blinds = { sb: bl.sb, bb: bl.bb };
   if (!isInt(blinds.sb) || !isInt(blinds.bb) || blinds.sb < 1 || blinds.bb < 2 || blinds.sb >= blinds.bb) return bad('Blinds must be whole numbers with small < big');
-  if (buyIn.min < blinds.bb) return bad('Minimum buy-in must cover the big blind');
   const seats = raw.seats === undefined ? 8 : raw.seats;
   if (!isInt(seats) || seats < 2 || seats > 9) return bad('Seats must be 2 to 9');
   const timer = raw.actionTimerSec === undefined ? 30 : raw.actionTimerSec;
@@ -147,7 +146,7 @@ function createTables(E) {
   }
 
   const LEGACY = () => buildTable({
-    name: 'The Ping', mode: 'chips', unit: 'chips', buyIn: { min: 500, max: 100000, default: 1500 }, blinds: { sb: 10, bb: 20 },
+    name: 'The Ping', mode: 'chips', unit: 'chips', buyIn: { min: 5, max: 100000, default: 1500 }, blinds: { sb: 10, bb: 20 },
     blindIncrease: { enabled: false, everyMin: 15, schedule: 'standard' }, seats: MAX_SEATS, actionTimerSec: 30, rebuys: true, rebuyLimit: 0, isPrivate: false, autoStart: true,
   }, 'chris', LEGACY_ID);
 
@@ -201,8 +200,19 @@ function createTables(E) {
   }
 
   // ── nights ────────────────────────────────────────────────────────────────
+  const playExtra = [];                     // hand snapshots + wins for the Play $ bank charts (memory only)
+  function playEntries() {
+    const all = [...playExtra];
+    for (const rows of playRows.values()) all.push(...rows);
+    return all.sort((a, b) => a.t - b.t);
+  }
   function noteRow(room, row) {
     if (room.mode !== 'play' || !room.nightId) return;
+    if (row.type === 'snapshot' || row.type === 'win') {
+      playExtra.push({ t: Date.now(), room: room.id, tableId: room.id, nightId: room.nightId, mode: 'cents', ...row });
+      if (playExtra.length > 20000) playExtra.splice(0, playExtra.length - 20000);
+      return;
+    }
     const rows = playRows.get(room.nightId) || [];
     rows.push({ t: Date.now(), room: room.id, tableId: room.id, nightId: room.nightId, mode: 'cents', ...row });
     playRows.set(room.nightId, rows);
@@ -567,7 +577,7 @@ function createTables(E) {
   }, Math.min(60000, EMPTY_MS));
   sweep.unref();
 
-  return { syncAccount, register, load, flush, attachLegacy, afterDrop, onRoomEmptied, finishNight, noteRow, card, publicTable, tables, lookup, genSchedule, setHostSocket, pushLobby, LEGACY_ID };
+  return { syncAccount, register, load, flush, attachLegacy, afterDrop, onRoomEmptied, finishNight, noteRow, playEntries, card, publicTable, tables, lookup, genSchedule, setHostSocket, pushLobby, LEGACY_ID };
 }
 
 module.exports = { createTables, validateSettings, genSchedule, fmtUnits, MAX_SEATS };

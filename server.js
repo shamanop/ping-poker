@@ -175,22 +175,34 @@ function pushMoney(key) {
   }
 }
 
-function bankSummary(roomId) {
-  const live = [];
+function bankSummary(roomId, view) {
   const own = rooms.get(roomId);
-  const nightId = (own && own.nightId) || null;
+  const want = view === 'play' || view === 'chips' ? view : (own && own.mode === 'play' ? 'play' : 'chips');
+  const liveOf = room => room.players.map(p => {
+    let status;
+    if (!p.connected && !p.isBot) status = 'away';
+    else if (p.sittingOut || p.sitOutRequest || p.chips === 0) status = 'sitting-out';
+    else status = 'seated';
+    return { name: p.name, isBot: !!p.isBot, chips: p.chips, inPot: room.status === 'playing' && room.pot > 0 ? (p.handBet || 0) : 0, status };
+  });
+  if (want === 'play') {
+    const live = [], wal = {};
+    for (const room of rooms.values()) if (room.mode === 'play') live.push(...liveOf(room).filter(l => !l.isBot));
+    for (const a of Object.values(accounts.all())) { const k = bankKey(a.key); const w = gameHooks && gameHooks.wallet ? gameHooks.wallet.get(k) : null; if (w) wal[k] = w.play; }
+    return { ...ledger.summary(roomId, wal, live, { all: true, rows: tables.playEntries() }), view: 'play', unit: 'cents' };
+  }
+  const base = own && own.mode === 'play' ? ROOM_ID : roomId;
+  const chipsRoom = rooms.get(base);
+  const nightId = (chipsRoom && chipsRoom.nightId) || null;
+  const live = [];
   for (const room of rooms.values()) {
-    if (nightId ? room !== own : room.nightId) continue;
-    for (const p of room.players) {
-      if (p.isBot && room.id !== roomId) continue;
-      let status;
-      if (!p.connected && !p.isBot) status = 'away';
-      else if (p.sittingOut || p.sitOutRequest || p.chips === 0) status = 'sitting-out';
-      else status = 'seated';
-      live.push({ name: p.name, isBot: !!p.isBot, chips: p.chips, inPot: room.status === 'playing' && room.pot > 0 ? (p.handBet || 0) : 0, status });
+    if (nightId ? room !== chipsRoom : room.nightId) continue;
+    for (const l of liveOf(room)) {
+      if (l.isBot && room.id !== base) continue;
+      live.push(l);
     }
   }
-  return ledger.summary(roomId, bank, live, { nightId });
+  return { ...ledger.summary(base, bank, live, { nightId }), view: 'chips', unit: 'chips' };
 }
 
 function saveBank() {
@@ -972,6 +984,10 @@ function scheduleNextHand(room, delayMs = 5000) {
     for (const p of room.players) if (!p.isBot && p.acct && p.handStartChips > 0) accounts.recordHand(p.acct, { won: p.chips > p.handStartChips, pot });
   }
   if (room.mode !== 'play') ledger.endHand(room, getBalance);
+  else {
+    tables.noteRow(room, { type: 'snapshot', handNum: room.handNum, players: room.players.map(p => ({ name: p.name, chips: p.chips, played: !p.isBot && !p.sittingOut && p.handStartChips > 0, isBot: !!p.isBot })) });
+    for (const p of room.players) if (!p.isBot && p.handStartChips > 0 && p.chips > p.handStartChips) tables.noteRow(room, { type: 'win', name: p.name, amount: p.chips - p.handStartChips, key: bankKey(p.name) });
+  }
   room.status = 'waiting_next';
   broadcastGameState(room);
 
@@ -1270,9 +1286,9 @@ io.on('connection', socket => {
       table: room ? { paused: !!room.paused, status: room.status, seated: room.players.filter(p => !p.isBot).length, handNum: room.handNum || 0, startChips: room.startChips || STARTING_CHIPS } : null,
     });
   });
-  on('admin_bank_summary', () => {
+  on('admin_bank_summary', ({ view } = {}) => {
     if (!adminOnly()) return;
-    socket.emit('bank_summary', bankSummary(ROOM_ID));
+    socket.emit('bank_summary', bankSummary(ROOM_ID, view === 'play' ? 'play' : 'chips'));
   });
   on('admin_set_play', ({ key, cents } = {}) => {
     if (!adminOnly()) return;
@@ -1302,9 +1318,9 @@ io.on('connection', socket => {
     socket.emit('balance_data', { balance: getBalance(cleanNameOf(name)) });
   });
 
-  on('get_bank_summary', ({ roomId } = {}) => {
+  on('get_bank_summary', ({ roomId, view } = {}) => {
     if (typeof roomId !== 'string' || !socket.rooms.has(roomId)) return;
-    socket.emit('bank_summary', bankSummary(roomId));
+    socket.emit('bank_summary', bankSummary(roomId, view === 'play' || view === 'chips' ? view : undefined));
   });
 
   // Only the seated player named "chris" can edit money. `balance` is the player's TOTAL (bank + chips at the table).

@@ -86,7 +86,8 @@ function createLedger({ file, onWrite, keyOf, displayOf }) {
   // Net P&L = cashed out + at table - bought in is unchanged by that netting; adjustments by Chris never touch it.
   function summary(roomId, bank, live, opts) {
     const nightId = (opts && opts.nightId) || null;
-    const rowOk = e => (nightId ? e.nightId === nightId : (!e.nightId && e.mode !== 'cents'));
+    const all = !!(opts && opts.all), src = (opts && opts.rows) || entries;
+    const rowOk = e => (all ? true : nightId ? e.nightId === nightId : (!e.nightId && e.mode !== 'cents'));
     const P = new Map();
     const ensure = (name, isBot) => {
       const k = key(name);
@@ -98,10 +99,10 @@ function createLedger({ file, onWrite, keyOf, displayOf }) {
     const parked = new Map(); // key -> [{ ev, left }]
     const lastBal = new Map();
     const handList = []; // snapshots in order; x-axis is sequential so restarts (handNum reset) don't overwrite
-    for (const e of entries) {
+    for (const e of src) {
       if (!rowOk(e)) continue;
       if (e.type === 'snapshot') {
-        if (e.room !== roomId) continue;
+        if (!all && e.room !== roomId) continue;
         const h = { handNum: handList.length + 1, t: e.t, chips: {} };
         for (const sp of e.players) {
           const p = ensure(sp.name, sp.isBot);

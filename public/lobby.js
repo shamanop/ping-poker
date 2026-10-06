@@ -421,7 +421,7 @@ const PRESETS = { cents: [[25, 50], [50, 100], [100, 200], [200, 500], [500, 100
 function freshForm(mode, prev) {
   const unit = unitOf(mode), c = unit === 'chips';
   return Object.assign({ mode, unit, name: (prev && prev.name) || ((S.user && S.user.display) || 'My') + "'s table",
-    min: c ? 500 : 500, max: c ? 5000 : 50000, def: c ? 1500 : mode === 'play' ? 2000 : 10000, preset: c ? 2 : mode === 'play' ? 0 : 1, custom: false, csb: c ? 50 : 50, cbb: c ? 100 : 100,
+    min: c ? 5 : 500, max: c ? 100000 : 50000, def: c ? 1500 : mode === 'play' ? 2000 : 10000, preset: c ? 2 : mode === 'play' ? 0 : 1, custom: false, csb: c ? 50 : 50, cbb: c ? 100 : 100,
     seats: 8, timer: 30, bi: false, biEvery: 15, biSched: 'standard', rebuys: true, priv: true }, prev ? { seats: prev.seats, timer: prev.timer, bi: prev.bi, biEvery: prev.biEvery, biSched: prev.biSched, rebuys: prev.rebuys, priv: prev.priv } : {});
 }
 function blindsOf(f) { if (f.custom) return { sb: f.csb, bb: f.cbb }; const p = PRESETS[f.unit][f.preset]; return { sb: p[0], bb: p[1] }; }
@@ -464,7 +464,7 @@ function formBody(f, redraw, sum) {
   const modeSeg = seg([['play', 'Play $', 'fake money'], ['chips', 'Chips', 'bank chips']], f.mode, (m) => { if (m !== f.mode) { S.form = Object.assign(f, freshForm(m, f)); } redraw(); }, 'lb-mode');
   const name = h('input', { class: 'text-input', id: 'lb-tname', maxlength: 24, value: f.name, oninput: (e) => { f.name = e.target.value; sum(); } });
   // buy-in range
-  const lo = u === 'chips' ? 100 : 500, hi = u === 'chips' ? 10000 : 50000, vals = ladder(u, lo, hi, [f.min, f.max, f.def]);
+  const lo = u === 'chips' ? 5 : 500, hi = u === 'chips' ? 100000 : 50000, vals = ladder(u, lo, hi, [f.min, f.max, f.def]);
   const rl = h('input', { type: 'range', min: 0, max: vals.length - 1, step: 1, value: nearIdx(vals, f.min), 'aria-label': 'Minimum buy-in' });
   const rh = h('input', { type: 'range', min: 0, max: vals.length - 1, step: 1, value: nearIdx(vals, f.max), 'aria-label': 'Maximum buy-in' });
   const fill = h('div', { class: 'fill' });

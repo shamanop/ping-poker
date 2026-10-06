@@ -159,3 +159,7 @@
 .pause-reset { pointer-events: auto; margin-top: var(--p4); padding: var(--p4) var(--p16); border-radius: var(--p6); cursor: pointer;
   border: 1px solid #E2674F; background: transparent; color: #E2674F; font-family: var(--f-display); letter-spacing: .14em; text-transform: uppercase; font-size: var(--p12); }
 .pause-reset:hover { background: #E2674F; color: #fff; }
+
+.bank-view { flex: none; display: inline-flex; border: 1px solid var(--line-lt); border-radius: var(--p6); overflow: hidden; margin-left: var(--p8); }
+.bank-view button { background: transparent; color: var(--ink-dim); border: 0; padding: var(--p6) var(--p12); font-size: var(--p12); letter-spacing: .08em; text-transform: uppercase; cursor: pointer; }
+.bank-view button.on { background: var(--gold); color: #1B120C; }

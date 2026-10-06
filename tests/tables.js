@@ -68,7 +68,7 @@ const ledgerRows = () => JSON.parse(fs.readFileSync(F.ledger, 'utf8'));
     let e, d;
 
     // ── validation ──
-    const bad = [['sb>=bb', { blinds: { sb: 10, bb: 10 } }], ['min>max', { buyIn: { min: 900, max: 500, default: 600 } }], ['min<bb', { buyIn: { min: 5, max: 500, default: 100 }, blinds: { sb: 5, bb: 10 } }],
+    const bad = [['sb>=bb', { blinds: { sb: 10, bb: 10 } }], ['min>max', { buyIn: { min: 900, max: 500, default: 600 } }],
       ['short name', { name: 'x' }], ['bad timer', { actionTimerSec: 20 }], ['unit mismatch', { unit: 'chips' }], ['seats 1', { seats: 1 }], ['bad mode', { mode: 'cash' }], ['friends removed', { mode: 'friends' }]];
     for (const [label, over] of bad) {
       [e, d] = await A.call('table_create', { settings: settings(over) }, 'table_created', 'error');
