@@ -32,6 +32,7 @@ Changed (sim only, the old modes untouched):
 - **S4 daily once per session.** Every session is one fixed day (`2026-10-06`), so the daily appointment is claimed once per `spinsPerSession` paid spins and the streak never passes 1. A real player claims once per calendar day per currency with a streak up to `streakMax`. Free leads per paid spin are whatever `spinsPerSession` implies (1 claim per 2000 spins by default).
 - **S5 no idle time.** The clock advances 1 s per spin, so the cold clock never fires: the lead leak and the death of warm squares (`cold.*`) are in no number. Callback and warm values are upper bounds for a casual player.
 - **S6 flat bet only (plus the one switch mode).** No bet mixing in a list (the rounding of F2 is only visible through `callback.avgBetCents` on a flat bet, which is exact) and no buys inside a session: a bought bonus never touches state, and state is never crossed with a bought bonus.
+- FIX M1 (2026-10-06): the server no longer feeds or rolls the pot on a buy, so `--pull` and `--pot-room` (plain paid spins only, no buys) already match the server, and `--buys-pull` (no pot) now IS a buy's whole payback; LEVERS.md 8.14.
 - Also still true: the pot is one bettor per pot; picks use `first`/`best`/`none` policies only; every headline total is conditional on the Callback cadence set by `list` and `fill`.
 
 ## What the PROVISIONAL knobs do (smoke, seed 1; read before tuning)

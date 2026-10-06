@@ -539,7 +539,7 @@ Measured 2026-10-06 on shaman (24 threads, scratch `E:\bricklord-test\coldcall-p
 | rtp96 | `pull.list` 495; `buyCost` call 28, bonus1 982, bonus2 2971; `hunt.bellMult` 1.828 | **96.143 +- 0.199** (target 96.0, +0.14) | 96.107 | 95.809 | 95.147 | 20.37 | 96.81 |
 | rtp94 | `pull.list` 550; `buyCost` call 28, bonus1 1003, bonus2 3034, hunt 21; `hunt.bellMult` 1.85 | **94.045 +- 0.222** (target 94.0, +0.05) | 94.009 | 93.711 | 93.050 | 18.32 | 94.72 |
 
-All three are inside target +- 0.3. Chaser total = ex-pot + `capCents` 5000 / 100 / `oneInPerDollar` 3000 = ex-pot + 1.667 (the pot-chaser bar of 98.7 from 8.11): 98.69 shipped (0.013 under the bar), 96.81 and 94.72 for the lower presets, i.e. 1.9 and 4.0 points under it. A lower preset can only help on that bar. Pot part is unchanged (0.995 at $1).
+All three are inside target +- 0.3. Chaser total = ex-pot + `capCents` 5000 / 100 / `oneInPerDollar` 3000 = ex-pot + 1.667 (the pot-chaser bar of 98.7 from 8.11): 98.69 shipped (0.013 under the bar), 96.81 and 94.72 for the lower presets, i.e. 1.9 and 4.0 points under it. A lower preset can only help on that bar. Pot part is unchanged (0.995 at $1). The pot is part of PAID SPINS only: since FIX M1 a buy neither feeds nor wins it (8.14), so the totals in this table are for plain spins and every buy's figure below is its whole payback.
 
 Buys at $1 (paid payback, +- 95%; call, bonus1, bonus2 30M rounds, hunt 200M):
 
@@ -551,7 +551,7 @@ Buys at $1 (paid payback, +- 95%; call, bonus1, bonus2 30M rounds, hunt 200M):
 
 Honest caveat on the call buy: its price is a whole number of tenths and 27 pays back 98.04, 28 pays back 94.54, so 96 is not reachable. rtp96 uses 28 (1.5 under its target; 27 would be 2.0 over), and rtp94 uses 28 (0.5 over target). Pass 1 of rtp94 used 29 (91.28, 2.7 under) and hunt 21 at bellMult 1.845 (93.62); pass 2 changed those two knobs only (the flat figures do not depend on them). rtp96 needed one pass. Two passes of three used. The bellMult scan by the first builder (60M hunt rounds at price 20: 1.60 72.5, 1.66 78.4, 1.72 84.5, 1.76 88.8, 1.80 93.3, 1.845 98.6) fixes the slope: about 1.2 points of payback per 0.01 of bellMult.
 
-Labels shown in the lobby (`rtpLabel`, 160 characters at most, what was measured and nothing more): rtp98 "98.0% (long-run, 200M-spin sim, +-0.22, includes the Callback and the office pot)" (= `RTP_LABEL` in `games/coldcall.js`; 98.016 +- 0.219 from 8.12; the old 97.93 line was the 5c flat figure without the steady pot); rtp96 "96.1% ... +-0.20 ..."; rtp94 "94.0% ... +-0.22 ...". Totals are for flat play at $1 or any bet from 10c up within 0.04; at 1c the label would read 0.3 lower in the sim, which is the batch edge of the pot (8.12), not the game.
+Labels shown in the lobby (`rtpLabel`, 160 characters at most, what was measured and nothing more): rtp98 "98.0% (long-run, 200M-spin sim, +-0.22, includes the Callback and the office pot)" (the pot is part of plain paid spins only, buys have none: 8.14; = `RTP_LABEL` in `games/coldcall.js`; 98.016 +- 0.219 from 8.12; the old 97.93 line was the 5c flat figure without the steady pot); rtp96 "96.1% ... +-0.20 ..."; rtp94 "94.0% ... +-0.22 ...". Totals are for flat play at $1 or any bet from 10c up within 0.04; at 1c the label would read 0.3 lower in the sim, which is the batch edge of the pot (8.12), not the game.
 
 Not done: no preset was measured with mixed bets (8.10 / 8.12 mixers sit 1.8 to 3.4 below flat at the shipped math, so they sit below at the presets too) and the bonus buy 100x-cap tails were not re-measured (cap hits 2,071 / 4,538 per 30M at rtp96, unchanged knobs in the pay table).
 
@@ -563,3 +563,23 @@ node games\coldcall-sim.js --pull 100000 2000 121 --pickpolicy best --nowarmdiff
 node games\coldcall-sim.js --buys-pull 30000000 121 --bet 100 --pickpolicy best --more bank --only call,bonus1,bonus2 --threads 24 --preset presets\rtpNN.json
 node games\coldcall-sim.js --buys-pull 200000000 121 --bet 100 --pickpolicy best --more bank --only hunt --threads 24 --preset presets\rtpNN.json
 ```
+
+## 8.14 Buys and the pot (M1)
+
+Fix round M1, 2026-10-06 (Opus money critic 2, finding M1; Frank's decision, not re-opened).
+
+**The finding.** The pot-chaser ceiling 98.687 (8.11, 8.13) is `97.02` (a paid spin ex-pot) `+ capCents / 100 / oneInPerDollar` (1.667). The buys were priced to pay back 98.0 on their own, ex-pot (8.12), but a buy fed a slice and rolled the pot with a chance proportional to its price, so with the pot at $50 or more every buy carried the same +1.667: claimed (analytic, critic) 99.5 to 99.8 for a buy chaser, and a buy-only player got about 98.0 + 1.0 = 99.0 against a label that says 98.0.
+**The rule now.** A paid round with `rec.buy` set (`call`, `bonus1`, `bonus2`, `hunt`, any future buy) feeds no slice, moves no `pot.rem`, makes no pot roll and can win no pot. Only a plain paid spin (`cost > 0`, no buy) feeds and rolls, as before. A Callback stays as it was (never). The shipped prices and the "98.0%" label are true again with no knob change and no re-pricing; the chaser ceiling on paid spins (98.687, bar 98.7) stays the only pot ceiling. Code: one condition in `settle()` (`games/coldcall.js`); no engine change, no paid-spin result moves (the 10c-and-up transcript digest of `tests/coldcall-pull-engine.js` is unchanged).
+**The hunt number (job A, measured).** The shipped hunt buy, ex-pot (the sim's `--buys-pull` has no pot), $1 bet, 200M rounds each, best picks, gamble banked, seeds 277 / 278 / 279 (none used before; raw `levers-runs/M1_hunt200M*`): **98.112 +- 0.202, 98.283 +- 0.205, 98.035 +- 0.210**; pooled 98.143 +- 0.119 (95%, 600M rounds). Break-even for a pot chaser on the OLD rule was 98.333; every run and the pooled interval (upper end 98.26) sit below it. The older runs: 98.124 +- 0.439 (8.12) agrees; 98.58 +- 0.36 (60M) sits 2.3 combined standard deviations above the pooled figure (measured difference 0.44, sd 0.19), so it was most likely a high draw. Use the 600M figure. No knob was changed because of it; with M1 it no longer matters for the pot.
+
+Buys at $1, the whole payback now (ex-pot figure = its total), next to the paid-spin chaser:
+
+| | call | bonus1 | bonus2 | hunt | plain paid spin, best chaser (pot part 1.667) |
+|---|---|---|---|---|---|
+| shipped, payback now (measured; call / bonus1 / bonus2 30M rounds 8.12, hunt 600M above) | 98.04 +- 0.22 | 97.81 +- 0.06 | 98.01 +- 0.04 | 98.14 +- 0.12 | 98.687 (97.022 ex-pot measured 8.11 + 1.667 analytic, ceiling) |
+| before M1, buy chaser on a full pot (claimed: ex-pot + 1.667, the critic's analytic figure; hunt = my 98.14 + 1.667) | 99.71 | 99.48 | 99.67 | 99.81 | |
+| rtp96, now (measured 8.13) | 94.54 +- 0.21 | 96.02 +- 0.06 | 96.00 +- 0.04 | 96.27 +- 0.20 | 96.81 |
+| rtp94, now (measured 8.13) | 94.54 +- 0.21 | 94.01 +- 0.06 | 94.00 +- 0.04 | 94.21 +- 0.20 | 94.72 |
+
+Two things this makes true again: no buy player is above the 98.7 bar at any bet (a buy has no pot to chase), and a buy-only player gets his buy's own payback, not payback plus 1.0. Not changed: a mixed player (plain spins while the pot is high, buys otherwise) is still bounded by the plain-spin chaser 98.687 for the plain part. Bar stays 0.013 under 98.7 on paid spins (8.11 warning stands).
+**Tests** (`tests/coldcall-pull-server.js`): every buy at 1c / $1 / $25, both purses, pot at $70 with the roll forced to hit: no prize, the pot untouched, wallet = win - cost, no pot in the result, history or feed; a plain spin in the same state still wins the pot; conservation with buys mixed in. Kept repro `_scratch/critic-money2/m1-after-fix.js`.
