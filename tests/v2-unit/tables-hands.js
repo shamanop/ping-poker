@@ -152,6 +152,12 @@ t('a seat that left mid-hand reports stack 0 to the audit (its stack is already 
   const row = T.auditSeats().find(r => r.key === 'bob'); eq(row.stack, 0); ok(row.handBet >= 0);
   eq(drift(e), []); eq(T.phase, 'betting'); books(e);
 });
+t('E1 + leave: the uncalled layer returned to a leaver stays inside the seat account, so the audit counts it as handBet (fuzz finding, drift 638)', () => {
+  const e = three(); const T = e.table; T.startHand(); T.act('ann', { type: 'raise', to: 500 });
+  T.leave('ann');                                           // ann is the top bettor: E1 hands her uncalled layer back inside the engine
+  const row = T.auditSeats().find(r => r.key === 'ann'); eq(row.stack, 0); ok(row.handBet > 0);
+  eq(drift(e), []); books(e);
+});
 t('leave mid-hand as a folded seat still keeps its committed chips for the batch', () => {
   const e = three(); const T = e.table; T.startHand(); T.act('ann', { type: 'raise', to: 200 }); T.act('bob', { type: 'fold' });
   T.leave('bob'); eq(bank(e, 'bob'), 8000 + 1975); T.act('cy', { type: 'fold' }); eq(T.seatOfKey('bob'), null); eq(bank(e, 'bob'), 8000 + 1975 + 0 + 0 * 1);

@@ -123,7 +123,8 @@ class Table {
     return this.players().map(s => {
       const hs = this.liveSeat(s) ? this.hand.seats[s.seat] : null;
       // A seat that left or was kicked mid-hand was cashed out for its stack at once: only its committed chips are still in the seat account.
-      return { key: s.key, stack: s.leaving ? 0 : (hs ? hs.stack : s.stack), handBet: hs ? hs.committed - (hs.returned || 0) : 0 };
+      // The uncalled layer E1 returns to a leaver sits in the engine stack but the seat account still holds it (it is paid out by the batch): count it in handBet.
+      return { key: s.key, stack: s.leaving ? 0 : (hs ? hs.stack : s.stack), handBet: hs ? hs.committed - (s.leaving ? 0 : (hs.returned || 0)) : 0 };
     });
   }
   committedOf(s) { return this.liveSeat(s) && this.hand.seats[s.seat] ? this.hand.seats[s.seat].committed : 0; }
