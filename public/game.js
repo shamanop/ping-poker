@@ -495,6 +495,7 @@ window.PingGame = {
     if (table) setTableUnit(table.unit);
     const rc = $('room-code'); if (rc) rc.textContent = (table && (table.code || table.name)) || tableId;
     $('bust-panel')?.classList.add('hidden');
+    if (state.rebuyField) { state.rebuyField.destroy(); state.rebuyField = null; $('bust-amt')?.replaceChildren(); }
     showScreen('game-screen');
   },
   leave() {
@@ -597,7 +598,7 @@ function bindSocket() {
     playSound('blinds_up');
   });
 
-  s.on('bust_out', ({ balance }) => { showBust(balance); });
+  s.on('bust_out', ({ balance, rebuy }) => { showBust(rebuy && rebuy.balance != null ? rebuy.balance : balance, rebuy); });
   s.on('leaderboard_data', ({ entries }) => { renderLeaderboard(entries); });
   s.on('self_changed', v => { if (v && v.display) state.myName = v.display; });
   s.on('error', ({ message }) => { showError(message); });
@@ -781,7 +782,10 @@ function appendChatMsg(name, text) {
 function initBust() {
   $('btn-rebuy').addEventListener('click', () => {
     if (!state.roomId) return;
-    state.socket.emit('rebuy', { roomId: state.roomId });
+    // the amount sent is the number in the AmountInput (the same number the button label promises); never a guess
+    const f = state.rebuyField;
+    if (f) { if (f.value() === null) { f.submit(); return; } state.socket.emit('rebuy', { roomId: state.roomId, amount: f.value() }); f.destroy(); state.rebuyField = null; $('bust-amt').replaceChildren(); }
+    else state.socket.emit('rebuy', { roomId: state.roomId });
     $('bust-panel').classList.add('hidden');
   });
   $('btn-spectate').addEventListener('click', () => {
@@ -797,18 +801,37 @@ function initBust() {
   });
 }
 
-function showBust(balance) {
+function showBust(balance, rebuy) {
   state.lastBust = balance;
   state.spectating = false;
   $('bust-panel').classList.remove('hidden');
   $('bust-balance').textContent = `Bank ${fmt(balance)}`;
   const rebuyBtn = $('btn-rebuy');
   const brokeMsg = $('bust-broke-msg');
-  if (balance >= bustMin()) {
+  const slot = $('bust-amt');
+  const bi = state.table?.buyIn || {};
+  const rb = rebuy || state.lastRebuy || {};
+  if (rebuy) state.lastRebuy = rebuy;
+  const lo = rb.min ?? bi.min ?? bustMin();
+  const hi = Math.min(rb.max ?? bi.max ?? balance, balance);
+  const def = Math.min(hi, Math.max(lo, rb.default ?? buyInDefault()));
+  if (balance >= lo && hi >= lo) {
     rebuyBtn.classList.remove('hidden');
     brokeMsg.classList.add('hidden');
-    rebuyBtn.textContent = `Rebuy ${fmt(Math.min(buyInDefault(), balance))}`;
+    const presets = [{ label: 'Min', units: lo }, { label: 'Default', units: def }, { label: 'Max', units: hi }];
+    const label = () => { const v = state.rebuyField && state.rebuyField.value(); rebuyBtn.textContent = v === null || v === undefined ? 'Rebuy' : `Rebuy ${fmt(v)}`; rebuyBtn.disabled = v === null || v === undefined; };
+    if (state.rebuyField && state.rebuyField.unitKey === state.unit) {
+      state.rebuyField.setBounds({ min: lo, max: hi, presets });
+    } else {
+      if (state.rebuyField) state.rebuyField.destroy();
+      state.rebuyField = AmountInput({ units: def, min: lo, max: hi, unit: state.unit, scale: 'ladder', presets, label: 'Rebuy amount', rangeLabel: 'Rebuy', onChange: label });
+      state.rebuyField.unitKey = state.unit;
+      state.rebuyField.input.id = 'rebuy-input';
+      slot.replaceChildren(state.rebuyField.el);
+    }
+    label();
   } else {
+    if (state.rebuyField) { state.rebuyField.destroy(); state.rebuyField = null; slot.replaceChildren(); }
     rebuyBtn.classList.add('hidden');
     brokeMsg.classList.remove('hidden');
   }
