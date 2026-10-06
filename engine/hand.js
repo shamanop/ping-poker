@@ -221,8 +221,9 @@ function returnUncalled(hand, events) {
   if (!bets.length) return;
   const second = bets.length > 1 ? bets[1].bet : 0;
   if (bets[0].bet <= second) return;
-  const back = bets[0].bet - second;
   const x = hand.seats[bets[0].s];
+  if (x.folded) return; // a seat removed by foldOut keeps its bet in the pot (dead money)
+  const back = bets[0].bet - second;
   x.bet -= back; x.stack += back; x.returned += back;
   if (x.stack > 0) x.allIn = false;
   events.push({ type: 'returned', seat: bets[0].s, amount: back });

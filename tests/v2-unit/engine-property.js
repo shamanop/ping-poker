@@ -26,7 +26,8 @@ function oracle(hand) {
     pots.push({ amount, eligible });
   }
   const leftover = all.reduce((t, s) => t + rem[s], 0); // dead chips of folded seats above every live level
-  if (leftover) pots[pots.length - 1].amount += leftover;
+  if (leftover && pots.length) pots[pots.length - 1].amount += leftover;
+  else if (leftover) pots.push({ amount: leftover, eligible: live }); // only folded seats put chips in
   const leftOfButton = s => (s - hand.button - 1 + 100) % 100; // ascending distance clockwise from the button
   const payouts = {};
   for (const s of all) payouts[s] = 0;
@@ -129,7 +130,16 @@ function checkSettlement(hand, init, r, ctx) {
 }
 
 function playOne(rng, i, seed, cov) {
+  const trace = { log: [] };
+  try { return playOneInner(rng, i, seed, cov, trace); } catch (e) {
+    e.message += `\n    repro: button ${trace.setup && trace.setup.button} sb/bb ${trace.setup && trace.setup.sb}/${trace.setup && trace.setup.bb} seats ${trace.setup && J(trace.setup.seats)}\n    actions: ${trace.log.join(' ').slice(-1200)}`;
+    throw e;
+  }
+}
+
+function playOneInner(rng, i, seed, cov, trace) {
   const setup = L.randomSetup(rng);
+  trace.setup = setup;
   const ctx = `seed ${seed} hand ${i}`;
   let hand = H.createHand({ handNo: i, button: setup.button, sb: setup.sb, bb: setup.bb, seats: setup.seats, deck: setup.deck });
   let twin = clone(hand);
@@ -154,6 +164,7 @@ function playOne(rng, i, seed, cov) {
     if (foldOutPct && rng() < foldOutPct) {
       const seat = pick(rng, seatsOf(hand));
       const before = J(hand);
+      trace.log.push(`foldOut(${seat})`);
       const ev = H.foldOut(hand, seat);
       if (before !== J(hand)) forced = true;
       twin = clone(twin); H.foldOut(twin, seat);
@@ -165,6 +176,7 @@ function playOne(rng, i, seed, cov) {
     }
     if (hand.phase === 'runout') {
       assert.strictEqual(H.legalActions(hand, pick(rng, seatsOf(hand))), null);
+      trace.log.push('deal');
       const ev = H.dealNext(hand);
       twin = clone(twin); H.dealNext(twin);
       assert.strictEqual(J(hand), J(twin), `${sctx}: twin diverged after dealNext`);
@@ -190,6 +202,7 @@ function playOne(rng, i, seed, cov) {
     } else action = L.legalPick(la, rng, { shove });
     const isOffered = offered(hand, la, seatArg, action) || (typeof seatArg === 'string' && /^\d+$/.test(seatArg) && Number(seatArg) === t && offered(hand, la, t, action));
 
+    trace.log.push(`${J(seatArg)}:${J(action)}`);
     const snap = J(hand);
     let events = null, err = null;
     try { events = H.apply(hand, seatArg, action); } catch (e) { err = e; }

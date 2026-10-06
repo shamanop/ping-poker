@@ -492,6 +492,7 @@ module.exports = function register(t) {
     assert.deepStrictEqual(sidePots({ 0: 1000, 1: 100, 2: 1000 }, [0, 2]), [{ amount: 2100, eligible: [1] }]);
     assert.deepStrictEqual(sidePots({ 0: 50, 1: 50, 2: 0 }, new Set()), [{ amount: 100, eligible: [0, 1] }]);
     assert.deepStrictEqual(sidePots({}, []), []);
+    assert.deepStrictEqual(sidePots({ 0: 1, 1: 2, 2: 0 }, [0, 1]), [{ amount: 3, eligible: [2] }]);
     assert.throws(() => sidePots({ 0: 1.5 }, []), TypeError);
   });
 
@@ -552,6 +553,41 @@ module.exports = function register(t) {
     assert.strictEqual(h.phase, 'runout');
     finish(h);
     assert.deepStrictEqual(stacksOf(h), [2600, 2000, 0]);
+  });
+
+  t.case('foldOut of everyone but a seat that has put in nothing: it wins the dead blinds, nothing vanishes', () => {
+    // property-test find (seed 2, hand 6746): button 4, blinds 1/2, seats 0,2,3,4
+    const h = mk({ stacks: { 0: 385, 2: 20, 3: 142, 4: 58 }, button: 4, sb: 1, bb: 2 });
+    assert.strictEqual(h.toAct, 3);
+    H.foldOut(h, 2);
+    play(h, [[3, 'fold']]);
+    assert.strictEqual(h.toAct, 4);
+    H.foldOut(h, 0);
+    assert.strictEqual(h.phase, 'showdown');
+    assert.strictEqual(h.seats[0].returned + h.seats[2].returned, 0, 'a folded seat gets no return');
+    const r = H.settle(h);
+    assert.deepStrictEqual(r.payouts, { 0: 0, 2: 0, 3: 0, 4: 3 });
+    assert.deepStrictEqual(r.net, { 0: -1, 2: -2, 3: 0, 4: 3 });
+    assert.deepStrictEqual(r.pots, [{ amount: 3, eligible: [4], winners: [4] }]);
+  });
+
+  t.case('foldOut of the top bettor keeps its bet in the pot (dead money); a live top bettor still gets the uncalled part', () => {
+    const h = mk({ stacks: [1000, 1000, 1000], button: 0 });
+    play(h, [[0, 'raise', 300]]);
+    H.foldOut(h, 0); // the raiser is kicked while seat 1 is to act
+    assert.strictEqual(h.toAct, 1);
+    play(h, [[1, 'call']]);
+    play(h, [[2, 'fold']]);
+    assert.strictEqual(h.phase, 'showdown');
+    const r = H.settle(h);
+    assert.deepStrictEqual(r.returned, { 0: 0, 1: 0, 2: 0 });
+    assert.deepStrictEqual(r.payouts, { 0: 0, 1: 650, 2: 0 });
+    // and with a live raiser the uncalled part still comes back
+    const g = mk({ stacks: [1000, 1000, 1000], button: 0 });
+    play(g, [[0, 'raise', 300]]);
+    H.foldOut(g, 1);
+    play(g, [[2, 'fold']]);
+    assert.deepStrictEqual(H.settle(g).returned, { 0: 250, 1: 0, 2: 0 });
   });
 
   t.case('foldOut errors: unknown seat, repeat is a no-op, after showdown throws', () => {
