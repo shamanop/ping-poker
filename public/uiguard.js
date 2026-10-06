@@ -45,5 +45,20 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', watchImages);
   else watchImages();
 
-  window.PingUI = { isOverlayOpen };
+  // Server `error` events are {message, code, min?, max?, have?, need?}: the message carries no digits (the server never formats money);
+  // the numbers are added here with Money in the viewer's mode. Unknown codes fall back to the message alone.
+  function errorText(e, mode) {
+    const msg = (e && e.message) || 'Something went wrong';
+    const M = window.Money; if (!e || !M || !mode) return msg;
+    const f = v => M.format(v, mode), has = v => Number.isFinite(v);
+    const parts = [];
+    if (has(e.min) && has(e.max)) parts.push(f(e.min) + ' to ' + f(e.max));
+    else if (has(e.min)) parts.push('at least ' + f(e.min));
+    else if (has(e.max)) parts.push('at most ' + f(e.max));
+    if (has(e.have)) parts.push('you have ' + f(e.have));
+    if (has(e.need)) parts.push('you need ' + f(e.need));
+    return parts.length ? msg + ' (' + parts.join(', ') + ')' : msg;
+  }
+
+  window.PingUI = { isOverlayOpen, errorText };
 })();

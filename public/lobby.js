@@ -859,7 +859,12 @@ function bind() {
     S.cur = null; hostUi(false); root && root.classList.add('on'); show('settle', d);
   });
   s.on('ok', ({ what } = {}) => { if (what === 'pin') { toast('PIN changed'); closeModal(); } });
-  s.on('error', ({ message, code } = {}) => {
+  s.on('error', (e0 = {}) => {
+    const { code } = e0, message = window.PingUI ? PingUI.errorText(e0, Money.modeFor(Money.pref, (S.cur && S.cur.unit) || 'chips')) : e0.message;
+    if (code === 'taken_over') { // this seat was taken over by another tab or device: leave the table here
+      if (window.PingGame && PingGame.isIn && PingGame.isIn()) PingGame.leave();
+      Lobby.onGameLeft(); toast(message || 'This seat is now open on another device'); return;
+    }
     if (S.rebinding) { S.rebinding = null; LS.del('ping.table'); toast('Could not return to your table'); return; }
     if (S.pendingJoin && !S.onError) { S.pendingJoin = null; toast(message || 'No table with that code'); return; }
     if (S.onError) { const f = S.onError; if (S.pendingJoin) S.pendingJoin = null; f(message || 'Something went wrong'); } else if (S.user && message) toast(message);

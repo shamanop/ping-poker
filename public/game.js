@@ -401,14 +401,15 @@ function bindSocket() {
     if (state.gameState) { renderSeats(state.gameState); renderShowPanel(state.gameState); }
   });
 
-  s.on('showdown_result', ({ winners, pot, reveals, nextMs }) => {
+  s.on('showdown_result', ({ winners, pot, reveals, nextMs, net }) => {
     state.sdMs = nextMs || 5000;
     renderShowdown(winners, pot, reveals);
     playSound('win');
     const myName = state.gameState?.players[state.myIdx]?.name;
-    if (myName && winners.some(w => w.name === myName)) {
-      setTimeout(() => showWinFloat(pot), 250);
-    }
+    // my NET for the hand (never the whole pot): `net` map by name, else my winner row's net
+    const mine = winners.find(w => w.name === myName);
+    const myNet = net && myName in net ? net[myName] : (mine ? mine.net : 0);
+    if (myNet > 0) setTimeout(() => showWinFloat(myNet), 250);
     juiceShowdown(winners, pot);
   });
 
@@ -429,7 +430,7 @@ function bindSocket() {
   s.on('bust_out', ({ balance, rebuy }) => { showBust(rebuy && rebuy.balance != null ? rebuy.balance : balance, rebuy); });
   s.on('leaderboard_data', ({ entries }) => { renderLeaderboard(entries); });
   s.on('self_changed', v => { if (v && v.display) state.myName = v.display; });
-  s.on('error', ({ message }) => { showError(message); });
+  s.on('error', e => { showError(PingUI.errorText(e, tableMode())); });
 
   s.on('disconnect', () => { toast('Connection lost', 'Trying to reconnect', 'warn', 5000); });
   s.on('connect',    () => { if (state.roomId) toast('Back online', '', 'ok', 2000); });
@@ -1683,12 +1684,12 @@ function renderShowdown(winners, pot, reveals) {
   (reveals || winners).forEach(w => { if (w.cards?.length) { state.reveal.cards[w.name] = w.cards; state.reveal.names[w.name] = richHandLabel(w.handName || '', w.cards, gs?.community); } });
   state.winners = new Set(winners.map(w => w.name));
 
-  const share = Math.floor(pot / Math.max(1, winners.length));
-  $('showdown-content').innerHTML = winners.map((w, i) => `
+  // winners = pot winners only (a seat that just got a refund is not listed); amount = what they took, net = their gain over their own bets
+  $('showdown-content').innerHTML = winners.map(w => `
     <div class="sd-row">
       <span class="showdown-winner-name">${esc(w.name)}</span>
       <span class="showdown-hand-name">${esc(richHandLabel(w.handName || '', w.cards, gs?.community))}</span>
-      <span class="showdown-pot">wins <strong>${fmt(Number.isFinite(w.net) ? w.net : Number.isFinite(w.amount) ? w.amount : share + (i === 0 ? pot - share * winners.length : 0))}</strong></span>
+      <span class="showdown-pot">wins <strong>${Number.isFinite(w.amount) ? fmt(w.amount) : ''}</strong>${Number.isFinite(w.net) && w.net !== w.amount ? ` <small class="sd-net ${w.net > 0 ? 'pos' : w.net < 0 ? 'neg' : ''}">net ${w.net > 0 ? '+' : ''}${fmt(w.net)}</small>` : ''}</span>
     </div>`).join('');
 
   ov.classList.remove('hidden');
@@ -1874,7 +1875,7 @@ function juiceShowdown(winners, pot) {
   winners.forEach((w, wi) => {
     const idx = gs.players.findIndex(p => p.name === w.name);
     const seat = idx >= 0 ? juiceSeat(idx) : null;
-    const amt = Number.isFinite(w.amount) ? w.amount : Math.floor(pot / winners.length);
+    const amt = Number.isFinite(w.amount) ? w.amount : 0;
     const netAmt = Number.isFinite(w.net) ? w.net : amt;
     if (seat) PJ.chipShower(potEl, seat, Math.max(6, Math.min(18, Math.round(6 + bbs / 3))));
     if (seat && idx >= 0) setTimeout(() => {

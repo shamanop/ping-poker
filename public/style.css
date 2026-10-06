@@ -837,3 +837,4 @@ html.art-login .setup-card { background: linear-gradient(180deg, rgba(34, 22, 14
 #raise-box .amt-confirm { grid-area: conf; }
 #raise-box .amt-confirm[hidden], #raise-box .amt-confirm.hidden { display: none; }
 #raise-box.off .amt-pre, #raise-box.off .amt-slider { pointer-events: none; }
+.sd-net { font-size: var(--p12); margin-left: var(--p4); } .sd-net.pos { color: #8FD3A8; } .sd-net.neg { color: var(--danger-ink); }
