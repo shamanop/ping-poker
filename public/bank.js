@@ -211,28 +211,29 @@
     if (changed) $('bank-players').querySelectorAll('.bp-bal b.editable').forEach(b => b.addEventListener('click', () => editBank(b)));
   }
 
-  const inputText = v => Money.plain(v, bankMode());
+  // Inline edit of a player's total: a compact AmountInput (number is the truth, text is a view), Enter saves, Escape or leaving cancels.
   function editBank(b) {
     const name = b.dataset.name;
-    const input = document.createElement('input');
-    input.type = 'number'; input.min = '0'; input.step = 'any'; input.value = inputText(Number(b.dataset.total)); input.className = 'bp-edit';
-    input.setAttribute('aria-label', 'New total money for ' + name);
-    b.replaceWith(input); input.focus(); input.select();
+    const field = AmountInput({ units: Number(b.dataset.total) || 0, min: 0, max: isPlay() ? 100000000000 : 100000000, unit: isPlay() ? 'cents' : 'chips',
+      scale: 'ladder', compact: true, label: 'New total money for ' + name, rangeLabel: 'New total' });
+    field.input.classList.add('bp-edit');
+    b.replaceWith(field.el); field.focus(); field.input.select();
     let done = false;
     const finish = save => {
-      if (done) return; done = true;
-      if (save && state.socket) {
-        const parsed = Money.parse(input.value, bankMode()); const amount = parsed.ok ? parsed.units : null;
-        if (amount !== null) {
+      if (done) return;
+      if (save) {
+        const amount = field.value();
+        if (amount === null) { field.submit(); return; } // stays open with the message; nothing is sent
+        if (state.socket) {
           state.socket.emit('bank_set', { name, balance: amount });
           const row = data && data.players.find(p => p.name.toLowerCase() === name.toLowerCase());
-          if (row && Number.isFinite(amount) && amount >= 0) row.bank = amount;
+          if (row) row.bank = amount;
         }
       }
-      input.remove(); lastHtml.delete($('bank-players')); request(); render();
+      done = true; field.destroy(); field.el.remove(); lastHtml.delete($('bank-players')); request(); render();
     };
-    input.addEventListener('keydown', e => { if (e.key === 'Enter') finish(true); else if (e.key === 'Escape') { e.stopPropagation(); finish(false); } e.stopPropagation(); });
-    input.addEventListener('blur', () => finish(false));
+    field.input.addEventListener('keydown', e => { if (e.key === 'Enter') finish(true); else if (e.key === 'Escape') { e.stopPropagation(); finish(false); } e.stopPropagation(); });
+    field.input.addEventListener('blur', () => setTimeout(() => { if (!done && document.activeElement !== field.input) finish(false); }, 150));
   }
 
   function niceMax(v) {
