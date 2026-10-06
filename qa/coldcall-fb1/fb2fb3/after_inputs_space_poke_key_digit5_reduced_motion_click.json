@@ -1,0 +1,35 @@
+{
+ "key_digit5": {
+  "doneAfterMs": 722,
+  "lit": [
+   "5:1"
+  ],
+  "lcd": "1",
+  "anim": 2,
+  "youDialed": "DIALING FOR DOLLARS",
+  "bonusStarted": true,
+  "logs": []
+ },
+ "space_poke": {
+  "doneAfterMs": 730,
+  "lit": [
+   "1:1"
+  ],
+  "lcd": "1",
+  "anim": 2,
+  "youDialed": "DIALING FOR DOLLARS",
+  "bonusStarted": true,
+  "logs": []
+ },
+ "reduced_motion_click": {
+  "doneAfterMs": 1423,
+  "lit": [
+   "3:1"
+  ],
+  "lcd": "1",
+  "anim": 0,
+  "youDialed": "DIALING FOR DOLLARS",
+  "bonusStarted": true,
+  "logs": []
+ }
+}

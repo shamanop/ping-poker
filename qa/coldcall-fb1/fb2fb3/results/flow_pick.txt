@@ -1,0 +1,2 @@
+{"scenario":"pick","mode":"play","name":"flpickp09j9","picked":12,"morePrompt":true,"ok":true,"checks":{"mismatch":true,"err":true,"win":true,"wallet":true,"leftover":true,"noscrim":true,"notStuck":true,"noAbort":true,"pickHow":true,"bankHow":true},"detail":{"totalWin":512,"cost":964,"walletDelta":-452,"expect":-452,"winText":"$5.12","decisions":["player","player"],"auto":null,"tier":"mega","mismatch":[],"err":null,"pullErr":[]}}
+exit 0

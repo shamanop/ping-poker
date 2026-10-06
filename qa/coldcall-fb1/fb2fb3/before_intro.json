@@ -1,0 +1,66 @@
+{
+ "before_360": {
+  "geo": {
+   "dial": [
+    73.3,
+    222.9,
+    213.3,
+    213.3
+   ],
+   "scene": [
+    0,
+    16,
+    360,
+    605.3
+   ],
+   "scale": 0.667,
+   "keys": []
+  },
+  "logs": [
+   "Failed to load resource: the server responded with a status of 404 (Not Found)",
+   "Failed to load resource: the server responded with a status of 404 (Not Found)"
+  ]
+ },
+ "before_540": {
+  "geo": {
+   "dial": [
+    110,
+    259.3,
+    320,
+    320
+   ],
+   "scene": [
+    0,
+    24,
+    540,
+    758
+   ],
+   "scale": 1,
+   "keys": []
+  },
+  "logs": [
+   "Failed to load resource: the server responded with a status of 404 (Not Found)"
+  ]
+ },
+ "before_1440": {
+  "geo": {
+   "dial": [
+    570,
+    243.1,
+    300,
+    300
+   ],
+   "scene": [
+    466.9,
+    22.5,
+    506.3,
+    710.6
+   ],
+   "scale": 0.938,
+   "keys": []
+  },
+  "logs": [
+   "Failed to load resource: the server responded with a status of 404 (Not Found)"
+  ]
+ }
+}

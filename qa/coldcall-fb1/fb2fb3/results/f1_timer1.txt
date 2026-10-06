@@ -1,0 +1,2 @@
+{"build":"AFTER","scenario":"U5 second-ready","mode":"play","ok":true,"beforeLeftMs":20895,"afterLeftMs":20286,"serverLeftMs":20284,"shown":["0:21","0:21"]}
+exit 0
