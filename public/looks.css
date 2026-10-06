@@ -24,7 +24,12 @@
 /* ── per-look tuning, judged from screenshots (looks-shots/) ── */
 /* the "POT" caption sits on the studded ring: on the pale steel and alloy rails it vanished */
 #game-screen[data-look]:not([data-look="basement"]) .pot-txt small { color: #F2E6C4; text-shadow: 0 0 3px #000, 0 1px 2px #000, 0 0 6px rgba(0, 0, 0, .8); }
-/* the shag rug under the Miami table is a bright flat grey: pull the room down */
+/* Miami: the mirrored table with the powder lines is the point of the room (Chris 2026-10-06). The room is repainted with it at the
+   upper left, clear of the chat panel and the poker table; the rug is darkened in the picture itself, so the room keeps the normal
+   vignette, a little lighter. On landscape screens the room is also drawn 15 percent larger and shifted so the table sits in the gap. */
 #game-screen[data-look="miami"]::before {
-  background: radial-gradient(ellipse 75% 70% at 50% 46%, transparent 30%, rgba(4, 2, 1, .66) 100%), linear-gradient(rgba(8, 5, 3, .42), rgba(8, 5, 3, .42));
+  background: radial-gradient(ellipse 75% 70% at 50% 46%, transparent 38%, rgba(4, 2, 1, .5) 100%), linear-gradient(rgba(8, 5, 3, .1), rgba(8, 5, 3, .1));
+}
+@media (min-aspect-ratio: 5/4) {
+  #game-screen[data-look="miami"] { background-size: 115% auto; background-position: 33% 42%; }
 }
