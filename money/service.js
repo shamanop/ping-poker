@@ -22,6 +22,8 @@ function needStr(v, code, label) {
 }
 const needCur = (cur) => { if (!CURS.includes(cur)) throw new MoneyError('bad_cur', { cur }); return cur; };
 const needRef = (ref) => { if (typeof ref !== 'string' || !ref) throw new MoneyError('bad_ref', { ref }); return ref; };
+// :open and :close belong to openRound / settleRound / voidRound only: an instant call that wrote one could burn a round's close ref and strand its escrow.
+const needHouseRef = (ref) => { needRef(ref); if (ref.endsWith(':open') || ref.endsWith(':close')) throw new MoneyError('bad_ref', { ref, why: 'reserved suffix' }); return ref; };
 // Funding source of a seat. Missing means "the table's own currency" (today's fundOf). 'bank' is an alias of 'chips'.
 function needFund(fund, tableCur) {
   if (fund == null || fund === '') return tableCur;
@@ -161,12 +163,12 @@ function createService(ledger, opts = {}) {
   // Bender and Cold Call: the player pays the house, the house pays the player. House balances may go negative.
   function houseSpend(game, key, amount, cur, ref) {
     if (!GAMES.includes(game)) throw new MoneyError('bad_game', { game });
-    needStr(key, 'bad_key', 'key'); needCur(cur); needRef(ref);
+    needStr(key, 'bad_key', 'key'); needCur(cur); needHouseRef(ref);
     return ledger.transfer(store(cur, key), 'house:' + game, amount, cur, game + ':spend', ref);
   }
   function houseCredit(game, key, amount, cur, ref) {
     if (!GAMES.includes(game)) throw new MoneyError('bad_game', { game });
-    needStr(key, 'bad_key', 'key'); needCur(cur); needRef(ref);
+    needStr(key, 'bad_key', 'key'); needCur(cur); needHouseRef(ref);
     return ledger.transfer('house:' + game, store(cur, key), amount, cur, game + ':credit', ref);
   }
 
@@ -189,6 +191,8 @@ function createService(ledger, opts = {}) {
     const name = needStr(pool.name, 'bad_pool', 'name');
     return { acct: poolOf(game, name), feed: needAmt(pool.feed == null ? 0 : pool.feed, 'feed'), prize: needAmt(pool.prize == null ? 0 : pool.prize, 'prize') };
   }
+  // A pool is fed only out of the stake of the same batch (ADD-A-GAME 5.9): feed above it is house money going into the pot.
+  const needFeed = (p, stake) => { if (p.feed > stake) throw new MoneyError('bad_amount', { amount: p.feed, field: 'feed', stake }); };
   // The legs after the stake, always in this order: feed (house -> pool), prize (pool -> player), win (house -> player).
   function payLegs(game, player, cur, p, win) {
     const items = [];
@@ -213,9 +217,10 @@ function createService(ledger, opts = {}) {
   // batch is byte-for-byte what it was before pools existed.
   function houseRound(game, key, cost, win, cur, ref, pool) {
     if (!GAMES.includes(game)) throw new MoneyError('bad_game', { game });
-    needStr(key, 'bad_key', 'key'); needCur(cur); needRef(ref);
+    needStr(key, 'bad_key', 'key'); needCur(cur); needHouseRef(ref);
     for (const [label, v] of [['cost', cost], ['win', win]]) if (!isInt(v) || v < 0) throw new MoneyError('bad_amount', { amount: v, field: label });
     const p = needPool(game, pool);
+    needFeed(p, cost);
     if (cost + win + p.feed + p.prize === 0) return { id: null, dup: false, noop: true };
     const player = store(cur, key);
     const items = [];
@@ -234,13 +239,14 @@ function createService(ledger, opts = {}) {
     return ledger.transfer(store(cur, key), escrowOf(game, key, roundId), cost, cur, game + ':open', refs.open);
   }
 
-  // What the :close ref already wrote, read from the stored entries: { id, kind: 'void'|'settle', win, feed, prize, pool }.
-  // Only runs on a retry, so the scan over the ledger is not on any hot path.
+  // What the :close ref already wrote, read from the stored entries: { id, kind: 'void'|'settle', cur, stake, win, feed, prize, pool }.
+  // stake = the escrow leg (<game>:spend) of a settle. Only runs on a retry, so the scan over the ledger is not on any hot path.
   function closeOf(game, ref) {
     let out = null;
     for (const e of ledger.entries(x => x.ref === ref)) {
-      if (!out) out = { id: e.id, kind: 'settle', win: 0, feed: 0, prize: 0, pool: null };
+      if (!out) out = { id: e.id, kind: 'settle', cur: e.cur, stake: 0, win: 0, feed: 0, prize: 0, pool: null };
       if (e.reason.startsWith(game + ':void:')) out.kind = 'void';
+      else if (e.reason === game + ':spend') out.stake += e.amount;
       else if (e.reason === game + ':credit') out.win += e.amount;
       else if (e.reason === game + ':feed') { out.feed += e.amount; out.pool = e.to; }
       else if (e.reason === game + ':prize') { out.prize += e.amount; out.pool = e.from; }
@@ -256,22 +262,27 @@ function createService(ledger, opts = {}) {
 
   // Close a round with its outcome: ONE batch under <game>:<key>:<roundId>:close, in the contract's order: the WHOLE escrow
   // (read here, never passed in) -> house, feed, prize, win. A round with no escrow (a free round) writes only the pool legs and
-  // the win; everything 0 and no escrow = noop. The close ref is decided from its stored lines BEFORE anything is built (after
-  // the first close the escrow is 0, so a rebuilt batch would differ): same close again = dup, other numbers = ref_conflict,
-  // a stored void = round_closed.
+  // the win; everything 0 and no escrow = noop. o = { win, pool, stake }: stake (optional) is what the caller believes the escrow
+  // holds, 0 = "a free round, no escrow"; another escrow throws stake_mismatch before anything is written. The close ref is
+  // decided from its stored lines BEFORE anything is built (after the first close the escrow is 0, so a rebuilt batch would
+  // differ): the identical close (kind, currency, numbers, stake when given) = dup; anything else on a closed round = round_closed
+  // ("already played": a game that replays after a crash rolls new numbers).
   function settleRound(game, key, cur, roundId, o = {}) {
     needGame(game); needStr(key, 'bad_key', 'key'); needCur(cur); needRound(roundId);
-    const win = needAmt(o.win == null ? 0 : o.win, 'win'), p = needPool(game, o.pool);
+    if (o === null || typeof o !== 'object' || Array.isArray(o)) throw new MoneyError('bad_amount', { outcome: o });
+    const win = needAmt(o.win == null ? 0 : o.win, 'win'), p = needPool(game, o.pool), want = o.stake == null ? null : needAmt(o.stake, 'stake');
     const { close } = refsOf(game, key, roundId), escrow = escrowOf(game, key, roundId), player = store(cur, key);
     if (ledger.has(close)) {
       const st = closeOf(game, close);
-      if (st.kind === 'void') throw new MoneyError('round_closed', { ref: close });
       const pooled = p.feed + p.prize > 0;
-      if (st.win === win && st.feed === p.feed && st.prize === p.prize && (!pooled || st.pool === p.acct)) return { id: st.id, dup: true };
-      throw new MoneyError('ref_conflict', { ref: close, id: st.id });
+      if (st.kind === 'settle' && st.cur === cur && st.win === win && st.feed === p.feed && st.prize === p.prize && (!pooled || st.pool === p.acct)
+        && (want == null || want === st.stake)) return { id: st.id, dup: true };
+      throw new MoneyError('round_closed', { ref: close, id: st.id });
     }
     noOtherEscrow(escrow, cur);
     const held = ledger.balance(escrow, cur);
+    if (want != null && want !== held) throw new MoneyError('stake_mismatch', { have: held, want });
+    needFeed(p, held);
     const items = [];
     if (held > 0) items.push({ from: escrow, to: 'house:' + game, amount: held, cur, reason: game + ':spend' });
     items.push(...payLegs(game, player, cur, p, win));
@@ -280,7 +291,7 @@ function createService(ledger, opts = {}) {
   }
 
   // Refund an open round: ONE transfer escrow -> player (the whole escrow), reason <game>:void:<why>, same close ref as settle.
-  // No escrow = noop. A stored void answers dup whatever the `why`; a stored settle is round_closed.
+  // No escrow = noop. A stored void answers dup whatever the `why` (same currency); a stored settle, or a void in the other currency, is round_closed.
   function voidRound(game, key, cur, roundId, why) {
     needGame(game);
     return voidAccount(game, key, cur, roundId, why);
@@ -290,7 +301,7 @@ function createService(ledger, opts = {}) {
     const { close } = refsOf(game, key, roundId), escrow = escrowOf(game, key, roundId);
     if (ledger.has(close)) {
       const st = closeOf(game, close);
-      if (st.kind === 'void') return { id: st.id, dup: true };
+      if (st.kind === 'void' && st.cur === cur) return { id: st.id, dup: true };
       throw new MoneyError('round_closed', { ref: close });
     }
     noOtherEscrow(escrow, cur);
@@ -307,9 +318,10 @@ function createService(ledger, opts = {}) {
     for (const cur of CURS) for (const { account, balance } of ledger.list(`escrow:${game}:`, cur)) { const { key, roundId, amount } = parseEscrow(account, cur, balance); out.push({ key, cur, roundId, amount }); }
     return out;
   }
+  // True when the round was played: its :close ref is in the ledger, or (an instant round) its own ref is.
   function roundClosed(game, key, roundId) {
     needGame(game); needStr(key, 'bad_key', 'key'); needRound(roundId);
-    return ledger.has(refsOf(game, key, roundId).close);
+    return ledger.has(refsOf(game, key, roundId).close) || ledger.has(`${game}:${key}:${roundId}`);
   }
   function poolBalance(game, name, cur) {
     needGame(game); needStr(name, 'bad_pool', 'name'); needCur(cur);
@@ -493,7 +505,7 @@ function createService(ledger, opts = {}) {
   return {
     ensureAccount, buyIn, cashOut, settleHand, mint, houseSpend, houseCredit, houseRound, adminAdjust,
     openRound, settleRound, voidRound, openRounds, roundClosed, poolBalance, sweepEscrows,
-    topUpEligible, topUp, bootRecover, mirror, nightSummary, balances, seatFund, ledger,
+    topUpEligible, topUp, bootRecover, mirror, nightSummary, balances, seatFund, ledger, GAMES,
     START_CHIPS, START_PLAY, TOPUP_BELOW, TOPUP_COOLDOWN_MS,
   };
 }

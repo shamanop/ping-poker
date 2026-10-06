@@ -92,3 +92,14 @@ Decisions worth knowing:
 7. Shutdown does nothing for escrows. Recovery is the boot rule only.
 
 Tests: `tests/v2-unit/money-rounds.js` (service level, includes a seeded 4000-op random walk against a model), `tests/v2-unit/tables-game-money.js` (ctx.money + registry with a fake game), `tests/v2/18_escrow_boot.js` (real server, seeded data dir, SIGKILL and SIGTERM restarts).
+
+## P6 wave 2-b: fixes after the Opus money critic (2026-10-06)
+
+Critic report `_scratch/p6/w2b/CRITIC-REPORT.md`; the lead's decisions, all small:
+- F1: with `ctx.money` only the module `bender` gets `ctx.wallet`; `houseRound` / `houseSpend` / `houseCredit` refuse a ref ending in `:open` or `:close` (`bad_ref`).
+- F2: a stored `:close` met by anything but the identical close is `round_closed` (was `ref_conflict`); `ctx.money.round` maps the ledger's `ref_conflict` on the instant ref, and an all-zero replay against a stored instant round, to `round_closed`; `roundClosed` / `closed()` is also true for the instant ref. A free round whose whole outcome is 0 still leaves no trace: now a written limit (ADD-A-GAME section 4).
+- F3: `ctx.money` refuses a non-object outcome or an unknown key (`settle`: `win`, `pool`, `stake`; `round`: `cost`, `win`, `pool`; pool: `name`, `feed`, `prize`) with `args`, and a non-number `open` cost; `settleRound` takes an optional `stake` (`stake_mismatch { have, want }`, `stake: 0` = free round) and a resend must match it; a resend or void naming the other currency is `round_closed`.
+- F4: `feed` above the stake of the same batch is `bad_amount { field: 'feed' }` (`houseRound` against `cost`, `settleRound` against the escrow).
+- F6: `moneyView` gains `inRound` and counts it in `chips`.
+- F7: a `recover()` or `audit()` returning a thenable is `async`, reported, that game's escrows left alone, the rejection caught; a module id not in `service.GAMES` is skipped by `recover()`.
+- Tests: the eight surviving mutants and the two weak assertions (`tables-game-money.js` second-boot line count, test 18 mirror check with balances off the signup default) are closed; one test per fix. Tests that asserted `ref_conflict` on a different settle (two in `money-rounds.js` and the random walk) now assert `round_closed`; the walk also models the feed check.

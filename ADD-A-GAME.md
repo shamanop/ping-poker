@@ -2,7 +2,7 @@
 
 A game = one server module + one client `registerGame` file. This file is the contract every game follows. The money part is not advice: the soak (`tests/soak/`) fails the build when a game breaks it.
 
-**Status (P6 wave 1, 2026-10-06).** The rule and the API below are fixed. On this branch today only the *instant round* exists, under its old name (`ctx.wallet.spend` then `ctx.wallet.credit` in one handler: Bender). `ctx.money` with `open` / `settle` / `void`, escrow accounts and pools is built in P6 wave 2 together with COLD CALL. Until it lands, a game that keeps a round open across messages cannot be added.
+**Status (P6 wave 2, 2026-10-06).** The rule and the API below are fixed and the API now exists on `v2-all` (`transport/game-money.js`, `money/service.js`, `games/index.js`). No game uses `open` / `settle` / `void` yet: Bender still plays through `ctx.wallet.spend` then `ctx.wallet.credit` in one handler, and COLD CALL is the first game on `ctx.money`.
 
 ## 1. The one money rule
 
@@ -37,10 +37,10 @@ A new game needs: `house:<game>` in `SOURCE_ACCOUNTS` (`money/ledger.js`) and it
 money.balance(key, cur)                              -> what the player can spend now
 money.round(key, cur, roundId, { cost, win, pool })  -> an instant round. ONE batch.          ref <game>:<key>:<roundId>
 money.open(key, cur, roundId, cost)                  -> stake into escrow. ONE transfer.      ref <game>:<key>:<roundId>:open
-money.settle(key, cur, roundId, { win, pool })       -> close an open round. ONE batch.       ref <game>:<key>:<roundId>:close
+money.settle(key, cur, roundId, { win, pool, stake }) -> close an open round. ONE batch.      ref <game>:<key>:<roundId>:close
 money.void(key, cur, roundId, why)                   -> refund an open round. ONE transfer.   ref <game>:<key>:<roundId>:close
 money.openRounds()                                   -> [{ key, cur, roundId, amount }]  every non-zero escrow of this game, read from the ledger
-money.closed(key, roundId)                           -> true when the :close ref is in the ledger
+money.closed(key, roundId)                           -> true when the round was played: its :close ref is in the ledger, or (an instant round) its own ref
 money.pool(name, cur)                                -> the pool's balance
 ```
 
@@ -57,7 +57,10 @@ The legs of a batch, always in this order (each step is checked; no holder accou
 
 What the calls guarantee:
 - `round` and `open` throw `funds` before anything is written when the player cannot pay. Nothing is parked.
-- `settle` and `void` share ONE ref per round. Whichever is written first closes the round for good; the other answers `round_closed` and writes nothing. A retry of the same close with the same numbers answers `dup`.
+- `settle` and `void` share ONE ref per round. Whichever is written first closes the round for good; the other answers `round_closed` and writes nothing. A retry of the identical close (same kind, currency, `win`, pool and, when given, `stake`) answers `dup`; anything else on a closed round answers `round_closed`, also a `round` whose ref is already in the ledger with other numbers. `round_closed` and `dup` both mean "already played": advance your state, pay nothing.
+- `settle`'s `stake` (optional, a non-negative integer) is what you believe the round's escrow holds. When the escrow of that round in that currency holds anything else the call throws `stake_mismatch` and writes nothing; `stake: 0` says "this is a free round, there must be no escrow". Not given: the escrow is settled whatever it holds. Pass it whenever you know it: a mistyped round id otherwise settles as a free round.
+- `pool_short`: a `prize` larger than the pool holds after this batch's own `feed`. `args`: the outcome of `round` / `settle` is not a plain object, has a key that is not `cost` / `win` / `pool` (`round`) or `win` / `pool` / `stake` (`settle`), or its `pool` has a key that is not `name` / `feed` / `prize`; `open`'s `cost` is not a number. Thrown before anything is written.
+- `feed` is at most the stake of the same batch (`cost` for `round`, the escrow for `settle`), else `amount`: a free round cannot feed a pool, it can still win a prize.
 - A round with no stake (a free round) has no escrow: `open` with cost 0 writes nothing, `void` writes nothing, `settle` writes the win under the `:close` ref.
 - Every call returns only after the line is on disk (fsync). Every call fires the wallet push to the player's sockets; you do not emit balances yourself except inside your own result payload (`money.balance`).
 
@@ -79,6 +82,7 @@ Game state (reels in progress, the record of an open round, free rounds, leads, 
 - **The gate of a mint is the ledger.** "Already claimed today" is `ledger.has('bonus:<key>:<day>')`, not a flag in another file.
 - **An open round runs on the config it was opened with.** Snapshot the config into the round's record. A live config change, and a restart, never change the price or the pay table of an open round.
 - **Results after the write.** If a money call throws, emit an error, never a result. A result the client received is in the ledger.
+- **What the ledger cannot remember.** A free round whose outcome is 0 (no win, no prize) writes no line, so after a crash between the money call and the state flush it is played again with a new draw. The player never saw the first result and cannot cause it. Also (decision D3): leads, the Callback and its remainder are game state, not ledger balances; a crash can cost the entitlements granted by the one round in flight, never a balance.
 
 ## 5. A game must never
 
@@ -97,8 +101,8 @@ Game state (reels in progress, the record of an open round, free rounds, leads, 
 1. Export `{ id, name, kind: 'solo'|'table', init(ctx), handlers, onDisconnect?, recover?, audit }`.
 2. `handlers` is `{ event: (socket, payload, ctx) => ... }`. `games/index.js` registers each as `g:<id>:<event>` and rejects sockets that are not signed in (`error {code:'auth'}`) before your handler runs. `this` is your module.
 3. Add `'./<id>.js'` to `MODULES` in `games/index.js`.
-4. `ctx` = `{ io, accounts, money, now, rng, social }`. Account key: `socket.data.acct.key`. (`ctx.wallet` stays for Bender only: `spend` then `credit` in one handler is `money.round` under an old name. New games do not use it.)
-5. `audit()` returns `{ openRounds: [{ key, cur, roundId, amount }], pools: { '<name>': { chips, play } } }` from your OWN state. The soak compares it with the ledger after every step: an escrow you do not list, a round you list with no escrow, or a pool number that differs is a failed build.
+4. `ctx` = `{ io, accounts, money, now, rng, social }`. Account key: `socket.data.acct.key`. (`ctx.wallet` is in Bender's ctx only; every other module's ctx has none: `spend` then `credit` in one handler is `money.round` under an old name. New games do not use it.)
+5. `recover(rounds, ctx)` and `audit()` must be synchronous: one that returns a promise is an error at boot and its game's escrows are left alone. `audit()` returns `{ openRounds: [{ key, cur, roundId, amount }], pools: { '<name>': { chips, play } } }` from your OWN state. The soak compares it with the ledger after every step: an escrow you do not list, a round you list with no escrow, or a pool number that differs is a failed build.
 6. Resolve the round first with a pure function and the injected `ctx.rng`, then one money call, then state, then emit.
 7. Rate-limit every event a client can spam. Validate every payload field against a fixed list (bet levels, currencies, choices).
 8. Keep the math in `games/<id>-engine.js` with a `games/<id>-sim.js` that prints the payback, and tests in `tests/<id>.js`.

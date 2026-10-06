@@ -30,7 +30,9 @@ module.exports = function games(ctx) {
   const service = ctx.service; delete full.service;   // the boot sweep needs it; a module must not (ctx.money is its only way to the ledger)
 
   const mods = (ctx.modules || MODULES.map((m) => require(m)));
-  const ctxOf = new Map(mods.map((m) => [m, forGame ? { ...full, money: forGame(m.id) } : full]));
+  // With ctx.money, only Bender keeps ctx.wallet (the old spend/credit path): it writes any ref and any game's house, so another module would bypass ctx.money.
+  const modCtx = (m) => { if (!forGame) return full; const c = { ...full, money: forGame(m.id) }; if (m.id !== 'bender') delete c.wallet; return c; };
+  const ctxOf = new Map(mods.map((m) => [m, modCtx(m)]));
   for (const m of mods) if (m.init) m.init(ctxOf.get(m));
 
   function guard(socket, fn) {
@@ -75,17 +77,28 @@ module.exports = function games(ctx) {
     const claimed = new Map(), unknown = new Set();
     const err = (game, what, e) => report.errors.push({ game, what, code: (e && e.code) || 'error', message: String(e && e.message) });
     const rk = (r) => `${String(r.key).toLowerCase().trim()}|${r.cur}|${r.roundId}`;
+    // recover and audit are synchronous: a thenable cannot be waited for before listen, so its game's claim is unknown (escrows left alone).
+    const thenable = (v) => { const is = !!v && typeof v.then === 'function'; if (is) Promise.resolve(v).catch(() => {}); return is; };
     for (const m of mods) {
+      if (service && Array.isArray(service.GAMES) && !service.GAMES.includes(m.id)) continue;  // not a money game: nothing to recover
       const mctx = ctxOf.get(m), g = report.games[m.id] = { found: 0, settledOrVoidedByGame: 0, kept: 0 };
       const rounds = () => (mctx.money ? mctx.money.openRounds() : []);
       let before = [];
       try { before = rounds(); g.found = before.length; } catch (e) { err(m.id, 'openRounds', e); }
-      if (typeof m.recover === 'function') { try { m.recover(before, mctx); } catch (e) { err(m.id, 'recover', e); } }
+      let async = false;
+      if (typeof m.recover === 'function') {
+        try { if (thenable(m.recover(before, mctx))) { async = true; err(m.id, 'recover', { code: 'async', message: 'recover() returned a thenable; it must be synchronous' }); } } catch (e) { err(m.id, 'recover', e); }
+      }
       try { g.settledOrVoidedByGame = Math.max(0, before.length - rounds().length); } catch (e) { err(m.id, 'openRounds', e); }
       const set = new Set();
       claimed.set(m.id, set);
+      if (async) { unknown.add(m.id); continue; }
       if (typeof m.audit !== 'function') continue;
-      try { for (const r of (m.audit() || {}).openRounds || []) set.add(rk(r)); } catch (e) { unknown.add(m.id); err(m.id, 'audit', e); }
+      try {
+        const a = m.audit();
+        if (thenable(a)) throw Object.assign(new Error('audit() returned a thenable; it must be synchronous'), { code: 'async' });
+        for (const r of (a || {}).openRounds || []) set.add(rk(r));
+      } catch (e) { unknown.add(m.id); err(m.id, 'audit', e); }
     }
     if (!service || typeof service.sweepEscrows !== 'function') { report.errors.push({ game: null, what: 'sweep', code: 'no_service', message: 'ctx.service.sweepEscrows missing: escrows were not swept' }); return report; }
     const sweep = service.sweepEscrows((r) => unknown.has(r.game) || (claimed.has(r.game) && claimed.get(r.game).has(rk(r))));

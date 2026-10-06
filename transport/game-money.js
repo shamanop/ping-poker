@@ -15,7 +15,7 @@ function mapError(e) {
   if (e instanceof MoneyError) {
     if (e.code === 'insufficient' && /^(bank|play):/.test(String(e.account))) return fail('funds', 'Not enough funds', e);
     if (e.code === 'bad_amount') return fail('amount', 'Bad amount', e);
-    if (e.code === 'round_closed' || e.code === 'pool_short' || e.code === 'ref_conflict') return fail(e.code, e.message, e);
+    if (e.code === 'round_closed' || e.code === 'pool_short' || e.code === 'ref_conflict' || e.code === 'stake_mismatch') return fail(e.code, e.message, e);
   }
   return fail('internal', 'Server error', e);
 }
@@ -36,15 +36,41 @@ function createGameMoney({ service, ledger, onChange, log }) {
       return { id: r.id == null ? null : r.id, dup: !!r.dup, noop: !!r.noop };
     };
     const amount = (o, k) => (o && o[k] != null ? o[k] : 0);
+    // The outcome of a call is a plain object with known keys only: a bare number or a misspelt field would otherwise close a round on numbers that are not its own.
+    const plain = v => v !== null && typeof v === 'object' && !Array.isArray(v) && [Object.prototype, null].includes(Object.getPrototypeOf(v));
+    const shape = (o, keys, label) => {
+      if (!plain(o)) throw fail('args', label + ': the outcome must be an object');
+      for (const k of Object.keys(o)) if (!keys.includes(k)) throw fail('args', `${label}: unknown field ${k}`);
+      if (o.pool != null) {
+        if (!plain(o.pool)) throw fail('args', label + ': pool must be an object');
+        for (const k of Object.keys(o.pool)) if (!['name', 'feed', 'prize'].includes(k)) throw fail('args', `${label}: unknown pool field ${k}`);
+      }
+      return o;
+    };
 
     return {
       balance(key, c) { const k = who(key); c = cur(c); return ledger.balance((c === 'chips' ? 'bank:' : 'play:') + k, c); },
+      // A replay of an instant round the ledger already holds is "already played": ref_conflict (other numbers) and noop (all 0 against a
+      // stored round) both become round_closed.
       round(key, c, roundId, o) {
-        const k = who(key); c = cur(c);
-        return call(k, () => service.houseRound(game, k, amount(o, 'cost'), amount(o, 'win'), c, `${game}:${k}:${part(roundId, 'roundId')}`, o && o.pool));
+        const k = who(key); c = cur(c); shape(o, ['cost', 'win', 'pool'], 'round');
+        return call(k, () => {
+          const ref = `${game}:${k}:${part(roundId, 'roundId')}`;
+          let r;
+          try { r = service.houseRound(game, k, amount(o, 'cost'), amount(o, 'win'), c, ref, o.pool); } catch (e) { if (e && e.code === 'ref_conflict') throw new MoneyError('round_closed', { ref }); throw e; }
+          if (r.noop && ledger.has(ref)) throw new MoneyError('round_closed', { ref });
+          return r;
+        });
       },
-      open(key, c, roundId, cost) { const k = who(key); c = cur(c); return call(k, () => service.openRound(game, k, c, part(roundId, 'roundId'), cost)); },
-      settle(key, c, roundId, o) { const k = who(key); c = cur(c); return call(k, () => service.settleRound(game, k, c, part(roundId, 'roundId'), { win: amount(o, 'win'), pool: o && o.pool })); },
+      open(key, c, roundId, cost) {
+        const k = who(key); c = cur(c);
+        if (typeof cost !== 'number') throw fail('args', 'open: cost must be a number');
+        return call(k, () => service.openRound(game, k, c, part(roundId, 'roundId'), cost));
+      },
+      settle(key, c, roundId, o) {
+        const k = who(key); c = cur(c); shape(o, ['win', 'pool', 'stake'], 'settle');
+        return call(k, () => service.settleRound(game, k, c, part(roundId, 'roundId'), { win: amount(o, 'win'), pool: o.pool, stake: o.stake }));
+      },
       void(key, c, roundId, why) { const k = who(key); c = cur(c); return call(k, () => service.voidRound(game, k, c, part(roundId, 'roundId'), why)); },
       openRounds() { try { return service.openRounds(game); } catch (e) { throw mapError(e); } },
       closed(key, roundId) { const k = who(key); try { return service.roundClosed(game, k, part(roundId, 'roundId')); } catch (e) { throw mapError(e); } },

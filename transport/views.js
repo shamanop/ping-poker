@@ -18,9 +18,11 @@ function createViews({ registry, accounts, presLedger, ledger, service, wallet }
 
   // ---- money ---------------------------------------------------------------------------------------------------
   function walletView(key) { return wallet ? wallet.get(key) : { play: playOf(key), chips: bankOf(key) }; }
+  // inRound = the chips the key has parked in open game rounds (escrows); still theirs, so the total does not drop while a round is open.
+  const inRoundChips = key => { let n = 0; for (const { account, balance } of ledger.list('escrow:', 'chips')) if (account.split(':')[2] === key) n += balance; return n; };
   function moneyView(key) {
-    const bank = bankOf(key), atTable = atTableChips(key);
-    return { bank, atTable, chips: bank + atTable, wallet: walletView(key) };
+    const bank = bankOf(key), atTable = atTableChips(key), inRound = inRoundChips(key);
+    return { bank, atTable, inRound, chips: bank + atTable + inRound, wallet: walletView(key) };
   }
 
   // ---- table objects -------------------------------------------------------------------------------------------
