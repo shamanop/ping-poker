@@ -34,7 +34,7 @@ Grid 6 columns x 5 rows. A win is a cluster of 5+ of the same symbol connected u
 - **Max win 10,000x bet**, enforced: the round stops paying at the cap. In the script: `capped: true` on the round, and on the step / spin / bonus where it happened; nothing is played after it.
 - **Buys** (`buyBonus` ids): `call` = one base spin with a guaranteed phone; `bonus1`; `bonus2`; `hunt` = one base spin at a higher price with about 5x the bonus chance (bell weight multiplied).
   Prices are `CFG.buyCost[id]` in tenths of the bet (price in cents = tenths x bet / 10).
-- **Money**: every pay is a whole number of TENTHS of the bet (min cluster 0.1x, min bubble 0.2x). Bet levels `[10, 20, 50, 100, 200, 500, 1000, 2500]` cents are all multiples of 10 cents,
+- **Money**: every pay is a whole number of TENTHS of the bet (min cluster 1.0x, min bubble 0.2x). Bet levels `[10, 20, 50, 100, 200, 500, 1000, 2500]` cents are all multiples of 10 cents,
   so `cents = tenths * bet / 10` is an exact integer. No floats on the money path. The server ignores anything the client sends except bet, mode, buyBonus (and `force` when the QA hook is on).
 
 ## 2. Ids and units (every number in a script is an integer)
@@ -161,63 +161,66 @@ QA hook (`COLDCALL_TEST=1` and `NODE_ENV !== 'production'`, gated exactly as bef
 `bonus1/2/3` = 3 / 4 / 5 bells land (and exactly that many, no more); `phone` = a phone feature with >= 4 hot leads; `close` = a feature with a close and a second reveal round;
 `big` = the round pays >= 25x; `tease` = exactly 2 bells, no bonus. They are real engine rounds (bells placed, or whole rounds re-rolled with the real rng), through the normal spend/credit path.
 
-## 5. Final config (all in the `CFG` block at the top of `games/coldcall-engine.js`)
+## 5. Final config (all in the `CFG` block at the top of `games/coldcall-engine.js`; high-volatility retune, see `cold-call/RETUNE.md`)
 
 | Lever | Value |
 |---|---|
-| Regular symbol weights per cell (mug note ball can cups headset rx pile cashwad cash) | 35.9, 29, 22, 17, 12.2, 8.2, 6.2, 4.5, 3.2, 2.2 (skewed low: this is what makes the hit rate about 32%) |
-| closer / bell / phone weight per cell, base | 1 / 1.567 / 0.1945 |
-| closer / bell / phone weight per cell, bonus1, bonus2 | 1 / 1.567 / 4.5 |
-| closer / bell / phone weight per cell, bonus3 (a phone is also forced into every starting grid) | 1 / 1.567 / 3 |
-| Cluster pay, tenths of bet, sizes 5,6,7,8,9,10,11,12,13+ | mug 1,3,6,9,14,21,32,69,150 ... cash 10,23,46,81,138,230,402,805,1000 (5 pays 0.1x..1x, 13+ pays 15x..100x; full table in the file) |
-| Reveal weights base (bronze / silver / gold / upsell / close) | 100 / 2.5 / 0.2 / 6 / 1 |
-| Reveal weights bonus1 | 100 / 7.5 / 0.5 / 7 / 0.55 |
-| Reveal weights bonus2 | 100 / 7.5 / 0.5 / 7 / 0.22 |
-| Reveal weights bonus3 (no bronze; its own value weights: silver 75/15/7/3 %, gold 60/25/10/4/1 %) | 0 / 5.5 / 0.05 / 0.5 / 0.004 |
-| Value weights inside a tier (all other modes) | bronze 30/28/20/10/7/5, silver 40/30/18/12, gold 45/30/17/6/2 |
-| Upsell multiplier weights (x2 x3 x4 x5 x10) | 40 / 28 / 17 / 10 / 5 |
+| Regular symbol weights per cell (mug note ball can cups headset rx pile cashwad cash) | 29.925, 25.552, 20.828, 17.21, 13.464, 10.034, 8.159, 6.436, 5.001, 3.79 (the old weights flattened: w^0.74, same total 140.4; this is what brings the hit rate to about 20.7%) |
+| closer / bell / phone weight per cell, base | 1 / 1.52 / 0.208 |
+| closer / bell / phone weight per cell, bonus1 | 5 / 1.567 / 4.5 |
+| closer / bell / phone weight per cell, bonus2 | 3 / 1.567 / 4.5 |
+| closer / bell / phone weight per cell, bonus3 (a phone is also forced into every starting grid) | 2 / 1.567 / 3 |
+| Cluster pay, tenths of bet, sizes 5,6,7,8,9,10,11,12,13+ | mug 10,10,12,15,24,50,140,450,1300 ... cash 18,18,63,83,132,275,770,2475,7150. A 5-cluster pays 1.0x to 1.8x, so no cluster win is under 1x; 13+ pays 130x to 715x. Sizes 5-6 are flat across the low symbols; from size 7 the symbols separate by a factor 1, 1.1, 1.2, 1.35, 1.55, 1.85, 2.3, 3, 4, 5.5 (full table in the file) |
+| Reveal weights base (bronze / silver / gold / upsell / close) | 100 / 2.5 / 0.2 / 6 / 0.6 |
+| Reveal weights bonus1 | 100 / 19 / 1.9 / 9 / 0.6 |
+| Reveal weights bonus2 | 100 / 11 / 0.9 / 9 / 0.2 |
+| Reveal weights bonus3 (no bronze; its own value weights: silver 75/15/7/3 %, gold 60/25/10/4/1 %) | 0 / 5.5 / 0.05 / 0.5 / 0.004 (unchanged) |
+| Value weights inside a tier (all other modes) | bronze 30/28/20/10/7/5, silver 40/30/18/12, gold 45/30/17/6/2 (unchanged) |
+| Upsell multiplier weights (x2 x3 x4 x5 x10) | 40 / 28 / 17 / 10 / 5 (unchanged) |
 | Upsell adjacency | 4 |
-| Free spins | bonus1 8, bonus2 12, bonus3 12; +2 for 2 bells, +4 for 3 bells, upgrade +4; cap 40 total |
+| Free spins | bonus1 8, bonus2 12, bonus3 12; +2 for 2 bells, +4 for 3 bells, upgrade +4; cap 40 total (unchanged) |
 | Hard caps | 40 cascades per spin, 30 reveal rounds, 40 (+2) free spins; the 10,000x cap |
-| Hunt | bell weight x1.85 on one base spin |
-| Buy prices (tenths of bet) | call 46, bonus1 513, bonus2 2971, hunt 41 |
+| Hunt | bell weight x1.85 on one base spin (about 5.0x the natural bonus chance, measured) |
+| Buy prices (tenths of bet) | call 29, bonus1 856, bonus2 2834, hunt 35 |
 
-## 6. Measured table (final config; every number below is from a run on exactly this config, commit of this file)
+## 6. Measured table (final config; every number below is from a run on exactly this config, commit d2faee3)
 
-Method. The sim is `games/coldcall-sim.js` on 6 worker threads, `nice -n 10`, seeds split per 1M-spin chunk (independent 128-bit rng streams).
+Method. The sim is `games/coldcall-sim.js`, run on shaman (24 threads, Node v24, `CC_MAX_THREADS=24`), seeds split per 1M-spin chunk (independent 128-bit rng streams), so results do not depend on the thread count.
 - **RTP and parts: stratified estimator** (`--strat`), like `games/bender-rtp.js`: RTP = E[base spin pay (clusters + phone)] + sum over bonus kinds of P(bell trigger of that kind) x E[that bonus, sampled directly from a fresh start].
-  Variance includes the covariance of the base pay with the trigger kind and each bonus's own sampling error. 450,000,000 base spins + 8,000,100 bonus runs of each kind, seed 202, 875 s (14.6 min) locally.
-- **Frequencies, hit rate, tails, cap hits: plain full-round sim** (every spin is a real paid round, bonus included), 200,000,000 spins, seed 303, 230 s.
-- **Buys**: average value of 5,000,000 rounds per buy to set the price, then a fresh 5,000,000-round run at that price (seed 505), then 100,000,000 rounds each for `call` and `hunt` (seed 606) because their intervals were too wide at 5M.
+  450,000,000 base spins + 8,000,100 bonus runs of each kind, seed 202, 128.8 s.
+- **Frequencies, hit rate, bands, tails, cap hits: plain full-round sim** (every spin is a real paid round, bonus included), 200,000,000 spins, seed 303, 36.6 s.
+- **Buys**: prices set from the average value of a 10,000,000-round run (seed 505, base phone weight 0.205, one tick before the final 0.208), then re-simulated at the final price: 10,000,000 rounds each (seed 606), and 100,000,000 rounds each for `call` and `hunt` (seed 707).
 
 | Measure | Result |
 |---|---|
-| **Total RTP (stratified)** | **98.10% +- 0.14 (95%)** (target 98.0 +-0.3, interval at most 0.15: met) |
-| Total RTP, plain 200M cross-check | 97.94% +- 0.26 (95%): agrees |
-| By part (stratified) | clusters (base) 21.33%, base phone feature 25.74%, bonus 1 29.38% (+-0.05), bonus 2 15.16% (+-0.06), bonus 3 6.49% (+-0.10). Bonuses together 51.0% |
-| Hit rate (plain) | any win 32.22%; base cluster win 31.91% (Le Bandit 32.47%) |
-| Any bonus | 1 in 156.2 spins (bonus 1: 1 in 171, bonus 2: 1 in 1,918, bonus 3: 1 in 25,862) |
-| Bonus average value (natural triggers; stratified) | bonus 1 50.28x (+-0.06), bonus 2 290.80x (+-0.19), bonus 3 1,679x (+-0.74). Average free spins played per bonus: 9.4 (bonus 1: 9.0 incl. 0.4% upgraded to bonus 2) |
-| Phone feature in the base game | fires on 1.70% of spins (1 in 58.7); average 8.3 hot leads; 0.048 closes per feature |
-| Cascades | 1.36 per winning base spin |
+| **Total RTP (stratified)** | **97.95% +- 0.11 (95%)** (target 98.0 +-0.3: met) |
+| Total RTP, plain 200M cross-check | 97.97% +- 0.23 (95%): agrees. Standard deviation of one round: 16.7x bet |
+| By part (stratified) | clusters (base) 34.98%, base phone feature 13.26%, bonus 1 37.41% (+-0.07), bonus 2 9.80% (+-0.05), bonus 3 2.50% (+-0.05). Bonuses together 49.71% = 50.8% of RTP |
+| Hit rate (plain) | whole paid round (any win, bonus included) 20.68%; base-only (a spin with any cluster or phone pay) 20.36% |
+| Wins under 1x | 0 of 200,000,000 spins (no cluster pays under 1.0x, and a bubble only exists on a spin that has a cluster) |
+| Any bonus | 1 in 206.7 spins (bonus 1: 1 in 224, bonus 2: 1 in 2,832, bonus 3: 1 in 44,092) |
+| Bonus average value (natural triggers) | bonus 1 83.82x (+-0.11), bonus 2 277.65x (+-0.22), bonus 3 1,102x (+-0.59) (stratified); all natural bonuses together 102.9x (plain). Average free spins per bonus 9.3 (bonus 1: 8.9) |
+| Phone feature in the base game | fires on 1.08% of spins (1 in 93); average 7.0 hot leads; 0.041 closes per feature |
+| Cascades | 1.21 per winning base spin |
+| Bands (plain 200M), % of spins / pts of RTP | see `cold-call/RETUNE.md` |
 | Max win seen | 10,000x (the cap) |
-| Cap hits | plain: 51 in 200,000,000 spins = 1 in 3.9M (21 base-only, 12 bonus 1, 6 bonus 2, 12 bonus 3). Stratified cross-check: base-only 36 in 450M (1 in 12.5M) + bonus caps = about 1 in 4.3M overall. Target "not routine, at most 1 in 2M": met |
-| Tail, share of spins paying (plain 200M) | >= 100x: 0.125% (1 in 800); >= 1,000x: 0.00452% (1 in 22,100; 9,041 spins); >= 5,000x: 0.00011% (1 in 909,000; 220 spins) |
-| Bonus tails (stratified, per bonus) | bonus 1: >=100x 10.3%, >=1,000x 0.088%, >=5,000x 0.0043%, cap 1 in 78,400; bonus 2: 83.3%, 1.53%, 0.035%, cap 1 in 11,600; bonus 3: 97.8%, 72.6%, 1.06%, cap 1 in 1,100 |
-| Script size | base spin avg 0.6 KB (max seen 20 KB); bonus 1 avg 4.8 KB; bonus 2 avg 10.7 KB (max 25 KB); bonus 3 avg 13.7 KB (max 34 KB). Resolve time per round under 1 ms average |
+| Cap hits | plain: 61 in 200,000,000 spins = 1 in 3.28M (4 base-only, 50 bonus 1, 6 bonus 2, 1 bonus 3). Stratified cross-check: about 1 in 3.0M overall. Bonus caps per bonus: bonus 1 1 in 18,300 bonuses, bonus 2 1 in 7,300, bonus 3 1 in 3,000 |
+| Tail, share of spins paying (plain 200M) | >= 100x: 0.173% (1 in 579); >= 1,000x: 0.00329% (1 in 30,400); >= 5,000x: 0.000115% (1 in 870,000; 230 spins) |
+| Bonus tails (stratified, per bonus) | bonus 1: >=100x 24.9%, >=1,000x 0.30%, >=5,000x 0.017%; bonus 2: 75.7%, 2.09%, 0.053%; bonus 3: 92.1%, 47.6%, 0.27% |
+| Script size (1.5M rounds, seed 77, local) | base spin avg 0.45 KB (max 3.6 KB); bonus 1 avg 4.9 KB (max 17 KB); bonus 2 avg 9.8 KB (max 25 KB); bonus 3 avg 10.8 KB (only 17 samples, max 18 KB). Resolve time about 0.01 ms per round on the bulk |
 | Tests | `node tests/coldcall.js`: 46 passed (about 30 s); `node tests/bender.js`: 17 passed |
 
 ### Buy prices (price = measured average value / 0.98, rounded to a whole tenth of the bet, then re-simulated at that price)
 
-| Buy | Measured avg value (run 1, 5M) | Price | Re-simulated RTP at that price |
+| Buy | Measured avg value (10M, seed 505) | Price | Re-simulated RTP at that price |
 |---|---|---|---|
-| `call` (one spin, phone guaranteed) | 4.546x | 4.6x (46 tenths) | 98.61% +- 0.12 (100M rounds); 98.64% +- 0.53 (5M) |
-| `bonus1` | 50.28x | 51.3x (513) | 98.04% +- 0.16 (5M) |
-| `bonus2` | 291.12x | 297.1x (2971) | 97.95% +- 0.08 (5M) |
-| `hunt` (one spin, bell weight x1.85) | 3.99x | 4.1x (41) | 98.36% +- 0.28 (100M); bonus on 3.12% of hunt spins = 4.9x the natural 0.64% |
+| `call` (one spin, phone guaranteed) | 2.849x | 2.9x (29 tenths) | 98.07% +- 0.47 (10M); 97.92% +- 0.14 (100M) |
+| `bonus1` | 83.91x | 85.6x (856) | 97.99% +- 0.12 (10M) |
+| `bonus2` | 277.71x | 283.4x (2834) | 97.95% +- 0.07 (10M) |
+| `hunt` (one spin, bell weight x1.85) | 3.469x | 3.5x (35) | 99.30% +- 0.78 (10M); 99.15% +- 0.25 (100M); bonus on 2.44% of hunt spins = 5.0x the natural 0.484% |
 
-The `call` and `hunt` RTP sit 0.3-0.6 pt above 98 because a 4.6x / 4.1x price rounded to a whole tenth is a coarse step (one tenth = 2.2% of the price); that is the rounding the brief asked for.
-Caps in buys: bonus2 buy hits the cap on 0.0094% of buys (469 in 5M, by design: it is a bonus 2 start); hunt 1 in 840,000 hunts; call 1 in 930,000 calls.
+`hunt` sits 1.2 pt above 98 because 3.5x rounded to a whole tenth is a coarse step (one tenth = 2.9% of the price); that is the rounding the brief asked for. `call` is near 98 only by luck of the step (one tenth = 3.4%).
+Caps in buys (10M rounds): bonus1 buy 508 (1 in 19,700), bonus2 buy 1,513 (1 in 6,600), call 53 in 100M, hunt 179 in 100M.
 
 ## 7. Rule decisions where the brief was silent
 
@@ -242,11 +245,11 @@ Caps in buys: bonus2 buy hits the cap on 0.0094% of buys (469 in 5M, by design: 
 
 - **The front end has not been run against this contract.** `public/games/coldcall/game.js` is still the v1 board and will not work. The script contract is only checked by `tests/coldcall.js`' independent replayer, which I also wrote
   (it re-derives clusters, sweeps, gravity, hot leads, reveals, upsells, closes and bonus bookkeeping from the rules, but a shared misreading of a rule would pass both).
-- **Nothing here is checked against the real Le Bandit.** Rules are the brief's; symbol weights, pay table, reveal weights are mine. Hit rate and bonus frequency are in Le Bandit's range, nothing more is claimed.
+- **Nothing here is checked against the real Le Bandit.** Rules are the brief's; symbol weights, pay table, reveal weights are mine. After the high-volatility retune the hit rate (20.7%) is deliberately below Le Bandit's 32%; nothing more is claimed.
 - The RTP numbers are the sim measuring its own engine (sfc32 streams, independent per chunk). The stratified estimator assumes a bonus does not depend on the spin that triggered it (true: it starts from an empty board)
   and ignores the cap interplay between the base pay and the bonus (at most a few 1e-6 of a bet; capped rounds are about 2e-7 of spins).
-- Cap-hit rates are small-count estimates (51 events in the plain run: about +-14%). The stratified cross-check agrees (1 in 4.3M vs 1 in 3.9M).
-- `call` and `hunt` caps per round are higher than a normal spin's because those rounds carry more bonus chance; they are 1 in 930k and 1 in 840k of those buys.
+- Cap-hit rates are small-count estimates (61 events in the plain run: about +-13%). The stratified cross-check agrees (1 in 3.0M vs 1 in 3.3M).
+- `call` and `hunt` caps per round are higher than a normal spin's because those rounds carry more bonus chance; they are 1 in 1.9M (call) and 1 in 560k (hunt) of those buys.
 - Server tests use fake sockets (as v1); the real `server.js` / socket.io path and `tests/e2e` were not run.
 - The tests' RTP/buy checks are wide bands (the sim is the precise figure); they guard against a broken config, not against a 1 pt drift.
 
@@ -254,8 +257,9 @@ Caps in buys: bonus2 buy hits the cap on 0.0094% of buys (469 in 5M, by design: 
 
 ```
 node tests/coldcall.js                                   # 46 tests, about 30 s, no node_modules needed
-nice -n 10 node games/coldcall-sim.js --strat 450000000 8000000 202   # stratified RTP + parts + bonus table (about 15 min)
+nice -n 10 node games/coldcall-sim.js --strat 450000000 8000000 202   # stratified RTP + parts + bonus table (about 15 min on 6 threads, 2 min on 24)
 nice -n 10 node games/coldcall-sim.js 200000000 303      # plain rounds: hit rate, frequencies, tails, cap hits (about 4 min)
 nice -n 10 node games/coldcall-sim.js --buys 5000000 404 [--only call,hunt]   # buy values and RTP at the configured prices
-# any of them: --cfg '{"extra":{"base":{"phone":0.2}}}' overrides levers (objects merge); --threads N (max 6); --out file.json
+# CC_MAX_THREADS=24 raises the thread ceiling (default 6); --cfg '@file.json' reads the override from a file
+# any of them: --cfg '{"extra":{"base":{"phone":0.2}}}' overrides levers (objects merge); --threads N (max 6, or CC_MAX_THREADS); --out file.json
 ```
