@@ -94,6 +94,13 @@ t('sitting twice is a reconnect: stack unchanged, request amount ignored', () =>
   eq(s.stack, 2000); eq(s.socketId, 's2'); eq(bank(e, 'ann'), 8000);
   ok(e.events.some(x => x[0] === 'taken_over' && x[1].socketId === 's1'), 'old socket told');
 });
+t('rebind of a stack-0 seat re-sends bust (rebuy panel), a rebind with chips does not (P5 Q03)', () => {
+  const e = env(); const s = e.table.sit('ann', { amount: 2000, socketId: 's1' });
+  e.table.rebind(s, 's2'); ok(!e.events.some(x => x[0] === 'bust'), 'a seat with chips gets no bust');
+  s.stack = 0; e.table.disconnect('s2'); e.events.length = 0;
+  e.table.sit('ann', { amount: 4000, socketId: 's3' });
+  const b = e.events.filter(x => x[0] === 'bust'); eq(b.length, 1); eq(b[0][1].key, 'ann'); eq(b[0][2], 'ann'); eq(s.stack, 0);
+});
 t('play fund on a chips table keeps the fund; mixing funds while stack > 0 is fund_mismatch', () => {
   const e = env(); const s = e.table.sit('ann', { amount: 1000, fund: 'play', socketId: 's' }); eq(s.fund, 'play');
   eq(e.port.seatFund(e.table, 'ann'), 'play'); eq(e.ledger.balance('play:ann', 'play') < e.ledger.balance('play:bob', 'play'), true);
