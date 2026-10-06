@@ -112,12 +112,14 @@
     const set = new Set(choices), bd = $('board');
     set.forEach((p) => { const s = slots.children[p]; if (s) { s.classList.add('pick'); s.style.outline = '3px dashed #fff'; s.style.outlineOffset = '-4px'; s.style.cursor = 'pointer'; } });
     const at = (e) => { for (const p of set) { const s = slots.children[p]; if (!s) continue; const r = s.getBoundingClientRect(); if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) return p; } return -1; };
-    const on = (e) => { const p = at(e); if (!set.has(p)) return; e.stopPropagation(); e.preventDefault(); dispose(); cb(p); };
+    // U1: a lit square is a pick only once the prompt is armed (>= ARM ms after it opened) AND the tap started after it opened; an earlier tap is swallowed (no pick, no skip)
+    const ARM = 600, openedAt = performance.now(); let down = 0; const onDown = (e) => { down = e.timeStamp; };
+    const on = (e) => { const p = at(e); if (!set.has(p)) return; e.stopPropagation(); e.preventDefault(); if (e.timeStamp - openedAt < ARM || (e.detail > 0 && down < openedAt)) return; dispose(); cb(p); };
     function dispose() {
-      if (pickDispose !== dispose) return; pickDispose = null; bd.removeEventListener('click', on, true);
+      if (pickDispose !== dispose) return; pickDispose = null; bd.removeEventListener('click', on, true); bd.removeEventListener('pointerdown', onDown, true);
       set.forEach((p) => { const s = slots.children[p]; if (s) { s.classList.remove('pick'); s.style.outline = ''; s.style.cursor = ''; } });
     }
-    pickDispose = dispose; bd.addEventListener('click', on, true);
+    pickDispose = dispose; bd.addEventListener('pointerdown', onDown, true); bd.addEventListener('click', on, true);
     return dispose;
   }
   const state = () => ({ cells: reelsEl.children.length, ovl: ovl.children.length, hot: slots.querySelectorAll('i.hot').length });

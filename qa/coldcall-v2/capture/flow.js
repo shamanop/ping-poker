@@ -69,6 +69,7 @@ async function buy(page, id) { await page.click('#buy'); await page.click('#buy_
 const open_ = (page, k) => page.evaluate((kk) => !!(CC.core.st.ctx && CC.core.st.ctx.promptOpen === kk), k);
 // answer ONE MORE CALL with a real click on whichever prompt is on screen
 async function clickMore(page, take) {
+  await armedWait(page);
   const sel = (await page.locator('#pl_more').count()) ? (take ? '#pl_more' : '#pl_bank') : (take ? '#cc_more_take' : '#cc_more_bank');
   await page.click(sel);
 }
@@ -103,7 +104,10 @@ async function buyUntilPick(page, name, tries = 8) {
   }
   throw new Error('no bonus offered a pick in ' + tries + ' buys');
 }
+// U1 (fix F1): a prompt takes no tap in its first 600 ms (and not one that started before it opened): wait out the arming window like a player would, then click
+const armedWait = (page) => page.waitForFunction(() => { const c = CC.core.st.ctx; return !c || !c.promptOpenedAt || performance.now() - c.promptOpenedAt >= 700; }, null, { timeout: 5000 }).catch(() => {});
 async function clickLit(page) {                              // a real mouse click on a lit square of the board
+  await armedWait(page);
   const p = await page.evaluate(() => CC.board.hotList()[0]);
   await page.locator('#slots i').nth(p).click({ force: true, timeout: 5000 });   // force: Playwright's hit-test would stop at the symbol on top; the click itself is a real mouse click at the square's centre
   return p;

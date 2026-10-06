@@ -96,7 +96,7 @@
     if (sp) { sp.textContent = cb ? 'CALLBACK' : 'SPIN'; sp.style.fontSize = cb ? '15px' : ''; }
     $('spin').classList.toggle('cb', cb);
     $('bet').textContent = dollars(cb ? cbBetNow() : bet()); $('betDn').disabled = st.busy || cb || st.betIdx === 0; $('betUp').disabled = st.busy || cb || st.betIdx === st.bets.length - 1;
-    const bp = buyPrices(); $('buy').disabled = st.busy || !bp.length; $('buyFrom').textContent = bp.length ? 'from ' + dollars(Math.min(...bp.map((x) => x[1])) * bet() / 10) : 'n/a';
+    const bp = buyPrices(); $('buy').disabled = st.busy || !bp.length || cb; $('buyFrom').textContent = cb ? 'Callback first' : bp.length ? 'from ' + dollars(Math.min(...bp.map((x) => x[1])) * bet() / 10) : 'n/a';   // U15: buy prices follow the bet, a Callback shows its own and freezes it: no buying until it is played
   }
   function setBusy(b) { st.busy = b; $('spin').classList.toggle('run', b); $('spin').classList.toggle('idle', !b); drawBet(); }
   function toast(t, ms = 1800) { const d = document.createElement('div'); d.className = 'toast'; d.textContent = t; stage.appendChild(d); setTimeout(() => d.remove(), ms); }
@@ -177,7 +177,30 @@
   const LOST_MS = 9000;                                                 // an answer the server owes us (after the timer ran out, or after a decide) must come within this
   class Abort extends Error {}                                          // the round cannot go on on this screen (voided, refused, line lost): the server settles it, the screen cleans up
   const delay = (ms) => new Promise((r) => setTimeout(r, ms));
-  const mkTimer = () => ({ timeoutMs: 0, expiresAt: 0, at: 0, synced: false, left() { return Math.max(0, this.expiresAt - Date.now()); } });
+  const mkTimer = () => ({ timeoutMs: 0, expiresAt: 0, at: 0, synced: false, srvExp: 0, assumed: false, left() { return Math.max(0, this.expiresAt - Date.now()); } });
+  // U5: the clock follows the server's expiresAt. A repeat of the expiresAt already counted changes nothing (a second tab's `ready` answers every socket with the SAME one);
+  // a new one is read against our clock when that is plausible, else moved by the server's own delta, else counted from receipt.
+  function syncTimer(t, exp, ms) {
+    const now = Date.now(); if (ms > 0) t.timeoutMs = ms;
+    if (Number.isFinite(exp) && exp > 0) {
+      if (t.srvExp === exp && !t.assumed) return false;
+      const left = exp - now, was = t.srvExp; t.assumed = false;
+      if (left > 0 && left <= t.timeoutMs + 2000) t.expiresAt = now + Math.min(left, t.timeoutMs);
+      else if (was) t.expiresAt += exp - was;
+      else t.expiresAt = now + t.timeoutMs;
+      t.srvExp = exp;
+    } else { t.expiresAt = now + t.timeoutMs; t.assumed = false; }
+    t.at = now; t.synced = true; return true;
+  }
+  // U1: a decision is answered only by a tap that STARTED after the prompt opened and lands >= ARM_MS after it. SPIN / Space / board taps are never a skip while one is up.
+  const ARM_MS = 600;
+  const promptUp = () => !!(st.ctx && st.ctx.promptOpen);
+  let lastDown = 0;
+  addEventListener('pointerdown', (e) => { lastDown = e.timeStamp; }, true);
+  addEventListener('click', (e) => {
+    const c = st.ctx; if (!c || !c.promptOpen || !c.promptOpenedAt) return;
+    if (e.timeStamp - c.promptOpenedAt < ARM_MS || (e.detail > 0 && lastDown < c.promptOpenedAt)) { e.stopImmediatePropagation(); e.preventDefault(); }
+  }, true);
   // ctx lives for the WHOLE round: every result of the round (pending, pending, done) is applied to it with advance(), the animation keeps going from where it is
   function makeCtx(p, b, kind) {
     const final = p.status !== 'pending';
@@ -202,8 +225,8 @@
   }
   function advance(ctx, r) {                                   // a newer result of the same round: longer script, maybe the final totals
     ctx.p = r; ctx.script = r.script || r.partial || ctx.script;
-    if (r.status === 'pending') { const ms = r.timeoutMs || (st.server && st.server.pull && st.server.pull.decisionMs) || 20000, t = ctx.timer; t.timeoutMs = ms; t.at = Date.now(); t.expiresAt = t.at + ms; t.synced = false; }
-    else { ctx.run.total = r.totalWinTenths; ctx.willBig = E.winTier(r.totalWinTenths / 10) in TIER_LVL; }
+    if (r.status === 'pending') { const ms = r.timeoutMs || (st.server && st.server.pull && st.server.pull.decisionMs) || 20000; syncTimer(ctx.timer, r.expiresAt, ms); }
+    else { ctx.run.total = r.totalWinTenths; const m = r.pull && r.pull.more; ctx.willBig = E.winTier(r.totalWinTenths / 10) in TIER_LVL && !(m && m.take && !m.won); }   // U17: a lost gamble gets no BIG WIN tier
   }
 
   // ---- decisions: PICK YOUR LEAD (pick) and ONE MORE CALL (more). The prompt comes from CC.pull (builder B) or the plain placeholder below.
@@ -213,20 +236,33 @@
       const got = await Promise.race([boxWait(box), delay(ms).then(() => LOST)]);
       if (got === LOST) throw new Abort('lost');
       const it = box.q.shift(); if (!it) continue;
-      if (it._voided) throw new Abort('voided');
+      if (it._voided) throw new Abort('voided'); if (it._dropped) throw new Abort('dropped');
       if (it._err) { if (it._err.code === 'no_round') continue; throw new Abort(it._err.message || 'refused'); }   // no_round: the round was settled already, its done result is (or is about to be) in the inbox
       return it;
     }
   }
   const LOST = Symbol('lost');
+  // what the server did while this screen waited, in words (U16): a timeout, a dropped line, autoplay, or a person deciding on another screen
+  const sq = (p) => 'R' + (((p / E.COLS) | 0) + 1) + ' C' + ((p % E.COLS) + 1);
+  function whyLine(k, it, dflt) {
+    const a = it.auto, pk = it.pull && it.pull.pick, mo = it.pull && it.pull.more;
+    if (a === 'timeout') return "TIME'S UP: " + dflt;
+    if (a === 'disconnect') return 'Line dropped: ' + dflt;
+    if (a === 'autoplay') return 'AUTO: ' + dflt;
+    return k === 'pick' ? (pk && pk.p != null ? 'Lead ' + sq(pk.p) + ' picked on your other screen' : 'Lead picked on your other screen') : mo ? (mo.take ? 'Called once more on your other screen' : 'Banked on your other screen') : 'Decided on your other screen';
+  }
+  const RIB_WHY = { disconnect: 'LINE DROPPED', autoplay: 'AUTO', other: 'OTHER SCREEN' };   // CC.pull.expired always writes TIME'S UP: for every other cause the ribbon is rewritten after it
+  const ribWhy = (ctx, why) => { if (why !== 'timeout') ctx.rib(ctx.modeName || 'DECISION', RIB_WHY[why] || ''); };
+  const DROP_ERR = new Set(['rate', 'no_round']);                       // U8: an error that answers `ready` (a double-send, a settled round) never ends the round; only one answering a decide does
   async function decisionPoint(ctx, k, pend) {
     const id = ctx.p.roundId, box = inbox.get(id); if (!box) throw new Abort('no inbox');
+    if (ctx.dropped) throw new Abort('dropped');
     const dflt = DEFAULT_TXT[k], dbgRow = { k, shown: false, how: null };
     (ctx.decisions || (ctx.decisions = [])).push(dbgRow);
     // the server already settled this round (timeout / disconnect default while the animation ran): no prompt, just the caption
     while (box.q.length) {
-      const it = box.q.shift(); if (it._voided) throw new Abort('voided'); if (it._err) continue;
-      advance(ctx, it); dbgRow.how = it.auto || 'early'; say('idle', "TIME'S UP: " + dflt); await wait(500); return it;
+      const it = box.q.shift(); if (it._voided) throw new Abort('voided'); if (it._dropped) throw new Abort('dropped'); if (it._err) continue;
+      advance(ctx, it); dbgRow.how = it.auto || 'early'; say('idle', whyLine(k, it, dflt)); await wait(500); return it;
     }
     // autoplay with a server that still asked: take the default, no prompt
     if (st.auto) {
@@ -234,21 +270,27 @@
       say('idle', 'AUTO: ' + dflt); const r = await nextResult(ctx, box, LOST_MS); advance(ctx, r); return r;
     }
     const reg = { closed: false, close() {} }, iv = { id: 0 };
-    ctx.promptOpen = k; dbgRow.shown = true;
-    { const t = ctx.timer; t.at = Date.now(); t.expiresAt = t.at + (t.timeoutMs || 20000); t.synced = false; }   // fresh local clock for the prompt; the server's g:coldcall:timer reply (authoritative) updates it in place, a 'rate' error on ready is ignored
+    ctx.promptOpen = k; ctx.promptOpenedAt = performance.now(); dbgRow.shown = true;
+    // the prompt is on screen: assume the server's `ready` re-arm gives a full clock (shown at once, no flicker); its g:coldcall:timer reply (authoritative) corrects it, a `rate` error on ready is ignored
+    { const t = ctx.timer; t.at = Date.now(); t.expiresAt = t.at + (t.timeoutMs || 20000); t.synced = false; t.assumed = true; }
     T.ready(id);
     const prompt = ask(ctx, k, pend, reg);
     const expiry = new Promise((res) => { iv.id = setInterval(() => { if (ctx.timer.left() <= 0) { clearInterval(iv.id); res({ expired: true }); } }, 150); });
     let w;
     try {
-      w = await Promise.race([prompt.then((v) => ({ v })), boxWait(box).then(() => ({ q: 1 })), expiry]);   // the queue branch only SIGNALS: a loser must never shift an item the next wait needs
+      for (;;) {
+        w = await Promise.race([prompt.then((v) => ({ v })), boxWait(box).then(() => ({ q: 1 })), expiry]);   // the queue branch only SIGNALS: a loser must never shift an item the next wait needs
+        const head = 'q' in w && box.q[0]; if (head && head._err && DROP_ERR.has(head._err.code)) { box.q.shift(); continue; }
+        break;
+      }
       if (w.expired) {                                          // the UI never decides on its own: show TIME'S UP and wait for the server's default
         reg.close('timeout'); P('expired', 'timeout', { k, default: dflt }); say('idle', "TIME'S UP: " + dflt); dbgRow.how = 'timeout';
         const r = await nextResult(ctx, box, LOST_MS); advance(ctx, r); await wait(900); return r;   // the caption stays readable before the animation goes on
       }
       if ('q' in w) {                                           // an unsolicited result while the prompt was up
         const it = box.q.shift(); if (!it) throw new Abort('empty'); if (it._voided) throw new Abort('voided'); if (it._err) throw new Abort(it._err.message || 'refused');
-        reg.close(it.auto || 'timeout'); P('expired', it.auto || 'timeout', { k, default: dflt }); say('idle', "TIME'S UP: " + dflt); dbgRow.how = it.auto || 'unsolicited';
+        if (it._dropped) { reg.close('disconnect'); P('expired', 'disconnect', { k, default: dflt }); ribWhy(ctx, 'disconnect'); say('idle', 'Line dropped. Checking your call...'); dbgRow.how = 'dropped'; throw new Abort('dropped'); }
+        const why = it.auto || 'other'; reg.close(why); P('expired', why, { k, default: dflt }); ribWhy(ctx, why); say('idle', whyLine(k, it, dflt)); dbgRow.how = it.auto || 'unsolicited';
         advance(ctx, it); await wait(900); return it;
       }
       reg.close(null); T.decide(id, k, w.v); dbgRow.how = 'player'; dbgRow.v = w.v;
@@ -297,7 +339,7 @@
       if (shown === undefined && !(CC.pull && CC.pull.moreOutcome)) { ctx.stamp(m.won ? 'ONE MORE CALL: WON' : 'ONE MORE CALL: LOST', m.won ? 'x' + m.mult : 'the bonus is gone', 1500, null, m.won ? 'hi' : ''); if (m.won) SFX_.win(2); else SFX_.sting(); await wait(1500); }
       const delta = ctx.run.total - ctx.run.t; ctx.run.raw += delta; ctx.run.t = ctx.run.total;
       await setWin(ctx.run.total * ctx.bet / 10, true, 700, delta < 0);
-    } else if (m.auto || p.auto) { say('idle', 'AUTO: banked'); }
+    } else if (p.auto === 'autoplay') { say('idle', 'AUTO: banked'); }   // U16: AUTO is autoplay only; a timeout was already captioned TIME'S UP
     ctx.cur.more = m.take ? (m.won ? 'won' : 'lost') : 'banked';
   }
 
@@ -341,8 +383,9 @@
 
   // ---- one request: balance bookkeeping and the spin, then the shared round runner
   async function play(kind) {
-    if (st.busy) { if (kind === 'spin') { st.skip = true; st.tap++; if (CC.bonus && CC.bonus.poke) CC.bonus.poke(); } return; }
+    if (st.busy) { if (kind === 'spin' && !promptUp()) { st.skip = true; st.tap++; if (CC.bonus && CC.bonus.poke) CC.bonus.poke(); } return; }
     if (st.modal) return;
+    if (kind !== 'spin' && cbPending()) { toast('Play your Callback first.', 2000); return; }
     const v = pview(), cbv = st.live && kind === 'spin' && v && v.cb ? v.cb : null;       // a Callback is pending: this spin is it (free, at its own bet)
     const b = bet(), cost = cbv ? 0 : costT(kind) * b / 10;
     if (avail() < cost) { toast(kind === 'spin' ? 'Not enough funds. Lower your bet.' : 'Not enough funds for that bonus.'); st.auto = false; $('auto').classList.remove('on'); return; }
@@ -379,7 +422,9 @@
       if (!ctx) { st.winTarget = 0; await setWin(f.totalWin, false); }
       const winX = f.totalWinTenths / 10, tier = E.winTier(winX), amt = f.totalWin;
       if (f.maxed || (ctx && ctx.capped) || (f.script && f.script.capped)) { stamp('MAX WIN', E.MAX_WIN_X.toLocaleString('en-US') + 'x. The round stops here.', 1700, null, 'hi'); SFX_.win(3); say('bigWin'); await wait(1400); }
-      if (tier in TIER_LVL) await bigWin(winX, amt, tier);
+      const lost = f.pull && f.pull.more && f.pull.more.take && !f.pull.more.won;   // U17: no BIG WIN tier after a lost gamble, the plain total only
+      if (tier in TIER_LVL && lost) { stamp('NICE!', 'x' + (winX >= 10 ? Math.round(winX) : winX.toFixed(1).replace(/\.0$/, '')), 1300); SFX_.win(1); say('smallWin'); await wait(900); }
+      else if (tier in TIER_LVL) await bigWin(winX, amt, tier);
       else if (tier === 'sweet' || tier === 'nice') { stamp(tier === 'sweet' ? 'SWEET!' : 'NICE!', 'x' + (winX >= 10 ? Math.round(winX) : winX.toFixed(1).replace(/\.0$/, '')), 1300); SFX_.win(tier === 'sweet' ? 2 : 1); say(tier === 'sweet' ? 'nice' : 'smallWin'); await wait(900); }
       else if (amt > 0) { SFX_.coin(); say('smallWin'); }
       else {
@@ -410,6 +455,7 @@
   // the screen cannot finish this round (voided by the server, a decision refused, the line went quiet): clean up and let the server's state decide what is true
   function abortRound(p, ctx, why, row) {
     row.aborted = why.message; dbg.aborted = (dbg.aborted || 0) + 1; sweep(); st.ctx = null; st.cbBet = null; inbox.delete(p.roundId); st.skip = false;
+    if (why.message === 'dropped' && st.settle && st.settle.id === p.roundId) { st.settle.aborted = true; tryFinishSettle(); return; }   // the screen stays busy until the history says what became of the round
     toast(why.message === 'voided' ? 'That call was cancelled. Your bet is refunded.' : 'Lost the line. Your round is settled on the server.', 3000);
     if (st.live) { setBal(walletBal(), true); toParent({ type: 'hello' }); if (T.sock) T.sock.emit('g:coldcall:state', {}); }
     setBusy(false); wake(); syncWarm();
@@ -437,7 +483,7 @@
       if (!st.live) return Promise.resolve(localRound(b, buy));
       return new Promise((resolve, reject) => {
         const id = ++reqSeq, t = setTimeout(() => { pend.delete(id); reject(new Error('timeout')); }, 20000);
-        pend.set(id, { ok: (x) => { clearTimeout(t); resolve(x); }, err: (e) => { clearTimeout(t); reject(e); } });
+        pend.set(id, { mode: st.mode, bet: b, buy: buy || null, ok: (x) => { clearTimeout(t); resolve(x); }, err: (e) => { clearTimeout(t); reject(e); } });
         if (BRIDGE) toParent({ type: 'spin', reqId: id, bet: b, mode: st.mode, buy, auto: !!auto });
         else T.sock.emit('g:coldcall:spin', { bet: b, mode: st.mode, ...(buy ? { buyBonus: buy } : {}), auto: !!auto, ...(QFORCE ? { force: QFORCE } : {}) });
       });
@@ -446,6 +492,7 @@
       if (!st.live) return; const m = k === 'pick' ? { roundId, k, p: v } : { roundId, k, take: !!v };
       if (BRIDGE) toParent({ type: 'decide', reqId: ++reqSeq, ...m }); else if (T.sock) T.sock.emit('g:coldcall:decide', m);
     },
+    history() { if (!st.live) return; if (BRIDGE) toParent({ type: 'history' }); else if (T.sock) T.sock.emit('g:coldcall:history', {}); },
     ready(roundId) {                                            // the prompt is on screen: the server restarts the decision timer (and answers with g:coldcall:timer)
       if (!st.live) return;
       if (BRIDGE) toParent({ type: 'ready', roundId }); else if (T.sock) T.sock.emit('g:coldcall:ready', { roundId });
@@ -457,16 +504,24 @@
     return { roundId: 'p' + seed.toString(16), script: r.script, costTenths: r.costTenths, totalWinTenths: r.winTenths, totalWinMult: r.winX, cost: E.cents(r.costTenths, b), totalWin: E.cents(r.winTenths, b), tier: r.tier, maxed: r.capped, forced: QFORCE || undefined };
   }
   const firstPend = () => { const id = pend.keys().next().value, w = pend.get(id); if (w) pend.delete(id); return w; };
+  const pendFirst = () => pend.get(pend.keys().next().value);
   function onResult(p) {                                        // a g:coldcall:result (socket event or bridge message)
     if (!p || typeof p !== 'object') return;
     if (p.wallet || p.balances) applyWallet(p.wallet || p.balances);
     const box = p.roundId && inbox.get(p.roundId);
     if (box) return boxPush(box, p);                            // a result of the round on screen (the answer to a decide, or unsolicited)
-    const w = firstPend();
-    if (w) { if (!(p.script || p.partial)) return w.err(new Error('bad result')); mkBox(p.roundId); return w.ok(p); }   // the answer to the spin request
-    (dbg.stray = dbg.stray || []).push({ id: p.roundId, status: p.status });
+    // U3: the answer to THIS tab's spin is a result that is not `resolved` (a round settled out from under someone), in the mode asked, for the bet asked (a Callback plays at its own)
+    const q = pendFirst();
+    if (q && !p.resolved && p.mode === q.mode && (p.callback || (p.betCents != null ? p.betCents : p.bet) === q.bet) && ((p.buyBonus || null) === (q.buy || null) || p.callback)) {
+      const w = firstPend(); if (!(p.script || p.partial)) return w.err(new Error('bad result')); mkBox(p.roundId); return w.ok(p);   // the answer to the spin request
+    }
+    (dbg.stray = dbg.stray || []).push({ id: p.roundId, status: p.status, mode: p.mode });
     if (st.live && !st.busy && p.status === 'pending') adopt(p);   // another tab of the account started a round with a decision
-    else if (st.live && p.status === 'done' && p.resolved) { toast('A call you left open was settled.', 2200); if (!st.busy) syncView(); }
+    else if (st.live && p.status === 'done') {                      // a round of another tab / a default settled: that currency's view and wallet only, no animation
+      if (p.pull && p.pull.state && (p.mode === 'play' || p.mode === 'chips')) st.pv[p.mode] = p.pull.state;
+      if (p.resolved) toast('A call you left open was settled.', 2200);
+      if (!st.busy && (!p.mode || p.mode === st.mode)) syncView();
+    }
   }
   function onError(e) {                                         // a refused request: the spin in flight, else a decide of the round on screen
     e = e || {};
@@ -480,9 +535,50 @@
     const box = m.roundId && inbox.get(m.roundId);
     if (box) boxPush(box, { _voided: m }); else if (!st.busy) { toast('A call was cancelled. Your bet is refunded.', 2600); toParent({ type: 'hello' }); }
   }
-  function onTimer(m) {                                         // the server (re)started the decision timer: count down from its timeoutMs, measured on our clock
+  function onTimer(m) {                                         // the server (re)started the decision timer (U5: a repeat with the same expiresAt changes nothing)
     const c = st.ctx; if (!m || !c || c.p.roundId !== m.roundId || !(m.timeoutMs > 0)) return;
-    const t = c.timer; t.timeoutMs = m.timeoutMs; t.at = Date.now(); t.expiresAt = t.at + m.timeoutMs; t.synced = true; P('timer', t, c);
+    if (syncTimer(c.timer, m.expiresAt, m.timeoutMs)) P('timer', c.timer, c);
+  }
+  // ---- a dropped line (U6 / U7 / U11 / P4). The server settles a round the moment its owner's socket goes (banked default), or voids it on a restart. This screen
+  // closes the prompt with a plain line at once, then after the reconnect asks the server's history what became of the round and says THAT: banked + amount, or
+  // cancelled + refunded (only for a round that is in neither the history nor state.opens). The two stories are never mixed.
+  const SEEN_KEY = 'cc_dc_seen';
+  const seenGet = () => { try { return localStorage.getItem(SEEN_KEY); } catch (e) { return null; } };
+  const seenSet = (id) => { try { localStorage.setItem(SEEN_KEY, id); } catch (e) { /* private mode: the line may repeat once */ } };
+  const fmtMode = (mode, c) => (mode === 'chips' ? Math.round(c).toLocaleString('en-US') + ' chips' : usd(c));
+  const opensOf = (sv) => (sv && (sv.opens || (sv.open ? [sv.open] : []))) || [];
+  function markDropped(ctx, via) {
+    if (!ctx || ctx.dropped || !ctx.p || ctx.p.status !== 'pending') return;
+    ctx.dropped = true; const id = ctx.p.roundId;
+    st.settle = { id, mode: ctx.p.mode || st.mode, via, asked: false, aborted: false, hist: undefined, t2: 0 };
+    clearTimeout(st.settleCap); st.settleCap = setTimeout(() => { const x = st.settle; if (x && x.id === id) { x.hist = null; tryFinishSettle(); } }, 60000);   // the line never comes back: free the screen
+    const box = inbox.get(id); if (box) boxPush(box, { _dropped: true });
+    if (via === 'state') askHistory();
+  }
+  function onDisconnect() { if (st.live && st.ctx) markDropped(st.ctx, 'disconnect'); }
+  function askHistory() {
+    const x = st.settle; if (x) { if (x.asked) return; x.asked = true; clearTimeout(x.t2); x.t2 = setTimeout(() => { if (st.settle === x && x.hist === undefined) { x.hist = null; tryFinishSettle(); } }, 6000); }
+    T.history();
+  }
+  function onHistory(m) {
+    const rounds = m && Array.isArray(m.rounds) ? m.rounds : [], x = st.settle;
+    if (x) { if (!x.asked) return; x.hist = rounds; tryFinishSettle(); return; }
+    if (!st.histWanted) return; st.histWanted = false;                  // U11: a reload during a decision: the old page's socket went, the server banked it
+    const h = rounds[0];
+    if (h && h.auto === 'disconnect' && Date.now() - h.t < 600000 && seenGet() !== h.roundId && !st.busy) { seenSet(h.roundId); const msg = 'Your open call was banked: ' + fmtMode(h.mode, h.totalWin); toast(msg, 4500); say('idle', msg); }
+  }
+  function tryFinishSettle() {
+    const x = st.settle; if (!x || !x.aborted || x.hist === undefined) return;
+    clearTimeout(x.t2); clearTimeout(st.settleCap); st.settle = null;
+    const open = opensOf(st.server).find((o) => o.roundId === x.id), h = x.hist && x.hist.find((r) => r.roundId === x.id);
+    let msg = null;
+    if (x.hist === null) msg = 'Line dropped. Your call is settled on the server.';
+    else if (h) { seenSet(x.id); msg = 'Line dropped: your call was banked: ' + fmtMode(h.mode || x.mode, h.totalWin); }
+    else if (!open) msg = 'That call was cancelled. Your bet is refunded.';
+    if (msg) { toast(msg, 4500); say('idle', msg); }
+    $('ribL').textContent = RIB_IDLE; $('ribR').textContent = MAXTXT;
+    setBal(walletBal(), true); setBusy(false); wake(); syncWarm(); syncView();
+    if (open) adopt(open);
   }
   function onFloor(kind, ev) {                                  // floor:feed / floor:pot. Play $ events never show in Chips mode and the reverse.
     if (!st.live || !ev) return;
@@ -522,6 +618,7 @@
     const v = pview(); CC.board.setHot(v && v.warm && v.warm.length && v.warmBet === bet() ? v.warm : [], true);
   }
   function goLive(m) {
+    const first = !st.live;
     if (m.state) st.server = m.state;
     if (m.name) st.me = m.name;
     if (!st.live) { st.live = true; T.kind = BRIDGE ? 'bridge' : 'socket'; setBets(Array.isArray(m.bets) && m.bets.length ? m.bets : DEFAULT_BETS); }
@@ -538,8 +635,10 @@
     // leaving the prompt up until its clock runs out under a "TIME'S UP: first lead picked" caption (real.js void, 26 s)
     if (s && s.pull && st.ctx && st.ctx.p.status === 'pending') {
       const id = st.ctx.p.roundId, box = inbox.get(id), opens = s.opens || (s.open ? [s.open] : []);
-      if (box && !opens.some((o) => o.roundId === id) && !box.q.some((x) => x._voided || x.status === 'done')) boxPush(box, { _voided: { roundId: id, reason: 'restart' } });
+      if (box && !opens.some((o) => o.roundId === id) && !box.q.some((x) => x._voided || x.status === 'done')) markDropped(st.ctx, 'state');   // P4: banked or voided? the history tells (a banked round is never called refunded)
     }
+    if (st.settle && !st.settle.asked) askHistory();
+    if (first && s && s.pull && !s.open && !st.settle) { st.histWanted = true; T.history(); }
     if (!st.busy) syncView(); else drawBet();
     if (s && s.open && !st.busy && !st.modal) adopt(s.open);    // a decision was left open (reload, another tab): play it out
   }
@@ -548,7 +647,7 @@
   function initTransport() {
     const bar = document.createElement('div'); bar.id = 'modebar';
     bar.innerHTML = '<div class="mb"><button data-m="play">Play $</button><button data-m="chips">Chips</button></div><span id="modenote"></span>'; stage.appendChild(bar);
-    bar.addEventListener('click', (e) => { const x = e.target.closest('button'); if (!x || !st.live || st.busy) return; st.mode = x.dataset.m; SFX_.click(); setBal(walletBal(), false); modeUi(); feedReplay(); syncView(); toParent({ type: 'mode', mode: st.mode }); });
+    bar.addEventListener('click', (e) => { const x = e.target.closest('button'); if (!x || !st.live || st.busy) return; st.mode = x.dataset.m; SFX_.click(); resetWin(); setBal(walletBal(), false); modeUi(); feedReplay(); syncView(); toParent({ type: 'mode', mode: st.mode }); });
     modeUi();
     if (BRIDGE) {
       addEventListener('message', (ev) => {
@@ -556,6 +655,7 @@
         if (m.type === 'init') goLive(m); else if (m.type === 'wallet') { if (st.live) applyWallet(m.wallet || m); else goLive(m); }
         else if (m.type === 'result') onResult(m.payload); else if (m.type === 'error') onError({ message: m.message || 'Spin refused.', code: m.code, open: m.open });
         else if (m.type === 'floor') onFloor(m.kind, m.payload); else if (m.type === 'timer') onTimer(m.payload); else if (m.type === 'voided') onVoided(m.payload);
+        else if (m.type === 'disconnect') onDisconnect(); else if (m.type === 'history') onHistory(m.payload);
       });
       addEventListener('keydown', (e) => { if (e.key === 'Escape') toParent({ type: 'esc' }); });
       toParent({ type: 'hello' }); setTimeout(() => { if (!st.live) toParent({ type: 'practice' }); }, 2000);
@@ -569,6 +669,7 @@
         sock.on('g:coldcall:state', (s2) => goLive({ wallet: s2.wallet, bets: s2.bets, state: s2, mode: st.live ? st.mode : 'play' }));
         sock.on('wallet', (w) => applyWallet(w));
         sock.on('g:coldcall:result', onResult); sock.on('g:coldcall:timer', onTimer); sock.on('g:coldcall:voided', onVoided);
+        sock.on('disconnect', onDisconnect); sock.on('g:coldcall:history', onHistory);
         sock.on('floor:feed', (e) => onFloor('feed', e)); sock.on('floor:pot', (e) => onFloor('pot', e));
         sock.on('error', onError);
       };
@@ -587,8 +688,8 @@
   // ------------------------------------------------------------------ controls
   function tog(btn, on) { btn.classList.toggle('off', !on); btn.setAttribute('aria-pressed', on ? 'true' : 'false'); }
   function bindControls() {
-    $('spin').addEventListener('click', () => { SFX_.init(); st.tap++; if (st.busy) { st.skip = true; return; } play('spin'); });
-    board.addEventListener('click', () => { st.tap++; if (st.busy) st.skip = true; });
+    $('spin').addEventListener('click', () => { SFX_.init(); if (st.busy) { if (!promptUp()) { st.tap++; st.skip = true; } return; } st.tap++; play('spin'); });   // U1: while a decision is up SPIN is not a skip
+    board.addEventListener('click', () => { if (promptUp()) return; st.tap++; if (st.busy) st.skip = true; });
     $('betDn').addEventListener('click', () => { if (st.busy) return; st.betIdx = Math.max(0, st.betIdx - 1); SFX_.click(); drawBet(); P('onBetChange', bet()); syncWarm(); });
     $('betUp').addEventListener('click', () => { if (st.busy) return; st.betIdx = Math.min(st.bets.length - 1, st.betIdx + 1); SFX_.click(); drawBet(); P('onBetChange', bet()); syncWarm(); });
     $('turbo').addEventListener('click', () => { st.turbo = !st.turbo; $('turbo').classList.toggle('on', st.turbo); SFX_.click(); });
@@ -600,10 +701,10 @@
     addEventListener('keydown', (e) => {
       const sc = ov.querySelector('.scrim');
       if (e.key === 'Escape' && sc) { e.stopImmediatePropagation(); sc._done && sc._done('x'); return; }
-      if (e.code === 'Space' && !e.repeat) { e.preventDefault(); if (sc) { sc._done && sc._done('x'); return; } SFX_.init(); st.tap++; st.busy ? (st.skip = true, CC.bonus && CC.bonus.poke && CC.bonus.poke()) : play('spin'); }
+      if (e.code === 'Space' && !e.repeat) { e.preventDefault(); if (sc) { sc._done && sc._done('x'); return; } SFX_.init(); if (st.busy && promptUp()) return; st.tap++; st.busy ? (st.skip = true, CC.bonus && CC.bonus.poke && CC.bonus.poke()) : play('spin'); }
     });
     $('buy').addEventListener('click', async () => {
-      if (st.busy || st.modal) return; SFX_.init(); SFX_.click();
+      if (st.busy || st.modal) return; if (cbPending()) { toast('Play your Callback first.', 2000); return; } SFX_.init(); SFX_.click();
       const b = bet(), list = buyPrices(); if (!list.length) return;
       const opts = list.map(([id, t]) => { const c = t * b / 10; return `<button class="buyopt" id="buy_${id}" data-buy="${id}" data-v="${id}" ${avail() < c ? 'disabled' : ''}><b>${BUY_INFO[id][0]}</b><span>${BUY_INFO[id][1]}</span><em>${dollars(c)}</em></button>`; }).join('');
       const v = await modal(`<div class="card"><h2>Buy a bonus</h2><div class="buygrid">${opts}</div><button class="btn alt" data-v="x">Not now</button></div>`, { backdrop: true });
@@ -654,5 +755,5 @@
   }
   CC.core = { boot, st, play, dollars, wait, anim, tween, speed, say, toast, stamp, floatAt, stagePt, localPt, modal, waitTap, setWin, bigWin, sweep, Tick, T, money, applyWallet, goLive, goPractice, E, stage, board, sceneEl, SFX: SFX_, FX: CC.fx,
     // pull hooks (transport -> look layer); also the way tests and builder B reach the round machinery
-    onResult, onError, onTimer, onVoided, onFloor, adopt, syncView, syncWarm, pview, inbox, cbPending };
+    onResult, onError, onTimer, onVoided, onDisconnect, onHistory, onFloor, adopt, syncView, syncWarm, pview, inbox, cbPending };
 })();

@@ -93,10 +93,10 @@
         await ctx.decide.pick(pend);                                                   // returns once the round has its next result (player, server default, or already settled)
         b = ctx.script.bonus; sp = b.spins[i];
         if (!sp || sp.pickPending) throw new Error('pick: the spin is still open after the decision');
-        const pk = pl().pick; if (pk && pk.auto) ctx.say('idle', 'AUTO: first lead picked');
+        if (ctx.p.auto === 'autoplay' && pl().pick) ctx.say('idle', 'AUTO: first lead picked');   // U16: AUTO is autoplay only
         await ctx.playSpin(sp, { bonus: true, resume: true });                         // the phone feature of that spin only
       } else {
-        const pk = pl().pick; if (pk && pk.auto && pk.spin === sp.n && sp.phone) ctx.say('idle', 'AUTO: first lead picked');
+        const pk = pl().pick; if (ctx.p.auto === 'autoplay' && pk && pk.spin === sp.n && sp.phone) ctx.say('idle', 'AUTO: first lead picked');
         await ctx.playSpin(sp, { bonus: true });
       }
       ctx.cur.spins = i + 1;
@@ -112,7 +112,7 @@
       ctx.rib(NAME[b.kind], 'ONE MORE CALL?'); ctx.say('bigWin');
       await ctx.decide.more(ctx.p.pending);
       await ctx.moreOutcome();
-    } else if (pl().more && pl().more.auto) ctx.say('idle', 'AUTO: banked');
+    } else if (ctx.p.auto === 'autoplay' && pl().more) ctx.say('idle', 'AUTO: banked');
     // finale
     ctx.st.mirror = null; ctx.sceneEl.replaceChildren(); hud.hidden = true; ctx.st.pace = 1; (CC.dbg.spinT = CC.dbg.spinT || []).push(-(performance.now() | 0));
     if (ctx.willBig) { ctx.SFX.accepted(); CC.hero.mood('win', 3000); await ctx.wait(500); }   // the big-win overlay is the celebration; no second card before it
