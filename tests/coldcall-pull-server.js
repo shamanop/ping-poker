@@ -131,7 +131,7 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
     for (const mode of ['play', 'chips']) {
       const other = mode === 'play' ? 'chips' : 'play';
       const s = setup({ rng: E.rngFrom(mode === 'play' ? 41 : 42), potRng: E.rngFrom(7) }); const a = s.sock('ann');
-      E.CFG.pull.pot.oneInPerDollar = 400;              // make prizes common enough to be exercised
+      E.CFG.pull.pot.oneInPerDollar = 40;               // make prizes common enough to be exercised (only plain spins roll since FIX M1)
       rich(s, 'ann', mode);
       const start = s.wallet.get('ann'); let bal = start[mode], sumCost = 0, prizes = 0, takes = 0, wins = 0, picks = 0, mores = 0, callbacks = 0;
       for (let i = 0; i < 240; i++) {
@@ -150,7 +150,9 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
         assert.strictEqual(r.wallet[other], start[other], 'the other purse never moves');
         assert.deepStrictEqual(s.wallet.get('ann'), r.wallet);
         if (mode === 'chips') assert.strictEqual(s.chips.get('ann'), bal);
-        sumCost += cost; if (prize) prizes++; if (r.totalWin) wins++; if (r.callback) callbacks++;
+        if (!buy) sumCost += cost;                      // FIX M1: only a plain paid spin feeds the pot; a buy never feeds, never rolls
+        if (buy) assert.strictEqual(prize, 0, 'a buy wins no pot');
+        if (prize) prizes++; if (r.totalWin) wins++; if (r.callback) callbacks++;
         if (r.pull && r.pull.more && r.pull.more.take) takes++; if (r.pull && r.pull.pick) picks++; if (r.pull && r.pull.more) mores++;
         const p = s.potOf(mode); potOk(p);
         assert.strictEqual(p.fed * 10000 + p.rem, sumCost * E.CFG.pull.pot.feedBps, 'the slice is exact: fed + rem = cost x bps / 10000');
@@ -351,6 +353,62 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
     const s2 = setup({ dir: s.dir, bank: s.bank, rng: E.rngFrom(57), t: s.clock.now() + 1000 });
     assert.strictEqual(s2.wallet.get('ann').play, w.play + p.cost); assert.strictEqual(s2.wallet.get('ann').chips, w.chips + c.cost); assert.strictEqual(s2.bank.get('ann'), w.chips + c.cost);
     assert.strictEqual(s2.store().allOpen().length, 0);
+  });
+
+  // FIX M1 (money critic 2): a buy (call, bonus1, bonus2, hunt) is priced at 98.0 with no pot, so it feeds no slice, moves no remainder, rolls no pot and can win none. Only a plain paid spin feeds and rolls.
+  await test('FIX M1: every buy (call, bonus1, bonus2, hunt) at 1c, $1 and $25, Play $ and Chips, on a pot of $50+ with the roll forced to hit: no prize, pot bal / fed / paid / rem / seeded unchanged, wallet moves by win - cost only, no pot in the result, the history row, the feed or floor:pot', async () => {
+    for (const mode of ['play', 'chips']) for (const buy of ['call', 'bonus1', 'bonus2', 'hunt']) for (const bet of [1, 100, 2500]) {
+      const s = setup({ rng: E.rngFrom(700 + bet), potRng: () => 0, roundRng: E.rngFrom(bet + 9) }); const a = s.sock('ann'), b = s.sock('bo'); rich(s, 'ann', mode); E.CFG.pull.pot.capCents = 5000;
+      const pot = s.potOf(mode); pot.bal = 7000; pot.fed = 7000; pot.rem = 4321; s.store().potChanged();
+      const snap = clone(pot), potEvents = all(b, 'floor:pot').length, feedEvents = all(b, 'floor:feed').length;
+      const w0 = s.wallet.get('ann')[mode];
+      const r = play(s, a, { bet, mode, buyBonus: buy }, bet);
+      const tag = mode + ' ' + buy + ' ' + bet + 'c';
+      assert.strictEqual(r.status, 'done', tag); assert.strictEqual(r.buyBonus, buy, tag); assert.ok(r.cost > 0, tag + ' a buy is a paid round');
+      assert.strictEqual(r.pot, null, tag + ': no pot part in the result');
+      assert.deepStrictEqual(clone(pot), snap, tag + ': bal, fed, paid, rem, seeded and last do not move');
+      assert.strictEqual(s.wallet.get('ann')[mode], w0 - r.cost + r.totalWin, tag + ': the wallet moves by win - cost only');
+      assert.strictEqual(r.wallet[mode], w0 - r.cost + r.totalWin, tag);
+      potOk(pot);
+      a.send('g:coldcall:history'); assert.strictEqual(last(a, 'g:coldcall:history').rounds[0].pot, null, tag + ': the history row carries no pot');
+      assert.strictEqual(all(b, 'floor:pot').length, potEvents, tag + ': no floor:pot event');
+      assert.ok(!all(b, 'floor:feed').slice(feedEvents).some((e) => e.kind === 'pot'), tag + ': no pot event in the room feed');
+    }
+  });
+
+  await test('FIX M1: a plain paid spin in the same state still feeds the pot and still wins it (guard against over-fixing)', async () => {
+    for (const mode of ['play', 'chips']) for (const bet of [1, 100, 2500]) {
+      const s = setup({ rng: E.rngFrom(710 + bet), potRng: () => 0 }); const a = s.sock('ann'); rich(s, 'ann', mode); E.CFG.pull.pot.capCents = 5000;
+      const pot = s.potOf(mode); pot.bal = 7000; pot.fed = 7000; s.store().potChanged();
+      const w0 = s.wallet.get('ann')[mode];
+      const r = play(s, a, { bet, mode, auto: true }, bet);
+      assert.strictEqual(r.buyBonus, null); assert.ok(r.pot && r.pot.won && r.pot.amount === 5000, mode + ' ' + bet + 'c: the plain spin won the capped pot: ' + JSON.stringify(r.pot));
+      assert.strictEqual(pot.paid, 5000); assert.strictEqual(pot.fed * 10000 + pot.rem, 7000 * 10000 + r.cost * E.CFG.pull.pot.feedBps, 'it fed its slice (a cent or the remainder)'); potOk(pot);
+      assert.strictEqual(s.wallet.get('ann')[mode], w0 - r.cost + r.totalWin + 5000);
+      a.send('g:coldcall:history'); assert.strictEqual(last(a, 'g:coldcall:history').rounds[0].pot.amount, 5000);
+      assert.ok(all(a, 'floor:pot').length >= 1, 'floor:pot sent after the plain spin');
+    }
+  });
+
+  await test('FIX M1: conservation with buys mixed in: fed + seeded = paid + bal after every round, the slice is exact on the PLAIN spins only (fed x 10000 + rem = plain cost x feedBps), buys move only win - cost, 1c / $1 / $25, both purses', async () => {
+    const buys = [null, 'call', null, 'hunt', 'bonus1', null, 'bonus2', null];
+    let hitsPlain = 0, buysDone = 0;
+    for (const mode of ['play', 'chips']) {
+      const s = setup({ rng: E.rngFrom(720), potRng: E.rngFrom(721), roundRng: E.rngFrom(722) }); const a = s.sock('ann'); rich(s, 'ann', mode);
+      E.CFG.pull.pot.oneInPerDollar = 40; E.CFG.pull.pot.minBal = 1; E.CFG.pull.pot.feedBps = 500;     // fill fast and hit often
+      let bal = s.wallet.get('ann')[mode], plainCost = 0;
+      for (let i = 0; i < 700; i++) {
+        const bet = [1, 100, 2500, 100][i % 4], buy = buys[i % buys.length], pot = s.potOf(mode), before = clone(pot);
+        const r = play(s, a, { bet, mode, buyBonus: buy }, i);
+        const prize = r.pot ? r.pot.amount : 0; bal += -r.cost + r.totalWin + prize;
+        assert.strictEqual(r.wallet[mode], bal, mode + ' round ' + i);
+        potOk(pot); assert.ok(pot.bal >= 0);
+        if (buy || r.callback) { assert.strictEqual(prize, 0, 'no prize on a buy or a Callback'); assert.deepStrictEqual(clone(pot), before, 'the pot did not move on round ' + i); if (buy) buysDone++; }
+        else { plainCost += r.cost; if (prize) hitsPlain++; }
+        assert.strictEqual(pot.fed * 10000 + pot.rem, plainCost * E.CFG.pull.pot.feedBps, 'the slice is exact on plain spins only');
+      }
+    }
+    assert.ok(hitsPlain >= 5 && buysDone >= 500, [hitsPlain, buysDone].join());
   });
 
   await test('pot: two players racing for it in one tick, the hit roll forced: exactly one takes it, the other gets nothing, invariant and wallet sums hold (Play $ and Chips)', async () => {
@@ -1023,7 +1081,7 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
         bal += -cost + r.totalWin + prize; assert.strictEqual(r.wallet[mode], bal, mode + ' ' + bet + 'c round ' + i + ': before - cost + win + prize = after');
         assert.strictEqual(r.wallet[other], start[other], 'the other purse never moves');
         if (mode === 'chips') assert.strictEqual(s.chips.get('ann'), bal);
-        sumCost += cost; if (prize) prizes++; if (r.callback) callbacks++; else { paid += r.totalWin; exact += ex; sq += (r.totalWin - ex) * (r.totalWin - ex); }
+        if (!buy) sumCost += cost; if (buy) assert.strictEqual(prize, 0, 'a buy wins no pot (FIX M1)'); if (prize) prizes++; if (r.callback) callbacks++; else { paid += r.totalWin; exact += ex; sq += (r.totalWin - ex) * (r.totalWin - ex); }
         if (r.pull && r.pull.more && r.pull.more.take) takes++; if (r.pull && r.pull.pick) picks++; rounds++;
         const p = s.potOf(mode); potOk(p); assert.strictEqual(p.fed * 10000 + p.rem, sumCost * E.CFG.pull.pot.feedBps, 'the slice is exact: fed + rem = cost x bps / 10000 (remainders carried)'); assert.ok(p.bal >= 0);
         assert.strictEqual(s.potOf(other).fed, 0);

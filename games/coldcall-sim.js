@@ -8,6 +8,13 @@
 //   nice -n 10 node games/coldcall-sim.js --pull [sessions=20000] [spinsPerSession=2000] [seed=1] [--pickpolicy first|best|none] [--more bank|take] [--bet 100] [--nowarmdiff] [--fresh] [--bet-switch]
 //        THE PULL (cold-call/PULL-ENGINE.md section 5): sequential sessions with state (no idle time): RTP by part per paid spin (money in real cents), spins per Callback, warm, ghost, value per lead, pot.
 //        The state is CARRIED across the sessions of a batch (a returning player); --fresh = every session starts empty (old behaviour). --bet-switch = the F1 attacker: 10c spins, $25 on the spin after >= 3 warm squares exist. --bet-mix lo,hi[,T] = the critic's N1 attacker: bet hi (cents) while the state's lead-weighted average is under T, else lo (T defaults to the first half step over the middle, 15.5 for 10,20).
+//        DENOMS (1c / 2c / 5c, cold-call/PULL-ENGINE.md section 7): --bet 1|2|5 plays them; wins are paid in whole cents by Eng.roundCents with its OWN random stream (the round's stream does not move), the output adds
+//        'paid cents' (what the wallet would get) next to the exact tenths-based parts, and a decision ledger: for every ONE MORE CALL offer, (expected value of the option the policy took, given the SHOWN cents) minus (the exact value of banking).
+//        --more bank|take|bankup|takeup: bankup = bank when the shown bank amount rounded UP, gamble when it rounded down; takeup = the reverse. A fair design pays every policy the exact value (ledger 0 +- noise).
+//        --bet-mix lo,hi[,T]: any two bets (1,2 / 1,10 / 5,10 / 2,100 ...), T = the average at which it switches (default: just over the middle).
+//   nice -n 10 node games/coldcall-sim.js --buys-pull [runs=1000000] [seed=1] [--bet 100] [--pickpolicy first|best|none] [--more bank|take|bankup|takeup] [--only call,bonus1,bonus2,hunt] [--cfg ...]
+//        every buy through the real playRound (PICK, ONE MORE CALL) at its whole-cent price for that bet and the fair stake (Eng.buyPrice / scaleOf): paid cents / price cents with a CI by batch means, the exact payback
+//        (winTenths / costTenths: identical at every bet for the same seed), the paid - exact drift, cap hits. Same seeds at 1c, 2c, 5c and $1 = the same rounds; only the rounding differs.
 //   nice -n 10 node games/coldcall-sim.js --pot-room [ticks=1000000] [seed=1] --feeders 10:40,20:40 [--chase 2500,T[,perTick]] [--batches 20]
 //        POT ONLY (levers 8.11): the office pot of a room, no game. Each tick every feeder (bet:count, cents) spins once; the chaser (bet cents, threshold T cents, spins per tick, default 1) spins only while the pot holds at least T.
 //        Same pot rule and rng as --pull (potSlice, potHitChance, potPrize; separate stream per batch), so a flat one-bettor room reproduces the pot part of a --pull run bit for bit. Per bet class: stake, paid, pot % of stake, average and largest prize in bets; cents left; fed + seeded = paid + left to the cent.
@@ -58,11 +65,21 @@ if (!isMainThread) {
     }
     return parentPort.postMessage(out);
   }
-  if (mode === 'pull' || mode === 'bonus') {
+  if (mode === 'pull' || mode === 'bonus' || mode === 'buyspull') {
     const nb4 = (p, set) => { const r = (p / 6) | 0, c = p % 6; let n = 0; if (r > 0 && set.has(p - 6)) n++; if (c > 0 && set.has(p - 1)) n++; if (c < 5 && set.has(p + 1)) n++; if (r < 4 && set.has(p + 6)) n++; return n; };
     // 'best' pick: the hot square with the most hot neighbours (an upsell on it reaches the most leads); ties go to reading order
     const bestPick = (choices) => { const set = new Set(choices); let b = choices[0], bn = -1; for (const p of choices) { const n = nb4(p, set); if (n > bn) { bn = n; b = p; } } return b; };
-    const mkDecide = (pickpolicy, more) => (pt) => (pt.k === 'more' ? (more === 'take' ? { k: 'more', take: true } : null) : pickpolicy === 'best' ? { k: 'pick', p: bestPick(pt.choices) } : null);
+    // ctx = { num, den, pt }: the scale of the round about to be played (cents per tenth = num / den) and the last ONE MORE CALL point seen (the SHOWN cents), read by the shown-cents policies and the decision ledger
+    const mkDecide = (pickpolicy, more, ctx) => (pt) => {
+      if (pt.k === 'more') {
+        if (ctx) ctx.pt = pt;
+        if (more === 'take') return { k: 'more', take: true };
+        if (more === 'bank' || !ctx) return null;
+        const up = pt.bonusCents > pt.W * ctx.num / ctx.den + 1e-9;           // the shown bonus rounded UP (strictly above the exact amount)
+        return more === 'bankup' ? (up ? null : { k: 'more', take: true }) : (up ? { k: 'more', take: true } : null);
+      }
+      return pickpolicy === 'best' ? { k: 'pick', p: bestPick(pt.choices) } : null;
+    };
     const withPick = (c, pickpolicy) => (pickpolicy === 'none' ? merged(c, { pull: { pick: { on: false } } }) : c);
     if (mode === 'bonus') {
       const { kinds, combos } = workerData.bonusOpts, bet = workerData.bet, out = {};
@@ -70,9 +87,9 @@ if (!isMainThread) {
         const key = kind + '|' + cb.pick + '|' + cb.more, e = Eng.createEngine(withPick(cfg, cb.pick)), decide = mkDecide(cb.pick, cb.more);
         const a = { n: 0, sum: 0, sq: 0, cap: 0, ge100: 0, ge1000: 0, offers: 0, takes: 0, wins: 0, picks: 0 };
         for (const k of chunks) {
-          const rng = Eng.rngFrom(seedOf(baseSeed + kind * 977, k));         // same stream for every policy of a kind: common random numbers
+          const rng = Eng.rngFrom(seedOf(baseSeed + kind * 977, k)), rnd = Eng.rngFrom(seedOf(baseSeed + kind * 977 + 13, k));         // same stream for every policy of a kind: common random numbers; rnd = the whole-cent rounding stream (1c / 2c / 5c)
           for (let i = 0; i < size; i++) {
-            const r = e.playRound(rng, { buy: 'bonus' + kind, bet, state: null, script: false, auto: true, decide }, []);
+            const r = e.playRound(rng, { buy: 'bonus' + kind, bet, state: null, script: false, auto: true, decide, rnd }, []);
             const w = r.winTenths; a.n++; a.sum += w; a.sq += w * w; if (w >= capT) a.cap++; if (w >= 1000) a.ge100++; if (w >= 10000) a.ge1000++;
             if (r.pull.pick) a.picks++; if (r.pull.more) { a.offers++; if (r.pull.more.take) { a.takes++; if (r.pull.more.won) a.wins++; } }
           }
@@ -81,16 +98,37 @@ if (!isMainThread) {
       }
       return parentPort.postMessage(out);
     }
+    if (mode === 'buyspull') {
+      // every buy through the real playRound (PICK, ONE MORE CALL) at its whole-cent price and the fair stake; the same seed gives the same rounds at every bet, so only the rounding differs
+      const o = workerData.buyOpts, bet = workerData.bet, out = {};
+      for (const [bi, b] of o.only.entries()) {
+        const ctx = { num: 0, den: 1, pt: null }, e = Eng.createEngine(withPick(cfg, o.pickpolicy)), decide = mkDecide(o.pickpolicy, o.more, ctx), sc = Eng.scaleOf(cfg.buyCost[b], bet); ctx.num = sc.num; ctx.den = sc.den;
+        const acc = { chunks: [], paid: 0, price: 0, wt: 0, ct: 0, bonus: 0, cap: 0, n: 0, dgN: 0, dgSum: 0 };
+        for (const k of chunks) {
+          const rng = Eng.rngFrom(seedOf(baseSeed + bi * 977, k)), rnd = Eng.rngFrom(seedOf(baseSeed + bi * 977 + 13, k)), c = { paid: 0, price: 0, wt: 0, ct: 0, n: 0, bonus: 0, cap: 0 };
+          for (let i = 0; i < size; i++) {
+            ctx.pt = null;
+            const r = e.playRound(rng, { buy: b, bet, state: null, script: false, auto: true, decide, rnd }, []);
+            c.paid += r.pay.win; c.price += r.pay.price; c.wt += r.winTenths; c.ct += r.costTenths; c.n++; if (r.round.bonusKind) c.bonus++; if (r.winTenths >= capT) c.cap++;
+            if (r.pull.more && ctx.pt) { const pt = ctx.pt, ev = r.pull.more.take ? pt.pWin * pt.winCents + (1 - pt.pWin) * pt.baseCents : pt.bankCents; acc.dgN++; acc.dgSum += ev - (r.round.clusterTenths + r.round.phoneTenths + pt.W) * r.pay.num / r.pay.den; }
+          }
+          acc.chunks.push(c); for (const key of ['paid', 'price', 'wt', 'ct', 'bonus', 'cap', 'n']) acc[key] += c[key];
+        }
+        out[b] = acc;
+      }
+      return parentPort.postMessage(out);
+    }
     // ---- pull: sessions of sequential play with state. Money is counted in real CENTS (a Callback is played at cb.bet, not at the nominal bet).
     const o = workerData.pullOpts, bet = workerData.bet, P = cfg.pull, DAY = '2026-10-06';
     const HIST = 3000, SW_LO = 10, SW_HI = 2500;
     const runChunk = (c, seed) => {
-      const e = Eng.createEngine(withPick(c, o.pickpolicy)), decide = mkDecide(o.pickpolicy, o.more), Pc = c.pull;
+      const ctx = { num: bet, den: 10, pt: null }, e = Eng.createEngine(withPick(c, o.pickpolicy)), decide = mkDecide(o.pickpolicy, o.more, ctx), Pc = c.pull;
       // the office pot, the way the server runs it (store.pot: created holding `seed` cents of tracked house money; one shared pot per batch)
-      const rng = Eng.rngFrom(seed), potRng = Eng.rngFrom((seed ^ 0xA5A5A5A5) >>> 0), pot = { bal: Pc.pot.seed, rem: 0, fed: 0, seeded: Pc.pot.seed, paid: 0, hits: 0, balAtHit: 0 };
+      const rng = Eng.rngFrom(seed), potRng = Eng.rngFrom((seed ^ 0xA5A5A5A5) >>> 0), rnd = Eng.rngFrom((seed ^ 0x5A5A5A5A) >>> 0), pot = { bal: Pc.pot.seed, rem: 0, fed: 0, seeded: Pc.pot.seed, paid: 0, hits: 0, balAtHit: 0 };
       const a = { sess: 0, paid: 0, cbRounds: 0, cluster: 0, phone: 0, nat: 0, cb: 0, cbT: 0, cbBetSum: 0, cbUnder: 0, moreNet: 0, natBonuses: 0, dead: 0, win: 0, filled: 0, arms: 0, armHist: new Array(HIST + 1).fill(0), marked: 0, warmCreated: 0, warmSpins: 0, warmPhone: 0, warmPhonePay: 0,
         ghost: { n: 0, sum: 0, nz: 0, ge10: 0, ge100: 0, max: 0 }, picks: 0, offers: 0, takes: 0, takeWins: 0, stakeCents: 0, capHits: 0, sq: 0, warmDropped: 0,
-        loStake: 0, loBack: 0, hiStake: 0, hiBack: 0, hiSpins: 0, dropStake: 0, dropBack: 0, dropSpins: 0, leftLt: 0, leftCb: 0, ends: 0 };
+        loStake: 0, loBack: 0, hiStake: 0, hiBack: 0, hiSpins: 0, dropStake: 0, dropBack: 0, dropSpins: 0, leftLt: 0, leftCb: 0, ends: 0,
+        paidCents: 0, exactCents: 0, dgN: 0, dgSum: 0, dgSq: 0, dgUp: 0, dgTake: 0 };
       let st = Eng.newState(), since = 0, t = 1e9;
       for (let s = 0; s < o.sessions; s++) {
         let paid = 0;
@@ -98,8 +136,15 @@ if (!isMainThread) {
         else st = Object.assign({}, st, { day: null });         // carried state; a session is still one calendar day (one daily claim, streak 1)
         while (paid < o.spins) {
           const cur = o.betSwitch ? (st.warm.length >= 3 ? SW_HI : SW_LO) : o.betMix ? (st.avg < o.betMix.T ? o.betMix.hi : o.betMix.lo) : bet;
-          const r = e.playRound(rng, { bet: cur, state: st, now: t, day: DAY, script: false, auto: true, decide }, []);
+          ctx.num = st.cb ? st.cb.bet : cur; ctx.pt = null;                          // a Callback is played at its own bet
+          const r = e.playRound(rng, { bet: cur, state: st, now: t, day: DAY, script: false, auto: true, decide, rnd }, []);
           t += 1000; st = r.newState; const R = r.round, pl = r.pull, bc = r.betCents / 10;   // bc: cents per tenth of the bet actually played
+          a.paidCents += r.pay.win; a.exactCents += r.winTenths * r.pay.num / r.pay.den;        // what the wallet gets vs the exact value of the same rounds
+          if (pl.more && ctx.pt) {                                                     // DECISION LEDGER: the value (given the shown cents) of the option taken minus the exact value of banking
+            const pt = ctx.pt, exactBank = (R.clusterTenths + R.phoneTenths + pt.W) * r.pay.num / r.pay.den;
+            const ev = pl.more.take ? pt.pWin * pt.winCents + (1 - pt.pWin) * pt.baseCents : pt.bankCents, g = ev - exactBank;
+            a.dgN++; a.dgSum += g; a.dgSq += g * g; if (pt.bonusCents > pt.W * r.pay.num / r.pay.den + 1e-9) a.dgUp++; if (pl.more.take) a.dgTake++;
+          }
           if (r.winTenths >= capT) a.capHits++;
           if (pl.pick) a.picks++; if (pl.more) { a.offers++; if (pl.more.take) { a.takes++; if (pl.more.won) a.takeWins++; } }
           if (R.bonusRawTenths !== undefined) a.moreNet += (R.bonusTenths - R.bonusRawTenths) * bc;
@@ -196,7 +241,9 @@ if (!isMainThread) {
   const ONLY = onlyArg && onlyArg !== true ? onlyArg.split(',') : ['call', 'bonus1', 'bonus2', 'hunt'];
   const nums = argv.filter((a) => !a.startsWith('--')).map(Number);
   const cfgText = cfgArg && cfgArg !== true ? (cfgArg[0] === '@' ? fs.readFileSync(cfgArg.slice(1), 'utf8') : cfgArg) : '{}';   // --cfg '@file.json' reads the override from a file
-  const cfg = merged(Eng.CFG, JSON.parse(cfgText));
+  const presetArg = flag('--preset');   // --preset file.json: a cold-call/presets/*.json file (or a bare overrides object) applied through games/coldcall-livecfg.js merge(): the same validation and deep merge the server uses
+  let cfg = merged(Eng.CFG, JSON.parse(cfgText));
+  if (presetArg && presetArg !== true) { const pj = JSON.parse(fs.readFileSync(presetArg, 'utf8')); cfg = require('./coldcall-livecfg.js').merge(pj && pj.overrides !== undefined ? pj.overrides : pj); }
   const threads = Math.min(MAX_THREADS, Math.max(1, +thrArg || MAX_THREADS));
 
   if (bool('--pot-room')) {
@@ -227,12 +274,33 @@ if (!isMainThread) {
     }).catch((e) => { console.error(e); process.exit(1); });
     return;
   }
+  if (bool('--buys-pull')) {
+    const bet = +betArg || 100, f = (x, d = 2) => (x === null || x === undefined ? 'n/a' : x.toFixed(d)), t0 = Date.now();
+    const pickpolicy = pickArg && pickArg !== true ? pickArg : 'best', more = moreArg && moreArg !== true ? moreArg : 'bank';
+    if (!['first', 'best', 'none'].includes(pickpolicy) || !['bank', 'take', 'bankup', 'takeup'].includes(more) || !Eng.BET_LEVELS.includes(bet)) { console.error('--bet one of ' + Eng.BET_LEVELS.join(','), '--pickpolicy first|best|none, --more bank|take|bankup|takeup'); process.exit(1); }
+    const runs = nums[0] || 1000000, seedB = nums[1] || 1, size = Math.max(1, Math.min(CHUNK, Math.ceil(runs / 20))), nChunks = Math.ceil(runs / size), per = Array.from({ length: threads }, () => []); for (let k = 0; k < nChunks; k++) per[k % threads].push(k);      // at least 20 chunks for the interval
+    const meanSe = (arr) => { const n = arr.length, m = arr.reduce((a, b) => a + b, 0) / n, v = n > 1 ? arr.reduce((a, b) => a + (b - m) * (b - m), 0) / (n - 1) : 0; return { mean: m, se: Math.sqrt(v / n) }; };
+    Promise.all(per.filter((c) => c.length).map((chunks) => new Promise((res, rej) => { const w = new Worker(__filename, { workerData: { cfg, chunks, bet, mode: 'buyspull', size, baseSeed: seedB, buyOpts: { only: ONLY, pickpolicy, more } } }); w.once('message', res); w.once('error', rej); }))).then((parts) => {
+      const o = { mode: 'buys-pull', runsPerBuy: nChunks * size, seed: seedB, bet, pickpolicy, more, secs: (Date.now() - t0) / 1000, buys: {} };
+      for (const b of ONLY) {
+        const acc = parts.map((p) => p[b]), g = (k) => acc.reduce((a, x) => a + x[k], 0), cs = acc.flatMap((x) => x.chunks), sc = Eng.scaleOf(cfg.buyCost[b], bet);
+        const paid = meanSe(cs.map((c) => c.paid / c.price * 100)), exact = meanSe(cs.map((c) => c.wt / c.ct * 100)), drift = meanSe(cs.map((c) => (c.paid / c.price - c.wt / c.ct) * 100)), dgN = g('dgN');
+        o.buys[b] = { priceCents: sc.price, exactPriceCents: cfg.buyCost[b] * bet / 10, stakeCentsPerBet: sc.num * 10 / sc.den, paidPct: g('paid') / g('price') * 100, paidCi: 1.96 * paid.se, exactPct: g('wt') / g('ct') * 100, exactCi: 1.96 * exact.se, driftPct: (g('paid') / g('price') - g('wt') / g('ct')) * 100, driftCi: 1.96 * drift.se,
+          avgWinCents: g('paid') / g('n'), bonusRate: g('bonus') / g('n'), capHits: g('cap'), ledgerGainCents: dgN ? g('dgSum') / dgN : null, ledgerOffers: dgN };
+      }
+      if (outFile) fs.writeFileSync(outFile, JSON.stringify(o));
+      if (asJson) return console.log(JSON.stringify(o));
+      console.log(`COLD CALL --buys-pull: ${o.runsPerBuy} rounds per buy at ${bet}c, pick ${pickpolicy}, gamble ${more}, seed ${seedB}, ${threads} threads, ${f(o.secs, 1)}s`);
+      for (const b of ONLY) { const x = o.buys[b]; console.log(`  ${b.padEnd(7)} price ${x.priceCents}c (exact ${f(x.exactPriceCents, 1)}c, played at ${f(x.stakeCentsPerBet, 3)}c per 10 tenths)  paid payback ${f(x.paidPct, 3)}% +- ${f(x.paidCi, 3)}  exact ${f(x.exactPct, 3)}% +- ${f(x.exactCi, 3)}  paid - exact ${f(x.driftPct, 4)}% +- ${f(x.driftCi, 4)}  avg win ${f(x.avgWinCents, 3)}c  bonus on ${f(x.bonusRate * 100, 3)}%  cap hits ${x.capHits}  ledger ${x.ledgerGainCents === null ? 'n/a' : f(x.ledgerGainCents, 5) + 'c/offer (' + x.ledgerOffers + ')'}`); }
+    }).catch((e) => { console.error(e); process.exit(1); });
+    return;
+  }
   if (pullMode || bonusMode) {
     const bet = +betArg || 100, f = (x, d = 2) => (x === null || x === undefined ? 'n/a' : x.toFixed(d)), t0 = Date.now();
     const pickpolicy = pickArg && pickArg !== true ? pickArg : 'first', more = moreArg && moreArg !== true ? moreArg : 'bank';
-    if (!['first', 'best', 'none'].includes(pickpolicy) || !['bank', 'take'].includes(more)) { console.error('--pickpolicy first|best|none, --more bank|take'); process.exit(1); }
+    if (!['first', 'best', 'none'].includes(pickpolicy) || !['bank', 'take', 'bankup', 'takeup'].includes(more)) { console.error('--pickpolicy first|best|none, --more bank|take|bankup|takeup'); process.exit(1); }
     let betMix = null;
-    if (betMixArg) { const m = String(betMixArg).split(',').map(Number); if (m.length < 2 || !(m[0] > 0) || !(m[1] > m[0]) || (m.length > 2 && !Number.isFinite(m[2]))) { console.error('--bet-mix lo,hi[,T] in cents, 0 < lo < hi'); process.exit(1); } betMix = { lo: m[0], hi: m[1], T: m.length > 2 ? m[2] : Math.floor((m[0] + m[1]) / 20) * 10 + 5.5 }; }
+    if (betMixArg) { const m = String(betMixArg).split(',').map(Number); if (m.length < 2 || !(m[0] > 0) || !(m[1] > m[0]) || (m.length > 2 && !Number.isFinite(m[2]))) { console.error('--bet-mix lo,hi[,T] in cents, 0 < lo < hi'); process.exit(1); } betMix = { lo: m[0], hi: m[1], T: m.length > 2 ? m[2] : m[1] < 10 || m[0] + m[1] < 20 ? (m[0] + m[1]) / 2 + 0.05 : Math.floor((m[0] + m[1]) / 20) * 10 + 5.5 }; }
     const spawn = (per, data) => Promise.all(per.filter((c) => c.length).map((chunks) => new Promise((res, rej) => { const w = new Worker(__filename, { workerData: { cfg, chunks, bet, ...data } }); w.once('message', res); w.once('error', rej); })));
     const meanSe = (arr) => { const n = arr.length, m = arr.reduce((a, b) => a + b, 0) / n, v = n > 1 ? arr.reduce((a, b) => a + (b - m) * (b - m), 0) / (n - 1) : 0; return { mean: m, se: Math.sqrt(v / n) }; };
     if (bonusMode) {
@@ -291,11 +359,15 @@ if (!isMainThread) {
         ghost: { per100: g.n / paid * 100, avgPayX: g.n ? g.sum / g.n / 10 : null, shareNonZero: g.n ? g.nz / g.n : null, shareGe1x: g.n ? g.ge10 / g.n : null, shareGe10x: g.n ? g.ge100 / g.n : null, maxX: g.max / 10 },
         leads: { filledTotal: leads, perPaidSpin: leads / paid, callbackValuePerLeadX: leads ? cbCents / bet0 / leads : null, callbackPartPct: parts_.callbackBonus.pct },
         decisions: { picksPer100: sum('picks') / paid * 100, offersPer100: sum('offers') / paid * 100, takesPer100: sum('takes') / paid * 100, takeWinRate: sum('takes') ? sum('takeWins') / sum('takes') : null },
+        paidCents: { paidPct: sum('paidCents') / stakeAll * 100, exactPct: sum('exactCents') / stakeAll * 100, driftPct: (sum('paidCents') - sum('exactCents')) / stakeAll * 100, ci: 1.96 * meanSe(chunks.map((c) => (c.on.paidCents - c.on.exactCents) / c.on.stakeCents * 100)).se, paidTotalPct: sum('paidCents') / stakeAll * 100, paidTotalCi: 1.96 * meanSe(chunks.map((c) => c.on.paidCents / c.on.stakeCents * 100)).se },
+        decisionLedger: (() => { const n = sum('dgN'), m = n ? sum('dgSum') / n : null, ms = meanSe(chunks.filter((c) => c.on.dgN).map((c) => c.on.dgSum / c.on.dgN)); return { decisions: n, meanGainCents: m, ci: 1.96 * ms.se, upShare: n ? sum('dgUp') / n : null, takeShare: n ? sum('dgTake') / n : null, sdCents: n ? Math.sqrt(Math.max(0, sum('dgSq') / n - m * m)) : null, note: 'per ONE MORE CALL offer: (EV of the option the policy took, from the shown cents) - (exact value of banking), in cents; 0 for a design that cannot be gamed by reading the shown amount' }; })(),
         pot: { hitsPer1M: potHits / paid * 1e6, avgBalAtHitCents: potHits ? potBal / potHits : null, paidPctOfStake: potPaid / stakeAll * 100, fedPctOfStake: potFed / stakeAll * 100, seededPctOfStake: potSeeded / stakeAll * 100, leftInPotCents: potLeft, note: 'one shared pot per batch, server rule (bal kept above the cap, seed after a hit, minBal); the RTP part is what the pot PAID (seed money included), not the fed slice' } };
       if (outFile) fs.writeFileSync(outFile, JSON.stringify(o));
       if (asJson) return console.log(JSON.stringify(o));
       console.log(`COLD CALL --pull: ${totalSessions} sessions x ${spins} paid spins = ${paid} paid spins, ${betSwitchArg ? 'bet SWITCH 10c/2500c (F1 attacker)' : betMix ? 'bet MIX ' + betMix.lo + 'c/' + betMix.hi + 'c, hi while average < ' + betMix.T + 'c (N1 attacker)' : 'flat bet ' + bet + 'c'}, ${freshArg ? 'FRESH sessions' : 'state carried across sessions'}, pick ${pickpolicy}, gamble ${more}, seed ${seedP}, ${threads} threads, ${chunks.length} batches, ${f(o.secs, 1)}s`);
       console.log(`  total payback   ${f(o.rtpPct, 3)}% +- ${f(o.rtpCi, 3)} (95%, by batch means, per PAID spin, money in real cents; Callback rounds are free)`);
+      console.log(`  paid cents      wallet gets ${f(o.paidCents.paidPct, 3)}% of stake (+-${f(o.paidCents.paidTotalCi, 3)}) incl. Callback, ex pot; exact value of the same rounds ${f(o.paidCents.exactPct, 3)}%; rounding drift ${f(o.paidCents.driftPct, 4)}% +- ${f(o.paidCents.ci, 4)} (should be 0)`);
+      const dl = o.decisionLedger; console.log(`  decision ledger ${dl.decisions} ONE MORE CALL offers (${dl.upShare === null ? 'n/a' : f(dl.upShare * 100, 1)}% shown rounded up, taken ${dl.takeShare === null ? 'n/a' : f(dl.takeShare * 100, 1)}%): policy ${more} gains ${dl.meanGainCents === null ? 'n/a' : f(dl.meanGainCents, 5)} cents per offer +- ${f(dl.ci, 5)} (sd ${dl.sdCents === null ? 'n/a' : f(dl.sdCents, 3)}); 0 = the shown amount tells nothing`);
       const pp = o.parts; console.log(`  by part         base clusters ${f(pp.cluster.pct)}%  base phone ${f(pp.basePhone.pct)}%  natural bonus ${f(pp.natBonus.pct)}% (+-${f(pp.natBonus.ci, 3)})  Callback bonus ${f(pp.callbackBonus.pct)}% (+-${f(pp.callbackBonus.ci, 3)})  ONE MORE CALL net ${f(pp.moreNet.pct, 3)}% (+-${f(pp.moreNet.ci, 3)})  pot paid ${f(pp.pot.pct, 3)}% (+-${f(pp.pot.ci, 3)})`);
       console.log(`  Callback        ${f(o.callback.perHundredSpins, 3)} per 100 paid spins; spins per Callback mean ${f(o.callback.spinsPer.mean, 1)}  P10 ${o.callback.spinsPer.p10}  median ${o.callback.spinsPer.median}  P90 ${o.callback.spinsPer.p90}; avg Callback bonus ${f(o.callback.avgBonusX, 2)}x of its own bet; avg Callback bet ${f(o.callback.avgBetCents, 1)}c${o.callback.playedUnderNominal === null ? '' : ', ' + o.callback.playedUnderNominal + ' of ' + o.callback.rounds + ' played under the nominal bet'}`);
       const lo = o.leftOver; console.log(`  left over       ${f(lo.avgLeads, 1)} leads on average and ${lo.callbacksWaiting} of ${lo.points} Callbacks still waiting at the ${lo.at}`);

@@ -1,6 +1,8 @@
 /* COLD CALL: UI controller. The server resolves a whole round and returns a script; this file only ANIMATES it. The 6x5 board and cascades live in
    board.js, the phone feature in phone.js, the three bonuses in bonus.js; they talk to this file through CC.core (see the export at the end).
-   Money: integer cents everywhere; a tenth-of-bet amount t is t * bet / 10 cents (exact at every bet level). */
+   Money: integer cents everywhere. A script amount is in tenths; its cents are t * pay.num / pay.den (a spin: bet / 10; a buy: price / cost multiple, so a 1c buy is not 1/10 c a tenth).
+   From 10c up that is exact; at 1c / 2c / 5c a tenth can be a fraction of a cent: steps and the running WIN show it (sub-cent as a multiple / "<1c"), the server's whole cents are the truth
+   (totalWin, pay, bankCents / winCents / baseCents) and the meter lands on them. Live math (prices, pay table, rules, RTP label) is the server's (state / g:coldcall:cfg), never the engine copy. */
 (() => {
   const CC = (window.CC = window.CC || {});
   const $ = (id) => document.getElementById(id);
@@ -10,10 +12,10 @@
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const BRIDGE = Q.get('bridge') === '1' && window.parent !== window;
   const LIVE_SOCKET = !BRIDGE && Q.get('live') === '1';
-  const DEFAULT_BETS = E.BET_LEVELS.slice();
+  const DEFAULT_BETS = E.BET_LEVELS.filter((b) => b >= 10);   // practice (local engine, no wallet) plays the 10c-and-up ladder; the 1c / 2c / 5c bets need the server's whole-cent rounding
   const QFORCE = E.FORCES.includes(Q.get('force')) ? Q.get('force') : null;   // practice/QA only; the server ignores it unless COLDCALL_TEST=1
   const NAMES = { mug: 'Mug', note: 'Sticky note', ball: 'Stress ball', can: 'Energy can', cups: 'Paper cups', headset: 'Headset', rx: 'Rx bottle', pile: 'Pile', cashwad: 'Cash wad', cash: 'Cash' };
-  const BUY_INFO = { call: ['THE CALL', 'One spin with a rotary phone guaranteed on the board.'], bonus1: ['DIALING FOR DOLLARS', 'Straight into 8 free spins. Hot leads stay lit until a phone calls them.'], bonus2: ['ALWAYS BE CLOSING', 'Straight into 12 free spins. Hot leads stay lit the whole bonus.'], hunt: ['BELL HUNT', 'One spin with about 5x the chance of ringing in a bonus.'] };
+  const BUY_INFO = { call: ['THE CALL', 'One spin with a rotary phone guaranteed on the board.'], bonus1: ['DIALING FOR DOLLARS', 'Straight into %bonus1% free spins. Hot leads stay lit until a phone calls them.'], bonus2: ['ALWAYS BE CLOSING', 'Straight into %bonus2% free spins. Hot leads stay lit the whole bonus.'], hunt: ['BELL HUNT', 'One spin with about 5x the chance of ringing in a bonus.'] };
   const TIER_NAME = { big: 'BIG WIN', huge: 'HUGE WIN', mega: 'MEGA WIN', legend: 'LEGENDARY' };
   const TIER_LVL = { big: 1, huge: 2, mega: 3, legend: 4 };
 
@@ -28,10 +30,36 @@
   const bet = () => st.bets[st.betIdx];
   const usd = (c) => { const n = Math.round(c), a = Math.abs(n); return (n < 0 ? '-' : '') + '$' + Math.floor(a / 100).toLocaleString('en-US') + '.' + String(a % 100).padStart(2, '0'); };
   // every amount on screen goes through dollars(): Play $ and practice show dollars, Chips mode shows whole chips (1 chip = 1 cent), as Ballot Bender does
-  const dollars = (c) => (st.live && st.mode === 'chips' ? Math.round(c).toLocaleString('en-US') : usd(c));
-  // buys offered right now: ids with a price in the server state (practice: the engine config). A buy the state does not price is not shown.
-  const buyPrices = () => { const src = st.live ? (st.server && st.server.buyCostX) || {} : null; return E.BUYS.filter((id) => (src ? typeof src[id] === 'number' : typeof E.CFG.buyCost[id] === 'number')).map((id) => [id, src ? Math.round(src[id] * 10) : E.CFG.buyCost[id]]); };
-  const costT = (kind) => { if (kind === 'spin') return 10; const f = buyPrices().find(([id]) => id === kind); return f ? f[1] : Infinity; };
+  // Chips follow the shell's money preference like Ballot Bender (9d5f578): chips by default, dollars when the player picked USD (then no ' chips' unit is added: unit())
+  const chipsUsd = () => { try { const M = window.parent && window.parent !== window ? window.parent.Money : null; return !!(M && M.getPref && M.getPref() === 'usd'); } catch (e) { return false; } };
+  const chipsFmt = (c) => { try { const M = window.parent && window.parent !== window ? window.parent.Money : null; if (M && M.getPref && M.getPref() === 'usd') return M.fmt(c, { mode: 'usd' }); } catch (e) { /* standalone */ } return Math.round(c).toLocaleString('en-US'); };
+  const dollars = (c) => (st.live && st.mode === 'chips' ? chipsFmt(c) : usd(c));
+  const unit = () => (st.live && st.mode === 'chips' && !chipsUsd() ? ' chips' : '');
+  // the WIN meter / a running total: a fractional-cent round shows whole cents rounded DOWN and "<1c" under one cent (never "$0.00" for a win that is not zero); the end of the round sets the server's cents
+  const meterTxt = (c) => (st.frac && c > 0 && c < 1 ? '<' + dollars(1) : dollars(st.frac ? Math.floor(c + 1e-6) : c));
+  const xTxt = (x) => (x >= 100 ? Math.round(x).toLocaleString('en-US') : String(+Number(x).toFixed(1))) + 'x';
+  // bubble / close chips: short text of whole cents ("5c", "$1.20", "$12.5k"; Chips: 1,250 / 125k)
+  const shortAmt = (c) => {
+    if (st.live && st.mode === 'chips' && !chipsUsd()) return c < 100000 ? Math.round(c).toLocaleString('en-US') : c < 1e6 ? Math.round(c / 1000) + 'k' : String(+(c / 1e6).toFixed(1)) + 'M';
+    return c < 100 ? Math.round(c) + 'c' : c < 1000000 ? '$' + (c % 100 ? (c / 100).toFixed(2) : String(c / 100)) : '$' + String(+(c / 100000).toFixed(1)) + 'k';
+  };
+  // the cents scale of a round: pay.num / pay.den (every result carries pay, a pending one too once the server sends it), else cost / costTenths for a buy, else bet / 10
+  const scaleOf = (p, b) => {
+    const y = p && p.pay; if (y && Number.isFinite(y.num) && y.num >= 0 && y.den > 0) return { num: y.num, den: y.den };
+    if (p && p.costTenths > 0 && p.cost > 0) return { num: p.cost, den: p.costTenths };
+    return { num: b, den: 10 };
+  };
+  // buys offered right now at the current bet: [id, price in whole cents]. Signed in: the server's buyPriceCents[bet][buy] (live, nearest-cent, at least 1c); an older server without it: the engine's
+  // buyPrice from its buyCostX. Practice: the engine copy. A buy with no price is not shown.
+  const buyList = (b = bet()) => {
+    if (st.live) {
+      const sv = st.server || {}, row = sv.buyPriceCents && sv.buyPriceCents[b], src = sv.buyCostX || {};
+      return E.BUYS.filter((id) => (row ? Number.isFinite(row[id]) && row[id] > 0 : typeof src[id] === 'number')).map((id) => [id, row ? row[id] : E.buyPrice(Math.round(src[id] * 10), b)]);
+    }
+    return E.BUYS.filter((id) => typeof E.CFG.buyCost[id] === 'number').map((id) => [id, E.buyPrice(E.CFG.buyCost[id], b)]);
+  };
+  const buyDesc = (id) => { const sp = (liveCfg() && liveCfg().spins) || E.CFG.spins; return BUY_INFO[id][1].replace(/%(\w+)%/g, (m, k) => (sp[k] != null ? sp[k] : '')); };   // free-spin counts follow the live config
+  const costC = (kind, b) => { if (kind === 'spin') return b; const f = buyList(b).find(([id]) => id === kind); return f ? f[1] : Infinity; };
   const walletBal = () => (st.mode === 'chips' ? money.wallet.chips : money.wallet.play);
   const avail = () => (st.live ? walletBal() : st.pracBal);
   const pick = (a) => a[(Math.random() * a.length) | 0];
@@ -40,7 +68,7 @@
   // builder B's look layer (CC.pull) may not exist, or may throw: every call is guarded and a failure never stops a round
   const P = (fn, ...a) => { try { const f = CC.pull && CC.pull[fn]; if (typeof f === 'function') return f.apply(CC.pull, a); } catch (e) { dbg.pull.push(fn + ': ' + (e && e.message)); } };
   const PA = async (fn, ...a) => { try { return await P(fn, ...a); } catch (e) { dbg.pull.push(fn + ': ' + (e && e.message)); } };
-  const pview = () => (st.live ? st.pv[st.mode] : null);
+  const pview = () => (st.live && !(st.rules && st.rules.on === false) ? st.pv[st.mode] : null);   // a switched-off PULL has no view: no Callback, no lead list
 
   // ------------------------------------------------------------------ one shared rAF ticker (count-ups). The other loop is fx.js.
   const Tick = (() => { const fns = new Set(); let raf = 0; const loop = (now) => { for (const f of [...fns]) if (!f(now)) fns.delete(f); raf = fns.size ? requestAnimationFrame(loop) : 0; }; return { add(f) { fns.add(f); if (!raf) raf = requestAnimationFrame(loop); } }; })();
@@ -66,7 +94,7 @@
   const tween = (from, to, ms, fn) => { const t0 = performance.now(), dur = Math.max(1, ms * speed()); return new Promise((res) => Tick.add((now) => { const k = st.skip ? 1 : Math.max(0, Math.min(1, (now - t0) / dur)); fn(from + (to - from) * (1 - Math.pow(1 - k, 3))); if (k >= 1) { res(); return false; } return true; })); };
 
   // ------------------------------------------------------------------ readouts (never blank, win only ever adds within a round)
-  const showWin = (w, c) => { w.textContent = dollars(c); if (st.mirror) st.mirror(w.textContent); };   // the bonus HUD total mirrors the WIN meter itself
+  const showWin = (w, c) => { w.textContent = meterTxt(c); if (st.mirror) st.mirror(w.textContent); };   // the bonus HUD total mirrors the WIN meter itself
   function setWin(cents, animate = true, ms = 450, drop = false) {   // drop: the one place the meter may go down (ONE MORE CALL taken and lost)
     cents = drop ? cents : Math.max(cents, st.winTarget); st.winTarget = cents; const w = $('win'); w.dataset.c = cents;
     const from = st.winShown, tok = (setWin.tok = (setWin.tok || 0) + 1);
@@ -76,11 +104,11 @@
     return new Promise((res) => Tick.add((now) => {
       if (tok !== setWin.tok) { res(); return false; }
       const k = st.skip ? 1 : Math.max(0, Math.min(1, (now - t0) / dur)), e = 1 - Math.pow(1 - k, 3);   // a tap skips the count-up; rAF timestamps can precede t0 inside the same frame: clamp so the total never dips
-      st.winShown = Math.round(from + (cents - from) * e); showWin(w, st.winShown);
+      st.winShown = st.frac ? from + (cents - from) * e : Math.round(from + (cents - from) * e); showWin(w, st.winShown);
       if (k >= 1) { st.winShown = cents; showWin(w, cents); res(); return false; } return true;
     }));
   }
-  function resetWin() { setWin.tok = (setWin.tok || 0) + 1; st.winShown = st.winTarget = 0; const w = $('win'); w.dataset.c = 0; w.textContent = dollars(0); }
+  function resetWin() { setWin.tok = (setWin.tok || 0) + 1; st.frac = false; st.winShown = st.winTarget = 0; const w = $('win'); w.dataset.c = 0; w.textContent = dollars(0); }
   function setBal(v, animate) {
     const from = st.balShown, tok = (setBal.tok = (setBal.tok || 0) + 1), el = $('bal'); st.bal = v;
     const f = (n) => dollars(n);
@@ -96,7 +124,7 @@
     if (sp) { sp.textContent = cb ? 'CALLBACK' : 'SPIN'; sp.style.fontSize = cb ? '15px' : ''; }
     $('spin').classList.toggle('cb', cb);
     $('bet').textContent = dollars(cb ? cbBetNow() : bet()); $('betDn').disabled = st.busy || cb || st.betIdx === 0; $('betUp').disabled = st.busy || cb || st.betIdx === st.bets.length - 1;
-    const bp = buyPrices(); $('buy').disabled = st.busy || !bp.length || cb; $('buyFrom').textContent = cb ? 'Callback first' : bp.length ? 'from ' + dollars(Math.min(...bp.map((x) => x[1])) * bet() / 10) : 'n/a';   // U15: buy prices follow the bet, a Callback shows its own and freezes it: no buying until it is played
+    const bp = buyList(); $('buy').disabled = st.busy || !bp.length || cb; $('buyFrom').textContent = cb ? 'Callback first' : bp.length ? 'from ' + dollars(Math.min(...bp.map((x) => x[1]))) : 'n/a';   // U15: buy prices follow the bet, a Callback shows its own and freezes it: no buying until it is played
   }
   function setBusy(b) { st.busy = b; $('spin').classList.toggle('run', b); $('spin').classList.toggle('idle', !b); drawBet(); }
   function toast(t, ms = 1800) { const d = document.createElement('div'); d.className = 'toast'; d.textContent = t; stage.appendChild(d); setTimeout(() => d.remove(), ms); }
@@ -171,7 +199,8 @@
   }
 
   // ------------------------------------------------------------------ the round
-  const MAXTXT = 'MAX ' + E.MAX_WIN_X.toLocaleString('en-US') + 'x';
+  const maxX = () => (st.live && st.server && Number.isFinite(st.server.maxWinX) ? st.server.maxWinX : E.MAX_WIN_X);   // the live cap (server cfg.maxWinTenths) for a signed-in player
+  const maxTxt = () => 'MAX ' + maxX().toLocaleString('en-US') + 'x';
   const RIB_IDLE = '5+ touching = win';
   const DEFAULT_TXT = { pick: 'first lead picked', more: 'banked' };    // what the server does when nobody decides (timeout, disconnect, autoplay)
   const LOST_MS = 9000;                                                 // an answer the server owes us (after the timer ran out, or after a decide) must come within this
@@ -208,16 +237,20 @@
     const ctx = {
       bet: b, kind, E, st, run, p, script: p.script || p.partial, callback: !!p.callback, timer: mkTimer(), decisions: [], cur: { base: false, intro: false, spins: 0 },
       dollars, wait, anim, tween, say, toast, stamp, floatAt, stagePt, localPt, stage, board, sceneEl, ov, SFX: SFX_, FX: CC.fx, modal, waitTap, setWin, reduce, capped: false,
-      cents: (t) => t * b / 10,
+      cents: (t) => t * ctx.sc.num / ctx.sc.den,                                  // tenths -> cents on the round's own scale (pay.num / pay.den): bet / 10 for a spin, price / cost multiple for a buy
+      // a step amount (cluster pay, bubble, close): whole cents rounded to the nearest; under half a cent in a fractional round the multiple of the bet instead (0.4x): never $0.00 for a win that is not zero
+      amt(t, short) { const c = ctx.cents(t); if (ctx.frac && Math.round(c) < 1 && t > 0) return xTxt(t / 10); return short ? shortAmt(Math.round(c)) : dollars(Math.round(c)); },
+      meterTxt,
       bonusOn() { stage.classList.add('bonus'); SFX_.music('bonus'); }, bonusOff() { stage.classList.remove('bonus'); SFX_.music('base'); },
       // ribbon: left = mode name while a bonus runs (else the first text), right = the status text
       rib(l, r) { if (ctx.modeName) { $('ribL').textContent = ctx.modeName; $('ribR').textContent = l === ctx.modeName ? (r || '') : l + (r ? ' ' + r : ''); } else { $('ribL').textContent = l; $('ribR').textContent = r == null ? '' : r; } },
       // add tenths to the running total (never decreases, never exceeds the server's round total); `raw` is what the script asked for, for the self-check
-      addWin(t, ms) { run.raw += t; const add = Math.max(0, Math.min(t, run.total - run.t)); run.t += add; return setWin(run.t * b / 10, true, ms || 450); },
+      addWin(t, ms) { run.raw += t; const add = Math.max(0, Math.min(t, run.total - run.t)); run.t += add; return setWin(ctx.cents(run.t), true, ms || 450); },
       willBig: final && E.winTier(p.totalWinTenths / 10) in TIER_LVL, isLast: true,
       pickTargets: (choices, cb) => CC.board.pickTargets(choices, cb)       // for the pick prompt (CC.pull.askPick): taps on the lit squares
     };
     ctx.playSpin = (sp, o) => playSpin(ctx, sp, o);
+    ctx.rules = st.rules || null; ctx.sc = scaleOf(p, b); ctx.frac = ctx.sc.num % ctx.sc.den !== 0; st.frac = ctx.frac; ctx.bankCents = null;
     ctx.decide = { pick: (pend) => decisionPoint(ctx, 'pick', pend), more: (pend) => decisionPoint(ctx, 'more', pend) };
     ctx.moreOutcome = () => moreOutcome(ctx);
     advance(ctx, p);
@@ -225,6 +258,7 @@
   }
   function advance(ctx, r) {                                   // a newer result of the same round: longer script, maybe the final totals
     ctx.p = r; ctx.script = r.script || r.partial || ctx.script;
+    if (r.pay || r.costTenths != null) { ctx.sc = scaleOf(r, ctx.bet); ctx.frac = ctx.sc.num % ctx.sc.den !== 0; }
     if (r.status === 'pending') { const ms = r.timeoutMs || (st.server && st.server.pull && st.server.pull.decisionMs) || 20000; syncTimer(ctx.timer, r.expiresAt, ms); }
     else { ctx.run.total = r.totalWinTenths; const m = r.pull && r.pull.more; ctx.willBig = E.winTier(r.totalWinTenths / 10) in TIER_LVL && !(m && m.take && !m.won); }   // U17: a lost gamble gets no BIG WIN tier
   }
@@ -270,6 +304,8 @@
       say('idle', 'AUTO: ' + dflt); const r = await nextResult(ctx, box, LOST_MS); advance(ctx, r); return r;
     }
     const reg = { closed: false, close() {} }, iv = { id: 0 };
+    // ONE MORE CALL: the server's whole-cent figures are what is shown AND what is paid. The WIN meter reads the bank amount while the prompt is up (the meter has run on exact tenths so far)
+    if (k === 'more' && Number.isFinite(pend.bankCents)) { ctx.bankCents = pend.bankCents; if (ctx.frac) setWin(pend.bankCents, false, 0, true); }
     ctx.promptOpen = k; ctx.promptOpenedAt = performance.now(); dbgRow.shown = true;
     // the prompt is on screen: assume the server's `ready` re-arm gives a full clock (shown at once, no flicker); its g:coldcall:timer reply (authoritative) corrects it, a `rate` error on ready is ignored
     { const t = ctx.timer; t.at = Date.now(); t.expiresAt = t.at + (t.timeoutMs || 20000); t.synced = false; t.assumed = true; }
@@ -316,7 +352,7 @@
           const b = pend.choices.map((p) => `<button class="btn alt" data-v="${p}" data-pick="${p}" style="padding:6px 12px;font-size:16px">R${((p / E.COLS) | 0) + 1} C${(p % E.COLS) + 1}</button>`).join('');
           html = `<div class="card"><h2>PICK A LEAD</h2><p>Tap a lit square (or a button). That lead gets the better call. <small>Time left: <span class="ccT">${secs()}</span>s</small></p><div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center">${b}</div></div>`;
         } else {
-          const W = ctx.dollars(ctx.cents(pend.W)), X = ctx.dollars(ctx.cents(pend.W * pend.mult));
+          const hasC = Number.isFinite(pend.bonusCents), W = ctx.dollars(hasC ? pend.bonusCents : Math.round(ctx.cents(pend.W))), X = ctx.dollars(hasC ? pend.bonusCents * pend.mult : Math.round(ctx.cents(pend.W * pend.mult)));
           html = `<div class="card"><h2>ONE MORE CALL?</h2><p>The bonus paid <b>${W}</b>. Hang up and keep it, or call once more: ${Math.round(pend.pWin * 1000) / 10}% to win <b>${X}</b>, otherwise <b>${ctx.dollars(0)}</b>. <small>Time left: <span class="ccT">${secs()}</span>s</small></p><button class="btn" id="cc_more_take" data-v="take">ONE MORE CALL</button><button class="btn alt" id="cc_more_bank" data-v="bank">HANG UP: KEEP ${W}</button></div>`;
         }
         const pm = modal(html), sc = ov.lastElementChild; sc.classList.add('ph'); sc.style.background = 'none'; sc.style.pointerEvents = 'none'; sc.style.alignItems = 'end';
@@ -338,7 +374,7 @@
       const shown = await PA('moreOutcome', m, ctx);
       if (shown === undefined && !(CC.pull && CC.pull.moreOutcome)) { ctx.stamp(m.won ? 'ONE MORE CALL: WON' : 'ONE MORE CALL: LOST', m.won ? 'x' + m.mult : 'the bonus is gone', 1500, null, m.won ? 'hi' : ''); if (m.won) SFX_.win(2); else SFX_.sting(); await wait(1500); }
       const delta = ctx.run.total - ctx.run.t; ctx.run.raw += delta; ctx.run.t = ctx.run.total;
-      await setWin(ctx.run.total * ctx.bet / 10, true, 700, delta < 0);
+      await setWin(p.totalWin, true, 700, true);                  // the server's whole cents (a lost gamble is the one drop; at a fractional bet the exact running total may sit a cent off)
     } else if (p.auto === 'autoplay') { say('idle', 'AUTO: banked'); }   // U16: AUTO is autoplay only; a timeout was already captioned TIME'S UP
     ctx.cur.more = m.take ? (m.won ? 'won' : 'lost') : 'banked';
   }
@@ -347,7 +383,7 @@
     const p = ctx.p, S = ctx.script;
     if (S.spin) {
       ctx.rib(S.buy === 'call' ? 'THE CALL' : S.buy === 'hunt' ? 'BELL HUNT' : 'DIALING', ''); await playSpin(ctx, S.spin);
-      ctx.rib(RIB_IDLE, MAXTXT);
+      ctx.rib(RIB_IDLE, maxTxt());
       if (S.spin.bells === 2 && !S.bonus) await tease(ctx);
     } else if (ctx.callback) { ctx.rib('THE CALLBACK', ''); say('buy', 'Callback time. This one is free.'); SFX_.sting(); await wait(700); }
     else { say('buy'); SFX_.sting(); await wait(500); }
@@ -355,7 +391,7 @@
     if (S.bonus) { if (S.spin) CC.hero.mood('hype', 1800); await CC.bonus.run(ctx); }
     if (ctx.p.status === 'pending') throw new Abort('still open');
     if (ctx.run.t !== ctx.run.total) { dbg.mismatch.push({ round: ctx.p.roundId, what: 'running total', shown: ctx.run.t, script: ctx.run.total }); await ctx.addWin(ctx.run.total - ctx.run.t, 400); }
-    ctx.rib(RIB_IDLE, MAXTXT);
+    ctx.rib(RIB_IDLE, maxTxt());
     return ctx;
   }
   function sweep(keepHot) {                                    // end-of-round cleanup: nothing created for a round may outlive it (keepHot: the warm squares shown while idle stay lit)
@@ -369,7 +405,8 @@
     const bs = CC.board.state(), S = ctx.script, capped = !!(p.maxed || S.capped || ctx.capped);
     if (!capped && ctx.run.raw !== ctx.run.total) bad('script adds', ctx.run.raw, ctx.run.total);
     if (st.winShown !== p.totalWin) bad('win readout (cents)', st.winShown, p.totalWin);
-    if (p.totalWin !== ctx.cents(p.totalWinTenths)) bad('server cents', p.totalWin, ctx.cents(p.totalWinTenths));
+    if (ctx.frac ? Math.abs(p.totalWin - ctx.cents(p.totalWinTenths)) > 2 : p.totalWin !== ctx.cents(p.totalWinTenths)) bad('server cents', p.totalWin, ctx.cents(p.totalWinTenths));   // fractional: whole cents within 2c of the exact amount (base and bonus round apart)
+    if (p.pay && Number.isFinite(p.pay.win) && p.pay.win !== p.totalWin) bad('pay.win', p.pay.win, p.totalWin);
     if (bs.cells !== 30) bad('cells', bs.cells, 30); if (bs.ovl) bad('overlay nodes', bs.ovl, 0); if (bs.hot) bad('hot squares', bs.hot, 0);
     const left = floatsEl.children.length + ov.children.length + sceneEl.children.length + stage.querySelectorAll('.stamp,.accept,.banner,.fly,.flash').length; if (left) bad('leftover nodes', left, 0);
     const last = S.bonus && S.bonus.spins.length ? S.bonus.spins[S.bonus.spins.length - 1] : S.spin; if (last) { const g = last.steps.length ? last.steps[last.steps.length - 1].grid : last.grid, dom = CC.board.domGrid(); for (let i = 0; i < 30; i++) if (dom[i] !== E.SYM[g[i]]) { bad('final grid', dom.join(), g.map((x) => E.SYM[x]).join()); break; } }
@@ -387,7 +424,7 @@
     if (st.modal) return;
     if (kind !== 'spin' && cbPending()) { toast('Play your Callback first.', 2000); return; }
     const v = pview(), cbv = st.live && kind === 'spin' && v && v.cb ? v.cb : null;       // a Callback is pending: this spin is it (free, at its own bet)
-    const b = bet(), cost = cbv ? 0 : costT(kind) * b / 10;
+    const b = bet(), cost = cbv ? 0 : costC(kind, b);                      // whole cents: the bet, or the server's buy price at this bet
     if (avail() < cost) { toast(kind === 'spin' ? 'Not enough funds. Lower your bet.' : 'Not enough funds for that bonus.'); st.auto = false; $('auto').classList.remove('on'); return; }
     if (P('endGhost')) syncWarm();   // (chris 10-06 FB1) a would-have-closed stamp still showing is dropped, the warm squares come back
     SFX_.init(); wake(); dbg.started = (dbg.started || 0) + 1; setBusy(true); st.skip = false; CC.hero.set('idle'); sweep(true); resetWin(); st.cbBet = cbv ? cbv.bet : null; drawBet(); setBal(st.bal - cost, true); SFX_.spin(); say(kind === 'spin' ? 'spin' : 'buy');
@@ -421,13 +458,15 @@
     try {
       if (ctx && ctx.run.t !== ctx.run.total) await ctx.addWin(ctx.run.total - ctx.run.t, 200);
       if (!ctx) { st.winTarget = 0; await setWin(f.totalWin, false); }
+      else if (ctx.frac && st.winShown !== f.totalWin) { await setWin(f.totalWin, true, 300, true); }   // fractional-cent round: the meter lands on the whole cents the server really paid
       const winX = f.totalWinTenths / 10, tier = E.winTier(winX), amt = f.totalWin;
-      if (f.maxed || (ctx && ctx.capped) || (f.script && f.script.capped)) { stamp('MAX WIN', E.MAX_WIN_X.toLocaleString('en-US') + 'x. The round stops here.', 1700, null, 'hi'); SFX_.win(3); say('bigWin'); await wait(1400); }
+      if (f.maxed || (ctx && ctx.capped) || (f.script && f.script.capped)) { stamp('MAX WIN', maxX().toLocaleString('en-US') + 'x. The round stops here.', 1700, null, 'hi'); SFX_.win(3); say('bigWin'); await wait(1400); }
       const lost = f.pull && f.pull.more && f.pull.more.take && !f.pull.more.won;   // U17: no BIG WIN tier after a lost gamble, the plain total only
       if (tier in TIER_LVL && lost) { stamp('NICE!', 'x' + (winX >= 10 ? Math.round(winX) : winX.toFixed(1).replace(/\.0$/, '')), 1300); SFX_.win(1); say('smallWin'); await wait(900); }
       else if (tier in TIER_LVL) await bigWin(winX, amt, tier);
       else if (tier === 'sweet' || tier === 'nice') { stamp(tier === 'sweet' ? 'SWEET!' : 'NICE!', 'x' + (winX >= 10 ? Math.round(winX) : winX.toFixed(1).replace(/\.0$/, '')), 1300); SFX_.win(tier === 'sweet' ? 2 : 1); say(tier === 'sweet' ? 'nice' : 'smallWin'); await wait(900); }
       else if (amt > 0) { SFX_.coin(); say('smallWin'); }
+      else if (f.totalWinTenths > 0) { say('idle', 'Under one cent: it rounded down, nothing paid this time.'); }
       else {
         st.dead = kind === 'spin' ? st.dead + 1 : 0;
         if (st.dead >= RAGE_STREAK) { st.dead = 0; CC.hero.set('rage', 2400); say('rage'); }
@@ -547,7 +586,7 @@
   const SEEN_KEY = 'cc_dc_seen';
   const seenGet = () => { try { return localStorage.getItem(SEEN_KEY); } catch (e) { return null; } };
   const seenSet = (id) => { try { localStorage.setItem(SEEN_KEY, id); } catch (e) { /* private mode: the line may repeat once */ } };
-  const fmtMode = (mode, c) => (mode === 'chips' ? Math.round(c).toLocaleString('en-US') + ' chips' : usd(c));
+  const fmtMode = (mode, c) => (mode === 'chips' ? chipsFmt(c) + (chipsUsd() ? '' : ' chips') : usd(c));
   const opensOf = (sv) => (sv && (sv.opens || (sv.open ? [sv.open] : []))) || [];
   function markDropped(ctx, via) {
     if (!ctx || ctx.dropped || !ctx.p || ctx.p.status !== 'pending') return;
@@ -578,7 +617,7 @@
     else if (h) { seenSet(x.id); msg = 'Line dropped: your call was banked: ' + fmtMode(h.mode || x.mode, h.totalWin); }
     else if (!open) msg = 'That call was cancelled. Your bet is refunded.';
     if (msg) { toast(msg, 4500); say('idle', msg); }
-    $('ribL').textContent = RIB_IDLE; $('ribR').textContent = MAXTXT;
+    $('ribL').textContent = RIB_IDLE; $('ribR').textContent = maxTxt();
     setBal(walletBal(), true); setBusy(false); wake(); syncWarm(); syncView();
     if (open) adopt(open);
   }
@@ -611,6 +650,7 @@
   function syncView() {
     drawBet();
     if (!st.live) return;
+    P('setOn', !(st.rules && st.rules.on === false));            // rules.on === false: the PULL is switched off (no lead list, Callback, pot or decisions; spins are plain)
     const v = pview(); if (v) { P('setView', { ...v, at: Date.now() }, st.mode); P('onBetChange', bet()); }
     const pot = st.pot[st.mode]; if (pot) P('setPot', pot);
     syncWarm();
@@ -624,13 +664,16 @@
     if (m.state) st.server = m.state;
     if (m.name) st.me = m.name;
     if (!st.live) { st.live = true; T.kind = BRIDGE ? 'bridge' : 'socket'; setBets(Array.isArray(m.bets) && m.bets.length ? m.bets : DEFAULT_BETS); }
+    else if (Array.isArray(m.bets) && m.bets.length && st.bets.join() !== m.bets.join()) {   // the shell's wallet message can open the game live BEFORE the state does: the ladder (1c / 2c / 5c) arrives with the state, keep the bet the player is on
+      const cur = bet(); st.bets = m.bets.slice(); const i = st.bets.indexOf(cur); if (i >= 0) st.betIdx = i; else setBets(m.bets);
+    }
     if (m.mode === 'play' || m.mode === 'chips') st.mode = m.mode;
     applyWallet(m.wallet || m.balances); modeUi(); if (!st.busy) setBal(walletBal(), false);
     const s = m.state, pl = s && s.pull;
     if (pl && !st.busy) {
       for (const md of ['play', 'chips']) if (pl[md]) st.pv[md] = pl[md];
       if (s.pot) st.pot = { play: s.pot.play || null, chips: s.pot.chips || null };
-      P('rules', pl.rules || E.CFG.pull);
+      st.rules = pl.rules || null; P('rules', pl.rules || E.CFG.pull);
       if (Array.isArray(s.feed)) s.feed.forEach((ev) => onFloor('feed', ev));
     }
     // a reconnect whose state no longer lists the round this screen is still playing (server restart: voidStored refunded it): tell the round now, instead of
@@ -645,7 +688,24 @@
     if (s && s.open && !st.busy && !st.modal) adopt(s.open);    // a decision was left open (reload, another tab): play it out
   }
   function goPractice(msg) { st.live = false; T.kind = 'practice'; pend.clear(); inbox.clear(); setBets(DEFAULT_BETS); setBal(st.pracBal, false); modeUi(); drawBet(); if (msg) toast(msg, 2400); }
-  function setBets(list) { st.bets = list.slice(); const i = st.bets.indexOf(100); st.betIdx = i >= 0 ? i : Math.min(3, st.bets.length - 1); }
+  function setBets(list) { st.bets = list.slice(); const i = st.bets.indexOf(100); st.betIdx = i >= 0 ? i : Math.min(3, st.bets.length - 1); }   // the server's list (1c to $25), default bet $1
+  const sameList = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+  const requestState = () => { if (!st.live) return; if (BRIDGE) toParent({ type: 'hello' }); else if (T.sock) T.sock.emit('g:coldcall:state', {}); };
+  // g:coldcall:cfg (the admin changed the slot math): store the new numbers; the NEXT round uses them. A round in flight, a spin in animation and an open decision finish on what they started on:
+  // nothing here touches a prompt, a timer or the board. Only the idle screen reads them: the bet / buy labels, the buy menu and the info screen when they are open.
+  function onCfg(m) {
+    if (!m || typeof m !== 'object' || !st.live) return;
+    const sv = st.server || (st.server = {});
+    if (m.cfg && typeof m.cfg === 'object') { sv.cfg = m.cfg; if (Number.isFinite(m.cfg.maxWinTenths)) sv.maxWinX = m.cfg.maxWinTenths / 10; if (m.cfg.buyCost) sv.buyCostX = Object.fromEntries(Object.entries(m.cfg.buyCost).map(([k, v]) => [k, v / 10])); }
+    if (m.buyPriceCents && typeof m.buyPriceCents === 'object') sv.buyPriceCents = m.buyPriceCents;
+    if (typeof m.rtp === 'string') sv.rtp = m.rtp;
+    if (m.rules && typeof m.rules === 'object') { st.rules = m.rules; if (sv.pull) sv.pull.rules = m.rules; P('rules', m.rules); }
+    if (Array.isArray(m.bets) && m.bets.length && !sameList(m.bets, st.bets)) { const cur = bet(); st.bets = m.bets.slice(); const i = st.bets.indexOf(cur); st.betIdx = i >= 0 ? i : Math.min(st.betIdx, st.bets.length - 1); }
+    dbg.cfg = (dbg.cfg || 0) + 1;
+    if (!st.busy) { drawBet(); if ($('ribR').textContent.startsWith('MAX ')) $('ribR').textContent = maxTxt(); syncView(); }
+    refreshInfo(); refreshBuy();
+    if (m.rules && m.rules.on && !st.pv[st.mode] && !st.busy) requestState();   // the PULL was off and is on again: the server's view for this account
+  }
   function initTransport() {
     const bar = document.createElement('div'); bar.id = 'modebar';
     bar.innerHTML = '<div class="mb"><button data-m="play">Play $</button><button data-m="chips">Chips</button></div><span id="modenote"></span>'; stage.appendChild(bar);
@@ -656,7 +716,7 @@
         if (ev.source !== window.parent) return; const m = ev.data || {};
         if (m.type === 'init') goLive(m); else if (m.type === 'wallet') { if (st.live) applyWallet(m.wallet || m); else goLive(m); }
         else if (m.type === 'result') onResult(m.payload); else if (m.type === 'error') onError({ message: m.message || 'Spin refused.', code: m.code, open: m.open });
-        else if (m.type === 'floor') onFloor(m.kind, m.payload); else if (m.type === 'timer') onTimer(m.payload); else if (m.type === 'voided') onVoided(m.payload);
+        else if (m.type === 'floor') onFloor(m.kind, m.payload); else if (m.type === 'timer') onTimer(m.payload); else if (m.type === 'voided') onVoided(m.payload); else if (m.type === 'cfg') onCfg(m.payload); else if (m.type === 'pref') { if (st.live && !st.busy) { setBal(walletBal(), false); syncView(); } }
         else if (m.type === 'disconnect') onDisconnect(); else if (m.type === 'history') onHistory(m.payload);
       });
       addEventListener('keydown', (e) => { if (e.key === 'Escape') toParent({ type: 'esc' }); });
@@ -672,7 +732,7 @@
         sock.on('wallet', (w) => applyWallet(w));
         sock.on('g:coldcall:result', onResult); sock.on('g:coldcall:timer', onTimer); sock.on('g:coldcall:voided', onVoided);
         sock.on('disconnect', onDisconnect); sock.on('g:coldcall:history', onHistory);
-        sock.on('floor:feed', (e) => onFloor('feed', e)); sock.on('floor:pot', (e) => onFloor('pot', e));
+        sock.on('g:coldcall:cfg', onCfg); sock.on('floor:feed', (e) => onFloor('feed', e)); sock.on('floor:pot', (e) => onFloor('pot', e));
         sock.on('error', onError);
       };
       document.head.appendChild(s);
@@ -707,32 +767,62 @@
     });
     $('buy').addEventListener('click', async () => {
       if (st.busy || st.modal) return; if (cbPending()) { toast('Play your Callback first.', 2000); return; } SFX_.init(); SFX_.click();
-      const b = bet(), list = buyPrices(); if (!list.length) return;
-      const opts = list.map(([id, t]) => { const c = t * b / 10; return `<button class="buyopt" id="buy_${id}" data-buy="${id}" data-v="${id}" ${avail() < c ? 'disabled' : ''}><b>${BUY_INFO[id][0]}</b><span>${BUY_INFO[id][1]}</span><em>${dollars(c)}</em></button>`; }).join('');
-      const v = await modal(`<div class="card"><h2>Buy a bonus</h2><div class="buygrid">${opts}</div><button class="btn alt" data-v="x">Not now</button></div>`, { backdrop: true });
+      const b = bet(), list = buyList(b); if (!list.length) return;
+      const opts = list.map(([id, c]) => `<button class="buyopt" id="buy_${id}" data-buy="${id}" data-v="${id}" ${avail() < c ? 'disabled' : ''}><b>${BUY_INFO[id][0]}</b><span>${buyDesc(id)}</span><em>${dollars(c)}</em></button>`).join('');
+      const v = await modal(`<div class="card buymenu" data-bet="${b}"><h2>Buy a bonus</h2><div class="buygrid">${opts}</div><button class="btn alt" data-v="x">Not now</button></div>`, { backdrop: true });
       const hit = list.find(([id]) => id === v); if (!hit) return;
-      const c = hit[1] * b / 10;
-      const ok = await modal(`<div class="card"><h2>Confirm</h2><p>Buy <b>${BUY_INFO[v][0]}</b> for <b>${dollars(c)}</b>?<br><small>The price is charged now and it plays straight away.</small></p><button class="btn" id="buy_confirm" data-v="yes">Confirm</button><button class="btn alt" data-v="x">Cancel</button></div>`, { backdrop: true });
+      const c = (buyList(b).find(([id]) => id === v) || hit)[1];                  // a price swap while the menu was open: the live one
+      const ok = await modal(`<div class="card buyconfirm" data-buy="${v}" data-bet="${b}"><h2>Confirm</h2><p>Buy <b>${BUY_INFO[v][0]}</b> for <b class="bp">${dollars(c)}</b>?<br><small>The price is charged now and it plays straight away.</small></p><button class="btn" id="buy_confirm" data-v="yes">Confirm</button><button class="btn alt" data-v="x">Cancel</button></div>`, { backdrop: true });
       if (ok === 'yes') play(v);
     });
-    $('info').addEventListener('click', async () => {
-      if (st.busy || st.modal) return; SFX_.init(); SFX_.click();
-      const C = E.CFG, x = (t) => { const n = t / 10; return n >= 100 ? String(Math.round(n)) : String(+n.toFixed(1)); };
-      const head = ['5', '6', '7', '8', '9', '10', '11', '12', '13+'].map((s) => `<th>${s}</th>`).join('');
-      const rows = E.SYM.slice(0, E.NREG).reverse().map((s) => `<tr><td class="sy"><img src="${CC.assets.symUrl(s)}" alt=""><span>${NAMES[s]}</span></td>${C.pay[s].map((t) => `<td>${x(t)}</td>`).join('')}</tr>`).join('');
-      const range = (a) => x(a[0][0]) + 'x to ' + x(a[a.length - 1][0]) + 'x';
-      const pr = modal(`<div class="card info"><h2>How it plays</h2>
+    $('info').addEventListener('click', openInfo);
+  }
+  // the info screen: the pay table, cap, spins and RTP line of the LIVE math (signed in: state.cfg / g:coldcall:cfg; practice and an older server: the engine copy). Built when it opens and
+  // rebuilt in place when a g:coldcall:cfg arrives while it is open (scroll kept); it can only be open between rounds, so no prompt is ever repainted.
+  const liveCfg = () => (st.live && st.server && st.server.cfg) || null;
+  function infoCard() {
+    const lc = liveCfg(), C = lc ? Object.assign({}, E.CFG, { bubbles: lc.bubbles || E.CFG.bubbles, upsell: lc.upsell || E.CFG.upsell, spins: lc.spins || E.CFG.spins, maxSpins: lc.maxSpins || E.CFG.maxSpins }) : E.CFG;
+    const pay = (lc && lc.payTenths) || E.CFG.pay, x = (t) => { const n = t / 10; return n >= 100 ? String(Math.round(n)) : String(+n.toFixed(1)); };
+    const head = ['5', '6', '7', '8', '9', '10', '11', '12', '13+'].map((s) => `<th>${s}</th>`).join('');
+    const rows = E.SYM.slice(0, E.NREG).reverse().map((s) => `<tr><td class="sy"><img src="${CC.assets.symUrl(s)}" alt=""><span>${NAMES[s]}</span></td>${pay[s].map((t) => `<td>${x(t)}</td>`).join('')}</tr>`).join('');
+    const range = (a) => x(a[0][0]) + 'x to ' + x(a[a.length - 1][0]) + 'x';
+    const label = st.live && st.server && typeof st.server.rtp === 'string' && st.server.rtp ? 'RTP: ' + st.server.rtp.replace(/[<>&]/g, '') + '.' : '';   // exactly what the server sends ("custom settings, not measured" included)
+    const small = st.live && st.bets.some((b) => b < 10) ? `<p><b>Small bets.</b> At 1c, 2c and 5c a win is paid in whole cents: the cent after the decimal point is rounded up or down at random, with the fraction as the odds, so the payback does not change. A win under one cent can pay a cent or nothing. Bonus prices are rounded to the nearest cent and play at a fair stake.</p>` : '';
+    const bc = (lc && lc.buyCost) || E.CFG.buyCost, bl = buyList(bet());
+    const buys = bl.length ? `<p><b>Buying a bonus.</b> ${bl.map(([id, c]) => `${BUY_INFO[id][0]} ${x(bc[id])}x your bet (${dollars(c)} at your bet)`).join(', ')}. The price is a whole number of cents, rounded to the nearest cent, and is charged before it plays.</p>` : '';
+    return `<div class="card info"><h2>How it plays</h2>
         <p><b>Clusters.</b> Land 5 or more of the same symbol touching each other (up, down, left, right) to win. <b>The Closer</b> is wild for any pay symbol.</p>
         <p><b>Cascades.</b> A win clears the cluster and every other matching symbol on the board. The rest fall, new ones drop in, and it repeats while wins keep forming.</p>
         <p><b>Hot leads.</b> Every square in a winning cluster turns into a sticky note and stays lit while symbols fall.</p>
         <p><b>The Call.</b> When the cascade ends and a <b>rotary phone</b> is on the board, every hot lead is dialed and flips to a <b>quote bubble</b> (bronze ${range(C.bubbles.bronze)}, silver ${range(C.bubbles.silver)}, gold ${range(C.bubbles.gold)}), an <b>UPSELL</b> (${C.upsell.map((u) => 'x' + u[0]).join(' ')}, multiplies the bubbles and closes next to it) or <b>THE CLOSE</b>, which collects every bubble on the board. After a close the other leads are dialed again. The bubbles and closes on the board pay.</p>
         <p><b>Bells.</b> The desk bells that landed in a spin: 3 = DIALING FOR DOLLARS (${C.spins.bonus1} free spins, leads stay lit until a phone calls them), 4 = ALWAYS BE CLOSING (${C.spins.bonus2} free spins, leads stay lit the whole bonus), 5 or more = QUOTE ACCEPTED (${C.spins.bonus3} free spins, a phone on every spin, no bronze bubbles). In a bonus 2 bells add 2 spins, 3 add 4; 4 or more in DIALING FOR DOLLARS upgrades it to ALWAYS BE CLOSING. Up to ${C.maxSpins} spins.</p>
-        <p class="tl">Pay for a cluster, x bet</p><div class="pt"><table><tr><th></th>${head}</tr>${rows}</table></div>
-        <p><small>Max win ${E.MAX_WIN_X.toLocaleString('en-US')}x. ${st.server && st.server.rtp ? 'RTP ' + st.server.rtp + '.' : ''} Play money only: no deposits, no payouts.</small></p>
-        <button class="btn" data-v="x">Close</button><div class="cue">SCROLL FOR THE PAY TABLE</div></div>`, { backdrop: true });
-      const cd = ov.querySelector('.card.info'), cue = cd.querySelector('.cue'); const chk = () => cue.classList.toggle('end', cd.scrollTop + cd.clientHeight >= cd.scrollHeight - 6); cd.addEventListener('scroll', chk); chk();
-      await pr;
-    });
+        ${buys}${small}<p class="tl">Pay for a cluster, x bet</p><div class="pt"><table><tr><th></th>${head}</tr>${rows}</table></div>
+        <p><small>Max win ${maxX().toLocaleString('en-US')}x. ${label} Play money only: no deposits, no payouts.</small></p>
+        <button class="btn" data-v="x">Close</button><div class="cue">SCROLL FOR THE PAY TABLE</div></div>`;
+  }
+  const infoCue = (cd) => { const cue = cd.querySelector('.cue'), chk = () => cue.classList.toggle('end', cd.scrollTop + cd.clientHeight >= cd.scrollHeight - 6); cd.addEventListener('scroll', chk); chk(); };
+  async function openInfo() {
+    if (st.busy || st.modal) return; SFX_.init(); SFX_.click();
+    const pr = modal(infoCard(), { backdrop: true });
+    infoCue(ov.querySelector('.card.info'));
+    await pr;
+  }
+  function refreshInfo() {                                      // a live config swap while the info screen is open: rebuild it in place, same scroll
+    const cd = ov.querySelector('.card.info'); if (!cd) return; const sc = cd.parentElement, top = cd.scrollTop;
+    sc.innerHTML = infoCard(); const c2 = sc.querySelector('.card.info'); P('decorate', c2); infoCue(c2); c2.scrollTop = top;
+  }
+  function refreshBuy() {                                       // a live price swap while the buy menu / its confirm is open: the open one shows the new price (the server charges the live price)
+    const m = ov.querySelector('.card.buymenu'), cf = ov.querySelector('.card.buyconfirm');
+    if (m) {
+      const b = +m.dataset.bet, list = buyList(b), g = m.querySelector('.buygrid'); if (!g) return;
+      if (!list.length) { const sc = m.parentElement; if (sc && sc._done) sc._done('x'); return; }
+      g.innerHTML = list.map(([id, c]) => `<button class="buyopt" id="buy_${id}" data-buy="${id}" data-v="${id}" ${avail() < c ? 'disabled' : ''}><b>${BUY_INFO[id][0]}</b><span>${buyDesc(id)}</span><em>${dollars(c)}</em></button>`).join('');
+    }
+    if (cf) {
+      const b = +cf.dataset.bet, id = cf.dataset.buy, hit = buyList(b).find(([k]) => k === id), sc = cf.parentElement;
+      if (!hit) { if (sc && sc._done) sc._done('x'); toast('That bonus is not on offer any more.', 2200); return; }
+      const bp = cf.querySelector('.bp'), t = dollars(hit[1]); if (bp && bp.textContent !== t) { bp.textContent = t; toast('The price changed: now ' + t + '.', 2600); }
+    }
   }
 
   // ------------------------------------------------------------------ boot (called by boot.js)
@@ -744,7 +834,7 @@
     const hero = $('hero'); hero.src = CC.assets.heroUrl(); try { await hero.decode(); } catch (e) { /* shown anyway */ }
     $('splashHero').src = CC.assets.heroUrl();
     if (Q.has('shot') || Q.has('mock')) { const qs = document.createElement('script'); qs.src = 'qa.js'; document.head.appendChild(qs); }   // QA shot flag: see qa.js
-    CC.board.idle(); $('ribR').textContent = 'MAX ' + E.MAX_WIN_X.toLocaleString('en-US') + 'x';
+    CC.board.idle(); $('ribR').textContent = maxTxt();
     CC.caption.say('idle'); drawBet();
     const start = () => { SFX_.init(); splash.classList.add('out'); SFX_.music('base'); setTimeout(() => splash.remove(), 600); wake(); };
     go.disabled = false; go.textContent = 'Pick up';
@@ -755,7 +845,7 @@
     wake();
     CC.ready = true;
   }
-  CC.core = { boot, st, play, dollars, wait, anim, tween, speed, say, toast, stamp, floatAt, stagePt, localPt, modal, waitTap, setWin, bigWin, sweep, Tick, T, money, applyWallet, goLive, goPractice, E, stage, board, sceneEl, SFX: SFX_, FX: CC.fx,
+  CC.core = { boot, st, play, dollars, unit, meterTxt, shortAmt, xTxt, wait, anim, tween, speed, say, toast, stamp, floatAt, stagePt, localPt, modal, waitTap, setWin, bigWin, sweep, Tick, T, money, applyWallet, goLive, goPractice, E, stage, board, sceneEl, SFX: SFX_, FX: CC.fx,
     // pull hooks (transport -> look layer); also the way tests and builder B reach the round machinery
-    onResult, onError, onTimer, onVoided, onDisconnect, onHistory, onFloor, adopt, syncView, syncWarm, pview, inbox, cbPending };
+    onResult, onError, onTimer, onVoided, onCfg, buyList, openInfo, onDisconnect, onHistory, onFloor, adopt, syncView, syncWarm, pview, inbox, cbPending };
 })();

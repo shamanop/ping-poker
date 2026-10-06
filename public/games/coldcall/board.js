@@ -67,7 +67,7 @@
     SFX().clusterPop(i); if (fresh.length) setTimeout(() => SFX().hot(fresh.length), 120 * K().speed());
     for (const w of s.wins) {
       let sx = 0, sy = 0; w.pos.forEach((p) => { const [x, y] = centre(cells[p]); sx += x; sy += y; });
-      K().floatAt(Math.min(430, Math.max(90, sx / w.pos.length)), sy / w.pos.length, `<span>+${K().dollars(ctx.cents(w.pay))}</span>`);
+      K().floatAt(Math.min(430, Math.max(90, sx / w.pos.length)), sy / w.pos.length, `<span>+${ctx.amt(w.pay)}</span>`);
     }
     await K().wait(220);
     // 2. the cluster pops; the same-type sweep is flagged and goes a beat later

@@ -11,12 +11,15 @@
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const app = $('app'), board = $('board'), head = $('head'), ribbon = $('ribbon'), hud = $('hud'), scene = $('scene'), ribL = $('ribL'), ribR = $('ribR');
   const el = (tag, cls, html, id) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; if (id) e.id = id; return e; };
-  const S = { view: null, mode: 'play', pot: null, rules: null, bet: 0, prompt: null, rib: null, mine: null, idleKey: '', feed: [], fi: 0, phase: 0, seen: new Set(), demo: false, hold: null, bn: 0, potPend: null, potDone: false, lg: 0, gh: null };
+  const S = { off: false, view: null, mode: 'play', pot: null, rules: null, bet: 0, prompt: null, rib: null, mine: null, idleKey: '', feed: [], fi: 0, phase: 0, seen: new Set(), demo: false, hold: null, bn: 0, potPend: null, potDone: false, lg: 0, gh: null };
   const ARM_MS = 600;                                           // U1: a decision ignores taps for its first 600 ms (a skip tap that started before the prompt must not answer it)
   const st = () => K().st;
   const live = () => !!st().live;
   const chips = () => live() && st().mode === 'chips';
-  const money = (c) => K().dollars(c) + (chips() ? ' chips' : '');
+  const money = (c) => K().dollars(c) + K().unit();                       // Chips: the shell's money pref (chips, or dollars when the player picked USD: then no unit word)
+  const bare = (c) => K().dollars(c);
+  const plainChips = () => K().unit() === ' chips';
+  const capX = () => { const s = st(); return live() && s.server && Number.isFinite(s.server.maxWinX) ? s.server.maxWinX : E.MAX_WIN_X; };   // the live 10,000x
   const betNow = () => { const s = st(); return s.bets[s.betIdx]; };
   const pad2 = (n) => String(n).padStart(2, '0');
   const num = (n) => Math.round(n).toLocaleString('en-US');
@@ -66,18 +69,18 @@
   function potFlush() { if (!S.potPend) return; S.pot = S.potPend; S.potPend = null; drawPot(); }
   function drawPot() {
     const p = S.pot; if (!p || typeof p.bal !== 'number') { potb.hidden = true; return; }
-    const t = money(p.bal).replace(' chips', ''), prev = potb.dataset.v; potb.innerHTML = `<div class="m"><i></i>POT</div><b class="${t.length > 10 ? 'xs' : t.length > 8 ? 's' : ''}">${t}</b>`;
+    const t = bare(p.bal), prev = potb.dataset.v; potb.innerHTML = `<div class="m"><i></i>POT</div><b class="${t.length > 10 ? 'xs' : t.length > 8 ? 's' : ''}">${t}</b>`;
     if (prev != null && +prev !== p.bal) { potb.classList.add('tick'); setTimeout(() => potb.classList.remove('tick'), 700); } potb.dataset.v = p.bal;
   }
   // warm squares: the lit squares of a quiet board are the warm leads; each shows the bet it was made at (and only while the bet matches)
   function drawWarm() {
     const ovl = CC.board.ovl(); ovl.querySelectorAll('.wst').forEach((n) => n.remove());
     const v = S.view; if (!live() || st().busy || !v || !v.warm || !v.warm.length || v.warmBet !== S.bet) return;
-    v.warm.forEach((p) => { const t = el('div', 'wst', `<i>${money(v.warmBet).replace(' chips', '')}</i>`), [x, y] = CC.board.xy(p); t.style.left = x + 'px'; t.style.top = y + 'px'; ovl.appendChild(t); });
+    v.warm.forEach((p) => { const t = el('div', 'wst', `<i>${bare(v.warmBet)}</i>`), [x, y] = CC.board.xy(p); t.style.left = x + 'px'; t.style.top = y + 'px'; ovl.appendChild(t); });
   }
   const warnTxt = () => { const v = S.view; if (!v || !v.warm || !v.warm.length || v.warmBet === S.bet) return ''; const n = v.warm.length; return `${n} WARM ${n === 1 ? 'LEAD WORKS' : 'LEADS WORK'} AT ${money(v.warmBet).toUpperCase()} ONLY`; };
   function render() {
-    const on = live() && !!S.view; app.classList.toggle('pl-on', on);
+    const on = live() && !!S.view && !S.off; app.classList.toggle('pl-on', on);
     note.hidden = !on; leaf.hidden = !on; potb.hidden = !(on && S.pot);
     if (!on) { feedEl.hidden = true; ribbon.classList.remove('plf'); return; }
     drawNote(); drawLeaf(); drawPot(); drawWarm(); syncCb(); idleRibbon();
@@ -152,8 +155,11 @@
   }
   // U2: the three numbers are the ROUND's outcomes. base = what the trigger spin already paid (the WIN meter minus the bonus W); it stays in every outcome.
   function moreFigures(pend, ctx) {
+    // SHOWN = PAID: the server's whole cents (bankCents / winCents / baseCents / bonusCents); BANK pays bankCents, a won gamble winCents, a lost one baseCents. Never computed here from W x bet / 10.
+    if ([pend.bankCents, pend.baseCents, pend.bonusCents, pend.winCents].every(Number.isFinite)) return { baseT: pend.baseCents, bank: pend.bankCents, win: pend.winCents, lose: pend.baseCents, bonus: pend.bonusCents, base: pend.baseCents };
     const runT = ctx.run && typeof ctx.run.t === 'number' ? ctx.run.t : pend.W, baseT = Math.max(0, runT - pend.W);
-    return { baseT, bank: ctx.cents(baseT + pend.W), win: ctx.cents(baseT + pend.W * pend.mult), lose: ctx.cents(baseT), bonus: ctx.cents(pend.W), base: ctx.cents(baseT) };
+    const c = (t) => Math.round(ctx.cents(t));   // an older server without the whole-cent fields
+    return { baseT, bank: c(baseT + pend.W), win: c(baseT + pend.W * pend.mult), lose: c(baseT), bonus: c(pend.W), base: c(baseT) };
   }
   function askMore(pend, ctx) {
     return new Promise((res) => {
@@ -209,8 +215,8 @@
     G.leads.forEach((p) => { const s = $('slots').children[p]; if (s) s.classList.remove('plg'); const sq = CC.board.el(p); if (sq) sq.classList.remove('under'); }); CC.board.setHot([]); return true;
   }
   async function ghost(g, ctx) {
-    const ph = g && g.script, gr = rulesOf().ghost; if (!ph || !(g.pay > 0) || !live() || (gr && gr.minTenths > g.pay)) return;   // only at the knob's minTenths (50 = 5x)
-    const B = CC.board, ovl = B.ovl(), k = K(), amt = ctx.cents(g.pay), nodes = [];
+    const ph = g && g.script, gr = (ctx.rules || rulesOf()).ghost; if (!ph || !(g.pay > 0) || !live() || (gr && gr.minTenths > g.pay)) return;   // only at the knob's minTenths (50 = 5x)
+    const B = CC.board, ovl = B.ovl(), k = K(), amt = Math.round(ctx.cents(g.pay)), nodes = [];
     const TN = ['quote_bronze', 'quote_silver', 'quote_gold'], fin = new Map();
     for (const rd of ph.rounds) {
       for (const r of rd.reveals) fin.set(r.p, { k: r.k, v: r.v, t: r.t });
@@ -223,9 +229,9 @@
     let i = 0;
     for (const [p, f] of fin) {
       const [x, y] = B.xy(p), n = el('div', 'rv ' + (f.k === 'b' ? 'b t' + f.t : f.k === 'u' ? 'u' : 'c') + ' ghostrv');
-      if (f.k === 'b') { n.append(CC.assets.img(TN[f.t], 'bub')); const a = el('span', 'amt'); const s = CC.phone.amt(ctx.cents(f.v)); a.textContent = s; a.dataset.l = s.length > 5 ? 6 : s.length; n.append(a); }
+      if (f.k === 'b') { n.append(CC.assets.img(TN[f.t], 'bub')); const a = el('span', 'amt'); const s = ctx.amt(f.v, true); a.textContent = s; a.dataset.l = s.length > 5 ? 6 : s.length; n.append(a); }
       else if (f.k === 'u') n.innerHTML = '<b>x' + f.v + '</b><i>UPSELL</i>';
-      else { const s = CC.phone.amt(ctx.cents(f.v)); n.innerHTML = `<span class="cm"></span><span class="cv" data-l="${s.length > 5 ? 6 : s.length}">${s}</span><em class="mx"></em>`; }
+      else { const s = ctx.amt(f.v, true); n.innerHTML = `<span class="cm"></span><span class="cv" data-l="${s.length > 5 ? 6 : s.length}">${s}</span><em class="mx"></em>`; }
       n.style.left = x + 'px'; n.style.top = y + 'px'; ovl.appendChild(n); nodes.push(n);
       const sq = B.el(p); if (sq) sq.classList.add('under');
       if (!reduce) n.animate([{ transform: 'scaleX(0)' }, { transform: 'scaleX(1.12)', offset: 0.65 }, { transform: 'scaleX(1)' }], { duration: 230 * k.speed(), delay: i * 60 * k.speed(), fill: 'backwards', easing: 'ease-out' }); i++;
@@ -240,7 +246,7 @@
 
   // ------------------------------------------------------------------ ONE MORE CALL taken: the reveal. The WIN meter then moves to the server's final total (game.js).
   async function moreOutcome(m, ctx) {
-    if (!m || !m.take) return; const total = money(ctx.cents(ctx.p.totalWinTenths)), won = !!m.won;
+    if (!m || !m.take) return; const total = money(Number.isFinite(ctx.p.totalWin) ? ctx.p.totalWin : Math.round(ctx.cents(ctx.p.totalWinTenths))), won = !!m.won;
     const card = el('div', won ? '' : 'lost', won ? `<b>YOU DOUBLED IT</b><em>${total}</em><span>x${m.mult} on the bonus. Round total.</span>` : `<b>NO DEAL</b><em>${total}</em><span>x${m.mult} missed: the bonus is gone. Round total.</span>`, 'plmo');
     scene.appendChild(card); won ? ctx.SFX.win(2) : ctx.SFX.sting(); CC.hero.mood(won ? 'win' : 'shock', 2000); if (won) { ctx.FX.coins(30); ctx.FX.ring(270, 430, { n: 2, r1: 160 }); }
     if (!reduce) card.animate([{ transform: 'scale(.3) rotate(-14deg)', opacity: 0 }, { transform: 'scale(1.06) rotate(-2.5deg)', opacity: 1, offset: 0.6 }, { transform: 'rotate(-2.5deg)', opacity: 1 }], { duration: 320 * K().speed(), easing: 'ease-out' });
@@ -249,19 +255,19 @@
 
   // ------------------------------------------------------------------ the office pot: a medallion over the board, the amount is ADDED on top of the win
   async function potWin(pot, ctx) {
-    if (!pot || !pot.won) return; const amt = pot.amount, t = money(amt).replace(' chips', ''), cap = E.MAX_WIN_X.toLocaleString('en-US') + 'x';
-    const box = el('div', '', `<i class="cw l"></i><i class="mug"></i><small>THE OFFICE POT</small><b>YOU TOOK IT</b><em class="${t.length > 9 ? 's' : ''}">${money(0).replace(' chips', '')}</em><span>${chips() ? 'chips ' : ''}on top of your win. Outside the ${cap} cap.</span><i class="cw r"></i>`, 'plpot');
+    if (!pot || !pot.won) return; const amt = pot.amount, t = bare(amt), capC = ((ctx.rules || rulesOf()).pot || {}).capCents;
+    const box = el('div', '', `<i class="cw l"></i><i class="mug"></i><small>THE OFFICE POT</small><b>YOU TOOK IT</b><em class="${t.length > 9 ? 's' : ''}">${bare(0)}</em><span>${plainChips() ? 'chips ' : ''}on top of your win.${capC > 0 ? ' A pot pays up to ' + money(capC) + ' a hit, whatever you bet.' : ''}</span><i class="cw r"></i>`, 'plpot');
     scene.appendChild(box); ctx.SFX.win(3); ctx.SFX.big && ctx.SFX.big(3); CC.hero.set('win', 2800); ctx.FX.flash(140, '#fff', 0.5); ctx.FX.coins(70); ctx.FX.confetti(30); ctx.FX.ring(270, 430, { n: 3, r1: 200 });
     if (!reduce) box.animate([{ transform: 'scale(.3)', opacity: 0 }, { transform: 'scale(1.08)', opacity: 1, offset: 0.6 }, { transform: 'none', opacity: 1 }], { duration: 380 * K().speed(), easing: 'ease-out' });
-    const e = box.querySelector('em'); await ctx.tween(0, amt, 1100, (v) => { e.textContent = money(Math.round(v)).replace(' chips', ''); }); e.textContent = t;
+    const e = box.querySelector('em'); await ctx.tween(0, amt, 1100, (v) => { e.textContent = bare(Math.round(v)); }); e.textContent = t;
     if (ctx.demoHold) await hold(ctx, 0); else await Promise.race([ctx.waitTap(3200), ctx.wait(3400)]);
     box.remove(); S.potDone = true; potFlush();
   }
 
   // ------------------------------------------------------------------ info screen: one honest line per mechanic, numbers from the rules, plus the pot odds
   function infoLines() {
-    const R = rulesOf(), h = (ms) => String(+(ms / 3600000).toFixed(1)), ln = [], f = R.fill || {}, cap = E.MAX_WIN_X.toLocaleString('en-US') + 'x';
-    const dollar = (c) => (chips() ? num(c) + ' chips' : '$' + (c / 100).toFixed(c % 100 ? 2 : 0));
+    const R = rulesOf(), h = (ms) => String(+(ms / 3600000).toFixed(1)), ln = [], f = R.fill || {}, cap = capX().toLocaleString('en-US') + 'x';
+    const dollar = (c) => (plainChips() ? num(c) + ' chips' : '$' + (c / 100).toFixed(c % 100 ? 2 : 0));
     ln.push(['Leads.', `Every paid base spin adds leads to your list: ${f.dead} on a spin that paid nothing, ${f.win} on a win, ${f.bonus} when it triggers a bonus. Bought bonuses add none.`]);
     if (R.callback) ln.push(['The Callback.', `Fill the list (${R.list} leads) and THE CALLBACK arms: a free ${BN[R.callback.kind] || ''} bonus played at the average bet your leads came from${R.carryOver ? '. Leads over the list size carry over' : ''}.`]);
     if (R.cold) ln.push(['Going cold.', `Stay away ${h(R.cold.afterMs)} h and leads go cold: ${R.cold.batch} every ${h(R.cold.stepMs)} h, never below ${R.cold.floor}. Warm squares die at the first cold event.`]);
@@ -271,17 +277,20 @@
     if (R.more && R.more.on) ln.push(['One more call.', `After a bonus paying ${+(R.more.minTenths / 10).toFixed(1)}x or more you can bank it, or call once more: ${pct2(R.more.rtp / R.more.mult)[0]}% you win ${R.more.mult}x the bonus, ${pct2(R.more.rtp / R.more.mult)[1]}% you get ${dollar(0)}. ${R.more.rtp === 1 ? 'A fair coin: it does not change the payback. ' : ''}The bank, double and lose figures are the whole round: what the spin that triggered the bonus already paid stays yours. Not offered when the double would pass the cap. Wait too long and you bank.`]);
     if (R.daily) ln.push(['The appointment.', `Your first paid spin each day keeps your appointment: ${ldTxt(R.daily.base)} free, +${+Number(R.daily.perStreak).toFixed(2)} for each day in a row, up to ${ldTxt(R.daily.base + R.daily.perStreak * R.daily.streakMax)}. They count at your bet or ${dollar(R.daily.stakeCap)}, whichever is lower.`]);
     if (R.pot) {
-      const o = R.pot.oneInPerDollar, hit = o > 0 ? `each spin has a 1 in ${num(o)} chance per ${chips() ? '100 chips' : '$1'} bet of taking all of it, up to ${num(R.pot.maxPayX)}x your bet` : 'no one can take it right now';
-      ln.push(['The office pot.', `${+(R.pot.feedBps / 100).toFixed(2)}% of every paid bet goes in; ${hit}${R.pot.minBal > 0 ? `; a pot under ${dollar(R.pot.minBal)} pays nothing yet` : ''}. Play $ and Chips have separate pots. The pot is extra: it is paid on top of your win, outside the ${cap} cap.`]);
+      // a hit pays min(pot, capCents): one cap in money for every bet; the chance scales with the bet (1 in N per $1). The pot can hold more than a hit pays: the rest stays for the next winner.
+      const o = R.pot.oneInPerDollar, capC = R.pot.capCents, hit = o > 0 ? `each spin has a 1 in ${num(o)} chance per ${plainChips() ? '100 chips' : '$1'} bet of taking the pot${capC > 0 ? `, up to ${dollar(capC)} whatever you bet` : ''}` : 'no one can take it right now';
+      ln.push(['The office pot.', `${+(R.pot.feedBps / 100).toFixed(2)}% of every plain paid spin goes in (bonus buys do not feed the pot and cannot win it); ${hit}${R.pot.minBal > 0 ? `; a pot under ${dollar(R.pot.minBal)} pays nothing yet` : ''}. The pot can hold more than a hit pays: what is left stays for the next winner. Play $ and Chips have separate pots. The pot is extra: it is paid on top of your win and does not count toward the ${cap} max win.`]);
     }
     return ln;
   }
   const rules = (r) => { if (r && typeof r === 'object') S.rules = r; };
+  function setOn(on) { const off = !on; if (S.off === off) return; S.off = off; render(); }   // rules.on === false: hide the lead list, Callback, pot and decisions
+  function decorate(c) {                                            // the PULL lines inside an info card (game.js calls it again when it rebuilds an open info screen after a live config swap)
+    if (!c || c.querySelector('.plinfo') || !live() || S.off) return;
+    const box = el('div', 'plinfo', '<p class="tl">The pull</p>' + infoLines().map(([a, b]) => `<p><b>${a}</b> ${b}</p>`).join('')), tl = c.querySelector('p.tl'); if (tl) c.insertBefore(box, tl); else c.insertBefore(box, c.lastElementChild);
+  }
   new MutationObserver((ms) => {
-    for (const m of ms) for (const n of m.addedNodes) {
-      const c = n.nodeType === 1 && n.querySelector && n.querySelector('.card.info'); if (!c || c.querySelector('.plinfo') || !live()) continue;
-      const box = el('div', 'plinfo', '<p class="tl">The pull</p>' + infoLines().map(([a, b]) => `<p><b>${a}</b> ${b}</p>`).join('')), tl = c.querySelector('p.tl'); if (tl) c.insertBefore(box, tl); else c.insertBefore(box, c.lastElementChild);
-    }
+    for (const m of ms) for (const n of m.addedNodes) { const c = n.nodeType === 1 && n.querySelector && n.querySelector('.card.info'); if (c) decorate(c); }
   }).observe($('ov'), { childList: true });
 
   // ------------------------------------------------------------------ the API game.js calls
@@ -315,7 +324,7 @@
     const bonus = state === 'pick' || state === 'more';
     CC.board.show(ids(bonus ? G.bonus : state === 'ghost' ? G.dead : G.idle)); CC.board.setHot(bonus || state === 'ghost' || state === 'pot' ? [] : view.warm, true);
     s.bets.length || (s.bets = E.BET_LEVELS.slice());
-    const ctx = { bet, cents: (t) => t * bet / 10, dollars: k.dollars, wait: k.wait, tween: k.tween, speed: k.speed, SFX: k.SFX, FX: CC.fx, say: k.say, stamp: k.stamp, waitTap: k.waitTap, timer: { timeoutMs: 20000, expiresAt: Date.now() + 14000, left() { return Math.max(0, this.expiresAt - Date.now()); } },
+    const ctx = { bet, cents: (t) => t * bet / 10, amt: (t, short) => (short ? k.shortAmt(Math.round(t * bet / 10)) : k.dollars(Math.round(t * bet / 10))), dollars: k.dollars, wait: k.wait, tween: k.tween, speed: k.speed, SFX: k.SFX, FX: CC.fx, say: k.say, stamp: k.stamp, waitTap: k.waitTap, timer: { timeoutMs: 20000, expiresAt: Date.now() + 14000, left() { return Math.max(0, this.expiresAt - Date.now()); } },
       pickTargets: (c, cb) => CC.board.pickTargets(c, cb), run: { t: state === 'pick' ? 112 : (+Q.get('W') || 358.4) + (+Q.get('base') || 0) }, demoHold: true, promptOpen: null, p: { totalWinTenths: state === 'more_lost' ? 0 : 717, status: 'done' } };
     k.syncView(); render();
     $('win').dataset.c = 0; k.setWin(0, false);
@@ -342,6 +351,6 @@
   const release = () => { if (S.hold) { const r = S.hold; S.hold = null; r(); } };
 
   const armed = () => !!(S.prompt && S.prompt.armed);                 // true once the open prompt takes taps (false: no prompt, or still inside the 600 ms arming window)
-  CC.pull = { armed, feedClear, setView, setPot, feed, onBetChange, leadGain, ghost, endGhost, askPick, askMore, expired, moreOutcome, potWin, rules, timer, infoLines, demo, release, _S: S };
+  CC.pull = { setOn, decorate, armed, feedClear, setView, setPot, feed, onBetChange, leadGain, ghost, endGhost, askPick, askMore, expired, moreOutcome, potWin, rules, timer, infoLines, demo, release, _S: S };
   if (Q.get('mock') === 'pull') { window.demo = demo; demo(Q.get('state') || 'idle', Q.get('mode') || 'play'); }
 })();

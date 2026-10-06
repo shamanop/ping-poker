@@ -277,7 +277,7 @@
 
   // ---------- top bar / dock refresh ----------
   const user = () => { try { return window.Lobby && window.Lobby.user ? window.Lobby.user() : null; } catch (e) { return null; } };
-  if (window.Money && window.Money.onChange) window.Money.onChange(() => { try { refreshTop(); } catch (e) {} });
+  if (window.Money && window.Money.onChange) window.Money.onChange(() => { try { refreshTop(); } catch (e) {} try { if (ccReady) toCC({ type: 'pref' }); } catch (e) {} });   // Chips shown as chips or dollars: the slot repaints its idle amounts
   function refreshTop() {
     const p = $('sh-play'); if (!p) return;
     const c = $('sh-chips'); if (c) c.innerHTML = '<small>Chips</small>' + (chipsTotal == null ? '--' : chipAmt(chipsTotal));
@@ -349,6 +349,8 @@
     });
     // THE PULL: a decision timer restart, the shared floor (feed + pot) and a refunded round go to the game as they are; the game keys everything by roundId
     s.on('g:coldcall:timer', (p) => toCC({ type: 'timer', payload: p }));
+    // LIVECFG: the admin changed the slot math; the game stores it for its NEXT round (prices, pay table, rules, RTP label) and never touches a round in flight
+    s.on('g:coldcall:cfg', (p) => toCC({ type: 'cfg', payload: p }));
     // a dropped line (U6): the game closes its prompt at once, then settles the screen from the server's history after the reconnect (state first, then history)
     s.on('disconnect', () => { if (ccReady) { ccDropped = true; toCC({ type: 'disconnect' }); } });
     s.on('auth_ok', () => { if (ccDropped) { ccDropped = false; s.emit('g:coldcall:state', {}); } });
