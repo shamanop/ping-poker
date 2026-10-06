@@ -25,7 +25,7 @@ function createViews({ registry, accounts, presLedger, ledger, service, wallet }
 
   // ---- table objects -------------------------------------------------------------------------------------------
   function blindsNow(t) { return t.handLive() || t.hand ? { sb: t.hand.sb, bb: t.hand.bb } : { sb: t.blinds.sb, bb: t.blinds.bb }; }
-  function tableObj(t) { const b = blindsNow(t); return { id: t.id, name: t.name, mode: t.mode, unit: t.unit, sb: b.sb, bb: b.bb, maxSeats: t.maxSeats }; }
+  function tableObj(t) { const b = blindsNow(t); return { id: t.id, name: t.name, mode: t.mode, unit: t.unit, sb: b.sb, bb: b.bb, maxSeats: t.maxSeats, look: t.look || 'basement' }; }
   function modeFields(t) { return { mode: t.mode, unit: t.unit, moneyMode: t.mode, table: tableObj(t) }; }
   function publicTable(t) { return { ...registry.publicTable(t), emptySince: t.emptySince == null ? null : t.emptySince, pausedBy: t.pausedBy || '' }; }
   const hostName = t => { const s = t.seatOfKey(t.hostKey); return s ? nameOf(s.key) : ''; };

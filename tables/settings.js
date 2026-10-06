@@ -10,6 +10,7 @@ const EVERY_MIN = [10, 15, 20, 30];
 const MULTS = { standard: [1, 1.5, 2.5, 5, 7.5, 10, 15, 20], turbo: [1, 2, 4, 8, 16, 32, 64, 128] };
 const MAX_UNITS = 100000000;
 const NAME_MIN = 2, NAME_MAX = 24;
+const LOOKS = ['basement', 'yacht', 'miami', 'redroom', 'ranch', 'vault', 'saucer'];   // table looks (room + table paintings, public/images/ui/looks/<id>/); the lobby stays the basement
 
 const isInt = n => Number.isSafeInteger(n);
 
@@ -60,7 +61,9 @@ function validateSettings(raw) {
   if (!bin || typeof bin !== 'object') return invalid('blindIncrease', 'Bad blind increase');
   const blindIncrease = { enabled: !!bin.enabled, everyMin: bin.everyMin === undefined ? 15 : bin.everyMin, schedule: bin.schedule === undefined ? 'standard' : bin.schedule };
   if (!EVERY_MIN.includes(blindIncrease.everyMin) || !MULTS[blindIncrease.schedule]) return invalid('blindIncrease', 'Bad blind increase');
-  return { ok: true, value: { name, mode, unit, buyIn, blinds, blindIncrease, seats, actionTimerSec: timer, rebuys, rebuyLimit, isPrivate, autoStart } };
+  const look = raw.look === undefined ? 'basement' : raw.look;
+  if (typeof look !== 'string' || !LOOKS.includes(look)) return invalid('look', 'Unknown table look');
+  return { ok: true, value: { name, mode, unit, buyIn, blinds, blindIncrease, seats, actionTimerSec: timer, rebuys, rebuyLimit, isPrivate, autoStart, look } };
 }
 
 // The full escalation ladder for a starting blind pair: [{ sb, bb }] (level 0 first).
@@ -91,4 +94,4 @@ function levelAt(s, blindStartAt, now) {
   return { level, maxLevel, sb: sched[level].sb, bb: sched[level].bb, enabled: true, nextMs };
 }
 
-module.exports = { validateSettings, genSchedule, defaultsFor, levelAt, MAX_SEATS, MIN_SEATS, TIMERS, MULTS, MAX_UNITS };
+module.exports = { validateSettings, genSchedule, defaultsFor, levelAt, MAX_SEATS, MIN_SEATS, LOOKS, TIMERS, MULTS, MAX_UNITS };
