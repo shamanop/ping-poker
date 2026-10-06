@@ -255,6 +255,7 @@ const app    = express();
 const server = http.createServer(app);
 const io     = new Server(server, { cors: { origin: '*' } });
 
+require('./music').attach({ app, io, publicDir: path.join(__dirname, 'public') });
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.get('/apic/:key/:ver', (req, res) => {

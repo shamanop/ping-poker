@@ -773,6 +773,7 @@
   $('mus').addEventListener('click', () => { SFX.init(); const on = SFX.toggleMusic(); musUi(on); postMusicPref(); });
   // shell/lobby radio can flip the slot's music switch; the slot reports user flips back as 'bender-music-pref'
   addEventListener('message', (ev) => { const m = ev.data; if (!m || m.type !== 'music-enabled' || (window.parent !== window && ev.source !== window.parent)) return; SFX.setMusicEnabled(!!m.value); musUi(SFX.isMusicOn()); });
+  addEventListener('message', (ev) => { const m = ev.data; if (!m || m.type !== 'radio-active' || (window.parent !== window && ev.source !== window.parent)) return; SFX.holdBed(!!m.value); });
   $('pigeon').addEventListener('click', () => { SFX.init(); SFX.hic(); say('idle'); });
   stage.addEventListener('click', (e) => { if (e.target.closest('#tier')) st.tap++; });
   addEventListener('keydown', (e) => { const sc = ov.querySelector('.scrim'); if (e.key === 'Escape' && sc) { e.stopImmediatePropagation(); sc._done?.('x'); } });
