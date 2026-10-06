@@ -18,7 +18,9 @@ const normCode = c => String(c == null ? '' : c).toUpperCase().replace(/[^A-Z0-9
 function defaultsFor(mode) {
   return mode === 'chips'
     ? { buyIn: { min: 500, max: 5000, default: 1500 }, blinds: { sb: 10, bb: 20 } }
-    : { buyIn: { min: 500, max: 50000, default: 10000 }, blinds: { sb: 50, bb: 100 } };
+    : mode === 'play'
+      ? { buyIn: { min: 500, max: 50000, default: 2000 }, blinds: { sb: 25, bb: 50 } }
+      : { buyIn: { min: 500, max: 50000, default: 10000 }, blinds: { sb: 50, bb: 100 } };
 }
 
 // Validates a settings object (create form shape). Returns { ok, value } or { ok:false, message }.
@@ -399,6 +401,7 @@ function createTables(E) {
         const bal = E.getBalance(acct.display);
         if (bal < amount) { err('Not enough in your bank', 'bank'); return; }
       }
+      if (t.mode === 'play' && E.getPlay(key) < amount) { err('Not enough Play $', 'bank'); return; }
 
       let player = existing;
       if (player) {

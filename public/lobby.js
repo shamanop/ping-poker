@@ -51,7 +51,7 @@ function ladder(unit, min, max, extra = []) {
 const nearIdx = (vals, v) => { let bi = 0, bd = Infinity; vals.forEach((x, i) => { const d = Math.abs(x - v); if (d < bd) { bd = d; bi = i; } }); return bi; };
 const unitOf = (mode) => (mode === 'chips' ? 'chips' : 'cents');
 const modeLabel = (m) => ({ play: 'Play $', friends: 'Friends $', chips: 'Chips' }[m] || m);
-const modeNote = (m) => ({ play: 'Play $ is fake money from your play wallet.', friends: 'Ledger $ is a friendly tally, settle up on your own.', chips: 'Chips come from your bank balance.' }[m] || '');
+const modeNote = (m) => ({ play: 'Buy-ins come out of your Play $ balance and cash back into it when you stand up.', friends: 'Ledger $ is a friendly tally, settle up on your own.', chips: 'Chips come from your bank balance.' }[m] || '');
 const avSrc = (e) => (e && e.pic) || avUrl(e && e.avatar);
 const avUrl = (a) => { let s = String(a ?? 'a01'); if (/^\d+$/.test(s)) s = 'a' + s.padStart(2, '0'); s = s.replace(/\.png$/, ''); return 'images/avatars/' + s + '.png'; };
 const code6 = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
@@ -327,7 +327,7 @@ function settingsCard(t) {
 
 // ── buy-in picker (slider + typed) ────────────────────────────────
 function buyInPicker(t, mySettled) {
-  const unit = t.unit || unitOf(t.mode), bi = t.buyIn, bank = unit === 'chips' ? (S.user && (S.user.bankChips ?? S.user.chips)) : null;
+  const unit = t.unit || unitOf(t.mode), bi = t.buyIn, bank = unit === 'chips' ? (S.user && (S.user.bankChips ?? S.user.chips)) : (t.mode === 'play' && S.wallet ? S.wallet.play : null);
   const hi = bank != null && Number.isFinite(bank) ? Math.max(bi.min, Math.min(bi.max, bank)) : bi.max;
   const vals = ladder(unit, bi.min, hi, [bi.default]);
   let val = Math.min(hi, Math.max(bi.min, bi.default));
@@ -352,7 +352,7 @@ function buyInPicker(t, mySettled) {
     h('div', { class: 'lb-field' }, h('label', null, 'Buy-in'), h('div', { class: 'lb-join' }, typed, h('span'))),
     h('div', { class: 'lb-slider' }, h('div', { class: 'trk' }), fill, range),
     h('div', { class: 'lb-ends' }, h('span', null, fm(bi.min, unit)), h('span', null, fm(hi, unit))), msg, night,
-    bank != null ? h('div', { class: 'lb-muted' }, 'Your bank: ' + fm(bank, unit)) : null);
+    bank != null ? h('div', { class: 'lb-muted' }, (t.mode === 'play' ? 'Your Play $: ' : 'Your bank: ') + fm(bank, unit)) : null);
   return { el, get: () => (commit() ? val : null), msg };
 }
 
@@ -406,7 +406,7 @@ const PRESETS = { cents: [[25, 50], [50, 100], [100, 200], [200, 500], [500, 100
 function freshForm(mode, prev) {
   const unit = unitOf(mode), c = unit === 'chips';
   return Object.assign({ mode, unit, name: (prev && prev.name) || ((S.user && S.user.display) || 'My') + "'s table",
-    min: c ? 500 : 500, max: c ? 5000 : 50000, def: c ? 1500 : 10000, preset: c ? 2 : 1, custom: false, csb: c ? 50 : 50, cbb: c ? 100 : 100,
+    min: c ? 500 : 500, max: c ? 5000 : 50000, def: c ? 1500 : mode === 'play' ? 2000 : 10000, preset: c ? 2 : mode === 'play' ? 0 : 1, custom: false, csb: c ? 50 : 50, cbb: c ? 100 : 100,
     seats: 8, timer: 30, bi: false, biEvery: 15, biSched: 'standard', rebuys: true, priv: true }, prev ? { seats: prev.seats, timer: prev.timer, bi: prev.bi, biEvery: prev.biEvery, biSched: prev.biSched, rebuys: prev.rebuys, priv: prev.priv } : {});
 }
 function blindsOf(f) { if (f.custom) return { sb: f.csb, bb: f.cbb }; const p = PRESETS[f.unit][f.preset]; return { sb: p[0], bb: p[1] }; }
