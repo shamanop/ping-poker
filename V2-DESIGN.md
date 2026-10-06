@@ -459,3 +459,11 @@ Each has my recommendation; the contract above already assumes the recommendatio
 13. **`bust_out` is emitted right after the showdown**, not at the next deal. *Recommend:* yes (the rebuy prompt appears during the result screen); `30_shapes` is indifferent.
 14. **Wire `nextMs` now honours `HAND_DELAY_MS`.** *Recommend:* yes (it is the real delay).
 15. **Where the earlier design is weak** (contrarian notes): (a) "bets are not ledger writes" is right, but it makes mid-hand leave/kick arithmetic subtle: the cash-out must be `seat balance - committed`, not the engine stack; it is in the contract and has its own unit test. (b) "Restart: every seat is cashed out" plus "one seat per account" makes every deploy a table-wide eviction; fine for friends, bad for a live tournament night. (c) `fsync` on every transfer plus a 250 ms mirror rewrite of two JSON files is fine at this size but is O(accounts) per burst; if the mirror ever shows up in a profile, rewrite it only on `between` and on a timer. (d) The money ledger holds every line in memory; adequate for years of friend-group play, not for growth.
+
+### 12a. Lead answers (Frank, 2026-10-06 03:40)
+
+All recommendations in section 12 are accepted as written; the contract stands. Specifics:
+1. Q1: engine amendment E1 goes to the engine builder now (kicked or stood-up top bettor gets the uncalled layer back; property test updated). P3 does not work around it; check 24b stays failing until E1 merges.
+2. Q2: YES, a disconnected seat is not dealt into new hands (sitting out until it reconnects, cashed out after 2 minutes). In the hand it is already in it is never folded for disconnecting. This is a deliberate deviation from the earlier note; tell Isabelle at milestone 3.
+3. Q3-Q14: as recommended. Q8 (`/api/bank-summary?password=ping`) stays unchanged in wave 2 and is flagged to Isabelle for deletion in wave 3. Q10: harness author (P0) has no check depending on `minted` excluding `mint:topup`; if one turns up, the harness is wrong, not the server.
+4. Q15: noted, no action in wave 2.
