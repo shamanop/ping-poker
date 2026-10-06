@@ -7,7 +7,7 @@ const BET_LEVELS = Eng.BET_LEVELS;
 const BUYS = Eng.BUYS;   // call, bonus1, bonus2, hunt (prices in Eng.CFG.buyCost, tenths of the bet)
 const RATE_MS = 150;
 const HISTORY_MAX = 20;
-const RTP_LABEL = '97.95% (long-run, 450M-spin stratified sim, +-0.11)';
+const RTP_LABEL = '97.93% (long-run, 450M-spin stratified sim, +-0.11)';
 
 // QA hook: forces a feature so the front end can be driven by a test. It runs ONLY when the server process was started
 // with COLDCALL_TEST=1 (and NODE_ENV is not 'production'); otherwise `force` in a spin payload is ignored. Forced rounds are paid and

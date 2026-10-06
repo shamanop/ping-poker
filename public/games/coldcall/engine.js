@@ -26,28 +26,28 @@
     weights: [29.925, 25.552, 20.828, 17.21, 13.464, 10.034, 8.159, 6.436, 5.001, 3.79],
     // closer (wild), bell (scatter) and phone weights per cell, per mode (a phone is also guaranteed on every bonus3 spin and on a 'call' buy)
     extra: {
-      base: { wild: 1, bell: 1.52, phone: 0.208 },
+      base: { wild: 1, bell: 1.52, phone: 0.308 },
       bonus1: { wild: 5, bell: 1.567, phone: 4.5 },
       bonus2: { wild: 3, bell: 1.567, phone: 4.5 },
       bonus3: { wild: 2, bell: 1.567, phone: 3 },
     },
-    // cluster pay in tenths of the bet by cluster size: 5, 6, 7, 8, 9, 10, 11, 12, 13+  (5 pays 1x to 1.8x so no cluster win is under 1x; 13+ pays 130x to 715x)
+    // cluster pay in tenths of the bet by cluster size: 5, 6, 7, 8, 9, 10, 11, 12, 13+  (mug 5 pays 0.3x, every other 5 pays 1x to 1.8x; 13+ pays 130x to 715x)
     pay: {
-      mug:     [10, 10, 12, 15, 24, 50, 140, 450, 1300],
-      note:    [10, 10, 13, 17, 26, 55, 154, 495, 1430],
-      ball:    [10, 10, 14, 18, 29, 60, 168, 540, 1560],
-      can:     [10, 10, 16, 20, 32, 68, 189, 608, 1755],
-      cups:    [10, 10, 18, 23, 37, 78, 217, 698, 2015],
-      headset: [11, 11, 21, 28, 44, 93, 259, 833, 2405],
-      rx:      [12, 12, 26, 35, 55, 115, 322, 1035, 2990],
-      pile:    [13, 13, 35, 45, 72, 150, 420, 1350, 3900],
+      mug:     [3, 10, 10, 11, 16, 50, 140, 450, 1300],
+      note:    [10, 10, 11, 13, 18, 55, 154, 495, 1430],
+      ball:    [10, 10, 12, 14, 22, 60, 168, 540, 1560],
+      can:     [10, 10, 13, 17, 26, 68, 189, 608, 1755],
+      cups:    [10, 10, 16, 20, 30, 78, 217, 698, 2015],
+      headset: [11, 11, 18, 24, 38, 93, 259, 833, 2405],
+      rx:      [12, 12, 22, 30, 46, 115, 322, 1035, 2990],
+      pile:    [13, 13, 30, 40, 62, 150, 420, 1350, 3900],
       cashwad: [15, 15, 46, 60, 96, 200, 560, 1800, 5200],
       cash   : [18, 18, 63, 83, 132, 275, 770, 2475, 7150],
     },
     payScale: 1,   // applied once when the engine is built (rounded to integer tenths, min 1); 1 = the table as written
     // hot lead reveals: tier weights per mode (bonus3 has no bronze), optional per-mode value weights (bubbles), values in tenths of the bet
     reveal: {
-      base: { bronze: 100, silver: 2.5, gold: 0.2, upsell: 6, close: 0.6 },
+      base: { bronze: 100, silver: 2.95, gold: 0.2, upsell: 6, close: 0.6 },
       bonus1: { bronze: 100, silver: 19, gold: 1.9, upsell: 9, close: 0.6 },
       bonus2: { bronze: 100, silver: 11, gold: 0.9, upsell: 9, close: 0.2 },
       bonus3: { bronze: 0, silver: 5.5, gold: 0.05, upsell: 0.5, close: 0.004,
@@ -66,8 +66,8 @@
     maxCascades: 40,             // hard cap on cascade steps in one spin
     maxRevealRounds: 30,         // hard cap on the reveal / close repeat loop (it cannot pass the number of hot leads anyway)
     // buy prices, tenths of the bet. Set from the measured average value / 0.98 (rounded to a whole tenth), then re-simulated.
-    buyCost: { call: 29, bonus1: 856, bonus2: 2834, hunt: 35 },
-    hunt: { bellMult: 1.85 },     // 'hunt': one spin whose bell weight is multiplied (base game otherwise)
+    buyCost: { call: 29, bonus1: 849, bonus2: 2824, hunt: 35 },
+    hunt: { bellMult: 1.845 },     // 'hunt': one spin whose bell weight is multiplied (base game otherwise)
     maxWinTenths: MAX_WIN_T,
   };
   const TIERS = [[100, 'legend'], [50, 'mega'], [25, 'huge'], [10, 'big'], [5, 'sweet'], [2, 'nice']];

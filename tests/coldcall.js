@@ -249,8 +249,8 @@ function replayRound(s, cfg) {
     assert.deepStrictEqual(CFG.bubbles.silver.map((b) => b[0]), [50, 100, 150, 200]);
     assert.deepStrictEqual(CFG.bubbles.gold.map((b) => b[0]), [250, 500, 1000, 2500, 5000]);
     assert.deepStrictEqual(CFG.upsell.map((b) => b[0]), [2, 3, 4, 5, 10]);
-    // pay shape: a 5-cluster pays 1x..1.8x (lowest..highest symbol), 13+ pays 130x..715x
-    assert.strictEqual(PAYT[0][0], 10); assert.strictEqual(PAYT[9][0], 18); assert.strictEqual(PAYT[0][8], 1300); assert.strictEqual(PAYT[9][8], 7150);
+    // pay shape: a mug 5-cluster pays 0.3x (the only win under 1x at size 5), every other 5-cluster 1x..1.8x, 13+ pays 130x..715x
+    assert.strictEqual(PAYT[0][0], 3); for (let s = 1; s < 10; s++) assert.ok(PAYT[s][0] >= 10); assert.strictEqual(PAYT[9][0], 18); assert.strictEqual(PAYT[0][8], 1300); assert.strictEqual(PAYT[9][8], 7150);
     for (let s = 0; s < 10; s++) for (let i = 1; i < 9; i++) assert.ok(PAYT[s][i] >= PAYT[s][i - 1], 'pay rises with size');
     for (let i = 0; i < 9; i++) for (let s = 1; s < 10; s++) assert.ok(PAYT[s][i] >= PAYT[s - 1][i], 'pay rises with symbol');
   });

@@ -57,7 +57,7 @@ if (!isMainThread) {
     }
     parentPort.postMessage(out);
   } else {
-    const out = { total: mk(), cluster: mk(), phone: mk(), bonus: [mk(), mk(), mk(), mk()], nBonus: [0, 0, 0, 0], upg: 0, hitAny: 0, hitBase: 0, hitBaseAny: 0, baseBandN: new Array(8).fill(0), baseBandSum: new Array(8).fill(0), bandN: new Array(8).fill(0), bandSum: new Array(8).fill(0), maxT: 0, capHits: 0,
+    const out = { total: mk(), cluster: mk(), phone: mk(), bonus: [mk(), mk(), mk(), mk()], nBonus: [0, 0, 0, 0], upg: 0, hitAny: 0, hitBase: 0, hitBaseAny: 0, baseBandN: new Array(8).fill(0), baseBandSum: new Array(8).fill(0), bandN: new Array(8).fill(0), bandSum: new Array(8).fill(0), maxT: 0, capHits: 0, exact1: 0,
       capByKind: [0, 0, 0, 0], baseWinSpins: 0, baseCascades: 0, phoneBase: 0, phoneBaseLeads: 0, phoneBaseCloses: 0, over100: 0, over1000: 0, over5000: 0, bells2: 0, bonusSpins: 0, bonusCascades: 0 };
     for (const k of chunks) {
       const rng = Eng.rngFrom(seedOf(baseSeed, k));
@@ -67,6 +67,7 @@ if (!isMainThread) {
         add(out.total, w); add(out.cluster, r.clusterTenths); add(out.phone, r.phoneTenths);
         if (r.bonusKind) { add(out.bonus[r.bonusKind], r.bonusTenths); out.nBonus[r.bonusKind]++; if (r.upgraded) out.upg++; out.bonusSpins += r.bonusSpins; out.bonusCascades += r.cascades - r.baseCascades; }
         if (w > 0) out.hitAny++;
+        if (w === 10) out.exact1++;
         if (r.clusterTenths + r.phoneTenths > 0) out.hitBaseAny++;
         { const bd = bandOf(w); out.bandN[bd]++; out.bandSum[bd] += w; const bw = r.clusterTenths + r.phoneTenths, bb = bandOf(bw); out.baseBandN[bb]++; out.baseBandSum[bb] += bw; }
         if (r.clusterTenths > 0) { out.hitBase++; out.baseWinSpins++; out.baseCascades += r.baseCascades; }
@@ -166,7 +167,7 @@ if (!isMainThread) {
     const contrib = (a) => a.sum / total / 10 * 100;
     const o = {
       mode, spins: total, seed, secs, rtpPct: tot.mean * 100, rtpCi: tot.se * 196, sdX: tot.sd,
-      hitAnyPct: sumP('hitAny') / total * 100, hitBasePct: sumP('hitBase') / total * 100, hitBaseAnyPct: sumP('hitBaseAny') / total * 100,
+      hitAnyPct: sumP('hitAny') / total * 100, hitBasePct: sumP('hitBase') / total * 100, exact1Pct: sumP('exact1') / total * 100, exact1PctOfHits: sumP('exact1') / sumP('hitAny') * 100, under1PctOfHits: sumArr('bandN', 1) / sumP('hitAny') * 100, hitBaseAnyPct: sumP('hitBaseAny') / total * 100,
       baseBands: BAND_NAMES.map((name, i) => ({ band: name, pctSpins: sumArr('baseBandN', i) / total * 100, pctRtp: sumArr('baseBandSum', i) / total / 10 * 100 })),   // base spin only (cluster + phone pay, no bonus)
       bands: BAND_NAMES.map((name, i) => ({ band: name, pctSpins: sumArr('bandN', i) / total * 100, pctRtp: sumArr('bandSum', i) / total / 10 * 100, spins: sumArr('bandN', i) })),
       oneIn: { bonus1: nb[1] ? total / nb[1] : null, bonus2: nb[2] ? total / nb[2] : null, bonus3: nb[3] ? total / nb[3] : null, any: nAny ? total / nAny : null },
