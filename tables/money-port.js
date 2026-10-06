@@ -7,10 +7,11 @@ const { TableError, isFence } = require('./errors');
 
 const seatAcct = (tableId, key) => `seat:${tableId}:${key}`;
 
-function createMoneyPort({ service, ledger, bootId, afterWrite, onFence }) {
+function createMoneyPort({ service, ledger, bootId, afterWrite, onFence, onWrite }) {
   let counter = 0;
   const boot = bootId || Date.now().toString(36);
   const nextOp = () => `${boot}.${++counter}`;
+  const wrote = (kind, table, key, amount, extra) => { if (onWrite) { try { onWrite({ kind, table, key, amount, ...(extra || {}) }); } catch (e) { console.error('[v2] onWrite failed:', e && e.message); } } };
   const touch = keys => { if (afterWrite) { try { afterWrite(keys); } catch (e) { console.error('[v2] afterWrite failed:', e && e.message); } } };
 
   // An intent mints its ref ONCE; passing the same intent to a retry answers dup and can never double-pay.
@@ -39,7 +40,7 @@ function createMoneyPort({ service, ledger, bootId, afterWrite, onFence }) {
   function buyIn(table, key, amount, fund, it, kind = 'buyin') {
     const i = it || intent(kind, table, key, amount);
     const r = wrap(() => service.buyIn(key, table.id, amount, table.cur, fund || null, i.ref));
-    if (!r.dup) touch([key]);
+    if (!r.dup) { touch([key]); wrote(kind, table, key, amount, { fund: fund || table.cur }); }
     return { ...r, intent: i };
   }
 
@@ -48,7 +49,7 @@ function createMoneyPort({ service, ledger, bootId, afterWrite, onFence }) {
     if (amount === 0) return { id: null, dup: false, noop: true, intent: null };
     const i = it || intent(kind, table, key, amount);
     const r = wrap(() => service.cashOut(key, table.id, amount, table.cur, null, i.ref));
-    if (!r.dup && !r.noop) touch([key]);
+    if (!r.dup && !r.noop) { touch([key]); wrote(kind, table, key, amount, {}); }
     return { ...r, intent: i };
   }
 
