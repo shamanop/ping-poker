@@ -158,7 +158,7 @@ function atTableOf(k) {
   }
   return n;
 }
-// One shape for everything a player's own money bar needs: chips bank + table stack, plus the Play$/Ledger$ wallet.
+// One shape for everything a player's own money bar needs: chips bank + table stack, plus the Play $ wallet.
 function moneyView(key) {
   const k = bankKey(key);
   const bankChips = bank[k] === undefined ? null : bank[k];
@@ -266,8 +266,7 @@ app.get('/api/bank-summary', (req, res) => {
 const rooms = new Map();
 const AV_EMOJI = ['🤠', '🦊', '🐉', '🎩', '🦁', '🐺', '🦅', '🎲', '👑', '💀', '🎯', '⚡'];
 
-// Money in/out of a table seat by room mode. Chips: bank.json (+ ledger). Friends: ledger rows only (cents IOU).
-// Play: nothing is stored except in-memory night rows used for the settle screen.
+// Money in/out of a table seat by room mode. Chips: bank.json (+ ledger log). Play $: the wallet, plus in-memory night rows for the settle screen.
 function moneyMeta(room, name, key) {
   if (!room.nightId) return undefined;
   return { mode: room.unit, tableId: room.id, nightId: room.nightId, key: key || bankKey(name) };
@@ -279,7 +278,6 @@ function payIn(room, name, amount, type, opts = {}) {
     if (gameHooks && gameHooks.wallet) gameHooks.wallet.spend(k, 'play', amount);
     tables.noteRow(room, { name, type, amount, key: k }); return null;
   }
-  if (room.mode === 'friends') { ledger.log(type, name, amount, null, amount, room.handNum, room.id, meta); return null; }
   return adjustBank(name, -amount, type, room, amount, meta);
 }
 function payOut(room, name, amount, opts = {}) {
@@ -291,7 +289,6 @@ function payOut(room, name, amount, opts = {}) {
     if (gameHooks && gameHooks.wallet && amount > 0) gameHooks.wallet.credit(k, 'play', amount);
     tables.noteRow(room, { name, type: 'cashout', amount, key: k }); return null;
   }
-  if (room.mode === 'friends') { ledger.log('cashout', name, amount, null, 0, room.handNum, room.id, meta); return null; }
   return adjustBank(name, amount, 'cashout', room, 0, meta);
 }
 const tables = createTables({
@@ -1038,7 +1035,7 @@ function scheduleNextHand(room, delayMs = 5000) {
 
 function modeFields(room) {
   return {
-    mode: room.mode, unit: room.unit, moneyMode: room.mode === 'friends' ? 'ledger' : room.mode,
+    mode: room.mode, unit: room.unit, moneyMode: room.mode,
     table: { id: room.id, name: room.settings ? room.settings.name : null, mode: room.mode, unit: room.unit, sb: room.sb, bb: room.bb, maxSeats: room.maxSeats },
   };
 }
@@ -1760,7 +1757,7 @@ function dropSeat(room, player, opts = {}) {
 
 const social = require('./social.js').createSocial({ io, accounts, now: () => Date.now(), file: BIGWINS_FILE });
 process.env.WALLET_FILE = WALLET_FILE;
-try{ const g = require('./games')({io, rooms, ledger, accounts, tables, social, now:()=>Date.now()}); social.setWallet(g.wallet); gameHooks = g; }catch(e){ if(e.code!=='MODULE_NOT_FOUND') throw e; }
+try{ const g = require('./games')({io, rooms, ledger, accounts, tables, social, now:()=>Date.now(), chips:{ get:k=>{ const b=bank[bankKey(k)]; return b===undefined?BANK_DEFAULT:b; }, add:(k,d)=>adjustBank(k,d,null) }}); social.setWallet(g.wallet); gameHooks = g; }catch(e){ if(e.code!=='MODULE_NOT_FOUND') throw e; }
 
 const PORT = process.env.PORT || 3000;
 if (require.main === module) {

@@ -54,7 +54,7 @@ const p0 = wallet.get('bo');
 B.fire('bonus:status'); let st = B.last('bonus:status')[1];
 ok(st.available && st.amountCents === 10000 && st.streak === 1, 'status: available $100 streak 1');
 B.fire('bonus:claim'); const cl = B.last('bonus:claimed')[1];
-ok(cl.ok && wallet.get('bo').play === p0.play + 10000 && wallet.get('bo').ledgerNet === p0.ledgerNet, 'claim credits Play $ only');
+ok(cl.ok && wallet.get('bo').play === p0.play + 10000, 'claim credits Play $');
 B.fire('bonus:claim'); ok(B.last('bonus:claimed')[1].ok === false && wallet.get('bo').play === p0.play + 10000, 'second claim same day refused');
 clock += 3600000 * 3; ok(!social.bonusInfo('bo').available, 'still claimed later same Chicago day');
 const cityMidnight = Date.parse('2026-10-06T05:00:00Z'); clock = cityMidnight - 1000; ok(!social.bonusInfo('bo').available, 'not available 1s before Chicago midnight');
@@ -82,7 +82,6 @@ clock = Date.parse(dayOf(clock) + 'T18:00:00Z');
 const E = C; for (let i = 0; i < 6; i++) { social.claimBonus('cy'); clock += 86400000; }
 const e0 = pl('cy'); E.fire('bonus:claim'); const d7 = E.last('bonus:claimed')[1];
 ok(d7.ok && d7.day === 7 && d7.amountCents === 100000 && pl('cy') === e0 + 100000, 'day 7 claim pays $1,000 Play $');
-ok(wallet.get('cy').ledgerNet === 0, 'bonus does not touch real-money ledger');
 accounts.flush(); const acc2 = createAccounts({ file: path.join(dir, 'accounts.json') });
 ok(acc2.social('bo').bonus && acc2.social('bo').bonus.streak >= 1, 'bonus persisted in account record');
 const un = mkSock(null); handlers.forEach(f => f(un)); un.fire('bonus:claim'); ok(un.last('error') && un.last('error')[1].code === 'auth', 'claim requires sign-in');

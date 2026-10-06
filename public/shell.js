@@ -10,7 +10,7 @@
   const cfg = { benderUrl: '/games/bender/index.html?bridge=1' };
   let L = { games: {} };
   let signedIn = false, focusId = 'poker', zTop = 20, inResize = false;
-  const wallet = { play: null, ledgerNet: null, ledgerLimit: -50000 };
+  const wallet = { play: null, chips: null };
   let chipsTotal = null;
   let wmode = 'play', lastWin = 0, sessNet = 0;
   const $ = (id) => document.getElementById(id);
@@ -46,7 +46,7 @@
       <header class="sh-top">
         <img class="sh-logo" src="/images/ui/vp-mark.png" alt=""><span class="sh-brand">THE PING</span>
         <span class="sh-lvl" id="sh-lvl"><span id="sh-flame"></span><span id="sh-xp"></span></span>
-        <div class="sh-wallet" id="sh-wallet" title="Play $ is pretend money. Ledger $ is a friendly tally, settle up on your own."><span id="sh-chips" title="Chips: your poker bank plus what you have at the table"><small>Chips</small>--</span><span id="sh-play"><small>Play</small>--</span><span id="sh-ledger"><small>Ledger</small>--</span></div>
+        <div class="sh-wallet" id="sh-wallet" title="Play $ is pretend money. Chips are your poker bank."><span id="sh-chips" title="Chips: your poker bank plus what you have at the table"><small>Chips</small>--</span><span id="sh-play"><small>Play</small>--</span></div>
         <span data-money-toggle></span>
         <button class="sh-bonus" id="sh-bonus" type="button" title="Daily bonus"></button>
         <button class="sh-acct" id="sh-acct" type="button"></button>
@@ -276,11 +276,9 @@
   // ---------- top bar / dock refresh ----------
   const user = () => { try { return window.Lobby && window.Lobby.user ? window.Lobby.user() : null; } catch (e) { return null; } };
   function refreshTop() {
-    const p = $('sh-play'), l = $('sh-ledger'); if (!p) return;
+    const p = $('sh-play'); if (!p) return;
     const c = $('sh-chips'); if (c) c.innerHTML = '<small>Chips</small>' + (chipsTotal == null ? '--' : Number(chipsTotal).toLocaleString('en-US'));
     p.innerHTML = '<small>Play</small>' + (wallet.play == null ? '--' : dollars(wallet.play));
-    const n = wallet.ledgerNet;
-    l.innerHTML = '<small>Ledger</small>' + (n == null ? '--' : `<em class="${n < 0 ? 'neg' : n > 0 ? 'pos' : ''}" style="font-style:normal">${n > 0 ? '+' : ''}${dollars(n)}</em>`);
     const u = user(); $('sh-acct').textContent = u ? (u.display || u.key || '') : '';
   }
   function needsAction() {
@@ -398,8 +396,7 @@
   function setWallet(w) {
     if (!w) return;
     if (typeof w.play === 'number') wallet.play = w.play;
-    if (typeof w.ledgerNet === 'number') wallet.ledgerNet = w.ledgerNet;
-    if (typeof w.ledgerLimit === 'number') wallet.ledgerLimit = w.ledgerLimit;
+    if (typeof w.chips === 'number') wallet.chips = w.chips;
     refreshTop(); if (benderReady) toBender({ type: 'wallet', wallet: Object.assign({}, wallet) });
   }
   const benderFrame = () => { const g = games.get('bender'); return g && g.el ? g.el.querySelector('iframe') : null; };
@@ -415,7 +412,7 @@
       spinQ.push(m.reqId);
       const p = { bet: m.bet, mode: m.mode }; if (m.buy) p.buyBonus = m.buy;
       s.emit('g:bender:spin', p);
-    } else if (m.type === 'mode') { wmode = m.mode === 'ledger' ? 'ledger' : 'play'; }
+    } else if (m.type === 'mode') { wmode = m.mode === 'chips' ? 'chips' : 'play'; }
     else if (m.type === 'round') {
       if (typeof m.win === 'number') lastWin = m.win; refreshDock();
       if (window.PingJuice && (m.tier === 'mega' || m.tier === 'jackpot') && m.bet > 0) PingJuice.toast(`**You** hit **${Math.round(m.win / m.bet)}x** on Ballot Bender`, { sticker: 'ballot-cherry' });

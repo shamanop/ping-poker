@@ -27,8 +27,8 @@ function defaultsFor(mode) {
 function validateSettings(raw) {
   const bad = message => ({ ok: false, message });
   if (!raw || typeof raw !== 'object') return bad('Bad table settings');
-  const mode = raw.mode === undefined ? 'friends' : raw.mode;
-  if (!['friends', 'chips', 'play'].includes(mode)) return bad('Mode must be friends, chips or play');
+  const mode = raw.mode === undefined ? 'play' : raw.mode;
+  if (!['chips', 'play'].includes(mode)) return bad('Mode must be chips or play');
   const unit = mode === 'chips' ? 'chips' : 'cents';
   if (raw.unit !== undefined && raw.unit !== unit) return bad(`Mode ${mode} uses unit ${unit}`);
   const name = typeof raw.name === 'string' ? raw.name.replace(/[\u0000-\u001f<>]/g, '').trim().replace(/\s+/g, ' ') : '';
@@ -118,7 +118,7 @@ function createTables(E) {
     room.settings = t;
     room.mode = t.mode;
     room.unit = t.unit;
-    room.moneyMode = t.mode === 'friends' ? 'ledger' : t.mode;
+    room.moneyMode = t.mode;
     room.maxSeats = t.seats;
     room.turnMs = t.actionTimerSec * 1000;
     room.rebuysAllowed = t.rebuys;
@@ -174,7 +174,7 @@ function createTables(E) {
   }
   function publicTable(t) {
     const room = roomOf(t);
-    return { ...t, sb: room ? room.sb : t.blinds.sb, bb: room ? room.bb : t.blinds.bb, host: { key: t.hostKey, display: dispOf(t.hostKey) }, moneyMode: t.mode === 'friends' ? 'ledger' : t.mode };
+    return { ...t, sb: room ? room.sb : t.blinds.sb, bb: room ? room.bb : t.blinds.bb, host: { key: t.hostKey, display: dispOf(t.hostKey) }, moneyMode: t.mode };
   }
   function seatedList(t) {
     return humans(roomOf(t)).filter(p => p.connected).map(p => ({ key: p.acct || E.bankKey(p.name), display: p.name, avatar: p.avatarId || null, pic: p.acct ? accounts.picUrl(accounts.get(p.acct)) : null, stack: p.chips }));
@@ -211,15 +211,11 @@ function createTables(E) {
 
   function nightPayload(t) {
     const n = nightOf(t);
-    const payments = t.mode === 'friends' ? n.payments : [];
     const players = n.players.map(p => ({ key: p.key, display: accounts.get(p.key) ? dispOf(p.key) : p.display, avatar: accounts.get(p.key) ? accounts.get(p.key).avatar : null, pic: accounts.get(p.key) ? accounts.picUrl(accounts.get(p.key)) : null, buyIns: p.buyIns, rebuys: p.rebuys, cashedOut: p.cashedOut, net: p.net }));
-    const nameOf = k => (accounts.get(k) ? dispOf(k) : k);
-    const pays = payments.map(p => ({ ...p, fromName: nameOf(p.from), toName: nameOf(p.to) }));
     const d = new Date(n.endedAt || Date.now());
     const lines = [`The Ping - ${t.name} - ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`];
     for (const p of players) lines.push(`${p.display} ${fmtUnits(p.net, t.unit, true)}`);
-    if (pays.length) lines.push('Settle: ' + pays.map(p => `${p.fromName} -> ${p.toName} ${fmtUnits(p.amount, t.unit)}`).join('; '));
-    const out = { nightId: t.nightId, tableId: t.id, table: { name: t.name, mode: t.mode, unit: t.unit }, ended: t.state === 'ended', startedAt: n.startedAt, endedAt: n.endedAt, players, payments: pays, zeroSum: n.zeroSum, text: lines.join('\n') };
+    const out = { nightId: t.nightId, tableId: t.id, table: { name: t.name, mode: t.mode, unit: t.unit }, ended: t.state === 'ended', startedAt: n.startedAt, endedAt: n.endedAt, players, zeroSum: n.zeroSum, text: lines.join('\n') };
     if (n.drift) out.drift = n.drift;
     return out;
   }
@@ -530,35 +526,12 @@ function createTables(E) {
       socket.emit('table_created', { table: publicTable(n) });
     });
 
-    on('table_adjust', ({ tableId, key: target, amount, note } = {}) => {
-      const key = authed(); if (!key) return;
-      if (!accounts.isAdmin(key)) { err('Only the admin can adjust', 'not_host'); return; }
-      const t = lookup(tableId);
-      if (!t) { err('No table with that code'); return; }
-      if (t.mode !== 'friends') { err('Adjustments are for Friends $ tables (use the bank panel for Chips)'); return; }
-      const k = keyOf(target);
-      if (!accounts.get(k)) { err('Unknown player'); return; }
-      if (!isInt(amount) || amount === 0 || Math.abs(amount) > MAX_UNITS) { err('Amount must be a non-zero whole number', 'range'); return; }
-      ledger.log('adjust', dispOf(k), Math.abs(amount), null, null, null, t.id, { mode: t.unit, tableId: t.id, nightId: t.nightId, key: k, signed: amount, note: String(note || '').slice(0, 80), by: key });
-      event(t, 'adjusted', { key: k, display: dispOf(k), amount });
-      if (t.state === 'ended') emitToParticipants(t, 'settle_up', nightPayload(t));
-    });
-
     const nightTable = nightId => [...tables.values()].find(t => t.nightId === nightId) || null;
     on('night_get', ({ nightId } = {}) => {
       const key = authed(); if (!key) return;
       const t = nightTable(String(nightId || ''));
       if (!t || !isParticipant(t, key)) { err('No such night'); return; }
       socket.emit('settle_up', nightPayload(t));
-    });
-    on('settle_mark', ({ nightId, from, to, amount } = {}) => {
-      const key = authed(); if (!key) return;
-      const t = nightTable(String(nightId || ''));
-      if (!t || !isParticipant(t, key)) { err('No such night'); return; }
-      const pay = nightPayload(t).payments.find(p => p.from === from && p.to === to && p.amount === amount);
-      if (!pay) { err('No such payment'); return; }
-      ledger.log('settle', dispOf(from), amount, null, null, null, t.id, { mode: t.unit, tableId: t.id, nightId: t.nightId, from, to, by: key });
-      emitToParticipants(t, 'settle_up', nightPayload(t));
     });
   }
 
@@ -570,6 +543,7 @@ function createTables(E) {
     for (const t of (j && Array.isArray(j.tables) ? j.tables : [])) {
       if (!t || !t.id || tables.has(t.id) || t.id === LEGACY_ID) continue;
       if (t.state === 'ended') { if ((t.createdAt || 0) > cutoff) tables.set(t.id, t); continue; }
+      if (t.mode === 'friends') continue; // Friends $ tables were removed; a live one cannot resume
       t.emptySince = Date.now();
       tables.set(t.id, t);
       const room = applyToRoom(E.makeRoom(t.id, null), t);

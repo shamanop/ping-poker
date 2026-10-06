@@ -18,8 +18,7 @@ const keyOf = (socket) => { const a = socket.data && socket.data.acct; return St
 function err(socket, code, message) { socket.emit('error', { message, code, game: 'bender' }); }
 
 function walletErr(socket, e) {
-  if (e && e.code === 'funds') return err(socket, 'funds', 'Not enough Play $');
-  if (e && e.code === 'limit') return err(socket, 'limit', 'Ledger limit reached');
+  if (e && e.code === 'funds') return err(socket, 'funds', e.message);
   return err(socket, 'bad_request', 'Could not place that bet');
 }
 
@@ -34,7 +33,7 @@ module.exports = {
   handlers: {
     state(socket, payload, ctx) {
       socket.emit('g:bender:state', {
-        betLevels: BET_LEVELS, modes: ['play', 'ledger'], rtp: RTP_LABEL,
+        betLevels: BET_LEVELS, modes: ['play', 'chips'], rtp: RTP_LABEL,
         buyCostX: { election: Eng.CFG.buyCost.election, landslide: Eng.CFG.buyCost.landslide },
         wallet: ctx.wallet.get(keyOf(socket)), balances: ctx.wallet.get(keyOf(socket)), bets: BET_LEVELS,
       });
@@ -48,7 +47,7 @@ module.exports = {
       socket.data.benderLast = t;
       const p = payload && typeof payload === 'object' ? payload : {};
       if (!Number.isSafeInteger(p.bet) || !BET_LEVELS.includes(p.bet)) return err(socket, 'bad_bet', 'Pick a listed bet');
-      if (p.mode !== 'play' && p.mode !== 'ledger') return err(socket, 'bad_mode', 'Pick Play $ or Ledger $');
+      if (p.mode !== 'play' && p.mode !== 'chips') return err(socket, 'bad_mode', 'Pick Play $ or Chips');
       const buy = p.buyBonus == null || p.buyBonus === false ? null : p.buyBonus;
       if (buy !== null && buy !== 'election' && buy !== 'landslide') return err(socket, 'bad_request', 'Bad bonus');
 

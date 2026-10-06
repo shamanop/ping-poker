@@ -26,13 +26,15 @@
   // ---------- shell bridge (iframe ?bridge=1): server-authoritative rounds, wallet in cents ----------
   const BRIDGE = Q.get('bridge') === '1' && window.parent !== window;
   const DEFAULT_BETS = BETS.slice();
-  const money = { live: false, mode: 'play', wallet: { play: 0, ledgerNet: 0, ledgerLimit: -50000 } };
+  const money = { live: false, mode: 'play', wallet: { play: 0, chips: 0 } };
   const pend = new Map(); let reqSeq = 0;
   const toParent = (m) => { if (BRIDGE) window.parent.postMessage(m, '*'); };
-  const walletBal = () => (money.mode === 'ledger' ? money.wallet.ledgerNet : money.wallet.play);
-  const avail = () => (money.live ? (money.mode === 'ledger' ? money.wallet.ledgerNet - (money.wallet.ledgerLimit ?? -50000) : money.wallet.play) : st.bal);
-  const fmtBal = (n) => (money.live && money.mode === 'ledger' && n > 0 ? '+' : '') + fmt(n);
-  const unitWord = () => (money.live ? 'funds' : 'VOTES');
+  const chipsFmt = (n) => Math.round(n).toLocaleString('en-US');
+  const liveFmt = () => (money.mode === 'chips' ? chipsFmt : dollars);
+  const walletBal = () => (money.mode === 'chips' ? money.wallet.chips : money.wallet.play);
+  const avail = () => (money.live ? walletBal() : st.bal);
+  const fmtBal = (n) => fmt(n);
+  const unitWord = () => (money.live ? (money.mode === 'chips' ? 'chips' : 'Play $') : 'VOTES');
 
   const stage = $('stage'), cellsEl = $('cells'), floatsEl = $('floats'), ov = $('ov'), boardEl = $('board'), mascot = $('mascot'), mimg = $('mimg'), dump = $('dump');
   const els = new Map();
@@ -831,17 +833,16 @@
   function applyWallet(w) {
     if (!w) return;
     if (typeof w.play === 'number') money.wallet.play = w.play;
-    if (typeof w.ledgerNet === 'number') money.wallet.ledgerNet = w.ledgerNet;
-    if (typeof w.ledgerLimit === 'number') money.wallet.ledgerLimit = w.ledgerLimit;
+    if (typeof w.chips === 'number') money.wallet.chips = w.chips;
     if (money.live && !st.busy) setBal(walletBal(), false);
   }
   function modeUi() {
     const bar = $('modebar'); if (!bar) return;
     bar.dataset.state = money.live ? money.mode : 'practice';
     bar.querySelectorAll('button').forEach((b) => b.classList.toggle('on', money.live && b.dataset.m === money.mode));
-    $('modenote').textContent = !money.live ? 'Practice (no wallet)' : money.mode === 'ledger' ? 'Ledger $ is a friendly tally. Settle up yourselves.' : 'Pretend money.';
-    $('balM').querySelector('.lbl').innerHTML = '&#9733; ' + (!money.live ? 'VOTES' : money.mode === 'ledger' ? 'NET' : 'BALANCE');
-    const fineTxt = !money.live ? 'Practice (no wallet). Free play only.' : (window.BENDER_FOOTER || 'No deposits, no payouts. Ledger $ is a friendly tally.');
+    $('modenote').textContent = !money.live ? 'Practice (no wallet)' : money.mode === 'chips' ? 'Real poker chips from your bank.' : 'Pretend money.';
+    $('balM').querySelector('.lbl').innerHTML = '&#9733; ' + (!money.live ? 'VOTES' : money.mode === 'chips' ? 'CHIPS' : 'BALANCE');
+    const fineTxt = !money.live ? 'Practice (no wallet). Free play only.' : (window.BENDER_FOOTER || 'No deposits, no payouts. Chips are your poker bank.');
     [$('fine'), $('dis')].forEach((el) => { if (el) el.textContent = fineTxt; });
   }
   function setBets(list) {
@@ -849,8 +850,9 @@
     st.betIdx = Math.min(BETS.length - 1, Math.max(0, BETS.indexOf(100) >= 0 ? BETS.indexOf(100) : 3));
   }
   function goLive(m) {
-    if (!money.live) { money.live = true; fmt = dollars; setBets(Array.isArray(m.bets) && m.bets.length ? m.bets : DEFAULT_BETS.concat([2500])); }
-    if (m.mode === 'play' || m.mode === 'ledger') money.mode = m.mode;
+    if (!money.live) { money.live = true; setBets(Array.isArray(m.bets) && m.bets.length ? m.bets : DEFAULT_BETS.concat([2500])); }
+    if (m.mode === 'play' || m.mode === 'chips') money.mode = m.mode;
+    fmt = liveFmt();
     applyWallet(m.wallet || m.balances); modeUi(); if (!st.busy) setBal(walletBal(), false); drawBet();
   }
   function goPractice(msg) {
@@ -859,11 +861,11 @@
   }
   function initBridge() {
     const bar = document.createElement('div'); bar.id = 'modebar';
-    bar.innerHTML = '<div class="mb"><button data-m="play">Play $</button><button data-m="ledger">Ledger $</button></div><span id="modenote"></span>';
+    bar.innerHTML = '<div class="mb"><button data-m="play">Play $</button><button data-m="chips">Chips</button></div><span id="modenote"></span>';
     $('stage').appendChild(bar);
     bar.addEventListener('click', (e) => {
       const b = e.target.closest('button'); if (!b || !money.live || st.busy) return;
-      money.mode = b.dataset.m; SFX.click(); setBal(walletBal(), false); modeUi(); toParent({ type: 'mode', mode: money.mode });
+      money.mode = b.dataset.m; fmt = liveFmt(); SFX.click(); setBal(walletBal(), false); modeUi(); drawBet(); toParent({ type: 'mode', mode: money.mode });
     });
     modeUi();
     if (!BRIDGE) return;

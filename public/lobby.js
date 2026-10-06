@@ -50,8 +50,8 @@ function ladder(unit, min, max, extra = []) {
 }
 const nearIdx = (vals, v) => { let bi = 0, bd = Infinity; vals.forEach((x, i) => { const d = Math.abs(x - v); if (d < bd) { bd = d; bi = i; } }); return bi; };
 const unitOf = (mode) => (mode === 'chips' ? 'chips' : 'cents');
-const modeLabel = (m) => ({ play: 'Play $', friends: 'Friends $', chips: 'Chips' }[m] || m);
-const modeNote = (m) => ({ play: 'Buy-ins come out of your Play $ balance and cash back into it when you stand up.', friends: 'Ledger $ is a friendly tally, settle up on your own.', chips: 'Chips come from your bank balance.' }[m] || '');
+const modeLabel = (m) => ({ play: 'Play $', chips: 'Chips' }[m] || m);
+const modeNote = (m) => ({ play: 'Buy-ins come out of your Play $ balance and cash back into it when you stand up.', chips: 'Chips come from your bank balance.' }[m] || '');
 const avSrc = (e) => (e && e.pic) || avUrl(e && e.avatar);
 const avUrl = (a) => { let s = String(a ?? 'a01'); if (/^\d+$/.test(s)) s = 'a' + s.padStart(2, '0'); s = s.replace(/\.png$/, ''); return 'images/avatars/' + s + '.png'; };
 const code6 = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
@@ -106,7 +106,7 @@ function renderTop() {
   topEl.style.display = sw ? 'none' : '';
   if (sw) return;
   const p = S.profile, u = S.user;
-  const net = p && p.netCents != null ? 'Ledger ' + fm(p.netCents, 'cents', { signed: true }) : '';
+  const net = p && p.netCents != null ? 'Net ' + fm(p.netCents, 'cents', { signed: true }) : '';
   const play = !window.Shell && S.wallet && S.wallet.play != null ? 'Play ' + fm(S.wallet.play, 'cents') : '';
   const cls = p && p.netCents > 0 ? 'up' : p && p.netCents < 0 ? 'down' : '';
   topEl.replaceChildren(
@@ -411,7 +411,7 @@ function freshForm(mode, prev) {
 }
 function blindsOf(f) { if (f.custom) return { sb: f.csb, bb: f.cbb }; const p = PRESETS[f.unit][f.preset]; return { sb: p[0], bb: p[1] }; }
 function viewCreate() {
-  const f = S.form = S.form || freshForm('friends');
+  const f = S.form = S.form || freshForm('play');
   const host = h('div', { class: 'lb-form lb-card', id: 'lb-form' }), side = h('div', { class: 'lb-stack' });
   const grid = h('div', { class: 'lb-create' }, host, side);
   setMain(scrollWrap(h('div', { class: 'lb-wrap' }, h('div', { style: 'display:flex;justify-content:space-between;align-items:center' }, h('button', { class: 'lb-link', onclick: () => show('lobby') }, 'Back to lobby')), grid)));
@@ -446,7 +446,7 @@ function seg(opts, cur, onPick, id) {
 function formBody(f, redraw, sum) {
   const u = f.unit, g = (label, ...k) => h('div', { class: 'grp' }, h('span', { class: 'lb-label' }, label), ...k);
   const set = (k) => (v) => { f[k] = v; redraw(); };
-  const modeSeg = seg([['play', 'Play $', 'fake money'], ['friends', 'Friends $', 'ledger tally'], ['chips', 'Chips', 'bank chips']], f.mode, (m) => { if (m !== f.mode) { S.form = Object.assign(f, freshForm(m, f)); } redraw(); }, 'lb-mode');
+  const modeSeg = seg([['play', 'Play $', 'fake money'], ['chips', 'Chips', 'bank chips']], f.mode, (m) => { if (m !== f.mode) { S.form = Object.assign(f, freshForm(m, f)); } redraw(); }, 'lb-mode');
   const name = h('input', { class: 'text-input', id: 'lb-tname', maxlength: 24, value: f.name, oninput: (e) => { f.name = e.target.value; sum(); } });
   // buy-in range
   const lo = u === 'chips' ? 100 : 500, hi = u === 'chips' ? 10000 : 50000, vals = ladder(u, lo, hi, [f.min, f.max, f.def]);
@@ -491,7 +491,7 @@ function submitCreate(f, err, btn) {
   if (!(b.sb >= 1 && b.bb > b.sb && b.bb >= 2)) return (err.textContent = 'Small blind must be less than big blind.');
   if (!(f.min <= f.def && f.def <= f.max)) return (err.textContent = 'Buy-in needs min <= default <= max.');
   err.textContent = ''; btn.disabled = true; S.onError = (m) => { btn.disabled = false; err.textContent = m; };
-  emit('table_create', { settings: { name: nm, mode: f.mode, unit: f.unit, moneyMode: f.mode === 'play' ? 'play' : f.mode === 'friends' ? 'ledger' : 'chips',
+  emit('table_create', { settings: { name: nm, mode: f.mode, unit: f.unit, moneyMode: f.mode,
     buyIn: { min: f.min, max: f.max, default: f.def }, blinds: b, blindIncrease: { enabled: f.bi, everyMin: f.biEvery, schedule: f.biSched },
     seats: f.seats, actionTimerSec: f.timer, rebuys: f.rebuys, rebuyLimit: 0, isPrivate: f.priv } });
 }
@@ -641,7 +641,7 @@ function openProfile() {
       h('div', { class: 'lb-avatars' }, Array.from({ length: 12 }, (_, i) => { const id = 'a' + String(i + 1).padStart(2, '0');
         return h('button', { type: 'button', class: !u.pic && id === String(av).replace(/\.png$/, '') ? 'on' : '', onclick: (e) => { av = id; photoMsg.textContent = ''; emit('profile_update', u.pic ? { avatar: id, avatarPic: null } : { avatar: id }); S.user.avatar = id; S.user.pic = null; refreshProfile(); } }, h('img', { src: avUrl(id), alt: id })); }))),
     h('div', { class: 'lb-xprow', id: 'lb-profxp' }, h('b', null, 'LV ' + (S.acctStats ? S.acctStats.level : 1)), h('span', { class: 'lb-xptrack' }, h('i', { style: 'width:' + Math.max(2, S.acctStats ? S.acctStats.xpPct : 0) + '%' })), h('small', null, S.acctStats ? S.acctStats.xp + ' / ' + S.acctStats.nextXp + ' XP' : '')),
-    h('div', { class: 'lb-stats' }, h('div', null, h('b', { class: net > 0 ? 'up' : net < 0 ? 'down' : '' }, fm(net, 'cents', { signed: true })), h('small', null, 'Ledger net')),
+    h('div', { class: 'lb-stats' }, h('div', null, h('b', { class: net > 0 ? 'up' : net < 0 ? 'down' : '' }, fm(net, 'cents', { signed: true })), h('small', null, 'Net')),
       h('div', null, h('b', null, st.nights ?? st.nightsPlayed ?? (p.recent || []).length), h('small', null, 'Nights')), h('div', null, h('b', null, st.hands ?? st.handsPlayed ?? 0), h('small', null, 'Hands'))),
     recent.length ? h('div', { class: 'lb-rows' }, recent.map((r) => h('div', { class: 'lb-row' }, h('div', null, h('div', { class: 't' }, r.name || r.tableName || r.nightId), h('div', { class: 's' }, r.date || '')), h('b', { class: r.net > 0 ? 'up' : 'down' }, fm(r.net, r.unit || 'cents', { signed: true }))))) : null,
     achSection(),
@@ -655,8 +655,7 @@ function openProfile() {
 function viewSettle(d) {
   d = d || S.night; if (!d) return show('lobby');
   const unit = (d.table && d.table.unit) || 'cents';
-  const players = (d.players || []).slice().sort((a, b) => b.net - a.net), pays = d.payments || [];
-  const nameOf = (k) => { const p = (d.players || []).find((x) => x.key === k); return (p && p.display) || k; };
+  const players = (d.players || []).slice().sort((a, b) => b.net - a.net);
   const tid = d.tableId || (d.table && d.table.id) || String(d.nightId || '').split('_').pop();
   setMain(scrollWrap(h('div', { class: 'lb-settle' },
     h('div', { class: 'hd' }, h('span', { class: 'lb-eyebrow' }, (d.table && d.table.name) || 'The Ping'), h('h1', { id: 'lb-settle-h' }, 'Night closed')),
@@ -664,11 +663,7 @@ function viewSettle(d) {
       h('span', { class: 'rk' }, i + 1), h('img', { src: avSrc(p), alt: '' }),
       h('div', { class: 'nm' }, p.display || p.key, h('div', { class: 'sub' }, 'In ' + fm((p.buyIns || 0) + (p.rebuys || 0), unit) + '  /  Out ' + fm(p.cashedOut, unit))),
       h('span'), h('span', { class: 'amt ' + (p.net > 0 ? 'up' : p.net < 0 ? 'down' : '') }, fm(p.net, unit, { signed: true }))))),
-    h('section', { class: 'lb-card' }, h('h2', null, 'How to settle'), pays.length ? pays.map((p) => h('div', { class: 'lb-pay' + (p.paid ? ' paid' : ''), 'data-pay': p.from + '>' + p.to },
-      h('span', { class: 'what' }, h('b', null, nameOf(p.from)), ' pays ', h('b', null, nameOf(p.to)), ' ', fm(p.amount, unit)),
-      h('span', { class: 'lb-muted' }, p.paid ? 'Paid' : ''),
-      p.paid ? h('span') : h('button', { class: 'lb-ghost', onclick: () => emit('settle_mark', { nightId: d.nightId, from: p.from, to: p.to, amount: p.amount }) }, 'Mark paid'))) : [h('div', { class: 'lb-empty' }, 'Everyone is square. Nothing to pay.')],
-      h('div', { class: 'lb-copy', style: 'margin-top:var(--p12)' }, modeNote(d.table && d.table.mode))),
+    h('div', { class: 'lb-copy', style: 'margin:var(--p12) 0' }, modeNote(d.table && d.table.mode)),
     h('div', { class: 'lb-btns' },
       h('button', { class: 'lb-btn blue', id: 'lb-copytext', onclick: () => copy(d.text || '', 'Results') }, 'Copy as text'),
       h('button', { class: 'lb-btn blue', id: 'lb-clone', onclick: () => { S.onError = (m) => toast(m); emit('table_clone', { tableId: tid }); } }, 'New table, same settings'),

@@ -34,6 +34,18 @@ const cl = () => { const c = { ev: [] }; c.s = io(`http://localhost:${PORT}`, { 
     b.ev.length = 0;
     b.s.emit('table_join', { tableId: id, buyIn: 5000 }); await sleep(400);
     ok(b.last('error') && /Play \$/.test(b.last('error').message) && !b.has('table_joined'), 'cannot buy in for more than Play $ balance');
+    // slot: Play $ and Chips modes, nothing else
+    a.ev.length = 0; a.s.emit('wallet_get'); await sleep(300);
+    const w0 = a.last('wallet'); ok(typeof w0.play === 'number' && typeof w0.chips === 'number' && w0.ledgerNet === undefined, 'wallet view is { play, chips } only');
+    a.ev.length = 0; a.s.emit('g:bender:spin', { bet: 100, mode: 'chips' }); await sleep(500);
+    const rc = a.last('g:bender:result'); ok(rc && rc.mode === 'chips' && rc.wallet.chips === w0.chips - 100 + rc.totalWin && rc.wallet.play === w0.play, 'slot chips spin settles against the chips bank');
+    const mv = a.last('money'); ok(mv && mv.bank === rc.wallet.chips, 'money event pushed after a chips spin (bank ' + (mv && mv.bank) + ')');
+    a.ev.length = 0; await sleep(200); a.s.emit('g:bender:spin', { bet: 100, mode: 'play' }); await sleep(500);
+    const rp = a.last('g:bender:result'); ok(rp && rp.mode === 'play' && rp.wallet.chips === rc.wallet.chips && rp.wallet.play === rc.wallet.play - 100 + rp.totalWin, 'slot Play $ spin leaves chips alone');
+    a.ev.length = 0; await sleep(200); a.s.emit('g:bender:spin', { bet: 100, mode: 'ledger' }); await sleep(300);
+    ok(a.last('error') && a.last('error').code === 'bad_mode' && !a.has('g:bender:result'), 'ledger mode refused');
+    a.ev.length = 0; a.s.emit('table_create', { settings: { name: 'Old school', mode: 'friends', buyIn: { min: 500, max: 5000, default: 1000 }, blinds: { sb: 5, bb: 10 } } }); await sleep(300);
+    ok(a.last('error') && !a.has('table_created'), 'Friends $ tables can no longer be created');
   } finally { proc.kill(); setTimeout(() => { try { fs.rmSync(dir, { recursive: true, force: true }); } catch {} process.exit(fails ? 1 : 0); }, 400); }
   console.log(fails ? `FAILED ${fails}` : 'ALL PASS');
 })();

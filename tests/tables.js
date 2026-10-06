@@ -56,7 +56,7 @@ async function signup(label) {
   c.key = d.account.key;
   return c;
 }
-const settings = (over = {}) => ({ name: 'Friday Night', mode: 'friends', buyIn: { min: 500, max: 5000, default: 1000 }, blinds: { sb: 5, bb: 10 }, seats: 8, actionTimerSec: 0, rebuys: true, isPrivate: true, autoStart: false, ...over });
+const settings = (over = {}) => ({ name: 'Friday Night', mode: 'play', buyIn: { min: 500, max: 5000, default: 1000 }, blinds: { sb: 5, bb: 10 }, seats: 8, actionTimerSec: 0, rebuys: true, isPrivate: true, autoStart: false, ...over });
 async function waitFor(fn, ms = 6000) { for (let t = 0; t < ms; t += 40) { if (fn()) return true; await sleep(40); } return false; }
 const sum = a => a.reduce((s, x) => s + x, 0);
 const ledgerRows = () => JSON.parse(fs.readFileSync(F.ledger, 'utf8'));
@@ -69,7 +69,7 @@ const ledgerRows = () => JSON.parse(fs.readFileSync(F.ledger, 'utf8'));
 
     // ── validation ──
     const bad = [['sb>=bb', { blinds: { sb: 10, bb: 10 } }], ['min>max', { buyIn: { min: 900, max: 500, default: 600 } }], ['min<bb', { buyIn: { min: 5, max: 500, default: 100 }, blinds: { sb: 5, bb: 10 } }],
-      ['short name', { name: 'x' }], ['bad timer', { actionTimerSec: 20 }], ['unit mismatch', { unit: 'chips' }], ['seats 1', { seats: 1 }], ['bad mode', { mode: 'cash' }]];
+      ['short name', { name: 'x' }], ['bad timer', { actionTimerSec: 20 }], ['unit mismatch', { unit: 'chips' }], ['seats 1', { seats: 1 }], ['bad mode', { mode: 'cash' }], ['friends removed', { mode: 'friends' }]];
     for (const [label, over] of bad) {
       [e, d] = await A.call('table_create', { settings: settings(over) }, 'table_created', 'error');
       ok(e === 'error', 'validation rejects ' + label + (d && d.message ? ': ' + d.message : ''));
@@ -79,7 +79,7 @@ const ledgerRows = () => JSON.parse(fs.readFileSync(F.ledger, 'utf8'));
 
     // ── create + lobby ──
     [e, d] = await A.call('table_create', { settings: settings() }, 'table_created', 'error');
-    ok(e === 'table_created' && /^[A-HJ-NP-Z2-9]{6}$/.test(d.table.id) && d.table.hostKey === A.key && d.table.mode === 'friends' && d.table.unit === 'cents', 'friends table created, 6-char code, host is creator');
+    ok(e === 'table_created' && /^[A-HJ-NP-Z2-9]{6}$/.test(d.table.id) && d.table.hostKey === A.key && d.table.mode === 'play' && d.table.unit === 'cents', 'Play $ table created, 6-char code, host is creator');
     const T = d.table.id; A.tid = B.tid = C.tid = D.tid = T;
     [e, d] = await B.call('lobby_list', {}, 'lobby_tables');
     ok(e === 'lobby_tables' && !d.tables.some(t => t.id === T), 'private table hidden from other users lobby');
@@ -99,16 +99,14 @@ const ledgerRows = () => JSON.parse(fs.readFileSync(F.ledger, 'utf8'));
     await C.call('table_join', { tableId: T, buyIn: 1000 }, 'table_joined', 'error');
     await sleep(150);
     const ru = B.last('room_update');
-    ok(ru && ru.unit === 'cents' && ru.moneyMode === 'ledger' && ru.mode === 'friends' && ru.players.length === 3, 'room_update carries unit/mode/moneyMode');
-    ok(JSON.parse(fs.readFileSync(F.bank, 'utf8')).alice === undefined, 'friends join never touches bank.json');
-    const buyRows = ledgerRows().filter(r => r.type === 'buyin' && r.tableId === T);
-    ok(buyRows.length === 3 && buyRows.every(r => r.mode === 'cents' && r.nightId && r.key), 'ledger buyin rows tagged mode/tableId/nightId/key');
+    ok(ru && ru.unit === 'cents' && ru.moneyMode === 'play' && ru.mode === 'play' && ru.players.length === 3, 'room_update carries unit/mode/moneyMode');
+    ok(JSON.parse(fs.readFileSync(F.bank, 'utf8')).alice === undefined, 'Play $ join never touches bank.json');
+    ok(ledgerRows().filter(r => r.tableId === T).length === 0, 'Play $ join writes no ledger rows');
     await sleep(700);
     ok(A.gs && A.gs.status === 'waiting', 'autoStart false: table does not start itself');
     [e, d] = await D.call('table_join', { tableId: T, buyIn: 1000 }, 'table_joined', 'error');
     [e, d] = await D.call('table_leave', { tableId: T }, 'table_left');
     ok(e === 'table_left' && d.cashedOut === 1000, 'table_leave cashes the stack out');
-    ok(ledgerRows().some(r => r.type === 'cashout' && r.tableId === T && r.key === D.key && r.amount === 1000), 'leave writes cashout row');
 
     // ── host controls ──
     [e, d] = await B.call('table_start', { tableId: T }, 'error', 'game_state');
@@ -128,7 +126,7 @@ const ledgerRows = () => JSON.parse(fs.readFileSync(F.ledger, 'utf8'));
     ok(e === 'table_event' && d.kind === 'started', 'host starts table');
     const okh = await waitFor(() => A.gs && A.gs.handNum >= 3);
     ok(okh, 'hands play out (3+)');
-    ok(A.gs.sb === 10 && A.gs.bb === 20 && A.gs.unit === 'cents' && A.gs.moneyMode === 'ledger' && A.gs.table && A.gs.table.name === 'Friday Night 2', 'game_state carries unit/moneyMode/table + new blinds');
+    ok(A.gs.sb === 10 && A.gs.bb === 20 && A.gs.unit === 'cents' && A.gs.moneyMode === 'play' && A.gs.table && A.gs.table.name === 'Friday Night 2', 'game_state carries unit/moneyMode/table + new blinds');
 
     // pause: finish hand, then hold
     [e, d] = await A.call('table_pause', { tableId: T, paused: true }, 'table_event', 'error');
@@ -143,22 +141,15 @@ const ledgerRows = () => JSON.parse(fs.readFileSync(F.ledger, 'utf8'));
     A.s.emit('table_end_night', { tableId: T });
     ok(await waitFor(() => A.count('settle_up') > 0 && B.count('settle_up') > 0 && C.count('settle_up') > 0), 'settle_up goes to every participant');
     const su = A.last('settle_up');
-    ok(su.tableId === T && su.ended === true && su.table.mode === 'friends' && su.players.length === 4, 'settle_up payload shape (4 players incl. one who left)');
+    ok(su.tableId === T && su.ended === true && su.table.mode === 'play' && su.players.length === 4, 'settle_up payload shape (4 players incl. one who left)');
     ok(su.zeroSum === true && sum(su.players.map(p => p.net)) === 0, 'night nets sum to zero');
     const al = su.players.find(p => p.key === A.key);
     ok(al && al.buyIns === 1000 && typeof al.cashedOut === 'number', 'player buyIns/cashedOut present');
-    const moved = su.payments.reduce((s, p) => s + p.amount, 0), owed = sum(su.players.filter(p => p.net < 0).map(p => -p.net));
-    ok(su.payments.length <= su.players.length - 1 && moved === owed, 'payments cover all debts with at most n-1 transfers');
     ok(/Friday Night 2/.test(su.text) && /\$/.test(su.text), 'share text includes table name and dollar amounts');
-    ok(su.payments.every(p => p.fromName && p.toName && p.paid === false), 'payments carry names and unpaid flag');
+    ok(su.payments === undefined, 'no settle-up payments any more');
     ok(A.last('table_left') === null || true, 'ended');
     [e, d] = await B.call('table_join', { tableId: T, buyIn: 1000 }, 'table_joined', 'error');
     ok(e === 'error', 'cannot join an ended table');
-    if (su.payments[0]) {
-      const p0 = su.payments[0];
-      [e, d] = await A.call('settle_mark', { nightId: su.nightId, from: p0.from, to: p0.to, amount: p0.amount }, 'settle_up', 'error');
-      ok(e === 'settle_up' && d.payments.find(p => p.from === p0.from && p.to === p0.to).paid === true, 'settle_mark flips paid flag');
-    } else ok(true, 'no payments (all even)');
     [e, d] = await D.call('night_get', { nightId: su.nightId }, 'settle_up', 'error');
     ok(e === 'settle_up', 'night_get for a participant who left earlier');
     const outsider = await signup('Erin');
@@ -172,10 +163,6 @@ const ledgerRows = () => JSON.parse(fs.readFileSync(F.ledger, 'utf8'));
     ok(e === 'table_created' && d.table.id !== T && d.table.name === 'Friday Night 2' && d.table.hostKey === B.key, 'clone makes a new table hosted by the cloner');
     [e, d] = await outsider.call('table_clone', { tableId: T }, 'table_created', 'error');
     ok(e === 'error', 'non-participant cannot clone');
-
-    // ── admin adjust ──
-    [e, d] = await B.call('table_adjust', { tableId: T, key: A.key, amount: 100 }, 'table_event', 'error');
-    ok(e === 'error' && d.code === 'not_host', 'table_adjust is admin only');
 
     // ── rebuy / bust (HU, all-in) ──
     const E1 = await signup('Heads'), E2 = await signup('Tails');
@@ -192,11 +179,8 @@ const ledgerRows = () => JSON.parse(fs.readFileSync(F.ledger, 'utf8'));
     await sleep(500);
     [e, d] = await loser.call('rebuy', { tableId: T2, amount: 50 }, 'balance_update', 'error', 'game_state');
     ok(e === 'error' && d.code === 'range', 'rebuy below min -> range');
-    const before = ledgerRows().filter(r => r.type === 'rebuy' && r.tableId === T2).length;
     [e, d] = await loser.call('rebuy', { tableId: T2, amount: 700 }, 'game_state', 'error');
-    await sleep(150);
-    const rrows = ledgerRows().filter(r => r.type === 'rebuy' && r.tableId === T2);
-    ok(rrows.length === before + 1 && rrows[rrows.length - 1].amount === 700 && rrows[rrows.length - 1].mode === 'cents', 'rebuy with amount writes tagged ledger row');
+    ok(e === 'game_state', 'rebuy with amount succeeds from the Play $ wallet');
     await sleep(2500);
     loser.auto = null;
     const lp = loser.gs.players.find(p => p.name === loser.display);
