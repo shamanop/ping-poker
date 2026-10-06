@@ -222,8 +222,12 @@ function returnUncalled(hand, events) {
   const second = bets.length > 1 ? bets[1].bet : 0;
   if (bets[0].bet <= second) return;
   const x = hand.seats[bets[0].s];
-  if (x.folded) return; // a seat removed by foldOut keeps its bet in the pot (dead money)
+  // A seat that folded by its own action forfeits its whole bet (dead money, same as the old server's showdown).
+  // E1: a seat removed by foldOut (kicked, stood up) still gets the uncalled layer back.
+  if (x.folded && !x.forced) return;
   const back = bets[0].bet - second;
+  // Only skip when handing it back would leave the pot empty (nothing for the live seat to play for).
+  if (totalPot(hand) - back <= 0) return;
   x.bet -= back; x.stack += back; x.returned += back;
   if (x.stack > 0) x.allIn = false;
   events.push({ type: 'returned', seat: bets[0].s, amount: back });
@@ -283,6 +287,7 @@ function foldOut(hand, seat) {
   if (hand.phase === 'showdown' || hand.phase === 'done') throw new RuleError('hand_over', { phase: hand.phase });
   if (s.folded) return [];
   s.folded = true;
+  s.forced = true;
   const events = [{ type: 'fold', seat: n, forced: true }];
   if (hand.phase === 'runout') {
     if (liveSeats(hand).length === 1) toShowdown(hand, events);

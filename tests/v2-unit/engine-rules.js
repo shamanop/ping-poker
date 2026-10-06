@@ -555,7 +555,7 @@ module.exports = function register(t) {
     assert.deepStrictEqual(stacksOf(h), [2600, 2000, 0]);
   });
 
-  t.case('foldOut of everyone but a seat that has put in nothing: it wins the dead blinds, nothing vanishes', () => {
+  t.case('foldOut of everyone but a seat that has put in nothing: it wins what is left, nothing vanishes', () => {
     // property-test find (seed 2, hand 6746): button 4, blinds 1/2, seats 0,2,3,4
     const h = mk({ stacks: { 0: 385, 2: 20, 3: 142, 4: 58 }, button: 4, sb: 1, bb: 2 });
     assert.strictEqual(h.toAct, 3);
@@ -564,14 +564,15 @@ module.exports = function register(t) {
     assert.strictEqual(h.toAct, 4);
     H.foldOut(h, 0);
     assert.strictEqual(h.phase, 'showdown');
-    assert.strictEqual(h.seats[0].returned + h.seats[2].returned, 0, 'a folded seat gets no return');
     const r = H.settle(h);
-    assert.deepStrictEqual(r.payouts, { 0: 0, 2: 0, 3: 0, 4: 3 });
-    assert.deepStrictEqual(r.net, { 0: -1, 2: -2, 3: 0, 4: 3 });
-    assert.deepStrictEqual(r.pots, [{ amount: 3, eligible: [4], winners: [4] }]);
+    // E1: the folded BB (2) is the top bettor over the folded SB (1): its uncalled 1 comes back
+    assert.deepStrictEqual(r.returned, { 0: 0, 2: 1, 3: 0, 4: 0 });
+    assert.deepStrictEqual(r.payouts, { 0: 0, 2: 0, 3: 0, 4: 2 });
+    assert.deepStrictEqual(r.net, { 0: -1, 2: -1, 3: 0, 4: 2 });
+    assert.deepStrictEqual(r.pots, [{ amount: 2, eligible: [4], winners: [4] }]);
   });
 
-  t.case('foldOut of the top bettor keeps its bet in the pot (dead money); a live top bettor still gets the uncalled part', () => {
+  t.case('foldOut of the top bettor: the matched part stays in the pot, a live top bettor still gets the uncalled part', () => {
     const h = mk({ stacks: [1000, 1000, 1000], button: 0 });
     play(h, [[0, 'raise', 300]]);
     H.foldOut(h, 0); // the raiser is kicked while seat 1 is to act
@@ -588,6 +589,56 @@ module.exports = function register(t) {
     H.foldOut(g, 1);
     play(g, [[2, 'fold']]);
     assert.deepStrictEqual(H.settle(g).returned, { 0: 250, 1: 0, 2: 0 });
+  });
+
+  t.case('E1 does not cover a voluntary fold: SB folds over two short all-ins -> nothing returned, whole blind is dead money (old-server showdown)', () => {
+    // seed 7 hand 8895 of the old-showdown differential: SB 5040 in, BB all-in 2520, caller all-in 2520, SB folds
+    const h = mk({ stacks: { 0: 40320, 1: 2520, 3: 98280, 4: 2520, 7: 80640 }, button: 1, sb: 5040, bb: 7560 });
+    const ev = play(h, [[7, 'fold'], [0, 'fold'], [1, 'call'], [3, 'fold']]);
+    assert.deepStrictEqual(ev.filter(e => e.type === 'returned'), []);
+    runOut(h);
+    assert.strictEqual(h.phase, 'showdown');
+    const r = H.settle(h);
+    assert.deepStrictEqual(r.returned, { 0: 0, 1: 0, 3: 0, 4: 0, 7: 0 });
+    assert.strictEqual(r.payouts[1] + r.payouts[4], 10080);
+    assert.strictEqual(r.net[3], -5040);
+    assert.strictEqual(h.seats[3].stack, 98280 - 5040);
+  });
+
+  t.case('E1 heads-up: host limps, P1 raises to 500, host kicks P1 -> P1 gets his uncalled 450 back, host wins 100', () => {
+    const h = mk({ stacks: [1000, 1000], button: 0 }); // seat 0 (button/SB) is "the host"
+    play(h, [[0, 'call'], [1, 'raise', 500]]);
+    assert.strictEqual(h.toAct, 0);
+    const ev = H.foldOut(h, 1);
+    assert.deepStrictEqual(ev.filter(e => e.type === 'returned'), [{ type: 'returned', seat: 1, amount: 450 }]);
+    assert.strictEqual(h.seats[1].stack, 950); // 1000 - 500 + 450: cashes out stack only
+    const r = H.settle(h);
+    assert.deepStrictEqual(r.returned, { 0: 0, 1: 450 });
+    assert.deepStrictEqual(r.payouts, { 0: 100, 1: 0 });
+    assert.deepStrictEqual(r.net, { 0: 50, 1: -50 });
+    assert.deepStrictEqual(stacksOf(h), [1050, 950]);
+  });
+
+  t.case('E1 4-handed: kicked raiser called only by a short all-in -> the layer above the call returns to the kicked seat', () => {
+    const h = mk({ stacks: [5000, 300, 5000, 5000], button: 0 }); // sb 1 (300), bb 2, utg 3
+    play(h, [[3, 'raise', 1000], [0, 'fold'], [1, 'call']]);
+    assert.strictEqual(h.toAct, 2);
+    H.foldOut(h, 3);
+    play(h, [[2, 'fold']]);
+    assert.strictEqual(h.phase, 'showdown');
+    const r = H.settle(h);
+    assert.deepStrictEqual(r.returned, { 0: 0, 1: 0, 2: 0, 3: 700 });
+    assert.deepStrictEqual(r.payouts, { 0: 0, 1: 650, 2: 0, 3: 0 });
+    assert.deepStrictEqual(r.net, { 0: 0, 1: 350, 2: -50, 3: -300 });
+  });
+
+  t.case('E1 a kicked top bettor on the river: the unanswered bet comes back, earlier streets stay in the pot', () => {
+    const h = mk({ stacks: [1000, 1000], button: 0, holes: [['7c', '2d'], ['As', 'Ad']], board: DRY });
+    play(h, [[0, 'call'], [1, 'check'], [1, 'check'], [0, 'check'], [1, 'check'], [0, 'check'], [1, 'check'], [0, 'raise', 400]]);
+    H.foldOut(h, 0);
+    const r = H.settle(h);
+    assert.deepStrictEqual(r.returned, { 0: 400, 1: 0 });
+    assert.deepStrictEqual(r.payouts, { 0: 0, 1: 100 });
   });
 
   t.case('foldOut errors: unknown seat, repeat is a no-op, after showdown throws', () => {
