@@ -53,3 +53,6 @@ CC.pull.potWin(pot, ctx)             // Promise
 CC.pull.rules(rules)                 // info-screen lines
 ```
 Prompts are rendered inside `#ov` / `#scene` so `sweep()` removes everything.
+
+## 0b. Timer change (server, U4 fix, 2026-10-06 ~11:10, on the branch)
+The server now arms the decision timer at `max(timeoutMs, 180000)` (ceiling) when the pending result is sent; the FIRST `ready` brings it to a full `timeoutMs` from now. The pending view's `expiresAt` is now the CEILING: the client must NOT show a countdown until the `g:coldcall:timer` reply arrives (no `timer` yet = prompt armed but no clock; show "..." or nothing). A client that never sends `ready` defaults at the ceiling. Real-server drivers that wait for a default must send `ready` first. Restart 4640 (`_scratch/start4640.sh`) to pick it up.
