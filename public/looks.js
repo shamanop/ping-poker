@@ -45,6 +45,7 @@
         h('span', null, name));
       box.append(b);
     }
+    box.setValue = (v) => { const c = known(v); for (const x of box.children) { const s = x.getAttribute('data-look') === c; x.classList.toggle('on', s); x.setAttribute('aria-checked', s ? 'true' : 'false'); } };
     return box;
   }
   window.PingLooks = { LOOKS, IDS, nameOf, apply, preload, picker, known };
