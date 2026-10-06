@@ -12,7 +12,7 @@ const { createTables } = require('./tables');
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const STARTING_CHIPS  = 1500;
+const STARTING_CHIPS  = 2000;
 const BANK_DEFAULT    = 10000;
 const DATA_DIR        = process.env.DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH || __dirname;
 const BANK_FILE       = process.env.BANK_FILE || path.join(DATA_DIR, 'bank.json');
