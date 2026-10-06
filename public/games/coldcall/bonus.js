@@ -80,7 +80,7 @@
     await intro(b, ctx); ctx.cur.intro = true;
     ctx.sceneEl.replaceChildren(); ctx.bonusOn(); ctx.st.pace = 0.8; hud.hidden = false; L.textContent = b.startSpins; $('bhTotL').textContent = lbl;
     // the HUD total is the WIN meter's own number (same running total, same moments); a bonus after a paying trigger spin reads ROUND TOTAL
-    T.textContent = ctx.dollars(ctx.cents(run0)); ctx.st.mirror = (t) => { T.textContent = t; };
+    T.textContent = ctx.meterTxt(ctx.cents(run0)); ctx.st.mirror = (t) => { T.textContent = t; };
     for (let i = 0; ; i++) {
       b = ctx.script.bonus; if (i >= b.spins.length) break;
       let sp = b.spins[i];
@@ -121,7 +121,7 @@
       const end = document.createElement('div'); end.className = 'scn';
       end.innerHTML = '<h2></h2><div class="chips"><div class="chip set"><small>SPINS PLAYED</small><b></b></div><div class="chip set nm"><small>MODE</small><b></b></div></div><div class="chip set" style="width:100%"><small></small><b></b></div><div class="tap">TAP TO CONTINUE</div>';
       end.querySelector('h2').innerHTML = 'BONUS<br>COMPLETE'; const bs = end.querySelectorAll('b');
-      bs[0].textContent = b.spins.length; bs[1].textContent = NAME[b.spins.length ? b.spins[b.spins.length - 1].mode : b.kind]; bs[2].textContent = ctx.dollars(ctx.cents(ctx.run.t)); end.querySelector('.chip[style] small').textContent = lbl;
+      bs[0].textContent = b.spins.length; bs[1].textContent = NAME[b.spins.length ? b.spins[b.spins.length - 1].mode : b.kind]; bs[2].textContent = ctx.p.status === 'done' && Number.isFinite(ctx.p.totalWin) ? ctx.dollars(ctx.p.totalWin) : ctx.meterTxt(ctx.cents(ctx.run.t)); end.querySelector('.chip[style] small').textContent = lbl;   // the round total the server paid (the card comes after ONE MORE CALL is settled)
       end.prepend(CC.hero.img('win', 'fin-hero')); ctx.sceneEl.replaceChildren(end); await ctx.waitTap(7000); ctx.FX.clear();
     }
     ctx.sceneEl.replaceChildren(); ctx.modeName = null; ctx.bonusOff();
