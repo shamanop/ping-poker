@@ -46,15 +46,17 @@
   }
 
   // presets: in-range only (never clamped silently), duplicates merged by units, the one equal to max is "All-in".
-  function cleanPresets(list, min, max) {
+  function cleanPresets(list, min, max, allIn) {
+    if (allIn === undefined) allIn = max;
     const byUnits = new Map();
     (list || []).forEach(p => {
       const u = Math.round(Number(p.units));
       if (!Number.isFinite(u) || u < min || u > max) return;
-      const label = u === max ? 'All-in' : p.label;
+      const isAllIn = allIn !== null && u === allIn;
+      const label = isAllIn ? 'All-in' : p.label;
       const prev = byUnits.get(u);
       if (!prev) byUnits.set(u, { label, units: u });
-      else if (u === max) prev.label = 'All-in';
+      else if (isAllIn) prev.label = 'All-in';
     });
     return Array.from(byUnits.values()).sort((a, b) => a.units - b.units);
   }
@@ -85,7 +87,7 @@
     const el = mk('div', 'amt');
     const row = mk('div', 'amt-row');
     const sym = mk('span', 'amt-sym');
-    const input = mk('input', 'amt-text', { type: 'text', autocomplete: 'off', spellcheck: 'false', autocapitalize: 'off', 'aria-label': label, enterkeyhint: 'done' });
+    const input = mk('input', 'amt-text text-input', { type: 'text', autocomplete: 'off', spellcheck: 'false', autocapitalize: 'off', 'aria-label': label, enterkeyhint: 'done' });
     const suffix = mk('span', 'amt-suffix');
     const slider = mk('input', 'amt-slider', { type: 'range', step: '1', 'aria-label': label + ' slider' });
     const ends = mk('div', 'amt-ends');
@@ -102,7 +104,7 @@
     confirmEl.hidden = true; confirmEl.classList.add('hidden');
     row.append(sym, input, suffix);
     ends.append(endMin, endMax);
-    el.append(row, slider, ends, presetBox, msgEl, confirmEl);
+    el.append(row, msgEl, slider, ends, presetBox, confirmEl); // message right under the text so it is never below the fold
 
     const mode = () => M().modeFor(M().pref, unit);
     const fmt = (u, o) => M().format(u, mode(), o);
@@ -131,7 +133,7 @@
     }
     function renderChrome() {
       stops = buildStops({ min, max, presets: rawPresets, scale, bb: opts.bb });
-      presets = cleanPresets(rawPresets, min, max);
+      presets = cleanPresets(rawPresets, min, max, allInUnits);
       slider.min = '0';
       slider.max = String(Math.max(0, stops.length - 1));
       slider.disabled = stops.length < 2;

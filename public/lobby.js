@@ -326,49 +326,39 @@ function settingsCard(t) {
     t.blindIncrease && t.blindIncrease.enabled ? cell('Blinds rise', 'every ' + t.blindIncrease.everyMin + ' min') : null, cell('Rebuys', t.rebuys === false ? 'Off' : 'On'));
 }
 
-// ── buy-in picker (slider + typed) ────────────────────────────────
+// ── buy-in picker (AmountInput: the number is the truth, the text is a view) ──
 function buyInPicker(t, mySettled) {
   const unit = t.unit || unitOf(t.mode), bi = t.buyIn;
   let fund = t.mode;
-  const bankOf = (f) => (f === 'chips' ? (S.user && (S.user.bankChips ?? S.user.chips)) : (S.wallet ? S.wallet.play : null));
-  const hiOf = (bk) => (bk != null && Number.isFinite(bk) ? Math.max(bi.min, Math.min(bi.max, bk)) : bi.max);
+  const bankOf = (f) => { const v = f === 'chips' ? (S.user && (S.user.bankChips ?? S.user.chips)) : (S.wallet ? S.wallet.play : null); return Number.isFinite(v) ? v : null; };
+  const hiOf = (bk) => (bk != null ? Math.min(bi.max, bk) : bi.max);
+  const presetsFor = (hi) => [{ label: 'Min', units: bi.min }, { label: 'Default', units: bi.default }, { label: 'Max', units: hi }];
   let bank = bankOf(fund), hi = hiOf(bank);
-  let vals = ladder(unit, bi.min, hi, [bi.default]);
-  let val = Math.min(hi, Math.max(bi.min, bi.default));
-  const range = h('input', { type: 'range', min: 0, max: vals.length - 1, step: 1, value: nearIdx(vals, val), id: 'lb-buyin-range', 'aria-label': 'Buy-in' });
-  const fill = h('div', { class: 'fill' });
-  const typed = h('input', { class: 'text-input', id: 'lb-buyin-input', type: 'text', inputmode: 'decimal', autocomplete: 'off', value: plain(val) });
-  const msg = h('div', { class: 'lb-err', id: 'lb-buyin-err' });
-  function plain(v) { return amtText(v, unit); }
-  const paint = () => { const a = range.value / Math.max(1, vals.length - 1); fill.style.left = 'var(--p8)'; fill.style.width = 'calc((100% - var(--p16)) * ' + a + ')'; };
-  range.addEventListener('input', () => { val = vals[+range.value]; typed.value = plain(val); msg.textContent = ''; paint(); drawBal(); });
-  const commit = () => {
-    const v = parseAmt(typed.value, unit);
-    if (v == null) { msg.textContent = 'Enter an amount.'; return false; }
-    val = Math.min(hi, Math.max(bi.min, v)); typed.value = plain(val); range.value = nearIdx(vals, val); paint();
-    msg.textContent = v !== val ? 'Buy-in is ' + fm(bi.min, unit) + ' to ' + fm(hi, unit) + '.' : ''; drawBal(); return true;
-  };
-  typed.addEventListener('change', commit); typed.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); commit(); } });
-  paint();
+  const short = () => bank != null && bank < bi.min; // cannot afford the minimum: nothing to pick
+  const f = AmountInput({ units: Math.min(Math.max(bi.min, bi.default), Math.max(bi.min, hi)), min: bi.min, max: Math.max(bi.min, hi), unit, scale: 'ladder', presets: presetsFor(Math.max(bi.min, hi)), label: 'Buy-in', rangeLabel: 'Buy-in', onChange: () => drawBal() });
+  f.input.id = 'lb-buyin-input'; f.slider.id = 'lb-buyin-range'; f.el.id = 'lb-buyin';
   const balLine = h('div', { class: 'lb-muted', id: 'lb-fund-bal' });
   const drawBal = () => {
-    const cross = fund !== t.mode;
-    balLine.textContent = bank == null ? '' : (fund === 'play' ? 'Your Play $: ' + fm(bank, 'cents') : 'Your bank: ' + fm(bank, 'chips')) + (cross ? '. This buy-in costs ' + (fund === 'play' ? fm(val, 'cents') : fm(val, 'chips')) + ' (1 chip = $0.01).' : '');
+    const cross = fund !== t.mode, v = f.value();
+    balLine.textContent = bank == null ? '' : (fund === 'play' ? 'Your Play $: ' + fm(bank, 'cents') : 'Your bank: ' + fm(bank, 'chips'))
+      + (short() ? '. Not enough for the minimum buy-in of ' + fm(bi.min, unit) + '.' : '')
+      + (cross && v != null ? '. This buy-in costs ' + (fund === 'play' ? fm(v, 'cents') : fm(v, 'chips')) + ' (1 chip = $0.01).' : '');
   };
-  const fundBtn = (f, label) => h('button', { type: 'button', class: 'lb-btn' + (fund === f ? '' : ' blue'), id: 'lb-fund-' + f, onclick: () => {
-    if (fund === f) return; fund = f; bank = bankOf(fund); hi = hiOf(bank);
-    vals = ladder(unit, bi.min, hi, [bi.default]); val = Math.min(hi, Math.max(bi.min, val)); range.max = vals.length - 1; range.value = nearIdx(vals, val); typed.value = plain(val); msg.textContent = '';
-    fundRow.replaceChildren(fundBtn('chips', 'Chips'), fundBtn('play', 'Play $')); paint(); drawBal();
+  const fundBtn = (k, label) => h('button', { type: 'button', class: 'lb-btn' + (fund === k ? '' : ' blue'), id: 'lb-fund-' + k, onclick: () => {
+    if (fund === k) return; fund = k; bank = bankOf(fund); hi = hiOf(bank);
+    const top = Math.max(bi.min, hi), cur = f.value();
+    f.setBounds({ min: bi.min, max: top, presets: presetsFor(top) });
+    f.set(cur == null ? bi.default : Math.min(top, Math.max(bi.min, cur)), { source: 'fund' });
+    fundRow.replaceChildren(fundBtn('chips', 'Chips'), fundBtn('play', 'Play $')); drawBal();
   } }, label);
   const fundRow = h('div', { class: 'lb-field', id: 'lb-fund' }, fundBtn('chips', 'Chips'), fundBtn('play', 'Play $'));
   drawBal();
   const night = mySettled != null ? h('div', { class: 'lb-muted' }, 'Your night so far: ', h('b', { class: mySettled > 0 ? 'up' : mySettled < 0 ? 'down' : '' }, fm(mySettled, unit, { signed: true }))) : null;
-  const el = h('div', { class: 'lb-stack', style: 'gap:var(--p14)' },
-    h('div', { class: 'lb-field' }, h('label', null, 'Buy-in'), h('div', { class: 'lb-join' }, typed, h('span'))),
-    h('div', { class: 'lb-slider' }, h('div', { class: 'trk' }), fill, range),
-    h('div', { class: 'lb-ends' }, h('span', null, fm(bi.min, unit)), h('span', null, fm(hi, unit))), msg, night,
-    fundRow, balLine);
-  return { el, get: () => (commit() ? val : null), getFund: () => fund, msg };
+  // the fund picker sits above the slider so the modal footer can never hide it (ui 11)
+  const el = h('div', { class: 'lb-stack', style: 'gap:var(--p14)' }, fundRow, balLine, h('div', { class: 'lb-field' }, h('label', null, 'Buy-in'), f.el), night);
+  // get(): integer units or null. Out of range, unparsable or unaffordable never seats (S1-3); the message stays visible.
+  const get = () => { if (short()) return null; const v = f.value(); if (v === null) { f.submit(); try { f.el.scrollIntoView({ block: 'center' }); } catch (e) {} } return v; };
+  return { el, get, getFund: () => fund, field: f, short };
 }
 
 // ── join / buy-in modal ───────────────────────────────────────────
@@ -396,7 +386,7 @@ function modalJoin(info, me) {
   const pick = buyInPicker(t, S.net[id]);
   const err = h('div', { class: 'lb-err', id: 'lb-joinmsg' });
   const sit = h('button', { class: 'lb-btn', id: 'lb-sit', onclick: () => {
-    const v = me ? (me.stack || t.buyIn.default) : pick.get(); if (v == null) return;
+    const v = me ? (me.stack || t.buyIn.default) : pick.get(); if (v == null) { err.textContent = pick.short() ? 'Your balance is below the minimum buy-in.' : 'Fix the buy-in amount first.'; return; }
     sit.disabled = true; err.textContent = ''; S.onError = (m) => { sit.disabled = false; err.textContent = m; };
     emit('table_join', { tableId: id, buyIn: v, fund: pick.getFund() });
   } }, me ? 'Return to seat' : 'Sit down');
@@ -524,15 +514,17 @@ function drawShare() {
   const link = location.origin + '/?t=' + id, unit = t.unit || unitOf(t.mode);
   const me = info && (info.seated || []).find((p) => p.key === myKey()), n = info ? (info.seated || []).length : 0;
   const isHost = tHost(t) === myKey() || isAdmin();
-  const err = h('div', { class: 'lb-err', id: 'lb-sharemsg' });
+  const err = h('div', { class: 'lb-err', id: 'lb-sharemsg' }, S.shareErr || '');
+  // the error stays across the 3 s preview redraws until the next action (S2-2)
+  const setErr = (m) => { S.shareErr = m || ''; err.textContent = S.shareErr; };
   let right;
   if (me) {
     right = h('section', { class: 'lb-card lb-stack' }, h('h2', null, 'You are seated'), h('div', { class: 'lb-muted' }, 'Stack ' + fm(me.stack, unit) + '. The hand deals automatically when a second player sits.'),
       isHost && n >= 2 ? h('button', { class: 'lb-btn blue full', id: 'lb-start', onclick: () => emit('table_start', { tableId: id }) }, 'Start when ready') : null,
-      h('button', { class: 'lb-btn full', id: 'lb-enter', onclick: () => { S.onError = (m) => { err.textContent = m; }; emit('table_join', { tableId: id, buyIn: me.stack || t.buyIn.default }); } }, 'Go to the table'), err);
+      h('button', { class: 'lb-btn full', id: 'lb-enter', onclick: () => { setErr(''); S.onError = (m) => { setErr(m); }; emit('table_join', { tableId: id, buyIn: me.stack || t.buyIn.default }); } }, 'Go to the table'), err);
   } else {
     const pick = S.sharePick && S.sharePick.id === id ? S.sharePick.p : (S.sharePick = { id, p: buyInPicker(t, S.net[id]) }).p;
-    const sit = h('button', { class: 'lb-btn full', id: 'lb-sit', onclick: () => { const v = pick.get(); if (v == null) return; sit.disabled = true; S.onError = (m) => { sit.disabled = false; err.textContent = m; }; emit('table_join', { tableId: id, buyIn: v, fund: pick.getFund() }); } }, 'Sit down');
+    const sit = h('button', { class: 'lb-btn full', id: 'lb-sit', onclick: () => { setErr(''); const v = pick.get(); if (v == null) { setErr(pick.short() ? 'Your balance is below the minimum buy-in.' : 'Fix the buy-in amount first.'); return; } sit.disabled = true; S.onError = (m) => { sit.disabled = false; setErr(m); }; emit('table_join', { tableId: id, buyIn: v, fund: pick.getFund() }); } }, 'Sit down');
     right = h('section', { class: 'lb-card lb-stack' }, h('h2', null, 'Take your seat'), pick.el, h('div', { class: 'lb-copy' }, modeNote(t.mode)), err, sit);
   }
   S.shareBox.replaceChildren(
@@ -812,7 +804,7 @@ function bind() {
   s.on('lobby_tables', ({ tables }) => { S.tables = tables || []; if (S.view === 'lobby') drawLists(); });
   s.on('tables_mine', ({ tables, nightNet }) => { S.mine = tables || []; S.net = nightNet || {}; if (S.view === 'lobby') drawLists(); });
   s.on('leaderboard_data', ({ entries, me }) => { S.board = entries || []; S.boardMe = me || null; if (S.view === 'lobby') drawLists(); });
-  s.on('table_created', ({ table }) => { S.cur = table; S.sharePick = null; S.onError = null; S.info[tId(table)] = S.info[tId(table)] || { table, seated: [], openSeats: table.seats }; show('share', tId(table)); });
+  s.on('table_created', ({ table }) => { S.cur = table; S.sharePick = null; S.shareErr = ''; S.onError = null; S.info[tId(table)] = S.info[tId(table)] || { table, seated: [], openSeats: table.seats }; show('share', tId(table)); });
   s.on('table_info', onInfo);
   s.on('table_joined', (p) => {
     S.cur = p.table; S.onError = null; S.rebinding = null; S.sharePick = null; closeModal();
