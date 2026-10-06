@@ -1,0 +1,185 @@
+{
+ "_what": "Baseline f20c3ff on :4650, mock=pull state idle|callback, Play $. note = #plNote getBoundingClientRect (includes its slight rotation); board = #board (the monitor frame, 12 px of it sits outside the viewport at 540 wide); symbolGrid = #slots. noteHeightPx is the number FB2 must halve. noteAreaOverBoard = note rect intersected with board rect, px^2; coverPctOfMonitorFrameVisible = that over (board width clipped to the viewport x board height). noteAreaOverSymbolGridPx2 = 0 in every case: the baseline strip already clears the symbols and covers the top of the bezel only.",
+ "sizes": {
+  "540x960_idle": {
+   "noteHeightPx": 61.6,
+   "noteWidthPx": 436.9,
+   "noteAreaOverBoardPx2": 26913,
+   "coverPctOfMonitorFrameVisible": 10.7,
+   "noteAreaOverSymbolGridPx2": 0,
+   "noteBottomMinusGridTopPx": -0.7,
+   "noteAsPctOfBoardHeight": 13.2,
+   "coldLineShown": true,
+   "rects": {
+    "note": {
+     "x": 17.6,
+     "y": 336.2,
+     "w": 436.9,
+     "h": 61.6
+    },
+    "board": {
+     "x": -12,
+     "y": 326,
+     "w": 564,
+     "h": 466
+    },
+    "symbolGrid": {
+     "x": 83.4,
+     "y": 398.5,
+     "w": 384,
+     "h": 320
+    }
+   }
+  },
+  "540x960_callback": {
+   "noteHeightPx": 61.6,
+   "noteWidthPx": 436.9,
+   "noteAreaOverBoardPx2": 26913,
+   "coverPctOfMonitorFrameVisible": 10.7,
+   "noteAreaOverSymbolGridPx2": 0,
+   "noteBottomMinusGridTopPx": -0.7,
+   "noteAsPctOfBoardHeight": 13.2,
+   "coldLineShown": true,
+   "rects": {
+    "note": {
+     "x": 17.6,
+     "y": 336.2,
+     "w": 436.9,
+     "h": 61.6
+    },
+    "board": {
+     "x": -12,
+     "y": 326,
+     "w": 564,
+     "h": 466
+    },
+    "symbolGrid": {
+     "x": 83.4,
+     "y": 398.5,
+     "w": 384,
+     "h": 320
+    }
+   }
+  },
+  "360x740_idle": {
+   "noteHeightPx": 41.1,
+   "noteWidthPx": 291.3,
+   "noteAreaOverBoardPx2": 11972,
+   "coverPctOfMonitorFrameVisible": 10.7,
+   "noteAreaOverSymbolGridPx2": 0,
+   "noteBottomMinusGridTopPx": -0.5,
+   "noteAsPctOfBoardHeight": 13.2,
+   "coldLineShown": true,
+   "rects": {
+    "note": {
+     "x": 11.7,
+     "y": 324.1,
+     "w": 291.3,
+     "h": 41.1
+    },
+    "board": {
+     "x": -8,
+     "y": 317.3,
+     "w": 376,
+     "h": 310.7
+    },
+    "symbolGrid": {
+     "x": 55.6,
+     "y": 365.7,
+     "w": 256,
+     "h": 213.3
+    }
+   }
+  },
+  "360x740_callback": {
+   "noteHeightPx": 41.1,
+   "noteWidthPx": 291.3,
+   "noteAreaOverBoardPx2": 11972,
+   "coverPctOfMonitorFrameVisible": 10.7,
+   "noteAreaOverSymbolGridPx2": 0,
+   "noteBottomMinusGridTopPx": -0.5,
+   "noteAsPctOfBoardHeight": 13.2,
+   "coldLineShown": true,
+   "rects": {
+    "note": {
+     "x": 11.7,
+     "y": 324.1,
+     "w": 291.3,
+     "h": 41.1
+    },
+    "board": {
+     "x": -8,
+     "y": 317.3,
+     "w": 376,
+     "h": 310.7
+    },
+    "symbolGrid": {
+     "x": 55.6,
+     "y": 365.7,
+     "w": 256,
+     "h": 213.3
+    }
+   }
+  },
+  "1440x900_idle": {
+   "noteHeightPx": 57.8,
+   "noteWidthPx": 409.6,
+   "noteAreaOverBoardPx2": 23675,
+   "coverPctOfMonitorFrameVisible": 10.2,
+   "noteAreaOverSymbolGridPx2": 0,
+   "noteBottomMinusGridTopPx": -0.6,
+   "noteAsPctOfBoardHeight": 13.2,
+   "coldLineShown": true,
+   "rects": {
+    "note": {
+     "x": 483.3,
+     "y": 315.2,
+     "w": 409.6,
+     "h": 57.8
+    },
+    "board": {
+     "x": 455.6,
+     "y": 305.6,
+     "w": 528.8,
+     "h": 436.9
+    },
+    "symbolGrid": {
+     "x": 545.1,
+     "y": 373.6,
+     "w": 360,
+     "h": 300
+    }
+   }
+  },
+  "1440x900_callback": {
+   "noteHeightPx": 57.8,
+   "noteWidthPx": 409.6,
+   "noteAreaOverBoardPx2": 23675,
+   "coverPctOfMonitorFrameVisible": 10.2,
+   "noteAreaOverSymbolGridPx2": 0,
+   "noteBottomMinusGridTopPx": -0.6,
+   "noteAsPctOfBoardHeight": 13.2,
+   "coldLineShown": true,
+   "rects": {
+    "note": {
+     "x": 483.3,
+     "y": 315.2,
+     "w": 409.6,
+     "h": 57.8
+    },
+    "board": {
+     "x": 455.6,
+     "y": 305.6,
+     "w": 528.8,
+     "h": 436.9
+    },
+    "symbolGrid": {
+     "x": 545.1,
+     "y": 373.6,
+     "w": 360,
+     "h": 300
+    }
+   }
+  }
+ }
+}
