@@ -11,6 +11,7 @@ process.env.WALLET_FILE = path.join(tmp, 'wallet.json');
 const { createWallet } = require('../wallet.js');
 const games = require('../games');
 const E = require('../games/coldcall-engine.js');
+E.CFG.pull.on = false;   // these tests script the rng through the old stateless path; THE PULL has its own files (run at the end)
 
 let pass = 0;
 const test = async (name, fn) => { try { await fn(); pass++; console.log('ok   ' + name); } catch (e) { console.error('FAIL ' + name + '\n' + (e.stack || e)); process.exitCode = 1; } };
@@ -836,4 +837,10 @@ function replayRound(s, cfg) {
 
   console.log(pass + ' passed' + (process.exitCode ? ', with failures' : ''));
   fs.rmSync(tmp, { recursive: true, force: true });
+  for (const f of ['coldcall-pull-engine.js', 'coldcall-pull-server.js']) {   // THE PULL: separate processes (own module state, pull.on = true)
+    const r = require('child_process').spawnSync(process.execPath, [path.join(__dirname, f)], { encoding: 'utf8', env: process.env });
+    const m = /(\d+) passed/.exec(r.stdout || '');
+    console.log(f + ': ' + (m ? m[1] + ' passed' : 'NO RESULT') + (r.status ? ', FAILED (exit ' + r.status + ')' : ''));
+    if (r.status) { process.exitCode = 1; console.error((r.stdout || '').split('\n').filter((l) => /^FAIL/.test(l)).join('\n') + (r.stderr || '')); }
+  }
 })();
