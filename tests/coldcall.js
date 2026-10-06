@@ -723,6 +723,38 @@ function replayRound(s, cfg) {
     }
   });
 
+  await test('settlement, Play $ and Chips: on every spin and buy at every bet level balance before - cost + win = balance after, whole units only, the other purse never moves, the wallet push equals the result, a fast double click is charged once', async () => {
+    const plays = [null, null, null, null, null, 'call', null, 'hunt', 'bonus1', 'bonus2'];
+    for (const mode of ['play', 'chips']) {
+      const other = mode === 'play' ? 'chips' : 'play';
+      const s = setup({ rng: E.rngFrom(mode === 'play' ? 21 : 22) }); const a = s.sock('ann');
+      if (mode === 'chips') s.bank.set('ann', 1000000000); else s.wallet.credit('ann', 'play', 1000000000);
+      const start = s.wallet.get('ann'); let bal = start[mode], n = 0, paid = 0, bought = 0;
+      for (let i = 0; i < 480; i++) {
+        const bet = E.BET_LEVELS[i % E.BET_LEVELS.length], buy = plays[(i / E.BET_LEVELS.length | 0) % plays.length];
+        s.clock.advance(200);
+        assert.strictEqual(s.wallet.get('ann')[mode], bal);
+        a.send('g:coldcall:spin', { bet, mode, buyBonus: buy });
+        a.send('g:coldcall:spin', { bet, mode, buyBonus: buy });                    // the double click, same instant: refused, not charged
+        assert.strictEqual(last(a, 'error').code, 'rate');
+        const res = all(a, 'g:coldcall:result'); assert.strictEqual(res.length, ++n, 'exactly one round per click pair');
+        const r = res[n - 1], cost = buy ? E.CFG.buyCost[buy] * bet / 10 : bet;
+        assert.strictEqual(r.mode, mode); assert.strictEqual(r.cost, cost); assert.strictEqual(r.totalWin, r.totalWinTenths * bet / 10);
+        for (const v of [r.cost, r.totalWin, r.wallet.play, r.wallet.chips]) assert.ok(Number.isSafeInteger(v) && v >= 0, 'whole units: ' + v);
+        assert.ok(r.totalWin <= E.MAX_WIN_X * bet, 'cap');
+        bal += -cost + r.totalWin; if (r.totalWin) paid++; if (buy) bought++;
+        assert.strictEqual(r.wallet[mode], bal, mode + ' round ' + i + ': before - cost + win = after');
+        assert.strictEqual(r.wallet[other], start[other]);
+        assert.deepStrictEqual(s.wallet.get('ann'), r.wallet);
+        if (mode === 'chips') assert.strictEqual(s.chips.get('ann'), bal);
+        await tick(); assert.deepStrictEqual(last(a, 'wallet'), r.wallet, 'the pushed wallet is the settled one');
+      }
+      assert.ok(paid > 60 && bought > 150, 'the run covered wins and buys: ' + paid + ' / ' + bought);
+      const st = s.wallet.stats('ann').coldcall[mode];
+      assert.strictEqual(st.rounds, n); assert.strictEqual(start[mode] - st.wagered + st.won, bal);
+    }
+  });
+
   await test('coldcall: history keeps the last 20 and wallet_get still works', async () => {
     const s = setup({ rng: E.rngFrom(13) }); const a = s.sock('ann');
     for (let i = 0; i < 25; i++) { s.clock.advance(200); a.send('g:coldcall:spin', { bet: 10, mode: 'play' }); }
