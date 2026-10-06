@@ -97,10 +97,13 @@ function open(file, opts = {}) {
     for (const c of CURS) for (const [a, v] of scratch[c]) { if (v === 0) bal[c].delete(a); else bal[c].set(a, v); }
   }
 
-  function replayLine(rec, lineNo) {
-    const bad = (why) => new MoneyError('corrupt', { line: lineNo, why });
-    if (!rec || typeof rec !== 'object' || rec.id !== lastId + 1) throw bad('id out of sequence');
-    let items, sig;
+  // Applies one stored line or throws MoneyError('quarantine', { why }) with nothing changed. ids must only increase
+  // (a gap is allowed: a lost line then only costs the lines that depend on it, not every line after it).
+  function replayLine(rec) {
+    const no = (why) => new MoneyError('quarantine', { why });
+    if (!rec || typeof rec !== 'object' || Array.isArray(rec)) throw no('not a record');
+    if (!Number.isSafeInteger(rec.id) || rec.id <= lastId) throw no(`id ${JSON.stringify(rec.id)} is not after ${lastId}`);
+    let items, sig, scratch;
     try {
       if (Array.isArray(rec.batch)) {
         items = rec.batch.map(it => normItem(it, rec.reason));
@@ -110,12 +113,14 @@ function open(file, opts = {}) {
         sig = sigOf(items[0]);
       }
       if (typeof rec.ref !== 'string' || !rec.ref) throw new MoneyError('bad_ref', { ref: rec.ref });
-      if (refs.has(rec.ref)) throw bad('duplicate ref ' + rec.ref);
-      commitMemory(validate(items));
+      if (refs.has(rec.ref)) throw no('duplicate ref ' + rec.ref);
+      scratch = validate(items);
     } catch (e) {
-      if (e instanceof MoneyError && e.code === 'corrupt') throw e;
-      throw bad(e.code || e.message);
+      if (e instanceof MoneyError && e.code === 'quarantine') throw e;
+      const d = e.details || {};
+      throw no(e.code === 'insufficient' ? `insufficient: ${d.account} has ${d.have}, needs ${d.need}` : (e.code || e.message));
     }
+    commitMemory(scratch);
     refs.set(rec.ref, { id: rec.id, sig });
     lines.push(rec);
     lastId = rec.id;
@@ -124,26 +129,47 @@ function open(file, opts = {}) {
   function releaseLock() { if (readLock() === token) { try { fs.unlinkSync(lockFile); } catch {} } }
 
   // ---- load + replay ----
-  let text = '';
-  try { text = fs.readFileSync(file, 'utf8'); } catch (e) { if (e.code !== 'ENOENT') throw e; }
-  const parts = text.split('\n');
-  const tail = parts.pop();            // '' when the file ends with a newline, else a torn (unacknowledged) line
-  let good = 0;                        // byte length of the good prefix
+  // A line that does not parse or does not validate is NOT applied: it is recorded in <file>.quarantine (once) and
+  // reported, and the ledger opens on the valid lines. The file itself is never rewritten here. Only the torn tail
+  // (no trailing newline) is truncated, as before.
+  const quarantineFile = file + '.quarantine';
+  const quarantined = [];               // [{ line, lineNo, reason }] for this open
+  let raw = Buffer.alloc(0);
+  try { raw = fs.readFileSync(file); } catch (e) { if (e.code !== 'ENOENT') throw e; }
+  let good = 0;                         // byte length of the complete lines
   try {
-    parts.forEach((ln, i) => {
-      let rec;
-      try { rec = JSON.parse(ln); } catch { throw new MoneyError('corrupt', { line: i + 1, why: 'unparseable line before the end of the file' }); }
-      replayLine(rec, i + 1);
-      good += Buffer.byteLength(ln) + 1;
-    });
-    if (tail !== '') fs.truncateSync(file, good);
+    let lineNo = 0;
+    for (let pos = 0; ;) {
+      const nl = raw.indexOf(10, pos);
+      if (nl < 0) break;
+      lineNo++;
+      const ln = raw.toString('utf8', pos, nl);
+      pos = nl + 1; good = pos;
+      if (ln.trim() === '') continue;
+      try {
+        let rec;
+        try { rec = JSON.parse(ln); } catch { throw new MoneyError('quarantine', { why: 'unparseable' }); }
+        replayLine(rec);
+      } catch (e) { quarantined.push({ line: ln, lineNo, reason: e.details && e.details.why ? e.details.why : e.message }); }
+    }
+    if (good < raw.length) fs.truncateSync(file, good);
   } catch (e) { releaseLock(); throw e; }
+  if (quarantined.length) {
+    const seen = new Set();
+    try { for (const l of fs.readFileSync(quarantineFile, 'utf8').split('\n')) { if (l) try { seen.add(JSON.parse(l).line); } catch {} } } catch {}
+    const fresh = quarantined.filter(q => !seen.has(q.line));
+    try {
+      if (fresh.length) fs.appendFileSync(quarantineFile, fresh.map(q => JSON.stringify({ ts: now(), lineNo: q.lineNo, reason: q.reason, line: q.line })).join('\n') + '\n');
+    } catch (e) { log(`could not write ${quarantineFile}: ${e.message}`); }
+    log(`QUARANTINED ${quarantined.length} line(s) of ${file} (${fresh.length} new, see ${quarantineFile}). They were NOT applied: balances may be short by those lines and need an admin look. ` +
+      quarantined.slice(0, 3).map(q => `line ${q.lineNo}: ${q.reason}`).join('; '));
+  }
   let size = good;
   const fd = fs.openSync(file, 'a');
   let closed = false;
 
   // Runs before every append. Not atomic with the append itself: a second opener landing between this check and the
-  // write can still get one line in; the next open then fails loudly on the duplicate id (see money/PROGRESS.md).
+  // write can still get one line in; the next open then quarantines the duplicate-id line (see money/PROGRESS.md).
   function fence() {
     if (refused) throw new MoneyError(refused);
     if (readLock() !== token) { refused = 'lost_lock'; throw new MoneyError('lost_lock', { file }); }
@@ -220,9 +246,11 @@ function open(file, opts = {}) {
 
   const has = (ref) => refs.has(ref);
 
-  // afterId (optional, extra to the contract): only lines with id > afterId. Ids are 1..n in order, so it is a direct index.
+  // afterId (optional, extra to the contract): only lines with id > afterId.
   function* entries(filterFn, afterId = 0) {
-    for (let i = Math.max(0, afterId); i < lines.length; i++) {
+    let lo = 0, hi = lines.length;      // first line with id > afterId (ids increase but may have gaps)
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (lines[mid].id <= afterId) lo = mid + 1; else hi = mid; }
+    for (let i = lo; i < lines.length; i++) {
       const rec = lines[i];
       if (Array.isArray(rec.batch)) {
         for (const it of rec.batch) {
@@ -243,13 +271,14 @@ function open(file, opts = {}) {
       for (const [a, v] of bal[c]) { if (classify(a).player) players += v; else sources += v; }
       out[c] = { players, sources, ok: players + sources === 0 };
     }
+    out.quarantined = quarantined.length;   // lines left out at open; separate from ok (the books balance without them)
     return out;
   }
 
   function sync() { if (!closed) fs.fsyncSync(fd); }
   function close() { if (!closed) { closed = true; try { fs.closeSync(fd); } catch {} releaseLock(); } }
 
-  return { transfer, batch, balance, list, has, entries, check, sync, close, file, get size() { return size; }, get lastId() { return lastId; } };
+  return { transfer, batch, balance, list, has, entries, check, sync, close, file, quarantined, quarantineFile, get size() { return size; }, get lastId() { return lastId; } };
 }
 
 module.exports = { open, MoneyError, SOURCE_ACCOUNTS, CURS };

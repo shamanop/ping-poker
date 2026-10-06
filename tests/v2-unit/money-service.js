@@ -155,7 +155,7 @@ t('one fund per seat while it holds chips: fund_mismatch writes nothing; a 0 sea
   booksOk(ledger);
 });
 
-t('a switched fund survives a restart (read from the ledger) and cashOut honours the caller fund', () => {
+t('a switched fund survives a restart (read from the ledger)', () => {
   const e = env(); const { svc } = e;
   svc.ensureAccount('a'); svc.buyIn('a', 'T', 100, 'chips', 'chips', 'x'); svc.cashOut('a', 'T', 100, 'chips', 'chips', 'y');
   svc.buyIn('a', 'T', 100, 'chips', 'play', 'z'); e.ledger.close();
@@ -163,6 +163,42 @@ t('a switched fund survives a restart (read from the ledger) and cashOut honours
   throwsCode(() => e2.svc.buyIn('a', 'T', 5, 'chips', 'chips', 'w'), 'fund_mismatch');
   e2.svc.buyIn('a', 'T', 5, 'chips', 'play', 'w2'); e2.svc.cashOut('a', 'T', 105, 'chips', 'play', 'out');
   eq(e2.ledger.balance('play:a', 'play'), START_PLAY);
+});
+
+t('cashOut: the seat\'s fund is the truth, the caller cannot redirect it', () => {
+  const { svc, ledger } = env();
+  svc.ensureAccount('a'); svc.ensureAccount('b'); svc.ensureAccount('c');
+  svc.buyIn('a', 'T', 1000, 'chips', 'play', 'a1');       // chips seat funded from Play $
+  svc.buyIn('b', 'T', 1000, 'chips', 'chips', 'b1');
+  const id = ledger.lastId, snap = JSON.stringify([ledger.list('', 'chips'), ledger.list('', 'play')]);
+  const e = throwsCode(() => svc.cashOut('a', 'T', 400, 'chips', 'chips', 'x1'), 'fund_mismatch');
+  eq(e.details.have, 'play'); eq(e.details.want, 'chips');
+  const e2 = throwsCode(() => svc.cashOut('b', 'T', 400, 'chips', 'play', 'x2'), 'fund_mismatch'); eq(e2.details.have, 'chips'); eq(e2.details.want, 'play');
+  throwsCode(() => svc.cashOut('b', 'T', 400, 'chips', 'gold', 'x3'), 'bad_fund');
+  eq(ledger.lastId, id, 'nothing written'); eq(JSON.stringify([ledger.list('', 'chips'), ledger.list('', 'play')]), snap); ok(!ledger.has('x1') && !ledger.has('x2'));
+  // null / missing fund = the seat's own fund
+  svc.cashOut('a', 'T', 400, 'chips', null, 'ok1');
+  eq(ledger.balance('play:a', 'play'), START_PLAY - 1000 + 400, 'back to Play $'); eq(ledger.balance('bank:a', 'chips'), START_CHIPS);
+  svc.cashOut('a', 'T', 100, 'chips', undefined, 'ok2'); svc.cashOut('a', 'T', 100, 'chips', 'play', 'ok3');
+  svc.cashOut('b', 'T', 100, 'chips', null, 'ok4'); svc.cashOut('b', 'T', 100, 'chips', 'bank', 'ok5'); svc.cashOut('b', 'T', 100, 'chips', 'chips', 'ok6');
+  eq(ledger.balance('bank:b', 'chips'), START_CHIPS - 1000 + 300); eq(ledger.balance('play:b', 'play'), START_PLAY);
+  // a zero stack leaving is a no-op whatever fund the caller names
+  eq(svc.cashOut('a', 'T', 0, 'chips', 'chips', 'z').noop, true);
+  // dup ref still answers dup: explicit fund, null fund, and after the seat has switched fund meanwhile
+  eq(svc.cashOut('a', 'T', 400, 'chips', null, 'ok1').dup, true); eq(svc.cashOut('a', 'T', 100, 'chips', 'play', 'ok3').dup, true);
+  eq(svc.cashOut('b', 'T', 100, 'chips', 'chips', 'ok6').dup, true);
+  svc.cashOut('a', 'T', 400, 'chips', null, 'ok7');                                   // a's seat is now empty
+  svc.buyIn('a', 'T', 50, 'chips', 'chips', 'a2');                                    // and switches to the bank
+  eq(svc.cashOut('a', 'T', 400, 'chips', null, 'ok1').dup, true, 'null-fund retry infers the original fund from its ref');
+  throwsCode(() => svc.cashOut('a', 'T', 401, 'chips', null, 'ok1'), 'ref_conflict');
+  // a seat with no buy-in on record (built by hand) falls back to the table currency
+  ledger.transfer('mint:bonus', 'seat:T:c', 70, 'chips', 'hand-made', 'hm');
+  throwsCode(() => svc.cashOut('c', 'T', 10, 'chips', 'play', 'c1'), 'fund_mismatch');
+  svc.cashOut('c', 'T', 10, 'chips', null, 'c2'); eq(ledger.balance('bank:c', 'chips'), START_CHIPS + 10);
+  // bootRecover is the other seat -> store path and already follows the ledger
+  svc.buyIn('c', 'PT', 30, 'play', 'chips', 'c3'); svc.bootRecover('bx'); eq(ledger.balance('bank:c', 'chips'), START_CHIPS + 70, 'hand-made seat (70) and the PT seat all back in the bank');
+  eq(ledger.list('seat:', 'chips').length + ledger.list('seat:', 'play').length, 0);
+  booksOk(ledger);
 });
 
 t('settleHand: payouts, uncalled return, odd chips; conserves; one ledger line', () => {

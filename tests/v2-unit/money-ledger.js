@@ -205,17 +205,90 @@ t('crash safety: half a batch line, garbage tail, tail of only a partial newline
   const l4 = mk(f); eq(l4.lastId, 0); eq(fs.statSync(f).size, 0); l4.close();
 });
 
-t('corruption before the end is an error, not a silent drop', () => {
+// ---- quarantine: a bad line never stops a boot ----
+const shaOf = (f) => require('crypto').createHash('sha256').update(fs.readFileSync(f)).digest('hex');
+const qrecs = (f) => { try { return fs.readFileSync(f + '.quarantine', 'utf8').split('\n').filter(Boolean).map(x => JSON.parse(x)); } catch { return []; } };
+const openQ = (f, logs) => open(f, { now: () => 1000, log: logs ? (m) => logs.push(m) : quiet });
+
+// Opens twice (the same lines are quarantined again on the second boot) and checks the common promises.
+function quarantineCase(name, build, want) {
+  t('quarantine: ' + name, () => {
+    const { f, lines } = goodLines();
+    build(f, lines);
+    const fileBefore = shaOf(f);
+    const logs = []; const l = openQ(f, logs);
+    eq(l.quarantined.length, want.n, 'quarantined count'); eq(logs.length, 1, 'one loud log'); ok(/QUARANTINED/.test(logs[0]) && /admin look/.test(logs[0]));
+    for (const q of l.quarantined) { ok(typeof q.line === 'string' && q.reason, 'line and reason reported'); }
+    ok(want.reason.test(l.quarantined[0].reason), 'reason ' + l.quarantined[0].reason);
+    eq(shaOf(f), fileBefore, 'the file is not rewritten on open');
+    eq(l.balance('bank:a', 'chips'), want.bank, 'balances equal the valid lines only'); eq(l.balance('seat:T:a', 'chips'), want.seat);
+    const ck = l.check(); ok(ck.chips.ok && ck.play.ok, 'books balance'); eq(ck.quarantined, want.n, 'check() reports the count apart from ok');
+    eq(qrecs(f).length, want.n, 'quarantine file has each line once'); ok(qrecs(f).every(r => r.ts === 1000 && r.reason && typeof r.line === 'string'));
+    // later writes work and are durable
+    const w = l.transfer('mint:signup', 'bank:z', 5, 'chips', 'signup', 'after-quarantine'); eq(w.dup, false);
+    l.batch([{ from: 'bank:z', to: 'seat:T:z', amount: 5, cur: 'chips' }], 'after-batch', 'x');
+    l.close();
+    const l2 = openQ(f);
+    eq(l2.quarantined.length, want.n, 'same lines quarantined again on the next boot');
+    eq(qrecs(f).length, want.n, 'quarantine file idempotent after a second open');
+    eq(l2.balance('bank:a', 'chips'), want.bank); eq(l2.balance('seat:T:z', 'chips'), 5, 'writes after the bad line survived');
+    ok(l2.has('after-quarantine') && l2.has('after-batch'));
+    const l3 = (l2.close(), openQ(f)); eq(qrecs(f).length, want.n, 'and a third open');
+    ok(l3.check().chips.ok);
+  });
+}
+const L = (f, arr, tail) => fs.writeFileSync(f, arr.map(x => x + '\n').join('') + (tail || ''));
+quarantineCase('garbage in the middle', (f, ls) => L(f, [ls[0], 'this is not json {{{', ls[1]]), { n: 1, bank: 60, seat: 40, reason: /unparseable/ });
+quarantineCase('garbage at the end', (f, ls) => L(f, [ls[0], ls[1], '<<<garbage>>>']), { n: 1, bank: 60, seat: 40, reason: /unparseable/ });
+quarantineCase('garbage at the start', (f, ls) => L(f, ['}{', ls[0], ls[1]]), { n: 1, bank: 60, seat: 40, reason: /unparseable/ });
+quarantineCase('a duplicate id', (f, ls) => {
+  const dup = JSON.parse(ls[1]); dup.ref = 'other-ref'; dup.amount = 1;     // same id 2, different ref
+  L(f, [ls[0], ls[1], JSON.stringify(dup)]);
+}, { n: 1, bank: 60, seat: 40, reason: /id 2 is not after 2/ });
+quarantineCase('a replayed line (same id and ref)', (f, ls) => L(f, [ls[0], ls[1], ls[1]]), { n: 1, bank: 60, seat: 40, reason: /id 2 is not after 2/ });
+quarantineCase('an id that goes backwards', (f, ls) => { const old = JSON.parse(ls[0]); old.ref = 'again'; L(f, [ls[0], ls[1], JSON.stringify(old)]); }, { n: 1, bank: 60, seat: 40, reason: /not after/ });
+quarantineCase('a line that overdraws', (f, ls) => {
+  const over = JSON.parse(ls[1]); over.amount = 999; over.ref = 'overdraw';
+  L(f, [ls[0], JSON.stringify(over)]);
+}, { n: 1, bank: 100, seat: 0, reason: /insufficient: bank:a has 100, needs 999/ });
+quarantineCase('a batch whose later item overdraws', (f, ls) => {
+  const b = { id: 2, ts: 1, ref: 'bad-batch', reason: 'x', batch: [
+    { from: 'bank:a', to: 'seat:T:a', amount: 60, cur: 'chips', reason: 'x' }, { from: 'bank:a', to: 'seat:T:b', amount: 60, cur: 'chips', reason: 'x' }] };
+  L(f, [ls[0], JSON.stringify(b)]);
+}, { n: 1, bank: 100, seat: 0, reason: /insufficient/ });
+quarantineCase('a wrong shape', (f, ls) => L(f, [ls[0], '[1,2,3]', ls[1]]), { n: 1, bank: 60, seat: 40, reason: /not a record/ });
+quarantineCase('a negative amount', (f, ls) => { const bad = JSON.parse(ls[1]); bad.amount = -5; bad.id = 2; L(f, [ls[0], JSON.stringify(bad), ls[1]]); }, { n: 1, bank: 60, seat: 40, reason: /bad_amount/ });
+quarantineCase('binary garbage (byte offsets stay right)', (f, ls) => {
+  fs.writeFileSync(f, Buffer.concat([Buffer.from(ls[0] + '\n'), Buffer.from([0xff, 0xfe, 0x00, 0xc3, 0x28, 0x0a]), Buffer.from(ls[1] + '\n')]));
+}, { n: 1, bank: 60, seat: 40, reason: /unparseable/ });
+
+t('quarantine: several bad lines, a torn tail on top, blank lines ignored, clean file untouched', () => {
   const { f, lines } = goodLines();
-  writeRaw(f, ['{"id":1,"ts":1,"fro', lines[1]]);
-  throwsCode(() => mk(f), 'corrupt');
-  writeRaw(f, [lines[1]]);                         // id 2 first: out of sequence
-  throwsCode(() => mk(f), 'corrupt');
-  writeRaw(f, [lines[0], lines[0]]);               // replayed line: bad id
-  throwsCode(() => mk(f), 'corrupt');
-  const over = JSON.parse(lines[1]); over.amount = 999; over.id = 2;
-  writeRaw(f, [lines[0], JSON.stringify(over)]);   // overdraws bank:a
-  throwsCode(() => mk(f), 'corrupt');
+  const bad2 = JSON.parse(lines[1]); bad2.amount = 5000; bad2.ref = 'ovr';
+  fs.writeFileSync(f, [lines[0], '', 'junk-1', lines[1], JSON.stringify(bad2), 'junk-2'].join('\n') + '\n{"id":9,"ts":1,"fro');
+  const l = openQ(f);
+  eq(l.quarantined.length, 3, 'blank line not counted, torn tail dropped not quarantined');
+  eq(l.balance('bank:a', 'chips'), 60); eq(fs.readFileSync(f, 'utf8').endsWith('junk-2\n'), true, 'torn tail truncated');
+  eq(qrecs(f).length, 3); l.close(); openQ(f).close(); eq(qrecs(f).length, 3);
+  // a clean file creates no quarantine file and reports none
+  const g = goodLines(); const c = openQ(g.f);
+  eq(c.quarantined.length, 0); eq(c.check().quarantined, 0); ok(!fs.existsSync(g.f + '.quarantine'));
+});
+
+t('quarantine: ids may have a gap (a lost line costs only what depends on it)', () => {
+  const { f, lines } = goodLines();
+  const gap = JSON.parse(lines[1]); gap.id = 7;
+  L(f, [lines[0], JSON.stringify(gap)]);
+  const l = openQ(f); eq(l.quarantined.length, 0); eq(l.lastId, 7); eq(l.balance('seat:T:a', 'chips'), 40);
+  eq(l.transfer('mint:signup', 'bank:q', 1, 'chips', 'x', 'next').id, 8);
+  eq([...l.entries(null, 7)].length, 1, 'entries(afterId) follows ids, not positions'); eq([...l.entries(null, 1)].length, 2); eq([...l.entries(null, 0)].length, 3);
+});
+
+t('quarantine: an unwritable quarantine file does not stop the boot', () => {
+  const { f, lines } = goodLines(); L(f, [lines[0], 'junk', lines[1]]);
+  fs.mkdirSync(f + '.quarantine');                    // a directory where the file should be: appendFileSync fails
+  const logs = []; const l = openQ(f, logs);
+  eq(l.quarantined.length, 1); eq(l.balance('bank:a', 'chips'), 60); ok(logs.some(m => /could not write/.test(m)));
 });
 
 t('reopen gives identical state and appends continue the id sequence', () => {
@@ -371,8 +444,7 @@ t('fence: a foreign append makes the next write throw foreign_write, then it sta
     throwsCode(() => a.transfer('mint:signup', 'bank:a', 5, 'chips', 'signup', 'a3'), 'foreign_write');
     eq(fs.statSync(f).size, before, 'the fenced writer wrote nothing');
     a.close();
-    if (foreign === 'garbage-line') { throwsCode(() => mk(f), 'corrupt'); fs.writeFileSync(f, fs.readFileSync(f, 'utf8').split('\n')[0] + '\n'); }
-    const b = mk(f); const ck = b.check(); ok(ck.chips.ok && ck.play.ok, 'books ok after ' + foreign);
+    const b = mk(f); if (foreign === 'garbage-line') eq(b.quarantined.length, 1, 'garbage is quarantined, not fatal'); const ck = b.check(); ok(ck.chips.ok && ck.play.ok, 'books ok after ' + foreign);
     eq(b.balance('bank:a', 'chips'), 10); eq(b.balance('bank:z', 'chips'), foreign === 'valid-line' ? 7 : 0);
     b.transfer('mint:signup', 'bank:a', 5, 'chips', 'signup', 'a2'); eq(b.balance('bank:a', 'chips'), 15); b.close();
   }
@@ -385,9 +457,9 @@ t('fence: a shrunk file is foreign too', () => {
   throwsCode(() => a.transfer('mint:signup', 'bank:a', 5, 'chips', 'signup', 'a3'), 'foreign_write');
 });
 
-t('fence: a corrupt file does not leave our lock behind', () => {
+t('fence: a file with quarantined lines still opens and holds the lock', () => {
   const f = fresh(); fs.writeFileSync(f, 'junk\n{"id":1}\n');
-  throwsCode(() => mk(f), 'corrupt'); eq(lockOf(f), null);
+  const l = mk(f); eq(l.quarantined.length, 2); ok(lockOf(f)); l.transfer('mint:signup', 'bank:a', 1, 'chips', 'x', 'r'); l.close(); eq(lockOf(f), null);
 });
 
 t('fsync option does not change behaviour', () => {
