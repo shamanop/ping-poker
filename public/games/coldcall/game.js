@@ -44,7 +44,7 @@
   function fit() {
     const H = Math.max(960, Math.min(1250, Math.round(540 * innerHeight / innerWidth)));
     st.s = Math.min(innerWidth / 540, innerHeight / H);
-    stage.style.setProperty('--H', H + 'px'); stage.style.setProperty('--s', st.s);
+    stage.style.setProperty('--H', H + 'px'); app.style.setProperty('--s', st.s);   // --s on #app: the wide-screen side art sizes itself from it
     const cv = $('fx'); if (cv.height !== H) { cv.width = 540; cv.height = H; }
     if (CC.caption) CC.caption.fit();
   }
@@ -155,7 +155,7 @@
 
   // ------------------------------------------------------------------ the round
   const MAXTXT = 'MAX ' + E.MAX_WIN_X.toLocaleString('en-US') + 'x';
-  const RIB_IDLE = '5+ touching, any direction';
+  const RIB_IDLE = '5+ touching = win';
   function makeCtx(p, b, kind) {
     const run = { t: 0, raw: 0, total: p.totalWinTenths };
     const ctx = {
