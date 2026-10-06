@@ -1,3 +1,4 @@
+const { authJoin } = require('./authjoin');
 // Bank edit permission + auto-start checks. Throwaway server on PORT 4778.
 const { spawn } = require('child_process');
 const fs = require('fs'), os = require('os'), path = require('path');
@@ -17,7 +18,7 @@ function client(name) {
   c.s.on('room_joined', d => { c.joined = d; });
   c.s.on('balance_data', d => { c.bal = d.balance; });
   c.s.on('bank_summary', d => { c.sum = d; });
-  c.join = async () => { c.joined = null; c.s.emit('join_game', { name, avatar: '🦊', password: 'ping' }); for (let i = 0; i < 40 && !c.joined && !c.errors.length; i++) await sleep(50); await sleep(150); return c.joined; };
+  c.join = async () => { c.joined = null; authJoin(c.s, { name, avatar: '🦊', password: 'ping' }); for (let i = 0; i < 40 && !c.joined && !c.errors.length; i++) await sleep(50); await sleep(150); return c.joined; };
   return c;
 }
 (async () => {

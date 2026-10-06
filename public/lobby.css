@@ -281,3 +281,6 @@
 
 .blinds-plate.editable { cursor: pointer; outline: 1px dashed rgba(184, 137, 58, .55); outline-offset: 2px; }
 .blinds-plate.editable:hover { background: rgba(184, 137, 58, .15); }
+
+/* PIN boxes are masked text, not type=password, so iOS/Chrome don't force a strong-password suggestion into a digits-only field */
+.pin-mask, #lb-oldpin, #lb-newpin { -webkit-text-security: disc; text-security: disc; }

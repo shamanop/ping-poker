@@ -1,4 +1,5 @@
 'use strict';
+const { authJoin } = require('./authjoin');
 const path = require('path'), fs = require('fs');
 const { spawn } = require('child_process');
 const { io } = require('/home/isabelle/.cache/node_modules/socket.io-client');
@@ -42,7 +43,7 @@ class Client {
   connect() { return new Promise((res, rej) => { if (this.sock.connected) return res(); this.sock.once('connect', res); this.sock.once('connect_error', rej); }); }
   async join(name = this.name, password = PASS) {
     const n = this.errors.length, j = this.events.filter(e => e.ev === 'room_joined').length;
-    this.sock.emit('join_game', { name, avatar: 'x', password });
+    authJoin(this.sock, { name, avatar: 'x', password });
     for (let i = 0; i < 100; i++) {
       await sleep(20);
       if (this.events.filter(e => e.ev === 'room_joined').length > j) return { ok: true };

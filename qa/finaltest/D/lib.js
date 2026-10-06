@@ -42,6 +42,7 @@ class Client {
   connect() { return new Promise((res, rej) => { if (this.sock.connected) return res(); this.sock.once('connect', res); this.sock.once('connect_error', rej); }); }
   async join(name = this.name, password = PASS) {
     const n = this.errors.length, j = this.events.filter(e => e.ev === 'room_joined').length;
+    await require('../../../tests/authjoin').authAs(this.sock, name); // join_game needs a signed-in account
     this.sock.emit('join_game', { name, avatar: 'x', password });
     for (let i = 0; i < 100; i++) {
       await sleep(20);
