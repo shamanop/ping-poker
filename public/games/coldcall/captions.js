@@ -33,12 +33,11 @@
     const bx = bub.offsetLeft, by = bub.offsetTop, bw = bub.offsetWidth, bh = bub.offsetHeight;
     // nearest point on the bubble's border to the mouth, and the angle from there to the mouth
     const px = Math.max(bx + 14, Math.min(bx + bw - 14, mx)), py = Math.max(by + 14, Math.min(by + bh - 14, my));
-    const dl = Math.abs(mx - bx), dr = Math.abs(mx - (bx + bw)), dt = Math.abs(my - by), db = Math.abs(my - (by + bh));
-    const dmin = Math.min(dl, dr, dt, db);
+    // the mouth is to the side of the bubble in the skin-3 layout: aim from the side edge when it is beside the bubble, else from the nearer of top / bottom
     let ex, ey;
-    if (dmin === db) { ex = px; ey = by + bh; } else if (dmin === dt) { ex = px; ey = by; } else if (dmin === dl) { ex = bx; ey = py; } else { ex = bx + bw; ey = py; }
+    if (mx < bx) { ex = bx; ey = py; } else if (mx > bx + bw) { ex = bx + bw; ey = py; } else if (my < by + bh / 2) { ex = px; ey = by; } else { ex = px; ey = by + bh; }
     const ang = Math.atan2(my - ey, mx - ex) * 180 / Math.PI - 90;     // tail triangle points "up" by default
-    tail.style.left = (ex - bx) + 'px'; tail.style.top = (ey - by) + 'px'; tail.style.transform = 'translate(-50%,-50%) rotate(' + ang.toFixed(1) + 'deg) translateY(-6px)';
+    tail.style.left = (ex - bx) + 'px'; tail.style.top = (ey - by) + 'px'; tail.style.transform = 'translate(-50%,-50%) rotate(' + ang.toFixed(1) + 'deg) translateY(-4px)';
   }
   function say(group, text) {
     const bub = document.getElementById('cap'), p = document.getElementById('capT'); if (!bub) return;

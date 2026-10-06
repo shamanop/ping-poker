@@ -25,7 +25,7 @@
   }
   function stop() { raf = 0; ps = []; if (g) { g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, cv.width, cv.height); cv.style.display = 'none'; } }
   const add = (p) => { if (!cv) init(); if (ps.length > 380) return; cols = cols || COLORS(); cv.style.display = ''; ps.push(p); if (!raf) { last = performance.now(); raf = requestAnimationFrame(frame); } };
-  function clear() { if (raf) cancelAnimationFrame(raf); stop(); }
+  function clear() { if (raf) cancelAnimationFrame(raf); stop(); document.querySelectorAll('#stage > .flash').forEach((n) => n.remove()); }   // a flash whose animation callback is late (busy frame) must not outlive the round
   function burst(x, y, o = {}) {
     cols = cols || COLORS(); const n = Math.round((o.n || 14) * (reduce ? 0.4 : 1)), c = o.cols || cols;
     for (let i = 0; i < n; i++) { const a = rnd(0, Math.PI * 2), sp = rnd(0.35, 1) * (o.speed || 300); add({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - (o.up == null ? 60 : o.up), g: o.g == null ? 800 : o.g, drag: 1.1, life: rnd(0.55, 1) * (o.life || 0.9), size: rnd(0.6, 1) * (o.size || 7), rot: rnd(0, 6), vr: rnd(-12, 12), c: c[(Math.random() * c.length) | 0], shape: o.shape || (Math.random() < 0.3 ? 'star' : 'rect') }); }

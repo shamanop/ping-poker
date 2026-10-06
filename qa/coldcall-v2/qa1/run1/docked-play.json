@@ -1,0 +1,58 @@
+{
+ "tag": "docked-play",
+ "rounds": [
+  {
+   "label": "dbl",
+   "id": "9dfb21a75889",
+   "forced": null,
+   "tier": "none",
+   "cost": 100,
+   "win": 0,
+   "winMeter": 0,
+   "balShown": 999900,
+   "serverBal": 999900,
+   "delta": -100,
+   "expect": -100,
+   "otherDelta": 0,
+   "shellPlay": "Play$9,999",
+   "shellChips": "Chips--"
+  }
+ ],
+ "checks": [
+  {
+   "label": "dbl",
+   "id": "9dfb21a75889",
+   "forced": null,
+   "tier": "none",
+   "cost": 100,
+   "win": 0,
+   "winMeter": 0,
+   "balShown": 999900,
+   "serverBal": 999900,
+   "delta": -100,
+   "expect": -100,
+   "otherDelta": 0,
+   "shellPlay": "Play$9,999",
+   "shellChips": "Chips--"
+  }
+ ],
+ "fails": [
+  {
+   "what": "harness exception",
+   "e": "TypeError: Cannot read properties of null (reading '0')\n    at verify (/home/frank/.openclaw/workspace/projects/ping-coldcall/qa/coldcall-v2/capture/qa1.js:85:82)\n    at async fastClicks (/home/frank/.openclaw/workspace/projects/ping-coldcall/qa/coldcall-v2/capture/qa1.js:110:3)\n    at async /home/frank/.openclaw/workspace/projects/ping-coldcall/qa/coldcall-v2/capture/qa1.js:139:5"
+  }
+ ],
+ "notes": [],
+ "logs": [],
+ "dock": {
+  "x": 920,
+  "y": 48,
+  "w": 360,
+  "h": 752
+ },
+ "bet": 100,
+ "start": {
+  "play": 1000000,
+  "chips": 10000
+ }
+}

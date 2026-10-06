@@ -44,7 +44,7 @@
   function fit() {
     const H = Math.max(960, Math.min(1250, Math.round(540 * innerHeight / innerWidth)));
     st.s = Math.min(innerWidth / 540, innerHeight / H);
-    stage.style.setProperty('--H', H + 'px'); stage.style.setProperty('--s', st.s);
+    stage.style.setProperty('--H', H + 'px'); app.style.setProperty('--s', st.s);   // --s on #app: the wide-screen side art sizes itself from it
     const cv = $('fx'); if (cv.height !== H) { cv.width = 540; cv.height = H; }
     if (CC.caption) CC.caption.fit();
   }
@@ -61,17 +61,18 @@
   const tween = (from, to, ms, fn) => { const t0 = performance.now(), dur = Math.max(1, ms * speed()); return new Promise((res) => Tick.add((now) => { const k = st.skip ? 1 : Math.max(0, Math.min(1, (now - t0) / dur)); fn(from + (to - from) * (1 - Math.pow(1 - k, 3))); if (k >= 1) { res(); return false; } return true; })); };
 
   // ------------------------------------------------------------------ readouts (never blank, win only ever adds within a round)
+  const showWin = (w, c) => { w.textContent = dollars(c); if (st.mirror) st.mirror(w.textContent); };   // the bonus HUD total mirrors the WIN meter itself
   function setWin(cents, animate = true, ms = 450) {
     cents = Math.max(cents, st.winTarget); st.winTarget = cents; const w = $('win'); w.dataset.c = cents;
     const from = st.winShown, tok = (setWin.tok = (setWin.tok || 0) + 1);
-    if (!animate || cents === from) { st.winShown = cents; w.textContent = dollars(cents); return Promise.resolve(); }
+    if (!animate || cents === from) { st.winShown = cents; showWin(w, cents); return Promise.resolve(); }
     w.classList.remove('pop'); void w.offsetWidth; w.classList.add('pop');
     const t0 = performance.now(), dur = Math.max(1, ms * speed());
     return new Promise((res) => Tick.add((now) => {
       if (tok !== setWin.tok) { res(); return false; }
       const k = st.skip ? 1 : Math.max(0, Math.min(1, (now - t0) / dur)), e = 1 - Math.pow(1 - k, 3);   // a tap skips the count-up; rAF timestamps can precede t0 inside the same frame: clamp so the total never dips
-      st.winShown = Math.round(from + (cents - from) * e); w.textContent = dollars(st.winShown);
-      if (k >= 1) { st.winShown = cents; w.textContent = dollars(cents); res(); return false; } return true;
+      st.winShown = Math.round(from + (cents - from) * e); showWin(w, st.winShown);
+      if (k >= 1) { st.winShown = cents; showWin(w, cents); res(); return false; } return true;
     }));
   }
   function resetWin() { setWin.tok = (setWin.tok || 0) + 1; st.winShown = st.winTarget = 0; const w = $('win'); w.dataset.c = 0; w.textContent = dollars(0); }
@@ -155,7 +156,7 @@
 
   // ------------------------------------------------------------------ the round
   const MAXTXT = 'MAX ' + E.MAX_WIN_X.toLocaleString('en-US') + 'x';
-  const RIB_IDLE = '5+ touching, any direction';
+  const RIB_IDLE = '5+ touching = win';
   function makeCtx(p, b, kind) {
     const run = { t: 0, raw: 0, total: p.totalWinTenths };
     const ctx = {
@@ -165,7 +166,7 @@
       // ribbon: left = mode name while a bonus runs (else the first text), right = the status text
       rib(l, r) { if (ctx.modeName) { $('ribL').textContent = ctx.modeName; $('ribR').textContent = l === ctx.modeName ? (r || '') : l + (r ? ' ' + r : ''); } else { $('ribL').textContent = l; $('ribR').textContent = r == null ? '' : r; } },
       // add tenths to the running total (never decreases, never exceeds the server's round total); `raw` is what the script asked for, for the self-check
-      addWin(t, ms) { run.raw += t; const add = Math.max(0, Math.min(t, run.total - run.t)); run.t += add; if (add && ctx.onAdd) ctx.onAdd(add, ms || 450); return setWin(run.t * b / 10, true, ms || 450); },
+      addWin(t, ms) { run.raw += t; const add = Math.max(0, Math.min(t, run.total - run.t)); run.t += add; return setWin(run.t * b / 10, true, ms || 450); },
       willBig: E.winTier(p.totalWinTenths / 10) in TIER_LVL, isLast: true
     };
     ctx.playSpin = (sp, o) => playSpin(ctx, sp, o);
@@ -203,7 +204,7 @@
   const allSpins = (S) => [...(S.spin ? [S.spin] : []), ...(S.bonus ? S.bonus.spins : [])];
   let autoT = 0;
   async function play(kind) {
-    if (st.busy) { if (kind === 'spin') { st.skip = true; st.tap++; } return; }
+    if (st.busy) { if (kind === 'spin') { st.skip = true; st.tap++; if (CC.bonus && CC.bonus.poke) CC.bonus.poke(); } return; }
     if (st.modal) return;
     const b = bet(), cost = costT(kind) * b / 10;
     if (avail() < cost) { toast(kind === 'spin' ? 'Not enough funds. Lower your bet.' : 'Not enough funds for that bonus.'); st.auto = false; $('auto').classList.remove('on'); return; }
@@ -341,7 +342,7 @@
     addEventListener('keydown', (e) => {
       const sc = ov.querySelector('.scrim');
       if (e.key === 'Escape' && sc) { e.stopImmediatePropagation(); sc._done && sc._done('x'); return; }
-      if (e.code === 'Space' && !e.repeat) { e.preventDefault(); if (sc) { sc._done && sc._done('x'); return; } SFX_.init(); st.tap++; st.busy ? (st.skip = true) : play('spin'); }
+      if (e.code === 'Space' && !e.repeat) { e.preventDefault(); if (sc) { sc._done && sc._done('x'); return; } SFX_.init(); st.tap++; st.busy ? (st.skip = true, CC.bonus && CC.bonus.poke && CC.bonus.poke()) : play('spin'); }
     });
     $('buy').addEventListener('click', async () => {
       if (st.busy || st.modal) return; SFX_.init(); SFX_.click();

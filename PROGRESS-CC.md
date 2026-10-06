@@ -3,7 +3,19 @@
 Second slot for The Ping. Game id `coldcall`. Play money only. Brief from Isabelle 2026-10-05.
 This file is the status line: Isabelle reads it on GitHub. Newest milestone at the top of the log.
 
-## Status (updated 2026-10-06 01:40)
+## Status (updated 2026-10-06 04:50)
+
+> **04:50 note from the lead: SKIN 3 IS MERGED (`e7351d5`, from `coldcall-skin3` `c123e5d`).** Skin only: `games/`, the
+> server, the wallet and `tests/` are unchanged by the merge; `tests/coldcall.js` 47 pass, `tests/bender.js` 19 pass, engine
+> copies byte-identical (run by me after the merge). Shots of the new skin at three sizes: `qa/coldcall-skin3/` (the skin
+> builder's captures; I looked at six of them, not all 76). **Functional chain 4 on the new skin, run by me 04:14-04:45:**
+> six legs (540x960, 1440x900, docked 360; Play $ and Chips), 33 real-click rounds each with every bonus forced, every buy,
+> a big win and four fast-click cases: **0 fails in all six**, money to the cent on every round, one round per click burst,
+> bonus total = WIN meter on every sample. The first narrow Play $ leg was spoiled by a dev-server restart at 04:17 that
+> wiped the test bank (kept as `qa1/narrow-play.spoiled-0417-restart.*`); its re-run is the clean one. Old-skin results:
+> `qa1/run3-oldskin/`. **Still not final:** Chris has not signed off the look, sounds have not been listened to, there is
+> no iOS/touch test, and THE PULL (`coldcall-pull`) is still to merge, after which Isabelle's whole list is re-run.
+> Hold unchanged: nothing to master, no PR, no deploy.
 
 > **02:30 note from the lead (read before the table below).** Chris, 02:11: the current skin is not good next to Ballot Bender
 > (brown on brown, soft small symbols, no scene, no title, plain frame). **THE SKIN IS BEING REPLACED. Visuals are NOT signed
@@ -11,6 +23,18 @@ This file is the status line: Isabelle reads it on GitHub. Newest milestone at t
 > The QA pass now running is FUNCTIONAL only (money to the cent, fast clicks, stuck rounds, each bonus and buy, three sizes,
 > Play $ and Chips); the three-size screenshot review is deferred to the new skin. A comp is with Chris; no skin spec yet.
 > Hold unchanged: nothing to master, no PR, no deploy.
+
+> **02:55 note from the lead: SCOPE ADDED by Chris (topic 10, 02:44), so nothing here is final.** His words: "want this all
+> built in and tested", plus a separate agent to tune "RTP and money levers ... compared with the real levers for hacksaw".
+> "This all" = six retention mechanics (THE PULL): a lead list with a guaranteed bonus and leads that go cold, warm squares that
+> persist, an honest "would have closed", one decision per bonus, an office pot + friends feed + watch, a daily appointment.
+> Spec `cold-call/PULL.md` on branch `coldcall-pull` (worktree, not pushed yet). It makes the engine a function of
+> (rng, buy, player state) and gives the server per-player state and a shared pot.
+> **For Isabelle:** the BASE GAME on config `c24` is what your 22:55 list is being checked against, and it is NOT yet
+> functionally green (the real-click QA is still running; Play $ runs show failures the QA builder is chasing, Chips runs
+> are clean so far). Once THE PULL and skin 3 are merged, your whole list is re-run: band table, settlement in Play $ and
+> Chips, byte-sync, three-size QA. Chris's 22:55 targets still stand; the levers agent may only recommend changes to them.
+> Expected merge order into `coldcall`: `coldcall-skin3`, then `coldcall-pull`. Master stays yours; hold unchanged.
 
 **Not green yet.** Retune pass 2 (config `c24`, `505a0eb`) is DONE and merged with board v2 and master into `coldcall` at `d772fe0` (pushed to `coldcall` only). Pass 2 met all six targets; the 80% stretch for 5x+ share of RTP is not reached (78.9%), and margins on 5x+ base share (1.622% vs 1.6%) rest on one plain run. Tests at this commit: `tests/coldcall.js` 47 pass, `tests/bender.js` 19 pass, engine copies identical (run by me 01:35). The dev server on 4610 was restarted on this tree at 01:40. The full three-size QA pass (1440x900, 540x960, docked; Play $ and Chips; win meter = credited; fast clicks) has NOT run: it starts next from `qa/coldcall-v2/critic-r1.md`. Nothing goes to master (Chris's hold, see Rules). The retune table below is the c14 (pass 1) reading; the c24 table is in the pass 2 report and `cold-call/RETUNE.md`.
 
@@ -29,8 +53,29 @@ This file is the status line: Isabelle reads it on GitHub. Newest milestone at t
 | 1 | Before/after table (RTP +-CI, hit %, bands, bonus frequency and average, buy RTPs, max win) | DONE for config `c14`: `cold-call/RETUNE.md`. I checked its numbers against the raw run outputs; I did not re-run the sims. One target missed, one buy out of band (below). May gain an AFTER-2 column from pass 2. |
 | 2 | Money settlement, Play $ and Chips | SERVER side done at this commit: one test, 480 rounds per currency over every bet level and every buy; on each round balance before - cost + win = after, whole units only, the other purse does not move, the pushed wallet equals the settled one, a same-instant double click is refused and not charged; bad amounts were already covered. BROWSER side (win meter = amount credited, fast clicks on the real button) NOT done: part of item 4. |
 | 3 | Engine byte-sync test | exists, passes at this commit |
-| 4 | Headless real-spin QA, 15+ spins, each bonus forced, a big win; 1440x900, 540x960, docked | NOT done. Runs after the retune is merged, on a restarted dev server. |
+| 4 | Headless real-spin QA, 15+ spins, each bonus forced, a big win; 1440x900, 540x960, docked | chain 3 on the OLD skin (`d4d20e3`, 03:48-04:12): 5 legs clean, docked Play $ 2 fails = a harness assumption, fixed (see QA r1 block below). Skin 3 (`e7351d5`) functional chain 4 is running separately; its results are not in this row yet. Visual review deferred to the new skin. |
 | 5 | All tests pass | after the retune merge: `tests/coldcall.js` 47 pass, `tests/bender.js` 19 pass, engine copies byte-identical, run by me. The `npm test` chain: not run by me; `preselect`, `allin`, `pause`, `reset` hard-code `/home/isabelle/.cache` and are reported to fail the same way on master on this box. |
+
+### QA r1, functional, 2026-10-06 (qa/coldcall-v2/qa1/, driver `qa/coldcall-v2/capture/qa1.js`)
+Real mouse clicks on the real buttons, dev server on 4610 restarted fresh (COLDCALL_TEST=1, empty bank), server wallet read from a second socket after every round. Chain 3 re-run from the start on `d4d20e3` (old skin) after the 03:37 gateway restart killed it; results kept in `qa/coldcall-v2/qa1/run3-oldskin/`.
+
+| Leg | Rounds | Fails | Fast clicks (double, triple 20 ms, in cascade, in bonus): rounds started / expected 1 each |
+|---|---|---|---|
+| narrow 540x960 Play $ | 33 | 0 | 1 / 1 / 1 / 1 |
+| narrow Chips | 33 | 0 | 1 / 1 / 1 / 1 |
+| wide 1440x900 Play $ | 33 | 0 | 1 / 1 / 1 / 1 |
+| wide Chips | 33 | 0 | 1 / 1 / 1 / 1 |
+| docked 360 px Play $ | 33 | 2 (old skin, harness assumption) | 1 / 1 / 1 / 2 (the 2 is the case below) |
+| docked Chips | 33 | 0 | 1 / 1 / 1 / 1 |
+
+Per round, all six old-skin legs: WIN meter == totalWin, server wallet delta == win - cost to the unit, the other purse unmoved, game balance == server wallet, (docked) shell wallet == server wallet, self-check list empty, no stuck round, no leftover overlay nodes. Each of the 7 forced features, all 4 buys and 16 plain spins ran in every leg. Bonus HUD total == WIN meter in every 100 ms sample, longest disagreement 0 ms.
+
+- **The 31 old "shell Play wallet != server wallet (whole dollars)" fails were a harness rule, not a display fault.** The old rule compared whole dollars; the shell's `dollars()` (public/shell.js:24) prints cents whenever they are non-zero, e.g. `Play$10,022.90` for a server balance of 1002290 cents, and `Play$10,075.90` for 1007590. Every failing line had shell text == game balance == server balance. The rule at HEAD compares to the cent and the docked Play $ leg now passes it in all 33 rounds.
+- **The 2 docked Play $ fails on the first re-run ("clicks during bonus made 2 rounds" + a wallet delta of -200 vs -100) were a harness assumption.** The test clicks 5 times over 4.5 s and assumes the bonus is still running. A forced bonus1 can pay 0 (legal math, 8 free spins with nothing landing); it then ends about 3 s after the HUD shows, and the 5th click lands on an idle button, which correctly starts a new paid round. Reproduced in a 6-run loop: runs 1 and 3 paid 0, and in both the 5th click saw `busy:false, bh:false` before it fired; the 4th click, at `busy:true, bh:false`, started nothing. So no double-fire. Fix (harness only): stop clicking once the round is no longer busy. A docked Play $ re-run with the fix: 33 rounds, 0 fails, but it ran on the skin 3 tree (`e7351d5`) on a restarted server while chain 4 was using the same server, so it is a check of the fix, not a clean skin-3 result; its output files were overwritten by chain 4 and are not kept.
+- Big-win overlay amount vs WIN meter: equal in 90-95% of samples; the other 5-10% (1-3 samples, 100-300 ms, at the start of an overlay) show `$0.00`, the count-up start while the meter already holds the total. Cosmetic, not a money fault; no threshold in the harness covers it.
+- Browser console: no errors in any leg (404s filtered).
+
+**Not verified:** anything visual (old skin, being replaced); a bonus that pays 0 was only reproduced in the scratch loop, not seen again in the final docked run; a 1.5 s wait covers shell wallet settle, no stress on slower machines; no run with two clients on one account; the retune numbers were not re-run; `npm test` chain not run.
 
 ### Retune result, config `c14` (builder's runs on shaman, 24 threads; full table in `cold-call/RETUNE.md`)
 | Target | BEFORE | AFTER (c14) | Verdict |

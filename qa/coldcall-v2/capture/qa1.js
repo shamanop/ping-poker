@@ -40,6 +40,8 @@ async function setup() {
     R.dock = await page.evaluate(() => { const r = document.querySelector('.sh-win[data-game=coldcall]').getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; });
   }
   await G(() => { const T = CC.core.T, o = T.spin; T.spin = async (...a) => { const r = await o.apply(T, a); (window.__spins = window.__spins || []).push({ args: a.slice(0, 3), id: r.roundId, cost: r.cost, win: r.totalWin, tier: r.tier, forced: r.forced || null, wallet: r.wallet || r.balances || null, script: r.script }); return r; };
+    { const o = CC.dbg.mismatch.push.bind(CC.dbg.mismatch); CC.dbg.mismatch.push = (m) => { if (m && m.what === 'leftover nodes') m.snap = [...document.querySelectorAll('#floats > *, #ov > *, #scene > *, #stage .stamp, #stage .accept, #stage .banner, #stage .fly, #stage .flash')].map((n) => (n.parentElement && (n.parentElement.id || n.parentElement.className)) + ' > ' + n.outerHTML.slice(0, 180)); return o(m); }; }
+    window.__added = []; new MutationObserver((ms) => ms.forEach((m) => m.addedNodes.forEach((n) => { if (n.nodeType === 1 && /stamp|accept|banner|fly|flash|toast/.test(n.className + '')) { __added.push([Date.now() % 1e7, n.className + '', n.parentElement && (n.parentElement.id || n.parentElement.className), (n.textContent || '').slice(0, 30)]); if (__added.length > 40) __added.shift(); } }))).observe(document.body, { childList: true, subtree: true });
     window.__samp = []; setInterval(() => { const bh = document.getElementById('bh'), t = document.querySelector('#tier .amt'); __samp.push([Date.now(), CC.core.st.busy ? 1 : 0, document.getElementById('win').textContent, bh && !bh.hidden ? document.getElementById('bhTot').textContent : null, t ? t.textContent : null, document.getElementById('bhTotL') ? document.getElementById('bhTotL').textContent : '']); }, 100); });
   probe = await openProbe(R.browser, name, '1234');
   // currency: a real click on the real mode button
@@ -73,17 +75,18 @@ async function verify(label, before, extra = {}) {
   const after = await probe.read(); const was = lastSrv; lastSrv = after;
   const purse = cur, other = cur === 'play' ? 'chips' : 'play';
   const win = sp.win, cost = sp.cost, dS = after.wallet[purse] - was.wallet[purse], dO = after.wallet[other] - was.wallet[other];
+  let settleMs = 0; { const t0 = Date.now(); while (Date.now() - t0 < 6000) { const b = await G(() => document.getElementById('bal').textContent); if (num(b) === after.wallet[purse]) break; await sleep(150); } settleMs = Date.now() - t0; }
   const g = await G(() => ({ bal: document.getElementById('bal').textContent, win: document.getElementById('win').textContent, bh: document.getElementById('bh').hidden, nOv: document.getElementById('ov').children.length, mis: CC.dbg.mismatch.slice(), busy: CC.core.st.busy }));
   const shell = docked ? await page.evaluate(() => ({ play: document.getElementById('sh-play').textContent, chips: document.getElementById('sh-chips').textContent })) : null;
-  const rec = { label, id: sp.id, forced: sp.forced, tier: sp.tier, cost, win, winMeter: num(g.win), balShown: num(g.bal), serverBal: after.wallet[purse], delta: dS, expect: win - cost, otherDelta: dO };
+  const rec = { label, settleMs, id: sp.id, forced: sp.forced, tier: sp.tier, cost, win, winMeter: num(g.win), balShown: num(g.bal), serverBal: after.wallet[purse], delta: dS, expect: win - cost, otherDelta: dO };
   if (shell) { rec.shellPlay = shell.play; rec.shellChips = shell.chips; }
   R.rounds.push(rec); R.checks.push(rec);
   if (num(g.win) !== win) fail('WIN meter != totalWin', rec);
   if (dS !== win - cost) fail('wallet delta != win - cost', rec);
   if (dO !== 0) fail('other purse moved', rec);
   if (num(g.bal) !== after.wallet[purse]) fail('game balance != server wallet', rec);
-  if (shell) { const sv = cur === 'play' ? num(shell.play.match(/\$[\d,]+\.\d\d/)[0]) : parseInt(shell.chips.replace(/[^0-9]/g, ''), 10); if (sv !== after.wallet[purse]) fail('shell wallet != server wallet', { ...rec, shell }); }
-  if (g.mis.length > (verify.seenMis || 0)) { verify.seenMis = g.mis.length; fail('game self-check mismatch', { label, mis: g.mis.slice(-3) }); fs.writeFileSync(`${OUT}/script-${TAG}-${sp.id}.json`, JSON.stringify(await G((i) => window.__spins[i], before))); }
+  if (shell) { if (cur === 'play') { const sv = Math.round(parseFloat(shell.play.replace(/^Play\$?/, '').replace(/,/g, '')) * 100); if (sv !== after.wallet.play) fail('shell Play wallet != server wallet', { ...rec, shell }); } else { const sv = parseInt(shell.chips.replace(/[^0-9]/g, ''), 10); if (sv !== after.wallet.chips) fail('shell chips != server wallet', { ...rec, shell }); } }
+  if (g.mis.length > (verify.seenMis || 0)) { verify.seenMis = g.mis.length; fail('game self-check mismatch', { label, mis: g.mis.slice(-2).map((m) => JSON.stringify(m).slice(0, 600)), now: Date.now() % 1e7, left: await G(() => [...document.querySelectorAll('#floats > *, #ov > *, #scene > *, .stamp, .accept, .banner, .fly, .flash')].map((n) => n.outerHTML.slice(0, 200))), added: await G(() => __added.slice(-12)) }); fs.writeFileSync(`${OUT}/script-${TAG}-${sp.id}.json`, JSON.stringify(await G((i) => window.__spins[i], before))); }
   if (g.nOv) fail('leftover overlay nodes', { label, n: g.nOv }); if (g.busy) fail('still busy', { label });
   return rec;
 }
@@ -124,7 +127,8 @@ async function fastClicks() {
   // 4. click during a bonus (free spins), normal speed
   s0 = await stState(); await page.evaluate(() => { window.__qaForce = 'bonus1'; }); await mclick('#spin');
   const t1 = Date.now(); let inb = false; let lt = 0; while (Date.now() - t1 < 90000) { inb = await G(() => !document.getElementById('bh').hidden); if (inb) break; if (Date.now() - lt > 1500) { lt = Date.now(); await tapper(); } await sleep(150); }
-  for (let i = 0; i < 5; i++) { await mclick('#spin'); await sleep(900); }
+  // a zero-pay bonus can end inside the 4.5 s of clicking; a click on the idle button is a legitimate new round, so stop clicking once the round is over
+  for (let i = 0; i < 5; i++) { if (!(await G(() => CC.core.st.busy))) break; await mclick('#spin'); await sleep(900); }
   s = await waitRound(s0.spins, 'during-bonus', { limit: 400000 }); await sleep(300); s1 = await stState();
   T.push({ t: 'clicks during bonus free spins (5 real clicks)', sawBonus: inb, started: s1.started - s0.started, results: s1.spins - s0.spins }); if (s1.spins - s0.spins !== 1) fail('clicks during bonus made ' + (s1.spins - s0.spins) + ' rounds', {});
   await verify('during-bonus', s0.spins);
