@@ -786,22 +786,34 @@ function drawDrawer(confirmEnd) {
   if (!hostDrawer || !S.cur) return;
   const t = S.cur, id = tId(t), info = S.info[id], paused = t.state === 'paused';
   const unit = t.unit || unitOf(t.mode);
-  hostDrawer.replaceChildren(
-    h('h4', { class: 'panel__title' }, 'Host controls', h('small', null, t.name + '  /  ' + id),
-      h('button', { class: 'panel__close host-x', id: 'host-close', type: 'button', 'aria-label': 'Close host controls', onclick: closeDrawer }, '\u00d7')),
-    h('div', { class: 'host-body' },
-      h('div', { class: 'lb-btns' },
-        h('button', { class: 'btn btn--secondary btn--sm', id: 'host-start', onclick: () => emit('table_start', { tableId: id }) }, 'Start'),
-        h('button', { class: 'btn btn--secondary btn--sm', id: 'host-pause', onclick: () => emit('table_pause', { tableId: id, paused: !paused }) }, paused ? 'Resume table' : 'Pause table')),
-      (blindsFor === id && blindsEl) ? (blindsEl.update(t), blindsEl.el) : (blindsFor = id, blindsEl = blindsEditor(t, id, unit), blindsEl.el),
-      h('hr', { class: 'divider' }),
-      h('div', { class: 'lb-label' }, 'Players'),
-      ...((info && info.seated) || []).map((p) => h('div', { class: 'lb-seat panel panel--inset' }, h('img', { src: avSrc(p), alt: '' }), h('div', null, h('b', null, p.display || p.key), h('span', null, fm(p.stack, unit))),
-        p.key !== myKey() ? h('button', { class: 'btn btn--danger btn--sm', onclick: () => emit('table_kick', { tableId: id, key: p.key }) }, 'Kick') : null))),
-    h('div', { class: 'host-foot' },
-      confirmEnd ? h('div', { class: 'lb-stack', style: 'gap:var(--p10)' }, h('div', { class: 'note' }, 'End the night? The current hand finishes, then everyone cashes out.'),
-        h('div', { class: 'lb-btns' }, h('button', { class: 'btn btn--secondary btn--sm', onclick: () => drawDrawer(false) }, 'Keep playing'), h('button', { class: 'btn btn--danger btn--sm', id: 'host-end-confirm', onclick: () => { emit('table_end_night', { tableId: id }); toggleDrawer(); } }, 'End night'))) :
-        h('button', { class: 'btn btn--danger btn--sm btn--block', id: 'host-end', onclick: () => drawDrawer(true) }, 'End night')));
+  const blinds = (blindsFor === id && blindsEl) ? (blindsEl.update(t), blindsEl.el) : (blindsFor = id, blindsEl = blindsEditor(t, id, unit), blindsEl.el);
+  const title = h('h4', { class: 'panel__title' }, 'Host controls', h('small', null, t.name + '  /  ' + id),
+    h('button', { class: 'panel__close host-x', id: 'host-close', type: 'button', 'aria-label': 'Close host controls', onclick: closeDrawer }, '\u00d7'));
+  const above = [
+    h('div', { class: 'lb-btns' },
+      h('button', { class: 'btn btn--secondary btn--sm', id: 'host-start', onclick: () => emit('table_start', { tableId: id }) }, 'Start'),
+      h('button', { class: 'btn btn--secondary btn--sm', id: 'host-pause', onclick: () => emit('table_pause', { tableId: id, paused: !paused }) }, paused ? 'Resume table' : 'Pause table'))];
+  const below = [
+    h('hr', { class: 'divider' }),
+    h('div', { class: 'lb-label' }, 'Players'),
+    ...((info && info.seated) || []).map((p) => h('div', { class: 'lb-seat panel panel--inset' }, h('img', { src: avSrc(p), alt: '' }), h('div', null, h('b', null, p.display || p.key), h('span', null, fm(p.stack, unit))),
+      p.key !== myKey() ? h('button', { class: 'btn btn--danger btn--sm', onclick: () => emit('table_kick', { tableId: id, key: p.key }) }, 'Kick') : null))];
+  const foot = h('div', { class: 'host-foot' },
+    confirmEnd ? h('div', { class: 'lb-stack', style: 'gap:var(--p10)' }, h('div', { class: 'note' }, 'End the night? The current hand finishes, then everyone cashes out.'),
+      h('div', { class: 'lb-btns' }, h('button', { class: 'btn btn--secondary btn--sm', onclick: () => drawDrawer(false) }, 'Keep playing'), h('button', { class: 'btn btn--danger btn--sm', id: 'host-end-confirm', onclick: () => { emit('table_end_night', { tableId: id }); toggleDrawer(); } }, 'End night'))) :
+      h('button', { class: 'btn btn--danger btn--sm btn--block', id: 'host-end', onclick: () => drawDrawer(true) }, 'End night'));
+  // Every table_info redraws this drawer, and they arrive while the host is typing. The blinds editor must stay in the page
+  // through a redraw: taking a focused input out of the document drops the cursor, so the host could not finish a number.
+  // The editor lives in a .host-body that is kept too; only the nodes around the editor are replaced.
+  const body = blinds.parentNode;
+  if (body && body.parentNode === hostDrawer && body.classList.contains('host-body')) {
+    while (body.firstChild !== blinds) body.firstChild.remove();
+    while (body.lastChild !== blinds) body.lastChild.remove();
+    blinds.before(...above); blinds.after(...below);
+    while (hostDrawer.firstChild !== body) hostDrawer.firstChild.remove();
+    while (hostDrawer.lastChild !== body) hostDrawer.lastChild.remove();
+    body.before(title); body.after(foot);
+  } else hostDrawer.replaceChildren(title, h('div', { class: 'host-body' }, ...above, blinds, ...below), foot);
 }
 
 // ── socket events ─────────────────────────────────────────────────
