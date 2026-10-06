@@ -33,7 +33,7 @@ button[disabled]{opacity:.4;pointer-events:none}
 #stage>*{position:absolute}
 /* backdrop: dark wood desk everywhere; the far office (ceiling lights, the paper storm) only in the top 46% and cropped to the right so the hero's ghost face in bg.jpg stays out of frame */
 #bgslot{inset:0;background:var(--img-wood) 0 0/256px,var(--bg)}
-#bgslot::before{content:"";position:absolute;left:0;right:0;top:0;height:46%;background:var(--img-bg) 100% 0/170% auto no-repeat;filter:brightness(1.55) saturate(.9);-webkit-mask-image:linear-gradient(#000 52%,transparent);mask-image:linear-gradient(#000 52%,transparent)}
+#bgslot::before{content:"";position:absolute;left:0;right:0;top:0;height:46%;background:var(--img-bg) 100% 0/170% auto no-repeat;filter:brightness(1.3) saturate(.9);-webkit-mask-image:linear-gradient(#000 52%,transparent);mask-image:linear-gradient(#000 52%,transparent)}
 #bgslot::after{content:"";position:absolute;inset:0;background:radial-gradient(ellipse at 50% 30%,rgba(20,10,2,0) 30%,rgba(10,5,0,.78) 100%),linear-gradient(180deg,rgba(21,14,6,0),rgba(21,14,6,.4) 60%)}
 .bw #hero{visibility:hidden}
 .flash{inset:0;pointer-events:none;z-index:40}
