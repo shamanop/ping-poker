@@ -243,7 +243,7 @@ function replayRound(s, cfg) {
     assert.strictEqual(E.COLS, 6); assert.strictEqual(E.ROWS, 5); assert.strictEqual(E.N, 30); assert.strictEqual(E.MIN_CLUSTER, 5);
     assert.deepStrictEqual(E.SYM, ['mug', 'note', 'ball', 'can', 'cups', 'headset', 'rx', 'pile', 'cashwad', 'cash', 'closer', 'bell', 'phone']);
     assert.strictEqual(E.MAX_WIN_X, 10000); assert.strictEqual(CFG.maxWinTenths, 100000);
-    assert.deepStrictEqual(E.BET_LEVELS, [10, 20, 50, 100, 200, 500, 1000, 2500]);
+    assert.deepStrictEqual(E.BET_LEVELS, [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2500]);   // DENOMS: 1c / 2c / 5c
     assert.deepStrictEqual(CFG.spins, { bonus1: 8, bonus2: 12, bonus3: 12 });
     assert.deepStrictEqual(CFG.retrigger, { two: 2, three: 4, upgrade: 4 });
     assert.deepStrictEqual(CFG.bubbles.bronze.map((b) => b[0]), [2, 5, 10, 20, 30, 40]);
@@ -532,7 +532,7 @@ function replayRound(s, cfg) {
   });
 
   await test('engine: integer tenths everywhere; the script parts add up to the round win; every pay has an integer cents value at every bet level (30,000 rounds, property test)', () => {
-    for (const b of E.BET_LEVELS) assert.strictEqual(b % 10, 0);
+    for (const b of E.BET_LEVELS) assert.ok(b % 10 === 0 || [1, 2, 5].includes(b));      // whole tenths of a bet are whole cents from 10c up; at 1c / 2c / 5c wins are rounded (roundCents)
     for (const v of Object.values(PAYT).flat()) assert.ok(Number.isInteger(v) && v > 0);
     const rng = E.rngFrom(9);
     for (let i = 0; i < 30000; i++) {
@@ -545,7 +545,8 @@ function replayRound(s, cfg) {
       assert.strictEqual(s.winTenths, Math.min(spinWin + bonusWin, MAXT)); assert.strictEqual(r.winTenths, s.winTenths);
       if (s.spin) { assert.strictEqual(s.spin.steps.reduce((a, x) => a + x.pay, 0), s.spin.cluster); assert.strictEqual(s.spin.win, spinWin); }
       if (s.bonus) assert.strictEqual(s.bonus.spins.reduce((a, x) => a + x.win, 0) >= s.bonus.winTenths, true);
-      for (const bet of E.BET_LEVELS) { const win = E.cents(r.winTenths, bet), cost = E.cents(r.costTenths, bet); assert.strictEqual(win * 10, r.winTenths * bet); assert.strictEqual(cost * 10, r.costTenths * bet); }
+      for (const bet of E.BET_LEVELS.filter((x) => x % 10 === 0)) { const win = E.cents(r.winTenths, bet), cost = E.cents(r.costTenths, bet); assert.strictEqual(win * 10, r.winTenths * bet); assert.strictEqual(cost * 10, r.costTenths * bet); }
+      if (i % 7 === 0) for (const bet of [1, 2, 5]) { const p = E.payRound(r.round, bet, rng); assert.ok(Number.isInteger(p.win) && Number.isInteger(p.price) && p.price >= 1 && Math.abs(p.win - r.winTenths * p.num / p.den) < 2); }
     }
     assert.throws(() => E.cents(1.5, 10)); assert.throws(() => E.cents(5, 15)); assert.throws(() => E.cents(5, 1.5)); assert.throws(() => E.cents(NaN, 10));
   });
@@ -624,7 +625,7 @@ function replayRound(s, cfg) {
       s.clock.advance(200); const bet = E.BET_LEVELS[i % E.BET_LEVELS.length];
       a.send('g:coldcall:spin', { bet, mode: 'play' });
       const r = last(a, 'g:coldcall:result'); const m = E.resolveRound(mirror, null);
-      assert.strictEqual(r.bet, bet); assert.strictEqual(r.cost, bet); assert.strictEqual(r.totalWin, m.winTenths * bet / 10); assert.strictEqual(r.totalWinTenths, m.winTenths);
+      assert.strictEqual(r.bet, bet); assert.strictEqual(r.cost, bet); if (bet % 10 === 0) assert.strictEqual(r.totalWin, m.winTenths * bet / 10); else assert.ok(Math.abs(r.totalWin - m.winTenths * bet / 10) < 2, 'rounded win at ' + bet + 'c'); assert.strictEqual(r.totalWinTenths, m.winTenths);
       assert.deepStrictEqual(r.script, m.script);
       expect += -bet + r.totalWin; assert.strictEqual(r.wallet.play, expect); assert.strictEqual(r.wallet.chips, 10000);
       for (const k of ['roundId', 'script', 'totalWin', 'tier', 'wallet']) assert.ok(k in r, k);
@@ -741,8 +742,8 @@ function replayRound(s, cfg) {
         a.send('g:coldcall:spin', { bet, mode, buyBonus: buy });                    // the double click, same instant: refused, not charged
         assert.strictEqual(last(a, 'error').code, 'rate');
         const res = all(a, 'g:coldcall:result'); assert.strictEqual(res.length, ++n, 'exactly one round per click pair');
-        const r = res[n - 1], cost = buy ? E.CFG.buyCost[buy] * bet / 10 : bet;
-        assert.strictEqual(r.mode, mode); assert.strictEqual(r.cost, cost); assert.strictEqual(r.totalWin, r.totalWinTenths * bet / 10);
+        const r = res[n - 1], cost = buy ? E.buyPrice(E.CFG.buyCost[buy], bet) : bet;
+        assert.strictEqual(r.mode, mode); assert.strictEqual(r.cost, cost); if (bet % 10 === 0) assert.strictEqual(r.totalWin, r.totalWinTenths * bet / 10); else assert.ok(r.totalWin >= 0 && Math.abs(r.totalWin - r.pay.win) === 0 && Math.abs(r.totalWin - r.totalWinTenths * r.pay.num / r.pay.den) < 2);
         for (const v of [r.cost, r.totalWin, r.wallet.play, r.wallet.chips]) assert.ok(Number.isSafeInteger(v) && v >= 0, 'whole units: ' + v);
         assert.ok(r.totalWin <= E.MAX_WIN_X * bet, 'cap');
         bal += -cost + r.totalWin; if (r.totalWin) paid++; if (buy) bought++;

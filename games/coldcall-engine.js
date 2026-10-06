@@ -2,15 +2,16 @@
    (games/coldcall.js), the sim, and (byte-identical copy at public/games/coldcall/engine.js) the browser for animation only.
    A paid round is a pure function of (rng, buy): it resolves the whole round (base spin, cascades, hot leads, phone feature,
    bonuses) into a win in whole TENTHS of the bet plus a replayable script. The contract is cold-call/ENGINE-V2.md.
-   win cents = winTenths * bet / 10 is an exact integer at every bet level (all multiples of 10 cents).
-   Money is never rounded: every pay, bubble value, multiplier and close value is an integer number of tenths.
+   Inside the engine money is never rounded: every pay, bubble value, multiplier and close value is an integer number of tenths of the bet.
+   Cents: win cents = winTenths * bet / 10 is an exact integer at every bet of 10 cents or more. At 1c / 2c / 5c (DENOMS, cold-call/PULL-ENGINE.md section 7) a win can be a fraction
+   of a cent: it is paid by unbiased rounding (floor, plus one cent with probability = the fraction; roundCents), the random number is an ARGUMENT (input.rnd, never the round's own stream).
    Grid: 6 columns x 5 rows, flat array of 30, pos = row * 6 + col, row 0 on top. */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory();
   else root.ColdCallEngine = factory();
 })(typeof self !== 'undefined' ? self : this, function () {
   const COLS = 6, ROWS = 5, N = 30, MIN_CLUSTER = 5, MAX_WIN_X = 10000, MAX_WIN_T = MAX_WIN_X * 10;
-  const BET_LEVELS = [10, 20, 50, 100, 200, 500, 1000, 2500];
+  const BET_LEVELS = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2500];
   // symbol ids: regular 0..9 (low 0-4, high 5-9), then closer (wild), bell (scatter), phone ("the call connects")
   const SYM = ['mug', 'note', 'ball', 'can', 'cups', 'headset', 'rx', 'pile', 'cashwad', 'cash', 'closer', 'bell', 'phone'];
   const NREG = 10, WILD = 10, BELL = 11, PHONE = 12, NSYM = 13;
@@ -84,7 +85,7 @@
       more: { on: true, mult: 2, rtp: 1.0, minTenths: 50 },   // ONE MORE CALL: a fair coin, wins with probability rtp / mult = 1/2, pays bonus x mult, else 0; offered from a 5x bonus up
       daily: { base: 0.2, perStreak: 0.05, streakMax: 4, stakeCap: 10 },   // free leads on the first paid spin of a day: 0.2 to 0.4 of a lead, worked at 10 cents: a ritual, not money (critic N2: 8 to 24 leads paid a once-a-day $1 player about $5 a day; this pays about a cent), LEVERS.md 8.8
       pot: { feedBps: 100, oneInPerDollar: 3000, seed: 0, minBal: 1000, capCents: 5000 },   // server only (cents, basis points); seed stays 0 (W9); capCents = the most one hit pays, in money, the same for every bet: capCents / 100 / oneInPerDollar = 1.67% is the most a pot chaser can add at ANY bet (W8, 8.11); keep capCents >= feedBps x oneInPerDollar / 100 (3000), or the pot cannot pay out what it is fed
-      feed: { minWinX: 100 },                       // server only
+      feed: { minWinX: 100, minWinCents: 500 },     // server only: a win goes to the room feed when it is >= minWinX x bet AND >= minWinCents (a 100x win at 1c is one dollar: not a room event)
       decision: { timeoutMs: 20000 },               // server only
     },
   };
@@ -123,19 +124,22 @@
   // a stored carry is a finite number in [0, 10) cents; anything else (missing, NaN, negative, text, 10 or more) reads as 0
   const cleanCarry = (c) => (typeof c === 'number' && c > 0 && c < 10 ? c : 0);
   const cloneState = (st) => Object.assign({}, st, { warm: st.warm.slice(), cb: st.cb ? Object.assign({}, st.cb) : null, carry: cleanCarry(st.carry) });
-  // the Callback is played at the lead-weighted average bet ROUNDED DOWN to a multiple of 10 cents, in [10, max bet level]: leads earned small cannot fire a big bet,
-  // and a few cheap leads (the daily gift) cannot knock a big bettor down a whole bet level. Any multiple of 10 cents is a legal Eng.cents bet.
-  // Floor, never nearest (W1B N1): nearest let a player who mixes bet sizes sit just over a half step and arm every Callback up to 5 cents above what the leads were
-  // worth. With the floor, cb.bet <= the average always, so no bet mix gains; a flat bettor whose average is already a multiple of 10 is exact (1e-9 absorbs float noise).
+  // the Callback is played at the lead-weighted average bet ROUNDED DOWN to a whole step, in [1, max bet level]: leads earned small cannot fire a big bet,
+  // and a few cheap leads (the daily gift) cannot knock a big bettor down a whole bet level. Below an average of 10 cents the step is 1 cent (DENOMS: 1c / 2c / 5c bettors),
+  // from 10 cents up it is EXACTLY the old rule (step 10); any whole number of cents in [1, 2500] is a legal Eng.cents-exact Callback bet.
+  // Floor, never nearest (W1B N1): nearest let a player who mixes bet sizes sit just over a half step and arm every Callback up to half a step above what the leads were
+  // worth. With the floor, cb.bet <= the average always, so no bet mix gains; a flat bettor whose average is already a whole step is exact (1e-9 absorbs float noise).
   // FLOOR + CARRY (N1-CARRY): the floor alone threw the remainder away (a flat $1 player whose daily gift pulled the average to 99.96c played every Callback at 90c).
-  // cbArm adds the carry the last Callback left to this list's average, plays the floor of the sum and keeps the rest: over time the stake handed out is the stake the leads
-  // were worth, never more (the carry is always >= 0 and < 10 cents, so any prefix of lists is at or under the worth). The clamps [10, 2500] only ever lower the stake handed
-  // out; a remainder that does not fit [0, 10) after a clamp is dropped, not banked.
-  const CB_MAX = BET_LEVELS[BET_LEVELS.length - 1];
+  // cbArm adds the carry the last Callback left to this list's average, plays the floor of the sum and keeps the rest. INVARIANT (proved by the fuzz in the tests): each arm keeps
+  // bet + carry out = avg + carry in (unless a clamp lowers the bet and drops the rest), carry out >= 0 and below the step of THIS list (1 or 10), so over any mix of lists, crossing
+  // the 10c line either way, the stake handed out is at or under the stake the leads were worth: sum(bet) = sum(avg) - carry_now <= sum(avg). A carry of 7.5c left by a 10c+ list and
+  // added to a list that averages 3c is worth 10.5c: the Callback plays 10c and keeps 0.5c. A carry of 0.7c added to a 12c list: 12.7c, plays 10c, keeps 2.7c. The step follows the
+  // average of the list being armed, not the sum (so the 10c+ rule reads exactly as before). The clamps only lower the stake; a remainder that does not fit [0, step) after a clamp is dropped.
+  const CB_MAX = BET_LEVELS[BET_LEVELS.length - 1], CB_MIN = BET_LEVELS[0];
   function cbArm(avg, carry) {
-    const t = (Number.isFinite(avg) && avg > 0 ? avg : 0) + cleanCarry(carry);
-    const bet = Math.min(CB_MAX, Math.max(BET_LEVELS[0], Math.floor(t / 10 + 1e-9) * 10)), rest = t - bet;
-    return { bet, carry: rest >= 0 && rest < 10 ? rest : 0 };
+    const a = Number.isFinite(avg) && avg > 0 ? avg : 0, t = a + cleanCarry(carry), step = a < 10 ? 1 : 10;
+    const bet = Math.min(CB_MAX, Math.max(CB_MIN, Math.floor(t / step + 1e-9) * step)), rest = t - bet;
+    return { bet, carry: rest >= 0 && rest < step ? rest : 0 };
   }
   const cbBet = (avg) => cbArm(avg, 0).bet;      // the floor alone (no carry): the Callback bet of an average
   function nextDay(d) { const [y, m, dd] = d.split('-').map(Number); return new Date(Date.UTC(y, m - 1, dd + 1)).toISOString().slice(0, 10); }
@@ -177,6 +181,40 @@
   // A knob that is not a whole number of cents >= 0 (NaN, text, negative, Infinity, missing) falls back to POT_CAP_DEFAULT: never NaN, never above the balance, never a throw.
   const POT_CAP_DEFAULT = 5000;
   function potPrize(pullCfg, bal) { const c = (pullCfg || CFG.pull).pot.capCents; return Math.min(bal, typeof c === 'number' && Number.isFinite(c) && c >= 0 ? Math.floor(c) : POT_CAP_DEFAULT); }
+
+  /* ---------------------------------------------------- DENOMS: whole-cent prices and unbiased whole-cent rounding (cold-call/PULL-ENGINE.md section 7) ----------------------------------------------------
+     The engine counts in tenths of the bet. A scale { price, num, den } turns tenths into cents: cents = tenths * num / den.
+       - a paid spin: price = bet, num = bet, den = 10 (a tenth of the bet is bet / 10 cents: whole at 10c and up, a fraction at 1c / 2c / 5c);
+       - a buy: price = the exact price (costTenths * bet / 10) rounded to the NEAREST cent (half up, at least 1c), and the round is played at the stake that makes it fair:
+         num = price, den = costTenths, so a tenth of the cost multiple is price / costTenths cents and the buy's payback is the same at 1c as at $1;
+       - a Callback: price 0 (free), num = its own bet, den = 10.
+     A cost is whole cents, fixed and shown before the player pays, never random. A win that is not a whole number of cents is paid by roundCents: floor, plus one cent with probability
+     equal to the fraction (same idea as Ballot Bender's spin handler, in exact integer arithmetic so no 1e-9 guard is needed). The random number is an argument. At 10c and up every amount
+     is whole, so the number is never read and the arithmetic is the old tenths * bet / 10. */
+  const buyPrice = (costTenths, bet) => Math.max(1, Math.floor((costTenths * bet + 5) / 10));
+  function scaleOf(costTenths, bet) {
+    if (costTenths > 0) { const price = buyPrice(costTenths, bet); return { price, num: price, den: costTenths }; }
+    return { price: 0, num: bet, den: 10 };
+  }
+  const isFractional = (sc) => sc.num % sc.den !== 0;      // some amount of tenths is not a whole number of cents at this scale
+  function roundCents(tenths, sc, u) {
+    const n = tenths * sc.num, r = n % sc.den, whole = (n - r) / sc.den;
+    return whole + (r > 0 && u * sc.den < r ? 1 : 0);
+  }
+  // the whole-cent total of a round: base spin (cluster + phone) and bonus rounded apart (u0 for the base, u1 for the bonus), then clamped to capCents (10,000 x the bet: no rounding can lift a payout above it)
+  function settleCents({ base, bonus, scale, us, capCents }) {
+    return Math.min(roundCents(base, scale, us[0]) + roundCents(bonus, scale, us[1]), capCents);
+  }
+  // the most one round can pay in cents: the engine's cap in tenths at this scale, never above MAX_WIN_X x the nominal bet (a buy's fair stake can sit above the bet by under 0.5 cent)
+  const capCentsOf = (capT, sc, bet) => Math.min(Math.floor(capT * sc.num / sc.den), MAX_WIN_X * bet);
+  const needRnd = () => { const e = new Error('a rounding source (input.rnd) is required when an amount at this bet can be a fraction of a cent'); e.code = 'need_rnd'; return e; };
+  // pay a plain round result (the stateless game: clusterTenths + phoneTenths = base spin, bonusTenths = bonus) in whole cents; rnd() is read twice (base, bonus) when the scale is fractional, never at 10c and up
+  function payRound(res, bet, rnd, capT) {
+    const sc = scaleOf(res.costTenths, bet), frac = isFractional(sc), cap = capCentsOf(capT === undefined ? MAX_WIN_T : capT, sc, bet);
+    if (frac && typeof rnd !== 'function') throw needRnd();
+    const us = frac ? [rnd(), rnd()] : [0, 0], base = roundCents(res.clusterTenths + res.phoneTenths, sc, us[0]), bonus = roundCents(res.bonusTenths, sc, us[1]);
+    return { price: sc.price, num: sc.num, den: sc.den, base, bonus, win: Math.min(base + bonus, cap), capCents: cap };
+  }
 
   function createEngine(cfgIn) {
     const cfg = cfgIn || CFG;
@@ -438,7 +476,7 @@
       const P = cfg.pull, buy = input.buy || null, S = input.script !== false, bet0 = input.bet;
       if (!P || !P.on || input.force) {              // the old stateless game: legacy round, state untouched, no decisions
         const r = round(rng, buy, { script: S, force: input.force });
-        return { status: 'done', round: r, buy: r.buy, callback: false, betCents: bet0, costTenths: r.costTenths, winTenths: r.winTenths, winX: r.winX, capped: r.capped, tier: r.tier, script: r.script, newState: input.state || null, pull: emptyPull(input.state) };
+        return { status: 'done', round: r, buy: r.buy, callback: false, betCents: bet0, costTenths: r.costTenths, winTenths: r.winTenths, winX: r.winX, capped: r.capped, tier: r.tier, script: r.script, newState: input.state || null, pull: emptyPull(input.state), pay: payRound(r, bet0, input.rnd, capT) };
       }
       const decs = decisions || [], now = input.now, day = input.day;
       let s = null, callback = false, bet = bet0, leaked = 0, warmDied = 0;
@@ -448,6 +486,12 @@
         s = tickStateWith(P, before, now); callback = !!s.cb; if (callback) bet = s.cb.bet;
         leaked = before.lt - s.lt; warmDied = before.warm.length - s.warm.length;
       }
+      // DENOMS: the scale tenths -> cents of this round (a Callback at its own bet, a buy at its fair stake) and the rounding source (read twice per DONE round when an amount can be a fraction of a cent)
+      const costT0 = callback ? 0 : buy ? cfg.buyCost[buy] : 10, scale = scaleOf(costT0, bet), frac = isFractional(scale), rnd = input.rnd;
+      if (frac && typeof rnd !== 'function') throw needRnd();
+      let U = null;
+      const us = () => U || (U = frac ? [rnd(), rnd()] : [0, 0]);
+      const rc = (t, k) => (frac ? roundCents(t, scale, us()[k]) : t * scale.num / scale.den), capC = capCentsOf(capT, scale, bet);
       const pull = emptyPull(s || input.state);
       pull.leaked = leaked; pull.warmDied = warmDied;
       const dx = { i: 0, pick: false, spins: null, cur: null, curNo: 0, curMi: 0, point: null, bonus: null };
@@ -508,7 +552,7 @@
           capLeft -= spin.win; if (spin.capped || capLeft <= 0) { res.capped = true; capLeft = 0; }
           if (!res.capped && spin.bells >= 3) res.bonusKind = spin.bells >= 5 ? 3 : spin.bells === 4 ? 2 : 1;
         }
-        let finalBonus = 0;
+        let finalBonus = 0, moreCents = null;       // moreCents: { bonus } the whole-cent bonus when ONE MORE CALL was offered (the amounts the player was shown)
         if (res.bonusKind && !res.capped) {
           bonus = playBonus(rng, res.bonusKind, S, capLeft, hooks);
           dx.bonus = bonus; const W = bonus.total;
@@ -517,17 +561,27 @@
           finalBonus = W;
           const M = P.more, mult = M ? Math.floor(M.mult) : 0;
           if (M && M.on && mult >= 2 && !bonus.capped && W > 0 && W >= M.minTenths && W * mult <= capLeft) {     // ONE MORE CALL (capLeft: the cap the bonus had, so a win is never clipped)
-            const pWin = M.rtp / mult;
-            const { d, auto } = take('more', { k: 'more', W, mult, pWin, capT: capT0 }, { k: 'more', take: false });
-            let won = null;
-            if (d.take) { const u = rng(); won = u * mult < M.rtp; finalBonus = won ? W * mult : 0; }
-            pull.more = { W, mult, pWin, take: d.take, won, auto: auto || false };
+            // SHOWN = PAID (DENOMS): the amounts of this decision are whole cents, rounded ONCE here (base and bonus apart) from the rounding source; banking pays them, a won gamble
+            // pays base + bonusCents x mult, a lost one the base: whole-cent arithmetic on what was shown, so what the player reads is what the option pays and no option leaks the draw.
+            // The rounding draws are made at this point on a replay too (same order), so they are the same numbers whenever the round is replayed from its tapes.
+            const baseC = rc(res.clusterTenths + res.phoneTenths, 0), bonusC = rc(W, 1);
+            if (baseC + bonusC * mult <= capC) {                       // the cap in whole cents (the same test as the tenths one at 10c and up, where nothing rounds)
+              const pWin = M.rtp / mult;
+              const { d, auto } = take('more', { k: 'more', W, mult, pWin, capT: capT0, bankCents: baseC + bonusC, baseCents: baseC, bonusCents: bonusC, winCents: baseC + bonusC * mult }, { k: 'more', take: false });
+              let won = null;
+              moreCents = { bonus: bonusC };
+              if (d.take) { const u = rng(); won = u * mult < M.rtp; finalBonus = won ? W * mult : 0; moreCents.bonus = won ? bonusC * mult : 0; }
+              pull.more = { W, mult, pWin, take: d.take, won, auto: auto || false };
+            }
           }
         }
         res.bonusTenths = finalBonus;
         res.winTenths = Math.min(res.clusterTenths + res.phoneTenths + finalBonus, capT0);
         if (res.winTenths >= capT0) res.capped = true;
         res.winX = res.winTenths / 10; res.tier = winTier(res.winX);
+        const payBase = rc(res.clusterTenths + res.phoneTenths, 0), payBonus = moreCents ? moreCents.bonus : rc(finalBonus, 1);
+        us();                                                           // a fractional round always reads both rounding numbers (tape alignment), even when nothing needs rounding
+        const pay = { price: scale.price, num: scale.num, den: scale.den, base: payBase, bonus: payBonus, win: Math.min(payBase + payBonus, capC), capCents: capC };
 
         // state out. Buys never touch it.
         let ns = input.state || null;
@@ -560,7 +614,7 @@
         if (dx.i < decs.length) throw badDecision('more decisions than decision points');
         if (S) res.script = { v: 2, buy, callback, bet, costTenths: res.costTenths, winTenths: res.winTenths, tier: res.tier, capped: res.capped, maxWinTenths: capT0,
           parts: { cluster: res.clusterTenths, phone: res.phoneTenths, bonus: finalBonus }, spin: spin ? spin.script : null, bonus: bonus ? bonus.script : null, pull };
-        return { status: 'done', round: res, buy, callback, betCents: bet, costTenths: res.costTenths, winTenths: res.winTenths, winX: res.winX, capped: res.capped, tier: res.tier, script: res.script, newState: ns, pull };
+        return { status: 'done', round: res, buy, callback, betCents: bet, costTenths: res.costTenths, winTenths: res.winTenths, winX: res.winX, capped: res.capped, tier: res.tier, script: res.script, newState: ns, pull, pay };
       } catch (e) {
         if (e !== PEND) throw e;
         let partial = null;
@@ -573,17 +627,17 @@
             partial = scriptSoFar({ kind, startSpins: cfg.spins[kind], spins: dx.spins.concat([cur]), partial: true });
           } else partial = scriptSoFar(bonus.script);
         }
-        return { status: 'pending', pending: dx.point, partial, buy, callback, betCents: bet, costTenths: res.costTenths, pull };      // pull: what is known so far (decisions made, daily, warm in, leads before)
+        return { status: 'pending', pending: dx.point, partial, buy, callback, betCents: bet, costTenths: res.costTenths, pull, pay: { price: scale.price, num: scale.num, den: scale.den, capCents: capC } };      // pull: what is known so far (decisions made, daily, warm in, leads before)
       }
     }
 
     return { round, playSpin, playBonus, phoneFeature, findClusters, playRound, cfg, PAY, REV, SYMT, get PICKREV() { return pickTables(); } };
   }
 
-  // whole cents for a tenths amount at a bet level; throws if it would not be an exact integer (it always is for BET_LEVELS)
+  // whole cents for a tenths amount at a bet; throws if it would not be an exact integer (always exact at 10c and up; at 1c / 2c / 5c only when tenths x bet / 10 is whole: use roundCents / payRound for wins)
   function cents(tenths, bet) {
     const c = tenths * bet / 10;
-    if (!Number.isSafeInteger(tenths) || !Number.isSafeInteger(bet) || bet % 10 !== 0 || !Number.isSafeInteger(c)) throw new Error('not whole cents');
+    if (!Number.isSafeInteger(tenths) || !Number.isSafeInteger(bet) || !Number.isSafeInteger(c)) throw new Error('not whole cents');
     return c;
   }
 
@@ -597,5 +651,5 @@
   // THE PULL round: (rng, { buy, bet, state, now, day, script, auto, decide }, decisions) -> { status: 'done' | 'pending', ... }
   const playRound = (rng, input, decisions) => engine.playRound(rng, input, decisions);
 
-  return { createEngine, engine, resolveRound, rngFrom, playRound, newState, tickState, coldInfo, potSlice, potHitChance, potPrize, cbBet, cbArm, cbLevel: cbBet, winTier, cents, TIERS, CFG, SYM, MODES, BUYS, FORCES, TIER_NAMES, BET_LEVELS, COLS, ROWS, N, NREG, WILD, BELL, PHONE, MIN_CLUSTER, MAX_WIN_X, MAX_WIN_T };
+  return { createEngine, engine, resolveRound, rngFrom, playRound, newState, tickState, coldInfo, potSlice, potHitChance, potPrize, cbBet, cbArm, cbLevel: cbBet, winTier, cents, buyPrice, scaleOf, roundCents, settleCents, payRound, TIERS, CFG, SYM, MODES, BUYS, FORCES, TIER_NAMES, BET_LEVELS, COLS, ROWS, N, NREG, WILD, BELL, PHONE, MIN_CLUSTER, MAX_WIN_X, MAX_WIN_T };
 });

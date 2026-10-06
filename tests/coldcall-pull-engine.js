@@ -39,7 +39,7 @@ function strict(vals) { let i = 0; const f = () => { if (i >= vals.length) throw
 function mkTape(base) { const t = []; let i = 0; const f = () => { if (i < t.length) return t[i++]; const v = base(); t.push(v); i++; return v; }; f.reset = () => { i = 0; }; f.tape = t; f.used = () => i; return f; }
 const counting = (base) => { let n = 0; const f = () => { n++; return base(); }; f.n = () => n; return f; };
 const st0 = (o) => Object.assign(E.newState(), o || {});
-const spin = (e, rng, state, o) => e.playRound(rng, Object.assign({ bet: 100, state, now: 5e6, day: '2026-10-06' }, o), (o && o.decisions) || []);
+const spin = (e, rng, state, o) => e.playRound(rng, Object.assign({ bet: 100, state, now: 5e6, day: '2026-10-06', rnd: E.rngFrom(99) }, o), (o && o.decisions) || []);
 const NODAY = { day: null };
 
 (async () => {
@@ -165,7 +165,7 @@ const NODAY = { day: null };
     assert.strictEqual(r.newState.lt, 0); assert.deepStrictEqual(r.newState.cb, { bet: 100 }); assert.ok(r.pull.armed);
   });
 
-  await test('avg and cb.bet: leads earned small cannot fire a big Callback; cb.bet = avg rounded DOWN to 10 cents (W1B N1), clamped to [10, 2500]', () => {
+  await test('avg and cb.bet: leads earned small cannot fire a big Callback; cb.bet = avg rounded DOWN (to 10 cents from an average of 10c, to the cent below it: DENOMS) (W1B N1), clamped to [1, 2500]', () => {
     const e = mkEng({ daily: { base: 0, perStreak: 0 } });
     const run = (st, bet) => spin(e, strict([...gridVals(e, 0)]), st, { bet });
     // 490 tenths at 10 cents, then a 2500-cent dead spin (12 tenths): avg = (10*490 + 2500*12) / 502 = 69.52 -> 60 (down to 10 cents)
@@ -173,7 +173,7 @@ const NODAY = { day: null };
     assert.deepStrictEqual(r.newState.cb, { bet: 60 }); assert.ok(Math.abs(r.newState.avg - (10 * 490 + 2500 * 12) / 502) < 1e-9);
     r = run(freeze(st0({ lt: 495, avg: 2500, day: '2026-10-06' })), 2500); assert.deepStrictEqual(r.newState.cb, { bet: 2500 });
     r = run(freeze(st0({ lt: 495, avg: 10, day: '2026-10-06' })), 10); assert.deepStrictEqual(r.newState.cb, { bet: 10 });
-    for (const [avg, lvl] of [[0, 10], [4.9, 10], [10, 10], [14.9, 10], [15, 10], [19.4, 10], [24.9, 20], [25, 20], [49.4, 40], [499.9, 490], [2356, 2350], [2496.4, 2490], [2499.5, 2490], [2500, 2500], [99999, 2500]]) assert.strictEqual(E.cbBet(avg), lvl, 'avg ' + avg);
+    for (const [avg, lvl] of [[0, 1], [4.9, 4], [10, 10], [14.9, 10], [15, 10], [19.4, 10], [24.9, 20], [25, 20], [49.4, 40], [499.9, 490], [2356, 2350], [2496.4, 2490], [2499.5, 2490], [2500, 2500], [99999, 2500]]) assert.strictEqual(E.cbBet(avg), lvl, 'avg ' + avg);
     // a flat bettor at every level gets exactly his level back, never rounding drift
     for (const b of E.BET_LEVELS) { let st = st0({ day: '2026-10-06' }); for (let i = 0; i < 80 && !st.cb; i++) st = spin(e, strict(gridVals(e, 0)), st, { bet: b }).newState; assert.deepStrictEqual(st.cb, { bet: b }); assert.strictEqual(st.avg, b); }
   });
@@ -380,7 +380,7 @@ const NODAY = { day: null };
     const e = E0; const rv = revVal(e, 1, 'b', 100); const W = 3 + 5 * 100;
     const run = (dec, extra) => { const rng = strict(bonusAll(e, Array(5).fill(rv), extra)); const r = e.playRound(rng, bonusIn(e), dec); return { r, rng }; };
     let { r } = run([{ k: 'pick', p: 0 }]);
-    assert.strictEqual(r.status, 'pending'); const W1 = r.pending.W; assert.deepStrictEqual(r.pending, { k: 'more', W: W1, mult: 2, pWin: 0.49, capT: T }); assert.ok(W1 >= 3 + 5 * 50, 'pick upgraded the picked square so W is at least the plain sum');
+    assert.strictEqual(r.status, 'pending'); const W1 = r.pending.W; { const pp = r.pending, bc = r.betCents / 10; assert.deepStrictEqual(pp, { k: 'more', W: W1, mult: 2, pWin: 0.49, capT: T, bankCents: W1 * bc, baseCents: 0, bonusCents: W1 * bc, winCents: W1 * bc * 2 }); } assert.ok(W1 >= 3 + 5 * 50, 'pick upgraded the picked square so W is at least the plain sum');
     // whole bonus in the partial, but not the gamble outcome
     assert.strictEqual(r.partial.bonus.spins.length, 8); assert.strictEqual(r.partial.bonus.winTenths, W1); assert.strictEqual(r.partial.pull.decisions.length, 1); assert.strictEqual(r.partial.parts, undefined); assert.strictEqual(r.partial.winTenths, undefined);
     let q = run([{ k: 'pick', p: 0 }, { k: 'more', take: false }]); assert.strictEqual(q.r.status, 'done'); assert.strictEqual(q.r.winTenths, W1); assert.strictEqual(q.rng.left(), 0, 'bank takes no draw'); assert.strictEqual(q.r.pull.more.take, false); assert.strictEqual(q.r.pull.more.won, null);
@@ -476,12 +476,14 @@ const NODAY = { day: null };
     const ids = (o, p = 'x') => { if (typeof o === 'number') assert.ok(Number.isFinite(o), 'non-finite at ' + p); };
     let st = E.newState();
     for (let i = 0; i < 6000; i++) {
-      const buy = i % 11 === 0 ? E.BUYS[(i / 11) % 4 | 0] : null, bet = E.BET_LEVELS[i % 8];
-      const r = E.playRound(E.rngFrom(i + 1000), { buy, bet, state: st, now: 1e6 + i * 4e6, day: '2026-10-' + String(1 + (i % 28)).padStart(2, '0'), auto: true }, []);
+      const buy = i % 11 === 0 ? E.BUYS[(i / 11) % 4 | 0] : null, bet = E.BET_LEVELS[i % E.BET_LEVELS.length];
+      const r = E.playRound(E.rngFrom(i + 1000), { buy, bet, state: st, now: 1e6 + i * 4e6, day: '2026-10-' + String(1 + (i % 28)).padStart(2, '0'), auto: true, rnd: E.rngFrom(i + 3) }, []);
       assert.strictEqual(r.status, 'done'); assert.ok(Number.isInteger(r.winTenths) && r.winTenths >= 0 && r.winTenths <= T);
       assert.strictEqual(r.costTenths, r.callback ? 0 : buy ? E.CFG.buyCost[buy] : 10);
       const R = r.round; assert.strictEqual(r.winTenths, Math.min(R.clusterTenths + R.phoneTenths + R.bonusTenths, T)); assert.strictEqual(r.script.parts.bonus, R.bonusTenths);
-      assert.doesNotThrow(() => E.cents(r.winTenths, r.betCents)); assert.doesNotThrow(() => E.cents(r.costTenths, r.betCents));
+      if (r.betCents % 10 === 0) { assert.doesNotThrow(() => E.cents(r.winTenths, r.betCents)); assert.doesNotThrow(() => E.cents(r.costTenths, r.betCents)); assert.strictEqual(r.pay.win, E.cents(r.winTenths, r.betCents)); }
+      else { assert.ok(Number.isInteger(r.pay.win) && Number.isInteger(r.pay.price)); assert.ok(Math.abs(r.pay.win - r.winTenths * r.pay.num / r.pay.den) < 2); }
+      assert.strictEqual(r.pay.price, r.callback ? 0 : buy ? E.buyPrice(E.CFG.buyCost[buy], r.betCents) : r.betCents);
       assert.ok(r.script.pull); assert.strictEqual(r.script.pull, r.pull); assert.ok(Number.isInteger(r.pull.leadsAfter) && r.pull.leadsAfter >= 0);
       if (r.pull.more) assert.strictEqual(R.bonusTenths, r.pull.more.take && r.pull.more.won ? r.pull.more.W * r.pull.more.mult : r.pull.more.take ? 0 : r.pull.more.W);
       st = r.newState;
@@ -609,11 +611,11 @@ const NODAY = { day: null };
       const r = e.playRound(E.rngFrom(b), { bet: 100, state: freeze(st0({ lt: 20, avg: b, cb: { bet: b }, day: '2026-10-06' })), now: 1, day: '2026-10-06', auto: true }, []);
       assert.strictEqual(r.betCents, b); assert.strictEqual(r.callback, true); assert.ok(Number.isInteger(E.cents(r.winTenths, b))); assert.ok(r.winTenths <= T);
     }
-    assert.strictEqual(E.cbBet(0), 10); assert.strictEqual(E.cbBet(-5), 10); assert.strictEqual(E.cbBet(1e9), 2500);
+    assert.strictEqual(E.cbBet(0), 1); assert.strictEqual(E.cbBet(-5), 1); assert.strictEqual(E.cbBet(1e9), 2500);
   });
 
   await test('W1B N1 the Callback bet is the lead-weighted average (plus the carry, N1-CARRY) ROUNDED DOWN to 10 cents: no bet mix arms a Callback above what its leads were worth; a flat bettor stays exact', () => {
-    for (const [a, want] of [[10, 10], [14.99, 10], [15.5, 10], [19.999, 10], [20, 20], [24.99, 20], [25, 20], [100, 100], [2499.99, 2490], [2500, 2500], [2500 - 1e-10, 2500], [9, 10], [1e9, 2500]]) assert.strictEqual(E.cbBet(a), want, 'cbBet(' + a + ')');
+    for (const [a, want] of [[10, 10], [14.99, 10], [15.5, 10], [19.999, 10], [20, 20], [24.99, 20], [25, 20], [100, 100], [2499.99, 2490], [2500, 2500], [2500 - 1e-10, 2500], [9, 9], [1e9, 2500]]) assert.strictEqual(E.cbBet(a), want, 'cbBet(' + a + ')');
     const e = mkEng({ list: 50, daily: { base: 0, perStreak: 0 } }), DAY = '2026-10-06';
     // the steerer from the critic: 20 cents while the average is under 15.5, else 10 cents. Every arming must satisfy cb.bet <= avg + the carry it held, and the sum of Callback bets <= the sum of averages.
     let st = E.newState(), n = 0, armed = 0, sumBet = 0, sumAvg = 0; const rng = E.rngFrom(77);
@@ -673,7 +675,7 @@ const NODAY = { day: null };
     }
   });
 
-  await test('N1-CARRY (d): cbArm(avg, carry): bet is a multiple of 10 in [10, 2500], the new carry is in [0, 10), bet + carry out never exceeds avg + carry in, and is exact unless the clamps act; garbage reads as 0', () => {
+  await test('N1-CARRY (d): cbArm(avg, carry) from an average of 10c up: bet is a multiple of 10 in [10, 2500], the new carry is in [0, 10), bet + carry out never exceeds avg + carry in, and is exact unless the clamps act; garbage reads as 0', () => {
     assert.strictEqual(typeof E.cbArm, 'function');
     const rng = E.rngFrom(3);
     for (let i = 0; i < 20000; i++) {
@@ -681,10 +683,10 @@ const NODAY = { day: null };
       assert.strictEqual(o.bet % 10, 0); assert.ok(o.bet >= 10 && o.bet <= 2500); assert.ok(o.carry >= 0 && o.carry < 10, 'carry out ' + o.carry);
       assert.ok(o.bet + o.carry <= avg + carry + 1e-9); assert.ok(Math.abs(o.bet + o.carry - (avg + carry)) < 1e-9 || o.bet === 2500, 'exact: ' + [avg, carry, o.bet, o.carry]);
     }
-    for (const [avg, carry, bet, c] of [[99.96, 0, 90, 9.96], [99.96, 9.96, 100, 9.92], [100, 0, 100, 0], [19.99, 0, 10, 9.99], [19.99, 9.99, 20, 9.98], [2500, 0, 2500, 0], [2500, 9.9, 2500, 9.9 > 0 ? 9.9 : 0], [10, 0, 10, 0], [0, 0, 10, 0]]) {
+    for (const [avg, carry, bet, c] of [[99.96, 0, 90, 9.96], [99.96, 9.96, 100, 9.92], [100, 0, 100, 0], [19.99, 0, 10, 9.99], [19.99, 9.99, 20, 9.98], [2500, 0, 2500, 0], [2500, 9.9, 2500, 9.9 > 0 ? 9.9 : 0], [10, 0, 10, 0], [0, 0, 1, 0]]) {
       const o = E.cbArm(avg, carry); assert.strictEqual(o.bet, bet, JSON.stringify([avg, carry])); assert.ok(Math.abs(o.carry - c) < 1e-9, JSON.stringify([avg, carry, o])); }
     for (const bad of [undefined, null, NaN, -4, 'x', Infinity, 10, 250, {}, [], true]) { const o = E.cbArm(99.96, bad); assert.deepStrictEqual([o.bet, +o.carry.toFixed(6)], [90, 9.96], 'garbage carry ' + String(bad)); }
-    for (const bad of [NaN, -1, undefined, Infinity, 1e9]) { const o = E.cbArm(bad, 0); assert.ok(o.bet >= 10 && o.bet <= 2500 && o.bet % 10 === 0 && o.carry >= 0 && o.carry < 10, 'garbage avg ' + bad); }
+    for (const bad of [NaN, -1, undefined, Infinity, 1e9]) { const o = E.cbArm(bad, 0); assert.ok(o.bet >= 1 && o.bet <= 2500 && Number.isInteger(o.bet) && o.carry >= 0 && o.carry < 10, 'garbage avg ' + bad); }
   });
 
   await test('N1-CARRY (c, engine): the carry is part of the state (0 in newState), is under 10c after every Callback, survives JSON, the cold clock and the idle days untouched, a garbage stored carry reads as 0 and the round plays; Play and Chips states carry apart', () => {
@@ -722,6 +724,225 @@ const NODAY = { day: null };
     assert.deepStrictEqual(Object.keys(E.newState()), ['v', 'lt', 'avg', 'cb', 'warm', 'warmBet', 'coldAt', 'day', 'streak', 'rounds', 'callbacks', 'carry']);
     let st = E.newState(); const rng = E.rngFrom(8);
     for (let i = 0; i < 400; i++) { const r = E.playRound(rng, { bet: 100, state: JSON.parse(JSON.stringify(st)), now: 1e6 + i, day: '2026-10-06', script: false, auto: true }, []); st = r.newState; assert.deepStrictEqual(JSON.parse(JSON.stringify(st)), st); }
+  });
+
+  // ================================================================ DENOMS: 1c / 2c / 5c bets (cold-call/PULL-ENGINE.md section 7) ================================================================
+  const SMALL = [1, 2, 5];
+  const pickFirst = (pt) => (pt.k === 'pick' ? { k: 'pick', p: pt.choices[0] } : null);      // answers PICK, leaves ONE MORE CALL open (null = fall through to pending)
+  // a round of `buy` at `bet` that stops at ONE MORE CALL; tapes for the main stream and for the rounding source, so any replay sees the same numbers
+  function toMore(e, bet, buy, from, need, span) {
+    for (let seed = from || 1; seed < (from || 1) + (span || 4000); seed++) {
+      const main = mkTape(E.rngFrom(seed)), rnd = mkTape(E.rngFrom(seed + 555555));
+      const input = { buy, bet, state: buy ? null : st0({ day: '2026-10-06' }), now: 1, day: '2026-10-06', script: false, rnd, decide: pickFirst };
+      const r = e.playRound(main, input, []);
+      if (r.status === 'pending' && r.pending.k === 'more' && (!need || need(r))) return { seed, main, rnd, input, r, e };
+    }
+    throw new Error('no ONE MORE CALL in ' + (span || 4000) + ' rounds');
+  }
+  const again = (c, decisions, forcedU, rndFn) => {          // replay the same round; a main-stream draw past the tape (the gamble coin) is forcedU
+    const main = mkTape(() => forcedU); for (const v of c.main.tape) main.tape.push(v);
+    const rnd = rndFn || (() => { c.rnd.reset(); return c.rnd; })();
+    const pre = c.r.pull.decisions.map((d) => (d.k === 'pick' ? { k: 'pick', p: d.p } : { k: 'more', take: d.take }));     // the picks the first run made through input.decide, recorded
+    return c.e.playRound(main, Object.assign({}, c.input, { rnd }), pre.concat(decisions));
+  };
+
+  await test('DENOMS bet list: 1, 2 and 5 cents are legal bets; Eng.cents is exact-or-throws for any bet, not only multiples of 10', () => {
+    assert.deepStrictEqual(E.BET_LEVELS, [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2500]);
+    assert.strictEqual(E.cents(10, 1), 1); assert.strictEqual(E.cents(40, 2), 8); assert.strictEqual(E.cents(30, 5), 15); assert.strictEqual(E.cents(7, 10), 7);
+    assert.throws(() => E.cents(7, 1)); assert.throws(() => E.cents(27, 5)); assert.throws(() => E.cents(1.5, 10)); assert.throws(() => E.cents(5, 1.5)); assert.throws(() => E.cents(NaN, 1));
+  });
+
+  await test('DENOMS roundCents: floor plus one cent with probability = the fraction, exact integer arithmetic, takes its random number as an argument, pure', () => {
+    assert.strictEqual(typeof E.roundCents, 'function'); assert.strictEqual(typeof E.scaleOf, 'function'); assert.strictEqual(typeof E.buyPrice, 'function');
+    const sc = E.scaleOf(10, 1);                                 // a spin at 1c: one tenth of the bet is 0.1 cent
+    assert.deepStrictEqual([sc.price, sc.num, sc.den], [1, 1, 10]);
+    assert.strictEqual(E.roundCents(7, sc, 0.69), 1); assert.strictEqual(E.roundCents(7, sc, 0.7), 0); assert.strictEqual(E.roundCents(7, sc, 0), 1); assert.strictEqual(E.roundCents(0, sc, 0), 0);
+    assert.strictEqual(E.roundCents(30, sc, 0), 3, 'a whole amount never takes the extra cent'); assert.strictEqual(E.roundCents(30, sc, 0.9999999), 3);
+    assert.strictEqual(E.roundCents(123, sc, 0.29), 13); assert.strictEqual(E.roundCents(123, sc, 0.3), 12);
+    // unbiased: the mean over a fine grid of u equals the exact amount, for every denomination and tenths from 0 to 40, buys included
+    for (const sc2 of [E.scaleOf(10, 1), E.scaleOf(10, 2), E.scaleOf(10, 5), E.scaleOf(27, 1), E.scaleOf(27, 5), E.scaleOf(964, 2), E.scaleOf(2910, 5), E.scaleOf(20, 1)]) {
+      for (let t = 0; t <= 40; t++) { let sum = 0; const N = sc2.den * 50; for (let i = 0; i < N; i++) sum += E.roundCents(t, sc2, (i + 0.5) / N); assert.ok(Math.abs(sum / N - t * sc2.num / sc2.den) < 1e-9, JSON.stringify([sc2, t, sum / N])); }
+    }
+    // at 10 cents and up the random number never matters (bit for bit the old whole-cent arithmetic)
+    for (const b of E.BET_LEVELS.filter((x) => x >= 10)) for (const buy of [10, 27, 964, 2910, 20]) { const s2 = E.scaleOf(buy, b); for (const t of [0, 1, 3, 7, 40, 99999, 100000]) for (const u of [0, 0.5, 0.9999999]) assert.strictEqual(E.roundCents(t, s2, u), t * b / 10, [b, buy, t, u].join()); }
+  });
+
+  await test('DENOMS buyPrice: exact price rounded to the NEAREST cent (half up), at least 1c; unchanged at 10c and up; the buy is played at the stake that makes it fair (num / den = price / cost multiple)', () => {
+    assert.strictEqual(E.buyPrice(27, 1), 3); assert.strictEqual(E.buyPrice(27, 2), 5); assert.strictEqual(E.buyPrice(27, 5), 14);        // 2.7, 5.4, 13.5 (half up)
+    assert.strictEqual(E.buyPrice(964, 1), 96); assert.strictEqual(E.buyPrice(964, 2), 193); assert.strictEqual(E.buyPrice(964, 5), 482);
+    assert.strictEqual(E.buyPrice(2910, 1), 291); assert.strictEqual(E.buyPrice(2910, 2), 582); assert.strictEqual(E.buyPrice(2910, 5), 1455);
+    assert.strictEqual(E.buyPrice(20, 1), 2); assert.strictEqual(E.buyPrice(20, 2), 4); assert.strictEqual(E.buyPrice(20, 5), 10);
+    assert.strictEqual(E.buyPrice(2, 1), 1, 'minimum 1 cent'); assert.strictEqual(E.buyPrice(5, 1), 1); assert.strictEqual(E.buyPrice(4, 1), 1);
+    for (const b of E.BET_LEVELS.filter((x) => x >= 10)) for (const buy of E.BUYS) assert.strictEqual(E.buyPrice(E.CFG.buyCost[buy], b), E.CFG.buyCost[buy] * b / 10, 'unchanged at ' + b + ' ' + buy);
+    for (const b of SMALL) for (const buy of E.BUYS) { const c = E.CFG.buyCost[buy], sc = E.scaleOf(c, b); assert.strictEqual(sc.price, E.buyPrice(c, b)); assert.strictEqual(sc.num, sc.price); assert.strictEqual(sc.den, c); assert.ok(sc.price >= 1 && Number.isInteger(sc.price)); assert.ok(Math.abs(sc.price - c * b / 10) <= 0.5 + 1e-9, 'within half a cent of the exact price'); }
+    const cb = E.scaleOf(0, 7); assert.deepStrictEqual([cb.price, cb.num, cb.den], [0, 7, 10], 'a Callback costs nothing and pays at its own bet');
+  });
+
+  await test('DENOMS rounding draws are a separate source: the main stream and the whole round are the same at 1c and at 10c, the rounding source is read twice per done round at 1c and never at 10c', () => {
+    for (const buy of [null, 'call', 'hunt', 'bonus1', 'bonus2']) for (let seed = 1; seed <= 25; seed++) {
+      const mk = (bet) => { const main = counting(E.rngFrom(seed * 13 + 1)), rnd = counting(E.rngFrom(77)); const r = E0.playRound(main, { buy, bet, state: buy ? null : st0({ day: '2026-10-06' }), now: 1, day: '2026-10-06', auto: true, rnd }, []); return { r, main: main.n(), rnd: rnd.n() }; };
+      const a = mk(1), b = mk(10), c = mk(5);
+      assert.strictEqual(a.main, b.main, 'same main-stream draws at 1c and 10c: ' + buy + seed); assert.strictEqual(c.main, b.main);
+      assert.strictEqual(a.r.winTenths, b.r.winTenths); assert.deepStrictEqual(a.r.script.spin, b.r.script.spin); assert.deepStrictEqual(a.r.script.bonus, b.r.script.bonus);
+      assert.strictEqual(a.rnd, 2); assert.strictEqual(c.rnd, 2); assert.strictEqual(b.rnd, 0, 'no rounding draw at 10c');
+    }
+    assert.throws(() => E0.playRound(E.rngFrom(1), { bet: 1, state: st0({ day: '2026-10-06' }), now: 1, day: '2026-10-06', auto: true }, []), (e) => e.code === 'need_rnd', 'a fractional bet without a rounding source is refused, not guessed');
+    assert.doesNotThrow(() => E0.playRound(E.rngFrom(1), { bet: 10, state: st0({ day: '2026-10-06' }), now: 1, day: '2026-10-06', auto: true }, []), 'at 10c no rounding source is needed');
+  });
+
+  await test('DENOMS buys at 1c / 2c / 5c are played at the fair stake: the same round as at $1 seed for seed, paid cents within one cent of winTenths x price / cost multiple, so the long-run payback is the $1 payback', () => {
+    const N = 2500;
+    for (const buy of E.BUYS) {
+      const run = (bet, i, rnd) => E0.playRound(E.rngFrom(900 + i), { buy, bet, state: null, now: 1, day: '2026-10-06', auto: true, script: false, rnd }, []);
+      let wt100 = 0, ct100 = 0;
+      for (let i = 0; i < N; i++) { const r = run(100, i); wt100 += r.winTenths; ct100 += r.costTenths; assert.strictEqual(r.pay.win * r.costTenths, r.winTenths * r.pay.price, 'at $1 the pay is exact'); assert.strictEqual(r.pay.price, E.CFG.buyCost[buy] * 10); }
+      for (const bet of SMALL) {
+        let paid = 0, price = 0, exact = 0, sq = 0, wt = 0, ct = 0;
+        for (let i = 0; i < N; i++) {
+          const r = run(bet, i, E.rngFrom(4000 + i)), ex = r.winTenths * r.pay.price / r.costTenths;
+          assert.ok(Math.abs(r.pay.win - ex) < 2 && r.pay.win <= E.MAX_WIN_X * bet, [buy, bet, i, r.pay.win, ex].join());      // base and bonus are rounded apart, each within a cent of its exact amount
+          assert.strictEqual(r.pay.price, E.buyPrice(E.CFG.buyCost[buy], bet)); assert.strictEqual(r.costTenths, E.CFG.buyCost[buy]);
+          paid += r.pay.win; price += r.pay.price; exact += ex; sq += (r.pay.win - ex) * (r.pay.win - ex); wt += r.winTenths; ct += r.costTenths;
+        }
+        assert.ok(Math.abs(paid - exact) < 6 * Math.sqrt(sq) + 1, buy + ' ' + bet + 'c: only rounding noise between paid ' + paid + ' and exact ' + exact);
+        assert.ok(Math.abs(exact / price - wt / ct) < 1e-9, buy + ' ' + bet + 'c: the exact payback of the priced round is winTenths / costTenths, the same as at $1');
+        assert.strictEqual(wt / ct, wt100 / ct100, 'same rounds as at $1');
+      }
+    }
+  });
+
+  await test('DENOMS shown = paid at ONE MORE CALL: the pending view carries whole-cent bank / base / bonus / win amounts, banking pays exactly the shown bank amount, a taken gamble pays exactly the shown win amount or the shown base', () => {
+    const check = (c, bet, cost) => {
+      const p = c.r.pending, sc = E.scaleOf(cost, bet);
+      for (const k of ['bankCents', 'baseCents', 'bonusCents', 'winCents']) assert.ok(Number.isSafeInteger(p[k]) && p[k] >= 0, k + ' is whole cents: ' + p[k]);
+      assert.strictEqual(p.bankCents, p.baseCents + p.bonusCents); assert.strictEqual(p.winCents, p.baseCents + p.bonusCents * p.mult);
+      const ex = p.W * sc.num / sc.den; assert.ok(p.bonusCents >= Math.floor(ex + 1e-9) && p.bonusCents <= Math.ceil(ex - 1e-9), 'the shown bonus is the exact bonus rounded: ' + p.bonusCents + ' vs ' + ex);
+      const bank = again(c, [{ k: 'more', take: false }], 0.5); assert.strictEqual(bank.status, 'done'); assert.strictEqual(bank.pay.win, p.bankCents, 'bank pays what was shown');
+      const won = again(c, [{ k: 'more', take: true }], 0.01), lost = again(c, [{ k: 'more', take: true }], 0.99);
+      assert.strictEqual(won.pay.win, p.winCents, 'a won gamble pays what was shown'); assert.strictEqual(lost.pay.win, p.baseCents, 'a lost gamble pays the shown base');
+      assert.strictEqual(won.pull.more.won, true); assert.strictEqual(lost.pull.more.won, false); assert.ok(won.pay.win <= E.MAX_WIN_X * bet);
+    };
+    for (const bet of SMALL) for (const buy of ['bonus1', 'bonus2']) check(toMore(E0, bet, buy, 1 + bet * 50), bet, E.CFG.buyCost[buy]);
+    // a natural bonus after a base spin that paid: base and bonus are rounded apart, the shown total is their sum
+    for (const bet of SMALL) { const c = toMore(E0, bet, null, 1, (r) => r.pending.baseCents > 0, 40000); check(c, bet, 10); assert.ok(c.r.pending.baseCents > 0); }
+  });
+
+  await test('DENOMS replay: the shown whole-cent amounts are the same on every replay of a round (main tape + rounding tape), however many decisions come before and after', () => {
+    for (const bet of SMALL) for (const buy of [null, 'bonus1']) {
+      const c = toMore(E0, bet, buy, 100 + bet);
+      const shown = (r) => [r.pending.bankCents, r.pending.baseCents, r.pending.bonusCents, r.pending.winCents, r.pending.W];
+      const first = shown(c.r);
+      for (let i = 0; i < 6; i++) { const r = again(c, [], 0.5); assert.strictEqual(r.status, 'pending'); assert.deepStrictEqual(shown(r), first, 'replay ' + i); }
+      assert.strictEqual(c.rnd.tape.length, 2, 'two rounding draws recorded, no more');
+      // a different rounding source changes only the rounding, never the round
+      const other = again(c, [], 0.5, E.rngFrom(31337)); assert.strictEqual(other.pending.W, c.r.pending.W); assert.ok(Math.abs(other.pending.bankCents - c.r.pending.bankCents) <= 2);
+    }
+    // the same decisions through a stateful round: base spin + natural bonus, PICK then MORE, replayed from the tapes
+    for (const bet of SMALL) { const main = mkTape(E.rngFrom(55 + bet)), rnd = mkTape(E.rngFrom(66 + bet)); const dec = [];
+      for (let g = 0; g < 6; g++) { main.reset(); rnd.reset(); const r = E0.playRound(main, { buy: 'bonus1', bet, state: null, now: 1, day: '2026-10-06', script: false, rnd }, dec.slice()); if (r.status === 'done') { assert.strictEqual(rnd.tape.length, 2); break; } dec.push(r.pending.k === 'pick' ? { k: 'pick', p: r.pending.choices[0] } : { k: 'more', take: false }); }
+    }
+  });
+
+  await test('DENOMS the leak trap: a policy that reads the shown bank amount ("bank when it rounded up, gamble when it rounded down") gains nothing; the naive floor(exact + u) design is shown to gain, so this test has power', () => {
+    const eF = mkEng({ more: { rtp: 1, minTenths: 20 } });         // a fair coin (rtp 1): any gain would be pure rounding leak
+    let tested = 0;
+    for (const bet of SMALL) for (const buy of ['bonus1', 'bonus2']) {
+      const c = toMore(eF, bet, buy, 7 + bet * 31 + (buy === 'bonus2' ? 500 : 0)); c.e = eF;
+      const p0 = c.r.pending, sc = E.scaleOf(E.CFG.buyCost[buy], bet), x = p0.W * sc.num / sc.den, frac = x - Math.floor(x);
+      if (frac < 0.15 || frac > 0.85) continue; tested++;
+      const N = 1000, pWin = p0.pWin; let evBank = 0, evPolicy = 0, evNaive = 0;
+      for (let i = 0; i < N; i++) {
+        const u = (i + 0.5) / N, r = again(c, [], 0.5, () => u), p = r.pending;
+        const up = p.bonusCents > x + 1e-12, takeEV = pWin * p.winCents + (1 - pWin) * p.baseCents;
+        evBank += p.bankCents; evPolicy += up ? p.bankCents : takeEV;
+        // the naive design: ONE shared u, bank = floor(exact + u), the gamble pays floor(exact x mult + u) on a win
+        const nb = Math.floor(x + u), nUp = nb > Math.floor(x); evNaive += nUp ? nb : pWin * Math.floor(x * p.mult + u);
+      }
+      evBank /= N; evPolicy /= N; evNaive /= N;
+      assert.ok(Math.abs(evBank - x) < 0.005, 'banking pays the exact value on average: ' + evBank + ' vs ' + x);
+      assert.ok(Math.abs(evPolicy - x) < 0.005, 'the shown-cents policy earns the exact value, not more: ' + evPolicy + ' vs ' + x);
+      assert.ok(evNaive - x > 0.04, 'the naive shared-u design leaks (' + (evNaive - x).toFixed(3) + ' cents on a ' + x.toFixed(1) + 'c bonus): the test can see a leak');
+    }
+    assert.ok(tested >= 3, 'tested ' + tested);
+  });
+
+  await test('DENOMS cap: no round pays above 10,000 x bet at 1c / 2c / 5c after rounding (1c: at most $100.00), the cap in cents is exact, a clamp never lifts a payout', () => {
+    for (const bet of SMALL) {
+      const sc = E.scaleOf(10, bet), top = E.settleCents({ base: 0, bonus: E.MAX_WIN_T, scale: sc, us: [0, 0], capCents: E.MAX_WIN_X * bet });
+      assert.strictEqual(top, E.MAX_WIN_X * bet); assert.strictEqual(top, E.cents(E.MAX_WIN_T, bet));
+      // rounded parts that would add up past the cap: clamped, never above, never below the unclamped value when under the cap
+      for (let i = 0; i < 4000; i++) { const rng = E.rngFrom(i + 5), cap = 1 + Math.floor(rng() * 20), base = Math.floor(rng() * 300), bonus = Math.floor(rng() * 300), us = [rng(), rng()];
+        const v = E.settleCents({ base, bonus, scale: sc, us, capCents: cap }), raw = E.roundCents(base, sc, us[0]) + E.roundCents(bonus, sc, us[1]); assert.strictEqual(v, Math.min(raw, cap)); }
+    }
+    const e = mkEng(null, { maxWinTenths: 25 });                    // a 2.5 x cap makes the clamp matter every few rounds
+    for (const bet of SMALL) for (const buy of [null, 'bonus1', 'call']) { let atCap = 0;
+      for (let i = 0; i < 2500; i++) { const r = e.playRound(E.rngFrom(i * 3 + 1), { buy, bet, state: buy ? null : st0({ day: '2026-10-06' }), now: 1, day: '2026-10-06', auto: true, script: false, rnd: E.rngFrom(i + 9) }, []);
+        assert.ok(r.winTenths <= 25); assert.strictEqual(r.pay.capCents, Math.min(Math.floor(25 * r.pay.num / r.pay.den), E.MAX_WIN_X * bet)); assert.ok(r.pay.win <= r.pay.capCents, [bet, buy, i, r.pay.win, r.pay.capCents].join()); if (r.pay.win === r.pay.capCents) atCap++; }
+      assert.ok(atCap > 0, 'the clamp was reached for ' + bet + ' ' + buy); }
+    for (const bet of SMALL) { const r = E0.playRound(E.rngFrom(3), { buy: 'bonus1', bet, state: null, now: 1, day: '2026-10-06', auto: true, rnd: E.rngFrom(1) }, []); const sc = E.scaleOf(E.CFG.buyCost.bonus1, bet); assert.strictEqual(r.pay.capCents, Math.min(Math.floor(E.MAX_WIN_T * sc.num / sc.den), E.MAX_WIN_X * bet)); assert.ok(r.pay.capCents <= E.MAX_WIN_X * bet, 'never above 10,000 x the nominal bet; a buy whose fair stake is a hair under the bet tops out a hair under it'); const sp = E0.playRound(E.rngFrom(3), { bet, state: st0({ day: '2026-10-06' }), now: 1, day: '2026-10-06', auto: true, rnd: E.rngFrom(1) }, []); assert.strictEqual(sp.pay.capCents, E.MAX_WIN_X * bet, 'a spin: exactly 10,000 x the bet in cents'); }
+  });
+
+  await test('DENOMS Callback step: below an average of 10c the step is 1 cent (carry in [0, 1)), from 10c up it is exactly the old floor-to-10 rule, the minimum Callback bet is 1c', () => {
+    const t = (avg, carry, bet, rest) => { const o = E.cbArm(avg, carry); assert.strictEqual(o.bet, bet, JSON.stringify([avg, carry])); assert.ok(Math.abs(o.carry - rest) < 1e-9, JSON.stringify([avg, carry, o])); };
+    t(3.7, 0, 3, 0.7); t(9.99, 0, 9, 0.99); t(1, 0, 1, 0); t(2, 0, 2, 0); t(5, 0, 5, 0); t(0.4, 0, 1, 0); t(0, 0, 1, 0);
+    t(10, 0, 10, 0); t(14.9, 0, 10, 4.9); t(15, 0, 10, 5); t(19.99, 0, 10, 9.99); t(99.96, 0, 90, 9.96); t(2499.95, 0, 2490, 9.95); t(2500, 0, 2500, 0); t(1e9, 0, 2500, 0);
+    t(3, 7.5, 10, 0.5);            // 7.5c carried from a 10c+ list added to a list whose average is 3c: worth 10.5, hands out 10, keeps 0.5
+    t(12, 0.7, 10, 2.7);           // the reverse: 0.7c carried from a small list added to a 12c average: worth 12.7, floor to 10, keeps 2.7
+    t(2.5, 9.9, 12, 0.4); t(1, 9.5, 10, 0.5); t(2000, 7.5, 2000, 7.5); t(9.9, 0.2, 10, 0.1);
+    assert.strictEqual(E.cbBet(4.9), 4); assert.strictEqual(E.cbBet(0), 1); assert.strictEqual(E.cbBet(-5), 1); assert.strictEqual(E.cbBet(1e9), 2500); assert.strictEqual(E.cbBet(24.9), 20); assert.strictEqual(E.cbBet(99999), 2500);
+    for (const bad of [NaN, -1, undefined, Infinity, 'x', null]) { const o = E.cbArm(bad, 0); assert.ok(o.bet >= 1 && o.bet <= 2500 && Number.isInteger(o.bet) && o.carry >= 0 && o.carry < 1, String(bad)); }
+    // a flat bettor at 1c / 2c / 5c gets exactly his bet back, no drift; the Callback round pays whole cents at it
+    for (const b of [1, 2, 3, 5, 7, 9, 10, 20]) { let st = st0({ day: '2026-10-06' }); for (let i = 0; i < 200 && !st.cb; i++) st = E0.playRound(strict(gridVals(E0, 0)), { bet: b, state: st, now: 5e6, day: '2026-10-06', rnd: E.rngFrom(1) }, []).newState; assert.deepStrictEqual(st.cb, { bet: b }, 'flat ' + b); assert.strictEqual(st.avg, b); }
+    for (const b of [1, 2, 5, 7, 99, 2500]) { const r = E0.playRound(E.rngFrom(b), { bet: 100, state: freeze(st0({ lt: 20, avg: b, cb: { bet: b }, day: '2026-10-06' })), now: 5e6, day: '2026-10-06', auto: true, rnd: E.rngFrom(3) }, []);
+      assert.strictEqual(r.callback, true); assert.strictEqual(r.betCents, b); assert.strictEqual(r.pay.price, 0); assert.ok(Number.isInteger(r.pay.win) && r.pay.win >= 0); assert.ok(r.pay.win <= E.MAX_WIN_X * b); }
+  });
+
+  await test('DENOMS Callback invariant (fuzz): over any mix of bets, including mixes that cross 10c, the stake handed out is never above what the leads were worth, and each arm keeps bet + carry out = avg + carry in', () => {
+    const rng = E.rngFrom(2026);
+    for (let run = 0; run < 40; run++) {
+      let carry = 0, sumBet = 0, sumAvg = 0;
+      for (let i = 0; i < 400; i++) {
+        const r = rng(), avg = r < 0.4 ? 1 + rng() * 9 : r < 0.55 ? 10 + rng() * 5 : r < 0.7 ? [1, 2, 5, 10, 20][Math.floor(rng() * 5)] : 1 + Math.exp(rng() * 7.8);
+        const o = E.cbArm(avg, carry), step = avg < 10 ? 1 : 10, tin = avg + carry;
+        assert.ok(Number.isInteger(o.bet) && o.bet >= 1 && o.bet <= 2500, 'bet ' + o.bet);
+        assert.ok(o.carry >= 0 && o.carry < step + 1e-12, 'carry ' + o.carry + ' step ' + step);
+        assert.ok(o.bet <= tin + 1e-6, 'never above the worth: ' + o.bet + ' vs ' + tin);
+        if (avg + carry < 2500) assert.ok(Math.abs(o.bet + o.carry - tin) < 1e-6 || o.carry === 0, 'conservation ' + JSON.stringify([avg, carry, o]));
+        carry = o.carry; sumBet += o.bet; sumAvg += avg; assert.ok(sumBet <= sumAvg + 1e-6, 'prefix: ' + sumBet + ' vs ' + sumAvg + ' at ' + i);
+      }
+    }
+    // the same through real rounds: random bets from the whole list (crossing 10c both ways), the arms are read off the state
+    const e = mkEng({ daily: { base: 0, perStreak: 0 } }); let armed = 0;      // no daily gift: one addLeads per spin, so the state's average after the spin is the average the Callback was armed at
+    for (let seed = 1; seed <= 6; seed++) {
+      const g = E.rngFrom(seed * 77), sm = E.rngFrom(seed), rnd = E.rngFrom(seed + 99); let st = st0(), sumBet = 0, sumAvg = 0, carry0 = 0;
+      for (let i = 0; i < 5000; i++) {
+        const bet = g() < 0.5 ? [1, 2, 5][Math.floor(g() * 3)] : E.BET_LEVELS[Math.floor(g() * 11)], day = '2026-10-' + String(6 + Math.floor(i / 400)).padStart(2, '0');
+        const r = e.playRound(sm, { bet, state: st, now: 1e6 + i, day, auto: true, script: false, rnd }, []);
+        if (r.pull.armed) { armed++; sumBet += r.newState.cb.bet; sumAvg += r.newState.avg; assert.ok(sumBet <= sumAvg + 1e-6, 'real flow prefix ' + sumBet + ' vs ' + sumAvg); assert.ok(r.newState.carry >= 0 && r.newState.carry < 10); }
+        assert.ok(!r.newState.cb || (Number.isInteger(r.newState.cb.bet) && r.newState.cb.bet >= 1 && r.newState.cb.bet <= 2500)); st = r.newState;
+      }
+    }
+    assert.ok(armed >= 20, 'armed ' + armed);
+  });
+
+  await test('DENOMS legacy path (pull.on = false) at 1c: the old stateless round pays whole cents too, rounded by the same engine function', () => {
+    const e = mkEng({ on: false });
+    for (const bet of SMALL) for (const buy of [null, 'call', 'bonus1']) for (let i = 0; i < 30; i++) {
+      const r = e.playRound(E.rngFrom(i + 1), { buy, bet, state: null, now: 1, day: '2026-10-06', script: false, rnd: E.rngFrom(i + 100) }, []);
+      assert.strictEqual(r.status, 'done'); assert.ok(Number.isInteger(r.pay.win) && Number.isInteger(r.pay.price) && r.pay.price >= 1); assert.ok(r.pay.win <= E.MAX_WIN_X * bet);
+      const ex = r.winTenths * r.pay.num / r.pay.den; assert.ok(Math.abs(r.pay.win - ex) < 2);
+    }
+  });
+
+  await test('DENOMS pot slice at 1c / 2c / 5c: remainders carry, fed + rem is exactly cost x bps, nothing is lost over 1M spins', () => {
+    for (const bet of SMALL) for (const bps of [50, 100, 7]) { let rem = 0, fed = 0; for (let i = 0; i < 100000; i++) { const s = E.potSlice(bps, bet, rem); assert.ok(Number.isInteger(s.slice) && s.slice >= 0 && s.rem >= 0 && s.rem < 10000); rem = s.rem; fed += s.slice; } assert.strictEqual(fed * 10000 + rem, 100000 * bet * bps); }
+    for (const bet of SMALL) assert.ok(Math.abs(E.potHitChance({ pot: { oneInPerDollar: 3000 } }, bet) - bet / 100 / 3000) < 1e-15);
+  });
+
+  // regression guard, generated on the unchanged engine (8c9c00a / 2004fd5): every playRound result at a bet of 10c or more, state flows with Callbacks, daily, cold clock, buys, PICK and ONE MORE CALL, resumed from a pending point
+  await test('DENOMS 10c and up is bit for bit the old engine (digest of 5,760 stateful rounds incl. scripts, states and pending points; guard generated before the change)', () => {
+    const h = require('./lib-den-transcript.js')(E, crypto);
+    assert.strictEqual(h, '0e446129fe339a59cc1c1ed9c2e77bbf91703af08d3182951aea3416cb98f409');
   });
 
   console.log(pass + ' passed' + (process.exitCode ? ', with failures' : ''));

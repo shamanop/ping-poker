@@ -8,7 +8,7 @@ const PINNED = {
   ghost: { on: true, maxWinTenths: 10, minTenths: 0 },
   pick: { on: true, minLeads: 2, mult: { bronze: 0, silver: 2, gold: 3, upsell: 2, close: 2 } },
   more: { on: true, mult: 2, rtp: 0.98, minTenths: 20 }, daily: { base: 3, perStreak: 1, streakMax: 4, stakeCap: 100 },
-  pot: { feedBps: 50, oneInPerDollar: 20000, seed: 0, minBal: 100, capCents: 1000000 }, feed: { minWinX: 100 }, decision: { timeoutMs: 20000 },
+  pot: { feedBps: 50, oneInPerDollar: 20000, seed: 0, minBal: 100, capCents: 1000000 }, feed: { minWinX: 100, minWinCents: 0 }, decision: { timeoutMs: 20000 },
 };
 function pin(E) {
   const real = JSON.parse(JSON.stringify(E.CFG.pull));

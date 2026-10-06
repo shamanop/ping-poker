@@ -5,8 +5,8 @@ const path = require('path');
 const Eng = require('./coldcall-engine.js');
 const { createStore } = require('./coldcall-store.js');
 
-const BET_LEVELS = Eng.BET_LEVELS;
-const BUYS = Eng.BUYS;   // call, bonus1, bonus2, hunt (prices in Eng.CFG.buyCost, tenths of the bet)
+const BET_LEVELS = Eng.BET_LEVELS;   // cents: 1, 2, 5 (DENOMS), then 10 and up
+const BUYS = Eng.BUYS;   // call, bonus1, bonus2, hunt (prices in Eng.CFG.buyCost, tenths of the bet; whole cents at every bet through Eng.buyPrice)
 const RATE_MS = 150;
 const HISTORY_MAX = 20;
 const RTP_LABEL = '97.93% (long-run, 450M-spin stratified sim, +-0.11)';
@@ -57,7 +57,7 @@ let store = null;
 const open = new Map();       // roundId -> open record (memory: tape, state snapshot, timer, owning socket)
 const openByKey = new Map();  // "<nkey>|<mode>" -> open record
 let feed = [], feedSeq = 0;   // ring buffer (50), memory only
-const FEED_MAX = 50, FEED_STATE = 20;
+const FEED_MAX = 50, FEED_STATE = 20, FEED_MIN_CENTS = 500;   // FEED_MIN_CENTS: the fallback when a snapshot has no (or a damaged) feed.minWinCents
 
 const dayFmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago' });
 const chicagoDay = (ms) => dayFmt.format(new Date(ms));
@@ -67,7 +67,7 @@ const logf = (...a) => { const f = module.exports.log; if (f) f(...a); };
 function clearTimers() { for (const rec of open.values()) if (rec.timer) { clearTimeout(rec.timer); rec.timer = null; } }
 
 // A stored state of the wrong shape must never lock an account out: every field is checked, a missing one gets its default, a malformed one resets
-// the whole state (newState). cb.bet is any multiple of 10 in [10, 2500]; warmBet (cents of the bet the warm squares were made at) is 0 when absent, carry (cents, [0, 10)) is 0 when absent or damaged.
+// the whole state (newState). cb.bet is any whole number of cents in [1, 2500] (DENOMS: below an average of 10c the Callback step is 1 cent); warmBet (cents of the bet the warm squares were made at) is 0 when absent, carry (cents, [0, 10)) is 0 when absent or damaged.
 const isInt = (n) => Number.isSafeInteger(n);
 const isFiniteNum = (n) => typeof n === 'number' && Number.isFinite(n);
 function normState(st) {
@@ -77,7 +77,7 @@ function normState(st) {
   const get = (k, dflt, ok, fix) => { const x = st[k]; if (x === undefined || (x === null && dflt === null)) return dflt; return ok(x) ? (fix ? fix(x) : x) : BAD; };
   out.lt = get('lt', 0, (x) => isFiniteNum(x) && x >= 0);
   out.avg = get('avg', 0, (x) => isFiniteNum(x) && x >= 0);
-  out.cb = get('cb', null, (x) => x && typeof x === 'object' && !Array.isArray(x) && isInt(x.bet) && x.bet % 10 === 0 && x.bet >= 10 && x.bet <= 2500, (x) => ({ ...x }));
+  out.cb = get('cb', null, (x) => x && typeof x === 'object' && !Array.isArray(x) && isInt(x.bet) && x.bet >= 1 && x.bet <= 2500, (x) => ({ ...x }));
   out.warm = get('warm', [], (x) => Array.isArray(x) && x.every((q) => isInt(q) && q >= 0 && q < cells), (x) => x.slice());
   out.warmBet = get('warmBet', 0, (x) => isInt(x) && x >= 0);
   out.coldAt = get('coldAt', null, isFiniteNum);
@@ -98,13 +98,14 @@ const dayAfter = (d) => chicagoDay(Date.parse(d + 'T12:00:00Z') + 86400000);
 
 // How many leads the next daily claim gives. One source of truth: the claim itself. The engine plays a throwaway paid spin on a copy of the state on the
 // day the claim would happen (today if unclaimed, else the next day: the streak continues) and reports what it granted; nothing is stored or charged.
+const PROBE_BET = 10;   // the probe spin only reads the daily grant (the same leads at any bet): a whole-cent bet, so it needs no rounding source
 function dailyNext(st, now, day, P) {
   const live = Eng.CFG.pull;
   let claimDay;
   try { claimDay = !st.day || day > st.day ? day : dayAfter(st.day); } catch (e) { return null; }   // a day the clock cannot add to: no number, never a throw
   Eng.CFG.pull = P;                          // synchronous: the probe runs under the knobs the view is for
   try {
-    const r = Eng.playRound(Eng.rngFrom(1), { buy: null, bet: BET_LEVELS[0], state: { ...clone(st), cb: null }, now, day: claimDay, script: false, auto: true });
+    const r = Eng.playRound(Eng.rngFrom(1), { buy: null, bet: PROBE_BET, state: { ...clone(st), cb: null }, now, day: claimDay, script: false, auto: true });
     return r.pull && r.pull.daily ? r.pull.daily.leads : null;
   } catch (e) { return null; } finally { Eng.CFG.pull = live; }
 }
@@ -149,12 +150,17 @@ function runRound(rec, decisions, auto) {
   const base = module.exports.rng || cryptoRng();
   let i = 0;
   const rng = () => { if (i < rec.tape.length) return rec.tape[i++]; const v = base(); rec.tape.push(v); i++; return v; };
-  const len = rec.tape.length, live = Eng.CFG.pull, liveX = {};
+  // DENOMS: the whole-cent rounding numbers come from their OWN source (module.exports.roundRng, like potRng), never from the round's stream / tape, and are recorded
+  // (rec.rtape) so every replay of the round shows and pays the same cents. A 10c+ round never reads it.
+  const rbase = module.exports.roundRng || cryptoRng();
+  let j = 0;
+  const rnd = () => { if (j < rec.rtape.length) return rec.rtape[j++]; const v = rbase(); rec.rtape.push(v); j++; return v; };
+  const len = rec.tape.length, rlen = rec.rtape.length, live = Eng.CFG.pull, liveX = {};
   Eng.CFG.pull = rec.cfg;                    // synchronous: nothing else runs while the snapshot is in place
   for (const k of SNAP_KNOBS) { liveX[k] = Object.prototype.hasOwnProperty.call(Eng.CFG, k) ? { v: Eng.CFG[k] } : null; if (rec.cfgx && k in rec.cfgx) Eng.CFG[k] = rec.cfgx[k]; }
   try {
-    return Eng.playRound(rng, { buy: rec.buy, bet: rec.bet, state: clone(rec.state), now: rec.now, day: rec.day, script: true, auto: !!auto, ...(rec.force ? { force: rec.force } : {}) }, decisions);
-  } catch (e) { rec.tape.length = len; throw e; } finally {
+    return Eng.playRound(rng, { buy: rec.buy, bet: rec.bet, state: clone(rec.state), now: rec.now, day: rec.day, script: true, auto: !!auto, rnd, ...(rec.force ? { force: rec.force } : {}) }, decisions);
+  } catch (e) { rec.tape.length = len; rec.rtape.length = rlen; throw e; } finally {
     Eng.CFG.pull = live;
     for (const k of SNAP_KNOBS) { if (liveX[k]) Eng.CFG[k] = liveX[k].v; else delete Eng.CFG[k]; }
   }
@@ -201,9 +207,10 @@ function settle(rec, r, autoWhy, extraSocket) {
   const mode = rec.mode, key = rec.key, cfg = rec.cfg, cost = rec.cost, wasOpen = open.has(rec.id);
   const betCents = r.betCents != null ? r.betCents : rec.betCents;
   const ref = { game: 'coldcall', round: rec.id };
-  let winCents, pot, slice = null, prize = null, seed = 0, wonAt = 0, view, minWinX;
+  let winCents, pot, slice = null, prize = null, seed = 0, wonAt = 0, view, minWinX, minWinCents;
   try {
-    winCents = Eng.cents(r.winTenths, betCents);
+    winCents = r.pay.win;                    // whole cents from the engine (rounded once, from the recorded rounding numbers); exact at 10c and up
+    if (!isInt(winCents) || winCents < 0) throw new Error('bad win cents');
     pot = store.pot(mode, cfg.pot.seed);
     seed = cfg.pot.seed > 0 ? cfg.pot.seed : 0;
     if (cost > 0) {                 // pot: slice of every paid spin, one hit roll, award (never on a Callback)
@@ -216,7 +223,7 @@ function settle(rec, r, autoWhy, extraSocket) {
         wonAt = C.now();
       }
     }
-    minWinX = cfg.feed.minWinX;
+    minWinX = cfg.feed.minWinX; minWinCents = Number.isFinite(cfg.feed.minWinCents) && cfg.feed.minWinCents >= 0 ? cfg.feed.minWinCents : FEED_MIN_CENTS;
     view = stateView(r.newState, rec.now, rec.day, cfg);
   } catch (e) { logf('coldcall: settle failed, voiding', rec.id, e && e.message); return voidRound(rec, 'settle_error'); }
 
@@ -252,7 +259,7 @@ function settle(rec, r, autoWhy, extraSocket) {
 
   const result = {
     roundId: rec.id, status: 'done', pending: null, resolved: wasOpen, auto, bet: betCents, betCents, cost, mode, buyBonus: rec.buy, callback,
-    script: r.script, costTenths: r.costTenths, totalWinTenths: r.winTenths, totalWinMult: r.winX, totalWin: winCents, tier: r.tier, maxed: r.capped,
+    script: r.script, costTenths: r.costTenths, totalWinTenths: r.winTenths, totalWinMult: r.winX, totalWin: winCents, tier: r.tier, maxed: r.capped, pay: r.pay,
     wallet: w, balances: w,
     pull: { ...(r.pull || {}), state: view }, pot: potWon,
     ...(rec.forced ? { forced: rec.forced } : {}),
@@ -264,7 +271,7 @@ function settle(rec, r, autoWhy, extraSocket) {
   try {
     const bonusKind = r.script && r.script.bonus && r.script.bonus.kind;
     if (bonusKind) pushFeed('bonus', rec, r.winX, winCents, bonusKind);
-    if (r.winX >= minWinX) pushFeed('win', rec, r.winX, winCents, bonusKind || undefined);
+    if (r.winX >= minWinX && winCents >= minWinCents) pushFeed('win', rec, r.winX, winCents, bonusKind || undefined);      // BOTH: x of the bet and money (a 100x win at 1c is one dollar: no room event)
     if (r.pull && r.pull.armed) pushFeed('callback', rec, 0, 0);
     if (potWon) pushFeed('pot', rec, potWon.amount / betCents, potWon.amount);
     if (potMoved) broadcast('floor:pot', { mode, bal: pot.bal });
@@ -284,6 +291,9 @@ function voidRound(rec, why) {
   logf('coldcall: voided round', rec.id, why, 'refund', rec.cost, rec.mode);
   emitAcct(rec, 'g:coldcall:voided', { roundId: rec.id, mode: rec.mode, refund: rec.cost, reason: why, wallet: w });
 }
+
+// the stored form of an open round: enough to refund it at a restart (cost, key, mode) plus the rounding numbers drawn so far (rnd, DENOMS) so the cents already shown survive with the record
+const openRecord = (rec) => ({ roundId: rec.id, key: rec.nk, mode: rec.mode, cost: rec.cost, bet: rec.betCents, buy: rec.buy, t: rec.t, cfg: rec.cfg, rnd: rec.rtape.slice() });
 
 // take the safe default for every remaining decision of an open round and settle it
 function autoSettle(rec, why) {
@@ -315,7 +325,7 @@ function pullSpin(socket, p, buy, now) {
   const force = testHookOn() && buy === null && FORCES.includes(p.force) ? p.force : null;
   const rec = {
     id: crypto.randomBytes(6).toString('hex'), key, nk, mode, who: whoOf(socket), socket, buy, bet: p.bet,
-    betCents: callback ? state.cb.bet : p.bet, callback, state, now, day, t: now, tape: [], decisions: [], force, forced: force,
+    betCents: callback ? state.cb.bet : p.bet, callback, state, now, day, t: now, tape: [], rtape: [], decisions: [], force, forced: force,
   };
   try {
     rec.cfg = snap(pullCfg());             // the knobs this round is played, defaulted and settled under (Infinity preserved)
@@ -327,7 +337,8 @@ function pullSpin(socket, p, buy, now) {
     r = runRound(rec, [], auto);
     if (r.betCents != null) rec.betCents = r.betCents;
     rec.costTenths = r.costTenths;
-    cost = r.costTenths ? Eng.cents(r.costTenths, rec.betCents) : 0;
+    cost = r.pay.price;                     // whole cents, fixed by the engine before anything is paid (a buy at 1c / 2c / 5c: the exact price rounded to the nearest cent, at least 1c); 0 on a Callback
+    if (!isInt(cost) || cost < 0) throw new Error('bad cost');
   } catch (e) { return err(socket, 'bad_request', 'Could not place that bet'); }
   rec.cost = cost;
   if (cost > 0) { try { C.wallet.spend(key, mode, cost, { game: 'coldcall', round: rec.id }); } catch (e) { return walletErr(socket, e); } }
@@ -337,7 +348,7 @@ function pullSpin(socket, p, buy, now) {
     try {
       rec.pending = r.pending; rec.partial = r.partial;
       open.set(rec.id, rec); openByKey.set(ok, rec);
-      store.putOpen({ roundId: rec.id, key: nk, mode, cost, bet: rec.betCents, buy, t: now, cfg: rec.cfg });
+      store.putOpen(openRecord(rec));
       armTimer(rec);
       if (C.wallet.flush) C.wallet.flush();
       store.flush();
@@ -382,6 +393,7 @@ module.exports = {
         engine: 2, grid: { cols: Eng.COLS, rows: Eng.ROWS },
         betLevels: BET_LEVELS, modes: ['play', 'chips'], rtp: RTP_LABEL, maxWinX: Eng.MAX_WIN_X,
         buyCostX: Object.fromEntries(BUYS.map((b) => [b, Eng.CFG.buyCost[b] / 10])),
+        buyPriceCents: Object.fromEntries(BET_LEVELS.map((bet) => [bet, Object.fromEntries(BUYS.map((b) => [b, Eng.buyPrice(Eng.CFG.buyCost[b], bet)]))])),
         wallet: w, balances: w, bets: BET_LEVELS,
         ...(testHookOn() ? { qaHook: true } : {}),
         ...extra,
@@ -416,6 +428,7 @@ module.exports = {
       if (r.status === 'pending') {
         rec.pending = r.pending; rec.partial = r.partial;
         armTimer(rec);
+        try { store.putOpen(openRecord(rec)); } catch (e) { logf('coldcall: open record update failed', rec.id, e && e.message); }     // the rounding draws made so far stay with the stored record
         const v = pendingView(rec);
         for (const s of new Set([rec.socket, socket])) if (s) { try { s.emit('g:coldcall:result', v); } catch {} }
         return;
@@ -458,8 +471,8 @@ module.exports = {
       const roundId = crypto.randomBytes(6).toString('hex');
       const force = testHookOn() && buy === null && FORCES.includes(p.force) ? p.force : null;
       const r = force ? resolveForced(rng, force) : Eng.resolveRound(rng, buy);   // pure; nothing touched yet
-      let cost, totalWin;
-      try { cost = Eng.cents(r.costTenths, p.bet); totalWin = Eng.cents(r.winTenths, p.bet); } catch (e) { return err(socket, 'bad_request', 'Could not place that bet'); }
+      let cost, totalWin, pay;
+      try { pay = Eng.payRound(r.round, p.bet, module.exports.roundRng || cryptoRng(), Eng.CFG.maxWinTenths); cost = pay.price; totalWin = pay.win; } catch (e) { return err(socket, 'bad_request', 'Could not place that bet'); }
       const ref = { game: 'coldcall', round: roundId };
       let w;
       try { ctx.wallet.spend(key, p.mode, cost, ref); } catch (e) { return walletErr(socket, e); }
@@ -472,7 +485,7 @@ module.exports = {
 
       socket.emit('g:coldcall:result', {
         roundId, bet: p.bet, cost, mode: p.mode, buyBonus: buy,
-        script: r.script, costTenths: r.costTenths, totalWinTenths: r.winTenths, totalWinMult: r.winX, totalWin, tier: r.tier, maxed: r.capped,
+        script: r.script, costTenths: r.costTenths, totalWinTenths: r.winTenths, totalWinMult: r.winX, totalWin, tier: r.tier, maxed: r.capped, pay,
         wallet: w, balances: w,
         ...(force ? { forced: force } : {}),
       });
