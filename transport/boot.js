@@ -48,17 +48,23 @@ function prepareDataDir(p, env, log) {
   }
 }
 
-// Step 4 of the boot order: first copy the old stores to <name>.pre-v2 (never overwrite a copy), then migrate (idempotent by mig: refs).
+// Step 4 of the boot order. The four old stores are copied ONCE to <name>.pre-v2 (never overwritten; a missing store becomes '{}', so the
+// copies also mark "v2 has booted here"). The migration always runs from those copies and is idempotent by mig: refs: a crash half way is
+// completed by the next boot, and later boots add nothing. (V2-DESIGN says "migrate when the ledger has no mig: refs"; that rule re-runs
+// from a mirror that already holds v2 money when the first boot had no accounts, so the copies are the marker instead. See PROGRESS.)
 function migrateIfNeeded({ ledger, paths, migrate, log }) {
-  if (!migrate.needsMigration(ledger)) return null;
-  for (const f of [paths.BANK_FILE, paths.WALLET_FILE, paths.STACKS_FILE, paths.ACCOUNTS_FILE]) {
-    try { if (fs.existsSync(f) && !fs.existsSync(f + '.pre-v2')) fs.copyFileSync(f, f + '.pre-v2'); } catch (e) { log('pre-v2 copy failed ' + f + ': ' + e.message); }
+  const files = [paths.BANK_FILE, paths.WALLET_FILE, paths.STACKS_FILE, paths.ACCOUNTS_FILE];
+  for (const f of files) {
+    try {
+      if (fs.existsSync(f + '.pre-v2')) continue;
+      if (fs.existsSync(f)) fs.copyFileSync(f, f + '.pre-v2'); else fs.writeFileSync(f + '.pre-v2', '{}');
+    } catch (e) { log('pre-v2 copy failed ' + f + ': ' + e.message); }
   }
-  const inputs = { bank: readJson(paths.BANK_FILE, {}), wallet: readJson(paths.WALLET_FILE, {}), stacks: readJson(paths.STACKS_FILE, {}), accounts: readJson(paths.ACCOUNTS_FILE, {}) };
-  const { items, report } = migrate.migrate(inputs);
+  const [bank, wallet, stacks, accounts] = files.map(f => readJson(f + '.pre-v2', {}));
+  const { items, report } = migrate.migrate({ bank, wallet, stacks, accounts });
   const res = migrate.apply(ledger, items);
-  try { fs.writeFileSync(paths.STACKS_FILE, '{}'); } catch {}
-  log(`migration: ${report.accounts} accounts, ${report.items} writes (${res.written} written, ${res.dup} dup), orphans ${report.orphans.length}, rejected ${report.rejected.length}`);
+  if (res.written) { try { fs.writeFileSync(paths.STACKS_FILE, '{}'); } catch {} }
+  if (res.written || res.conflicts.length) log(`migration: ${report.accounts} accounts, ${report.items} writes (${res.written} written, ${res.dup} dup), orphans ${report.orphans.length}, rejected ${report.rejected.length}${res.conflicts.length ? ', CONFLICTS ' + res.conflicts.length : ''}`);
   return { report, res };
 }
 
