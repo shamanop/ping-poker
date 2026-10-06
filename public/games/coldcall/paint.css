@@ -1,0 +1,15 @@
+/* COLD CALL painted UI (chris 10-06 FB4): GPT-painted blanks for every piece that was a CSS box. Loaded LAST (after ui.css and keypad.css), CSS only: no markup or JS reads it.
+   Art: assets/img/ui/ui_*.webp, registered in assets/symbols.json pieces (so CSS has --img-ui_<name> and the splash preloads them). Masters: cold-call/art/paint/<sheet>/, how: cold-call/art/PAINT-NOTES.md.
+   Rule: the art sits on a pseudo-element (or an existing art slot) so NO box changes size (layout is identical with and without this file); live text stays HTML on top.
+   Test switch: a build with this file blanked must have the same boxes (qa/coldcall-fb1/paint_shift.js). */
+
+/* ---- S1 (chris 10-06 FB4): the status bar above the tile drop. Rule bar = painted red / gold bar, art box = the old box + its 3 px outline (inset -3), 1060 x 76 = 2x of 530 x 38. ---- */
+#ribbon::before,.bonus #ribbon::before{inset:-3px;border:0;outline:0;background:var(--img-ui_bar_red) center/100% 100% no-repeat;filter:drop-shadow(0 2px 0 rgba(0,0,0,.35))}
+.bonus #ribbon::before,#ribbon.gold::before{background-image:var(--img-ui_bar_gold)}
+/* PICK YOUR LEAD / ONE MORE CALL countdown: the same red bar, the part already drained is darkened by a layer over its right end (the old bar drained a gradient) */
+#ribbon.ask::before,#ribbon.ask.late::before{background:var(--img-ui_bar_red) center/100% 100% no-repeat}
+#ribbon.ask.late::before{filter:brightness(1.22) saturate(1.15) drop-shadow(0 2px 0 rgba(0,0,0,.35))}
+#ribbon.ask::after{content:"";position:absolute;z-index:3;top:4px;bottom:4px;right:4px;left:var(--left,100%);border-radius:0 3px 3px 0;background:rgba(18,5,3,.74);pointer-events:none}
+/* leads strip: ui.css gave it one art slot (#plNote::before reads --note-art): a painted yellow sticky strip, 1032 x 60 = 2x of 516 x 30. The 5 px fill meter stays live CSS on its bottom edge. */
+#plNote{--note-art:var(--img-ui_strip_note);box-shadow:none}
+#plNote .bar{left:5px;right:9px;bottom:3px}
