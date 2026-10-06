@@ -50,12 +50,12 @@
   async function run(f, ctx) {
     const E = ctx.E, { bet } = ctx;
     // 1. trigger: the three phones ring
-    ctx.say('rotary'); ctx.SFX.sting(); ctx.SFX.ringing();
+    ctx.say('rotary'); ctx.SFX.sting(); ctx.SFX.ringing(); CC.hero.set('hype', 1800);
     for (let c = 0; c < E.COLS; c++) for (let r = 0; r < E.ROWS; r++) { const el = ctx.cellEl(c, r); if (el && el.dataset.s === 'phone') el.classList.add('pulse'); }
     ctx.stamp('CALLBACK!', 'ROTARY', 1500); ctx.FX.shake(6, 350); await ctx.wait(1500); ctx.clearHits();
     // 2. the dial scene: two stops
     const scn = document.createElement('div'); scn.className = 'scn rot';
-    scn.innerHTML = '<h2>ROTARY</h2><p class="sub" id="rSub"></p><div id="rHost"></div><div class="chips"><div class="chip" id="chS"><small>FREE SPINS</small><b>-</b></div><div class="chip" id="chM"><small>MULTIPLIER</small><b>-</b></div></div><div class="tap" id="rTap"></div>';
+    scn.innerHTML = '<div class="hd"><i></i><h2>ROTARY</h2><i></i></div><p class="sub" id="rSub"></p><div id="rHost"></div><div class="chips"><div class="chip" id="chS"><small>FREE SPINS</small><b>-</b></div><div class="chip" id="chM"><small>MULTIPLIER</small><b>-</b></div></div><div class="tap" id="rTap"></div>';
     ctx.sceneEl.replaceChildren(scn);
     const sub = scn.querySelector('#rSub'), host = scn.querySelector('#rHost'), tap = scn.querySelector('#rTap');
     const stops = [
@@ -88,11 +88,11 @@
     }
     // 4. finale
     if (!(ctx.willBig && ctx.isLast)) {
-      ctx.SFX.accepted(); ctx.FX.coins(40); ctx.FX.confetti(25);
+      ctx.SFX.accepted(); ctx.FX.coins(40); ctx.FX.confetti(25); CC.hero.set('win', 3000);
       const end = document.createElement('div'); end.className = 'scn';
       end.innerHTML = '<h2>ROTARY<br>COMPLETE</h2><div class="chips"><div class="chip set"><small>SPINS PLAYED</small><b></b></div><div class="chip set"><small>MULTIPLIER</small><b></b></div></div><div class="chip set" style="width:100%"><small>TOTAL WIN</small><b></b></div><div class="tap">TAP TO CONTINUE</div>';
       const bs = end.querySelectorAll('b'); bs[0].textContent = total; bs[1].textContent = 'x' + f.mult; bs[2].textContent = ctx.dollars(ctx.cents(ctx.run.t));
-      ctx.sceneEl.replaceChildren(end); await ctx.waitTap(7000); CC.fx.clear();
+      end.prepend(CC.hero.img('win', 'fin-hero')); ctx.sceneEl.replaceChildren(end); await ctx.waitTap(7000); CC.fx.clear();
     }
     ctx.sceneEl.replaceChildren(); ctx.bonusOff(); ctx.rib('3+ in a row, left to right', 'MAX ' + E.MAX_WIN_X.toLocaleString('en-US') + 'x');
   }

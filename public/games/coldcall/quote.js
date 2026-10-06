@@ -6,12 +6,12 @@
 
   function buildForm(ctx, f) {
     const E = ctx.E, scn = document.createElement('div'); scn.className = 'scn quote'; scn.style.opacity = 0;
-    scn.innerHTML = '<h2 style="font-size:34px">QUOTE ACCEPTED</h2><div class="rsp"><span>RESPINS</span><i class="d"></i><i class="d"></i><i class="d"></i></div><div class="form"></div>';
+    scn.innerHTML = '<h2 style="font-size:34px">QUOTE ACCEPTED</h2><div class="rsp"><span>RESPINS</span><i class="d"></i><i class="d"></i><i class="d"></i></div><div class="form"></div><div class="desk"><i class="cm"></i><i class="cd"></i></div>';
     const form = scn.querySelector('.form'), boxes = [], rows = [];
     E.FIELDS.forEach((F, i) => {
       const row = document.createElement('div'); row.className = 'frow'; row.style.setProperty('--c', `var(--tier-${F.tier})`);
       const prize = E.CFG.fieldPrize[F.id];
-      row.innerHTML = `<div class="fl">${F.name}<em>${TIER_LABEL[F.tier]}</em></div><div class="fb"></div><div class="fp"><b>${ctx.boxFmt(ctx.cents(prize))}</b><small>${F.size} BOXES</small></div><span class="mult"></span>`;
+      row.innerHTML = `<i class="sl"></i><div class="fl">${F.name}<em>${TIER_LABEL[F.tier]}</em></div><div class="fb"></div><div class="fp"><b>${ctx.boxFmt(ctx.cents(prize))}</b><small>${F.size} BOXES</small></div><span class="mult"></span>`;
       const fb = row.querySelector('.fb');
       for (let k = 0; k < F.size; k++) { const b = document.createElement('div'); b.className = 'fbox'; b.innerHTML = '<span class="v"></span>'; fb.appendChild(b); boxes[F.from + k] = b; }
       form.appendChild(row); rows.push(row);
@@ -31,7 +31,7 @@
   async function run(f, base, ctx) {
     const E = ctx.E;
     // 1. trigger: amounts pop onto the bubbles that landed on the reels
-    ctx.say('quote'); ctx.SFX.sting();
+    ctx.say('quote'); ctx.SFX.sting(); CC.hero.set('hype', 1800);
     const cells = base ? base.quotes : [], srcEls = [];
     f.start.forEach((s, k) => {
       const q = cells[k]; if (!q) return; const el = ctx.cellEl(q.c, q.r); if (!el) return; srcEls[k] = el;
@@ -73,7 +73,7 @@
       }
       if (F.done) {
         row.classList.add('done'); ctx.SFX.field(i); ctx.FX.burst(...ctx.stagePt(row), { n: 18, speed: 300, size: 8 });
-        ctx.floatAt(rx + 105, ry, `<span>${TIER_LABEL[F.tier]}</span><b>+${ctx.dollars(ctx.cents(F.prize))}</b>`, '', ctx.sceneEl); await ctx.addWin(F.prize, 500); await ctx.wait(650);
+        ctx.floatAt(rx + 40, ry, `<span>${TIER_LABEL[F.tier]}</span><b>+${ctx.dollars(ctx.cents(F.prize))}</b>`, '', ctx.sceneEl); await ctx.addWin(F.prize, 500); await ctx.wait(650);
       } else row.classList.add('dim');
     }
     if (f.grand) {
@@ -86,10 +86,11 @@
     if (!(ctx.willBig && ctx.isLast)) {
       if (!f.grand) ctx.SFX.register();
       const end = document.createElement('div'); end.className = 'scn';
+      CC.hero.set('win', 3000);
       end.innerHTML = '<h2>QUOTE<br>ACCEPTED</h2><div class="chip set" style="width:100%"><small>TOTAL WIN</small><b></b></div><p class="sub"></p><div class="tap">TAP TO CONTINUE</div>';
       end.querySelector('b').textContent = ctx.dollars(ctx.cents(ctx.run.t));
       end.querySelector('.sub').textContent = f.fields.filter((x) => x.done).map((x) => x.name).join(' + ') || 'No field completed';
-      ctx.sceneEl.replaceChildren(end); await ctx.waitTap(7000);
+      end.prepend(CC.hero.img('win', 'fin-hero')); ctx.sceneEl.replaceChildren(end); await ctx.waitTap(7000);
     } else await ctx.wait(500);
     ctx.sceneEl.replaceChildren(); ctx.ov.querySelectorAll('.fly,.banner').forEach((n) => n.remove());
     for (const a of document.querySelectorAll('.cell .amt')) a.remove(); ctx.clearHits(); ctx.rib('3+ in a row, left to right', 'MAX ' + E.MAX_WIN_X.toLocaleString('en-US') + 'x');
