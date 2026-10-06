@@ -10,7 +10,9 @@ const flushers = new Set();
 process.on('exit', () => { for (const f of flushers) f(); });
 
 const isObj = (o) => o && typeof o === 'object' && !Array.isArray(o);
-const emptyData = () => ({ v: 1, players: {}, pot: {}, open: {} });
+// maps keyed by account name or "<name>|<mode>" have NO prototype: a key like __proto__ or constructor is a plain entry, never Object.prototype
+const dict = (src) => { const m = Object.create(null); if (isObj(src)) for (const k of Object.keys(src)) m[k] = src[k]; return m; };
+const emptyData = () => ({ v: 1, players: dict(), pot: dict(), open: dict() });
 
 function createStore(file) {
   let data = emptyData();
@@ -18,7 +20,7 @@ function createStore(file) {
     try {
       const j = JSON.parse(fs.readFileSync(file, 'utf8'));
       if (isObj(j)) {
-        data = { v: 1, players: isObj(j.players) ? j.players : {}, pot: isObj(j.pot) ? j.pot : {}, open: isObj(j.open) ? j.open : {} };
+        data = { v: 1, players: dict(j.players), pot: dict(j.pot), open: dict(j.open) };
       }
     } catch { data = emptyData(); }
   }
@@ -45,7 +47,7 @@ function createStore(file) {
     file, save, flush, close,
     // player state (a stored object or null; callers clone before handing it to the engine)
     player(key, mode) { checkMode(mode); const p = data.players[key]; return (p && p[mode]) || null; },
-    setPlayer(key, mode, state) { checkMode(mode); (data.players[key] = data.players[key] || {})[mode] = state; save(); },
+    setPlayer(key, mode, state) { checkMode(mode); (data.players[key] = data.players[key] || dict())[mode] = state; save(); },
     // the pot of a currency; created on first use holding `seed` cents of tracked house money
     pot(mode, seed) {
       checkMode(mode);
