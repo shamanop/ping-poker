@@ -1,19 +1,27 @@
 {
   "_note": "ONE swap point for art. Replace files (same names) or edit paths here; no code change. Paths are relative to this file. Never put text in an image.",
   "symbols": {
-    "cash": "img/cash.svg",
-    "pile": "img/pile.svg",
-    "rx": "img/rx.svg",
-    "headset": "img/headset.svg",
-    "can": "img/can.svg",
-    "mug": "img/mug.svg",
-    "note": "img/note.svg",
-    "ball": "img/ball.svg",
-    "closer": "img/closer.svg",
-    "phone": "img/phone.svg",
-    "quote": "img/quote.svg",
-    "upsell": "img/upsell.svg"
+    "cash": "img/cash.webp",
+    "pile": "img/pile.webp",
+    "rx": "img/rx.webp",
+    "headset": "img/headset.webp",
+    "can": "img/can.webp",
+    "mug": "img/mug.webp",
+    "note": "img/note.webp",
+    "ball": "img/ball.webp",
+    "closer": "img/closer.webp",
+    "phone": "img/phone.webp",
+    "quote": "img/quote.webp",
+    "upsell": "img/upsell.webp"
   },
-  "hero": { "file": "img/hero.svg", "mouth": { "x": 0.61, "y": 0.56 } },
-  "background": { "file": "img/bg.svg" }
+  "hero": {
+    "file": "img/hero.webp",
+    "mouth": {
+      "x": 0.54,
+      "y": 0.48
+    }
+  },
+  "background": {
+    "file": "img/bg.jpg"
+  }
 }
