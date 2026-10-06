@@ -66,7 +66,7 @@
     maxCascades: 40,             // hard cap on cascade steps in one spin
     maxRevealRounds: 30,         // hard cap on the reveal / close repeat loop (it cannot pass the number of hot leads anyway)
     // buy prices, tenths of the bet. Set from the measured average value / 0.98 (rounded to a whole tenth), then re-simulated.
-    buyCost: { call: 49, bonus1: 553, bonus2: 3094, hunt: 30 },
+    buyCost: { call: 46, bonus1: 513, bonus2: 2971, hunt: 41 },
     hunt: { bellMult: 1.85 },     // 'hunt': one spin whose bell weight is multiplied (base game otherwise)
     maxWinTenths: MAX_WIN_T,
   };

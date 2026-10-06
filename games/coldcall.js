@@ -7,7 +7,7 @@ const BET_LEVELS = Eng.BET_LEVELS;
 const BUYS = Eng.BUYS;   // call, bonus1, bonus2, hunt (prices in Eng.CFG.buyCost, tenths of the bet)
 const RATE_MS = 150;
 const HISTORY_MAX = 20;
-const RTP_LABEL = '98% (long-run, 200M spin sim, +-0.1)';
+const RTP_LABEL = '98.1% (long-run, 450M-spin stratified sim, +-0.14)';
 
 // QA hook: forces a feature so the front end can be driven by a test. It runs ONLY when the server process was started
 // with COLDCALL_TEST=1 (and NODE_ENV is not 'production'); otherwise `force` in a spin payload is ignored. Forced rounds are paid and
@@ -45,6 +45,7 @@ module.exports = {
     state(socket, payload, ctx) {
       const w = ctx.wallet.get(keyOf(socket));
       socket.emit('g:coldcall:state', {
+        engine: 2, grid: { cols: Eng.COLS, rows: Eng.ROWS },
         betLevels: BET_LEVELS, modes: ['play', 'ledger'], rtp: RTP_LABEL, maxWinX: Eng.MAX_WIN_X,
         buyCostX: Object.fromEntries(BUYS.map((b) => [b, Eng.CFG.buyCost[b] / 10])),
         wallet: w, balances: w, bets: BET_LEVELS,

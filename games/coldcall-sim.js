@@ -4,7 +4,7 @@
 //   nice -n 10 node games/coldcall-sim.js --strat [baseSpins=100000000] [bonusRunsPerKind=20000000] [seed=1]
 //        stratified RTP: RTP = E[base cluster + base phone] + sum_k P(bell trigger k) * E[bonus k]; each bonus is sampled directly,
 //        so the heavy tail of the bonuses no longer dominates the interval (same idea as games/bender-rtp.js)
-//   nice -n 10 node games/coldcall-sim.js --buys [runsPerBuy=5000000] [seed=1]  average value and RTP of every buy at its configured price
+//   nice -n 10 node games/coldcall-sim.js --buys [runsPerBuy=5000000] [seed=1] [--only call,hunt]  average value and RTP of every buy at its configured price
 //   add --cfg '{"extra":{"base":{"phone":0.6}}}' to override levers (objects merge, arrays and numbers replace); --json for one JSON line; --out file.json also writes the JSON.
 // Seeds are stratified: the run is cut into 1M-spin chunks, each chunk has its own seed (splitmix of base seed + chunk index) and its
 // own 128-bit rng stream, so chunks are independent and the result does not depend on how many threads ran it.
@@ -21,11 +21,11 @@ const merged = (a, b) => { const o = Array.isArray(a) ? a.slice() : Object.assig
 const KINDS = [1, 2, 3];
 
 if (!isMainThread) {
-  const { cfg, mode, chunks, size, baseSeed, bonusRuns } = workerData;
+  const { cfg, mode, chunks, size, baseSeed, bonusRuns, only } = workerData;
   const eng = Eng.createEngine(cfg);
   const capT = cfg.maxWinTenths;
   if (mode === 'buys') {
-    const out = {}; for (const b of ['call', 'bonus1', 'bonus2', 'hunt']) out[b] = { w: mk(), bonus: 0, bonusAny: mk(), capHits: 0, nb: 0 };
+    const out = {}; for (const b of only) out[b] = { w: mk(), bonus: 0, bonusAny: mk(), capHits: 0, nb: 0 };
     for (const k of chunks) {
       const rng = Eng.rngFrom(seedOf(baseSeed, k));
       for (const b of Object.keys(out)) for (let i = 0; i < size; i++) {
@@ -79,7 +79,8 @@ if (!isMainThread) {
   const argv = process.argv.slice(2);
   const flag = (f) => { const i = argv.indexOf(f); if (i < 0) return null; const v = argv[i + 1]; argv.splice(i, v && !v.startsWith('--') ? 2 : 1); return v && !v.startsWith('--') ? v : true; };
   const bool = (f) => { const i = argv.indexOf(f); if (i < 0) return false; argv.splice(i, 1); return true; };
-  const cfgArg = flag('--cfg'), buysMode = bool('--buys'), stratMode = bool('--strat'), asJson = bool('--json'), thrArg = flag('--threads'), outFile = flag('--out');
+  const cfgArg = flag('--cfg'), buysMode = bool('--buys'), stratMode = bool('--strat'), asJson = bool('--json'), thrArg = flag('--threads'), outFile = flag('--out'), onlyArg = flag('--only');
+  const ONLY = onlyArg && onlyArg !== true ? onlyArg.split(',') : ['call', 'bonus1', 'bonus2', 'hunt'];
   const nums = argv.filter((a) => !a.startsWith('--')).map(Number);
   const cfg = merged(Eng.CFG, cfgArg && cfgArg !== true ? JSON.parse(cfgArg) : {});
   const threads = Math.min(MAX_THREADS, Math.max(1, +thrArg || MAX_THREADS));
@@ -94,7 +95,7 @@ if (!isMainThread) {
   const t0 = Date.now();
   const mode = buysMode ? 'buys' : stratMode ? 'strat' : 'spins';
   Promise.all(per.filter((c) => c.length).map((chunks) => new Promise((res, rej) => {
-    const w = new Worker(__filename, { workerData: { cfg, mode, chunks, size, baseSeed: seed, bonusRuns } });
+    const w = new Worker(__filename, { workerData: { cfg, mode, chunks, size, baseSeed: seed, bonusRuns, only: ONLY } });
     w.once('message', res); w.once('error', rej);
   }))).then((parts) => {
     const secs = (Date.now() - t0) / 1000;
@@ -106,7 +107,7 @@ if (!isMainThread) {
 
     if (buysMode) {
       const o = { mode, runsPerBuy: total, seed, secs, buys: {} };
-      for (const b of ['call', 'bonus1', 'bonus2', 'hunt']) {
+      for (const b of ONLY) {
         const s = stat(mergeAcc((p) => p[b].w)), price = cfg.buyCost[b] / 10;
         const nb = parts.reduce((a, p) => a + p[b].nb, 0), caps = parts.reduce((a, p) => a + p[b].capHits, 0);
         o.buys[b] = { avgValueX: s.mean, ci: 1.96 * s.se, priceX: price, rtpPct: s.mean / price * 100, rtpCi: 1.96 * s.se / price * 100, suggestedPriceTenths: Math.round(s.mean / 0.98 * 10), bonusPct: nb / total * 100, capHits: caps, sdX: s.sd };
