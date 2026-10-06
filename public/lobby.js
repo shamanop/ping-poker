@@ -776,19 +776,27 @@ function drawDrawer(confirmEnd) {
   if (!hostDrawer || !S.cur) return;
   const t = S.cur, id = tId(t), info = S.info[id], paused = t.state === 'paused';
   const unit = t.unit || unitOf(t.mode);
-  hostDrawer.replaceChildren(
+  const blinds = (blindsFor === id && blindsEl) ? (blindsEl.update(t), blindsEl.el) : (blindsFor = id, blindsEl = blindsEditor(t, id, unit), blindsEl.el);
+  const above = [
     h('h4', null, 'Host controls', h('small', null, t.name + '  /  ' + id),
       h('button', { class: 'host-x', id: 'host-close', type: 'button', 'aria-label': 'Close host controls', onclick: closeDrawer }, '\u00d7')),
     h('div', { class: 'lb-btns' },
       h('button', { class: 'lb-btn sm', id: 'host-start', onclick: () => emit('table_start', { tableId: id }) }, 'Start'),
-      h('button', { class: 'lb-btn sm blue', id: 'host-pause', onclick: () => emit('table_pause', { tableId: id, paused: !paused }) }, paused ? 'Resume table' : 'Pause table')),
-    (blindsFor === id && blindsEl) ? (blindsEl.update(t), blindsEl.el) : (blindsFor = id, blindsEl = blindsEditor(t, id, unit), blindsEl.el),
+      h('button', { class: 'lb-btn sm blue', id: 'host-pause', onclick: () => emit('table_pause', { tableId: id, paused: !paused }) }, paused ? 'Resume table' : 'Pause table'))];
+  const below = [
     h('div', { class: 'lb-label' }, 'Players'),
     ...((info && info.seated) || []).map((p) => h('div', { class: 'lb-seat' }, h('img', { src: avSrc(p), alt: '' }), h('div', null, h('b', null, p.display || p.key), h('span', null, fm(p.stack, unit))),
       p.key !== myKey() ? h('button', { class: 'lb-ghost', onclick: () => emit('table_kick', { tableId: id, key: p.key }) }, 'Kick') : null)),
     confirmEnd ? h('div', { class: 'lb-stack', style: 'gap:var(--p10)' }, h('div', { class: 'lb-notice' }, 'End the night? The current hand finishes, then everyone cashes out.'),
       h('div', { class: 'lb-btns' }, h('button', { class: 'lb-btn sm blue', onclick: () => drawDrawer(false) }, 'Keep playing'), h('button', { class: 'lb-btn sm', id: 'host-end-confirm', onclick: () => { emit('table_end_night', { tableId: id }); toggleDrawer(); } }, 'End night'))) :
-      h('button', { class: 'lb-btn sm blue full', id: 'host-end', onclick: () => drawDrawer(true) }, 'End night'));
+      h('button', { class: 'lb-btn sm blue full', id: 'host-end', onclick: () => drawDrawer(true) }, 'End night')];
+  // Every table_info redraws this drawer, and they arrive while the host is typing. The blinds editor must stay in the page
+  // through a redraw: taking a focused input out of the document drops the cursor, so the host could not finish a number.
+  if (blinds.parentNode === hostDrawer) {
+    while (hostDrawer.firstChild !== blinds) hostDrawer.firstChild.remove();
+    while (hostDrawer.lastChild !== blinds) hostDrawer.lastChild.remove();
+    blinds.before(...above); blinds.after(...below);
+  } else hostDrawer.replaceChildren(...above, blinds, ...below);
 }
 
 // ── socket events ─────────────────────────────────────────────────
