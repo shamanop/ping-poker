@@ -1,0 +1,50 @@
+diff --git a/server.js b/server.js
+index 988e6ce..3374500 100644
+--- a/server.js
++++ b/server.js
+@@ -419,7 +419,10 @@ function makePlayer(socketId, name, avatar, chips) {
+ 
+ // ─── Deck & Shuffle ──────────────────────────────────────────────────────────
+ 
++// RIG=1 test hook (tests/v2/baseline/rig.patch): decks queued by __rig are dealt in order. No effect unless RIG=1.
++const RIG_DECKS = [];
+ function makeDeck() {
++  if (process.env.RIG === '1' && RIG_DECKS.length) return RIG_DECKS.shift();
+   const deck = [];
+   for (const suit of SUITS) for (const rank of RANKS) deck.push({ rank, suit });
+   for (let i = deck.length - 1; i > 0; i--) {
+@@ -1338,6 +1341,34 @@ io.on('connection', socket => {
+     if (r.ok) console.log(`admin ${me} reset PIN for ${k}`);
+     socket.emit('admin_result', { op: 'reset_pin', key: k, ok: !!r.ok, code: r.code, message: r.ok ? 'PIN reset. Their other sessions were signed out.' : r.message });
+   });
++  // RIG=1 test hooks (tests/v2/baseline/rig.patch): __rig queues decks, __audit returns a money/seat snapshot. Read-only, no rule change.
++  if (process.env.RIG === '1') {
++    on('__rig', ({ decks } = {}) => {
++      RIG_DECKS.length = 0;
++      for (const d of Array.isArray(decks) ? decks : []) RIG_DECKS.push(d.map(c => ({ rank: c.rank, suit: c.suit })));
++      socket.emit('__rig_ok', { queued: RIG_DECKS.length });
++    });
++    on('__audit', () => {
++      let wal = {};
++      try { if (gameHooks && gameHooks.wallet) gameHooks.wallet.flush(); wal = JSON.parse(fs.readFileSync(WALLET_FILE, 'utf8')); } catch {}
++      const wallet = {};
++      let minted = 0, slotNet = 0;
++      for (const [k, w] of Object.entries(wal)) {
++        wallet[k] = w.play;
++        const g = w.byGame || {};
++        for (const game of ['achv', 'bonus']) for (const m of ['play', 'chips']) minted += (((g[game] || {})[m]) || {}).won || 0;
++        for (const m of ['play', 'chips']) { const b = ((g.bender || {})[m]) || {}; slotNet += (b.won || 0) - (b.wagered || 0); }
++      }
++      socket.emit('__audit', {
++        bank: { ...bank }, wallet, accounts: Object.values(accounts.all()).map(a => a.key), minted, slotNet,
++        rooms: [...rooms.values()].map(r => ({
++          id: r.id, status: r.status, unit: r.unit, pot: r.pot, handNum: r.handNum, sb: r.sb, bb: r.bb, street: r.street, currentBet: r.currentBet,
++          players: r.players.map(p => ({ key: p.isBot ? null : (p.acct || bankKey(p.name)), name: p.name, chips: p.chips, handBet: p.handBet || 0, isBot: !!p.isBot, fund: p.fund || null, connected: !!p.connected,
++            roundBet: p.roundBet || 0, folded: !!p.folded, allIn: !!p.allIn, sittingOut: !!p.sittingOut })),
++        })),
++      });
++    });
++  }
+   if (process.env.AUTH_CLOCK_SKEW !== undefined) on('__test_skew', ({ ms } = {}) => { accounts.setSkew(ms); socket.emit('ok', { what: 'skew' }); });
+ 
+   // ── Bank queries ──────────────────────────────────────────────────────────
