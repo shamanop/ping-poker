@@ -246,8 +246,8 @@ function replayRound(s, cfg) {
     assert.deepStrictEqual(CFG.bubbles.silver.map((b) => b[0]), [50, 100, 150, 200]);
     assert.deepStrictEqual(CFG.bubbles.gold.map((b) => b[0]), [250, 500, 1000, 2500, 5000]);
     assert.deepStrictEqual(CFG.upsell.map((b) => b[0]), [2, 3, 4, 5, 10]);
-    // pay shape: a 5-cluster pays 0.1x..1x (lowest..highest symbol), 13+ pays 15x..100x
-    assert.strictEqual(PAYT[0][0], 1); assert.strictEqual(PAYT[9][0], 10); assert.strictEqual(PAYT[0][8], 150); assert.strictEqual(PAYT[9][8], 1000);
+    // pay shape: a 5-cluster pays 1x..1.8x (lowest..highest symbol), 13+ pays 130x..715x
+    assert.strictEqual(PAYT[0][0], 10); assert.strictEqual(PAYT[9][0], 18); assert.strictEqual(PAYT[0][8], 1300); assert.strictEqual(PAYT[9][8], 7150);
     for (let s = 0; s < 10; s++) for (let i = 1; i < 9; i++) assert.ok(PAYT[s][i] >= PAYT[s][i - 1], 'pay rises with size');
     for (let i = 0; i < 9; i++) for (let s = 1; s < 10; s++) assert.ok(PAYT[s][i] >= PAYT[s - 1][i], 'pay rises with symbol');
   });
@@ -577,11 +577,11 @@ function replayRound(s, cfg) {
     }
   });
 
-  await test('engine: short sanity band (2M spins, fixed seed): hit rate 30-35%, any bonus 1 in 120-250, RTP in a wide band (the tight figure is the sim)', () => {
+  await test('engine: short sanity band (2M spins, fixed seed): hit rate 18-26%, any bonus 1 in 120-250, RTP in a wide band (the tight figure is the sim)', () => {
     const rng = E.rngFrom(2026); const N = 2000000; let sum = 0, hit = 0, bonus = 0, tot = 0;
     for (let i = 0; i < N; i++) { const r = eng.round(rng, null); sum += r.winTenths; if (r.clusterTenths > 0) hit++; if (r.bonusKind) bonus++; }
     const rtp = sum / N / 10 * 100, hr = hit / N * 100;
-    assert.ok(hr > 30 && hr < 35, 'hit ' + hr.toFixed(2)); assert.ok(N / bonus > 120 && N / bonus < 250, 'bonus 1 in ' + N / bonus); assert.ok(rtp > 70 && rtp < 130, 'rtp ' + rtp.toFixed(2));
+    assert.ok(hr > 18 && hr < 26, 'hit ' + hr.toFixed(2)); assert.ok(N / bonus > 120 && N / bonus < 250, 'bonus 1 in ' + N / bonus); assert.ok(rtp > 70 && rtp < 130, 'rtp ' + rtp.toFixed(2));
   });
 
   await test('engine: buys priced near 98% each (bonus buys 60k runs, call 400k; wide band, the tight figure is the sim)', () => {

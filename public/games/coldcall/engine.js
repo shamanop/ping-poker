@@ -23,33 +23,33 @@
      All money numbers are integers in TENTHS of the bet (10 = 1.0x bet). */
   const CFG = {
     // cell weights of the 10 regular symbols (order = SYM): mug note ball can cups headset rx pile cashwad cash
-    weights: [35.9, 29, 22, 17, 12.2, 8.2, 6.2, 4.5, 3.2, 2.2],
+    weights: [29.925, 25.552, 20.828, 17.21, 13.464, 10.034, 8.159, 6.436, 5.001, 3.79],
     // closer (wild), bell (scatter) and phone weights per cell, per mode (a phone is also guaranteed on every bonus3 spin and on a 'call' buy)
     extra: {
-      base: { wild: 1, bell: 1.567, phone: 0.1945 },
-      bonus1: { wild: 1, bell: 1.567, phone: 4.5 },
-      bonus2: { wild: 1, bell: 1.567, phone: 4.5 },
-      bonus3: { wild: 1, bell: 1.567, phone: 3 },
+      base: { wild: 1, bell: 1.52, phone: 0.205 },
+      bonus1: { wild: 5, bell: 1.567, phone: 4.5 },
+      bonus2: { wild: 3, bell: 1.567, phone: 4.5 },
+      bonus3: { wild: 2, bell: 1.567, phone: 3 },
     },
-    // cluster pay in tenths of the bet by cluster size: 5, 6, 7, 8, 9, 10, 11, 12, 13+  (5 pays 0.1x to 1x, 13+ pays 15x to 100x)
+    // cluster pay in tenths of the bet by cluster size: 5, 6, 7, 8, 9, 10, 11, 12, 13+  (5 pays 1x to 1.8x so no cluster win is under 1x; 13+ pays 130x to 715x)
     pay: {
-      mug: [1, 3, 6, 9, 14, 21, 32, 69, 150],
-      note: [1, 3, 6, 10, 16, 25, 39, 81, 200],
-      ball: [2, 5, 8, 14, 21, 32, 52, 103, 250],
-      can: [2, 6, 9, 16, 25, 39, 62, 126, 300],
-      cups: [3, 7, 12, 21, 32, 51, 81, 161, 400],
-      headset: [4, 9, 16, 28, 44, 69, 109, 218, 500],
-      rx: [5, 12, 21, 35, 57, 92, 144, 288, 600],
-      pile: [6, 14, 25, 46, 81, 126, 207, 402, 750],
-      cashwad: [8, 18, 35, 63, 109, 173, 288, 575, 900],
-      cash: [10, 23, 46, 81, 138, 230, 402, 805, 1000],
+      mug:     [10, 10, 12, 15, 24, 50, 140, 450, 1300],
+      note:    [10, 10, 13, 17, 26, 55, 154, 495, 1430],
+      ball:    [10, 10, 14, 18, 29, 60, 168, 540, 1560],
+      can:     [10, 10, 16, 20, 32, 68, 189, 608, 1755],
+      cups:    [10, 10, 18, 23, 37, 78, 217, 698, 2015],
+      headset: [11, 11, 21, 28, 44, 93, 259, 833, 2405],
+      rx:      [12, 12, 26, 35, 55, 115, 322, 1035, 2990],
+      pile:    [13, 13, 35, 45, 72, 150, 420, 1350, 3900],
+      cashwad: [15, 15, 46, 60, 96, 200, 560, 1800, 5200],
+      cash   : [18, 18, 63, 83, 132, 275, 770, 2475, 7150],
     },
     payScale: 1,   // applied once when the engine is built (rounded to integer tenths, min 1); 1 = the table as written
     // hot lead reveals: tier weights per mode (bonus3 has no bronze), optional per-mode value weights (bubbles), values in tenths of the bet
     reveal: {
       base: { bronze: 100, silver: 2.5, gold: 0.2, upsell: 6, close: 0.6 },
-      bonus1: { bronze: 100, silver: 8, gold: 0.5, upsell: 7, close: 0.4 },
-      bonus2: { bronze: 100, silver: 8, gold: 0.5, upsell: 7, close: 0.15 },
+      bonus1: { bronze: 100, silver: 19, gold: 1.9, upsell: 9, close: 0.6 },
+      bonus2: { bronze: 100, silver: 11, gold: 0.9, upsell: 9, close: 0.2 },
       bonus3: { bronze: 0, silver: 5.5, gold: 0.05, upsell: 0.5, close: 0.004,
         bubbles: { silver: [[50, 75], [100, 15], [150, 7], [200, 3]], gold: [[250, 60], [500, 25], [1000, 10], [2500, 4], [5000, 1]] } },
     },
@@ -66,7 +66,7 @@
     maxCascades: 40,             // hard cap on cascade steps in one spin
     maxRevealRounds: 30,         // hard cap on the reveal / close repeat loop (it cannot pass the number of hot leads anyway)
     // buy prices, tenths of the bet. Set from the measured average value / 0.98 (rounded to a whole tenth), then re-simulated.
-    buyCost: { call: 46, bonus1: 513, bonus2: 2971, hunt: 41 },
+    buyCost: { call: 29, bonus1: 856, bonus2: 2834, hunt: 35 },
     hunt: { bellMult: 1.85 },     // 'hunt': one spin whose bell weight is multiplied (base game otherwise)
     maxWinTenths: MAX_WIN_T,
   };

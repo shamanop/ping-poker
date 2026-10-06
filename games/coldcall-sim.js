@@ -5,7 +5,7 @@
 //        stratified RTP: RTP = E[base cluster + base phone] + sum_k P(bell trigger k) * E[bonus k]; each bonus is sampled directly,
 //        so the heavy tail of the bonuses no longer dominates the interval (same idea as games/bender-rtp.js)
 //   nice -n 10 node games/coldcall-sim.js --buys [runsPerBuy=5000000] [seed=1] [--only call,hunt]  average value and RTP of every buy at its configured price
-//   add --cfg '{"extra":{"base":{"phone":0.6}}}' to override levers (objects merge, arrays and numbers replace); --json for one JSON line; --out file.json also writes the JSON.
+//   add --cfg '{"extra":{"base":{"phone":0.6}}}' (or --cfg @file.json) to override levers (objects merge, arrays and numbers replace); --json for one JSON line; --out file.json also writes the JSON.
 // Seeds are stratified: the run is cut into 1M-spin chunks, each chunk has its own seed (splitmix of base seed + chunk index) and its
 // own 128-bit rng stream, so chunks are independent and the result does not depend on how many threads ran it.
 const os = require('os');
@@ -57,7 +57,7 @@ if (!isMainThread) {
     }
     parentPort.postMessage(out);
   } else {
-    const out = { total: mk(), cluster: mk(), phone: mk(), bonus: [mk(), mk(), mk(), mk()], nBonus: [0, 0, 0, 0], upg: 0, hitAny: 0, hitBase: 0, hitBaseAny: 0, bandN: new Array(8).fill(0), bandSum: new Array(8).fill(0), maxT: 0, capHits: 0,
+    const out = { total: mk(), cluster: mk(), phone: mk(), bonus: [mk(), mk(), mk(), mk()], nBonus: [0, 0, 0, 0], upg: 0, hitAny: 0, hitBase: 0, hitBaseAny: 0, baseBandN: new Array(8).fill(0), baseBandSum: new Array(8).fill(0), bandN: new Array(8).fill(0), bandSum: new Array(8).fill(0), maxT: 0, capHits: 0,
       capByKind: [0, 0, 0, 0], baseWinSpins: 0, baseCascades: 0, phoneBase: 0, phoneBaseLeads: 0, phoneBaseCloses: 0, over100: 0, over1000: 0, over5000: 0, bells2: 0, bonusSpins: 0, bonusCascades: 0 };
     for (const k of chunks) {
       const rng = Eng.rngFrom(seedOf(baseSeed, k));
@@ -68,7 +68,7 @@ if (!isMainThread) {
         if (r.bonusKind) { add(out.bonus[r.bonusKind], r.bonusTenths); out.nBonus[r.bonusKind]++; if (r.upgraded) out.upg++; out.bonusSpins += r.bonusSpins; out.bonusCascades += r.cascades - r.baseCascades; }
         if (w > 0) out.hitAny++;
         if (r.clusterTenths + r.phoneTenths > 0) out.hitBaseAny++;
-        { const bd = bandOf(w); out.bandN[bd]++; out.bandSum[bd] += w; }
+        { const bd = bandOf(w); out.bandN[bd]++; out.bandSum[bd] += w; const bw = r.clusterTenths + r.phoneTenths, bb = bandOf(bw); out.baseBandN[bb]++; out.baseBandSum[bb] += bw; }
         if (r.clusterTenths > 0) { out.hitBase++; out.baseWinSpins++; out.baseCascades += r.baseCascades; }
         if (r.phoneFired) { out.phoneBase++; out.phoneBaseLeads += r.leads; out.phoneBaseCloses += r.closes; }
         if (r.bells === 2) out.bells2++;
@@ -87,7 +87,8 @@ if (!isMainThread) {
   const cfgArg = flag('--cfg'), buysMode = bool('--buys'), stratMode = bool('--strat'), asJson = bool('--json'), thrArg = flag('--threads'), outFile = flag('--out'), onlyArg = flag('--only');
   const ONLY = onlyArg && onlyArg !== true ? onlyArg.split(',') : ['call', 'bonus1', 'bonus2', 'hunt'];
   const nums = argv.filter((a) => !a.startsWith('--')).map(Number);
-  const cfg = merged(Eng.CFG, cfgArg && cfgArg !== true ? JSON.parse(cfgArg) : {});
+  const cfgText = cfgArg && cfgArg !== true ? (cfgArg[0] === '@' ? fs.readFileSync(cfgArg.slice(1), 'utf8') : cfgArg) : '{}';   // --cfg '@file.json' reads the override from a file
+  const cfg = merged(Eng.CFG, JSON.parse(cfgText));
   const threads = Math.min(MAX_THREADS, Math.max(1, +thrArg || MAX_THREADS));
   const N = buysMode ? (nums[0] || 5000000) : (nums[0] || 100000000);
   const seed = (buysMode ? nums[1] : stratMode ? nums[2] : nums[1]) || 1;
@@ -164,8 +165,9 @@ if (!isMainThread) {
     // a part's contribution to RTP = its sum over ALL spins / total spins (spins without that part count as zero)
     const contrib = (a) => a.sum / total / 10 * 100;
     const o = {
-      mode, spins: total, seed, secs, rtpPct: tot.mean * 100, rtpCi: tot.se * 196,
+      mode, spins: total, seed, secs, rtpPct: tot.mean * 100, rtpCi: tot.se * 196, sdX: tot.sd,
       hitAnyPct: sumP('hitAny') / total * 100, hitBasePct: sumP('hitBase') / total * 100, hitBaseAnyPct: sumP('hitBaseAny') / total * 100,
+      baseBands: BAND_NAMES.map((name, i) => ({ band: name, pctSpins: sumArr('baseBandN', i) / total * 100, pctRtp: sumArr('baseBandSum', i) / total / 10 * 100 })),   // base spin only (cluster + phone pay, no bonus)
       bands: BAND_NAMES.map((name, i) => ({ band: name, pctSpins: sumArr('bandN', i) / total * 100, pctRtp: sumArr('bandSum', i) / total / 10 * 100, spins: sumArr('bandN', i) })),
       oneIn: { bonus1: nb[1] ? total / nb[1] : null, bonus2: nb[2] ? total / nb[2] : null, bonus3: nb[3] ? total / nb[3] : null, any: nAny ? total / nAny : null },
       avg: { bonus1: bonusMean(1), bonus2: bonusMean(2), bonus3: bonusMean(3), any: nAny ? (nb[1] * bonusMean(1) + nb[2] * bonusMean(2) + nb[3] * bonusMean(3)) / nAny : 0 }, bonusSharePct: (contrib(mergeAcc((p) => p.bonus[1])) + contrib(mergeAcc((p) => p.bonus[2])) + contrib(mergeAcc((p) => p.bonus[3]))) / (tot.mean * 100) * 100, upgradedOfBonus1: nb[1] ? sumP('upg') / nb[1] : 0,
@@ -181,9 +183,10 @@ if (!isMainThread) {
     if (outFile) fs.writeFileSync(outFile, JSON.stringify(o));
     if (asJson) return console.log(JSON.stringify(o));
     console.log(`COLD CALL sim (plain full rounds): ${total} spins, seed ${seed}, ${threads} threads, ${f(secs, 1)}s (${f(total / secs / 1e6, 2)}M spins/s)`);
-    console.log(`  total RTP        ${f(o.rtpPct, 3)}% +- ${f(o.rtpCi, 3)} (95%, plain; use --strat for the tight figure)`);
+    console.log(`  total RTP        ${f(o.rtpPct, 3)}% +- ${f(o.rtpCi, 3)} (95%, plain; use --strat for the tight figure)  sd of a round ${f(o.sdX, 2)}x bet`);
     console.log(`  hit rate         whole round (any win) ${f(o.hitAnyPct)}%   base-only (cluster or phone pay) ${f(o.hitBaseAnyPct)}%   base cluster win ${f(o.hitBasePct)}%`);
     console.log('  bands (round win / bet)  ' + o.bands.map((b) => `${b.band}: ${f(b.pctSpins, 3)}% spins ${f(b.pctRtp, 2)}% RTP`).join(' | '));
+    console.log('  base-only bands (cluster+phone, bonus excluded)  ' + o.baseBands.map((b) => `${b.band}: ${f(b.pctSpins, 3)}% spins ${f(b.pctRtp, 2)}% RTP`).join(' | '));
     console.log(`  RTP by part      clusters(base) ${f(o.parts.cluster)}%  base phone ${f(o.parts.basePhone)}%  bonus1 ${f(o.parts.bonus1)}%  bonus2 ${f(o.parts.bonus2)}%  bonus3 ${f(o.parts.bonus3)}%`);
     console.log(`  bonus triggers   bonus1 1 in ${o.oneIn.bonus1 ? f(o.oneIn.bonus1, 0) : 'n/a'} (avg ${f(o.avg.bonus1)}x, upgraded ${f(o.upgradedOfBonus1 * 100, 1)}%)  bonus2 1 in ${o.oneIn.bonus2 ? f(o.oneIn.bonus2, 0) : 'n/a'} (avg ${f(o.avg.bonus2)}x)  bonus3 ${o.oneIn.bonus3 ? '1 in ' + f(o.oneIn.bonus3, 0) : 'none'} (avg ${f(o.avg.bonus3)}x)  all bonuses avg ${f(o.avg.any)}x, ${f(o.bonusSharePct, 1)}% of RTP  any 1 in ${o.oneIn.any ? f(o.oneIn.any, 1) : 'n/a'}`);
     console.log(`  base phone       fires on ${f(o.phoneBase.pctOfSpins, 2)}% of spins (1 in ${o.phoneBase.oneIn ? f(o.phoneBase.oneIn, 1) : 'n/a'}), avg ${f(o.phoneBase.avgLeads, 1)} hot leads, ${f(o.phoneBase.avgCloses, 3)} closes`);
