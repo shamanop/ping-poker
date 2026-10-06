@@ -127,12 +127,16 @@
   }
   function refresh() { const s = sock(); if (s && isAdmin()) s.emit('admin_overview', {}); }
 
+  // The BANK balance of a row: v2 sends it separately from the at-table chips (`balance` there is bank + at table); a legacy row only has `balance`.
+  const bankOf = a => (typeof a.bank === 'number' ? a.bank : (a.balance || 0));
+
   // ── accounts ──
   function renderAccounts() {
     const host = $('adm-accounts'); if (!host || tab !== 'accounts') return;
     if (!overview) { host.innerHTML = '<div class="adm-empty">Loading</div>'; return; }
     const rows = overview.accounts.map(a => {
       const k = esc(a.key);
+      const atTable = typeof a.atTable === 'number' ? num(a.atTable) + (a.atTablePlay > 0 ? ' <small>+ ' + Money.format(a.atTablePlay, 'usd') + ' Play</small>' : '') : '--';
       let acts;
       if (editing && editing.key === a.key && editing.kind === 'bal') {
         acts = `<span class="adm-amt-slot" id="adm-edit-slot"></span>
@@ -147,16 +151,16 @@
         acts = `<button type="button" class="adm-btn" data-a="bal">Set chips</button><button type="button" class="adm-btn" data-a="play">Set Play $</button><button type="button" class="adm-btn" data-a="pin">Reset PIN</button>`;
       }
       return `<tr data-k="${k}"><td class="nm"><span class="adm-dot${a.online ? ' on' : ''}" title="${a.online ? 'Connected now' : 'Offline'}"></span><b>${esc(a.display)}</b>${a.isAdmin ? '<i>Owner</i>' : ''}${a.claimed ? '' : '<i>Unclaimed</i>'}</td>
-        <td>${a.online ? 'online now' : ago(a.lastSeen)}</td><td class="n adm-bal">${num(a.balance)}</td><td class="n adm-play">${a.play == null ? "--" : "$" + (a.play / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td><td class="n"><div class="adm-acts">${acts}</div></td></tr>`;
+        <td>${a.online ? 'online now' : ago(a.lastSeen)}</td><td class="n adm-bal">${num(bankOf(a))}</td><td class="n adm-at">${atTable}</td><td class="n adm-play">${a.play == null ? "--" : "$" + (a.play / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td><td class="n"><div class="adm-acts">${acts}</div></td></tr>`;
     }).join('');
-    host.innerHTML = `<table class="adm-tbl" id="adm-acct-tbl"><thead><tr><th>Player</th><th>Last seen</th><th class="n">Chips (total)</th><th class="n">Play $</th><th class="n">Actions</th></tr></thead><tbody>${rows}</tbody></table>
+    host.innerHTML = `<table class="adm-tbl" id="adm-acct-tbl"><thead><tr><th>Player</th><th>Last seen</th><th class="n">Bank (chips)</th><th class="n">At table</th><th class="n">Play $ wallet</th><th class="n">Actions</th></tr></thead><tbody>${rows}</tbody></table>
       <p class="adm-empty" style="padding:14px 0 0;text-align:left">Chips (total) is bank plus whatever is at the table. Play $ is the wallet used by the slot and Play tables. Players see changes instantly. Deleting accounts is not offered here: a player's money, history and table seats are tied together, so it needs a deliberate cleanup.</p>`;
     host.querySelectorAll('[data-a]').forEach(b => b.addEventListener('click', () => onAcct(b)));
     const slot = $('adm-edit-slot');
     if (slot && editing && (editing.kind === 'bal' || editing.kind === 'play')) {
       const a = overview.accounts.find(x => x.key === editing.key);
       const play = editing.kind === 'play';
-      if (!editing.field) editing.field = amt(editing.value || 0, play ? 'cents' : 'chips', 0, play ? MAX_PLAY : MAX_CHIPS, (play ? 'New Play $ for ' : 'New total for ') + (a ? a.display : ''), 'adm-edit');
+      if (!editing.field) editing.field = amt(editing.value || 0, play ? 'cents' : 'chips', 0, play ? MAX_PLAY : MAX_CHIPS, (play ? 'New Play $ for ' : 'New bank for ') + (a ? a.display : ''), 'adm-edit');
       slot.appendChild(editing.field.el);
       editing.field.focus(); editing.field.input.select && editing.field.input.select();
       editing.field.input.addEventListener('keydown', e => { if (e.key === 'Enter') { const ok = host.querySelector('[data-a$="-ok"]'); ok && ok.click(); } });
@@ -170,16 +174,16 @@
   function onAcct(b) {
     const tr = b.closest('tr'), key = tr.dataset.k, a = overview.accounts.find(x => x.key === key);
     const act = b.dataset.a, s = sock();
-    if (act === 'bal') { editing = { key, kind: 'bal', value: a.balance || 0 }; renderAccounts(); }
+    if (act === 'bal') { editing = { key, kind: 'bal', value: bankOf(a) }; renderAccounts(); }
     else if (act === 'play') { editing = { key, kind: 'play', value: a.play || 0 }; renderAccounts(); }
     else if (act === 'pin') { editing = { key, kind: 'pin' }; renderAccounts(); }
     else if (act === 'cancel') { editing = null; renderAccounts(); }
     else if (act === 'bal-ok') {
       const total = editing && editing.field ? editing.field.value() : null;
       if (total === null) { editing.field.submit(); status('Enter an amount from 0 to ' + money(MAX_CHIPS), 'err'); return; }
-      if (!window.confirm('Set ' + a.display + "'s total money to " + money(total) + '?')) return;
+      if (!window.confirm('Set ' + a.display + "'s BANK to " + money(total) + '? Chips at the table are not touched.')) return;
       editing = null; status('Saving');
-      const delta = total - (a.balance || 0); // admin_adjust is a delta against the BANK balance shown in this row
+      const delta = total - bankOf(a); // admin_adjust is a delta against the BANK balance shown in this row
       if (delta === 0) { status('No change', 'ok'); return; }
       s.emit('admin_adjust', { key, delta, cur: 'chips', reason: 'admin console' });
       pendingBal = { key, total };
@@ -242,7 +246,7 @@
       overview = o;
       if (pendingBal) {
         const a = o.accounts.find(x => x.key === pendingBal.key);
-        if (a && a.balance === pendingBal.total) status('Money set for ' + a.display, 'ok');
+        if (a && bankOf(a) === pendingBal.total) status('Money set for ' + a.display, 'ok');
         pendingBal = null;
       }
       if (pendingBlinds && o.table && (o.table.nextSb || o.table.sb) === pendingBlinds.sb && (o.table.nextBb || o.table.bb) === pendingBlinds.bb) {

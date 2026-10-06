@@ -822,7 +822,7 @@ function bind() {
   s.on('self_changed', (v) => { if (!S.user || !v || v.key !== S.user.key) return; Object.assign(S.user, { display: v.display, avatar: v.avatar, pic: v.pic || null }); refreshProfile(); });
   s.on('account_changed', () => { if (!S.user) return; if (S.view === 'lobby') { emit('get_leaderboard', {}); emit('social:feed'); emit('social:biggest'); emit('lobby_list', {}); } if (S.view === 'share' && S.arg) emit('table_preview', { code: S.arg }); });
   s.on('wallet', (w) => { S.wallet = w; renderTop(); });
-  s.on('money', (m) => { if (!m) return; if (S.user) S.user.bankChips = m.bank; if (m.wallet) S.wallet = m.wallet; renderTop(); });
+  s.on('money', (m) => { if (!m) return; if (S.user && Number.isFinite(m.bank)) S.user.bankChips = m.bank; if (m.wallet) S.wallet = m.wallet; renderTop(); });
   s.on('social:feed', onFeed);
   s.on('social:biggest', onBest);
   s.on('achv:state', (v) => { S.achv = v; drawAch(); renderAchHint(); });

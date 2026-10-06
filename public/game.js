@@ -640,6 +640,7 @@ function initBust() {
 function showBust(balance, rebuy) {
   state.lastBust = balance;
   state.spectating = false;
+  if ($('bust-panel').classList.contains('hidden') && state.rebuyField) { state.rebuyField.destroy(); state.rebuyField = null; $('bust-amt').replaceChildren(); } // a new bust starts from the default again
   $('bust-panel').classList.remove('hidden');
   const rbd = rebuy || state.lastRebuy || {};
   $('bust-balance').textContent = `${rbd.fund === 'play' ? 'Play $' : 'Bank'} ${fmt(balance)}`;

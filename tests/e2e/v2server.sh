@@ -16,6 +16,11 @@ ln -s "$WT/node_modules" "$X/node_modules"
 [ -d "$X/public/games/coldcall" ] && cp -r "$X/public/games/coldcall" /tmp/p4b-coldcall && rm -rf "$X/public" || rm -rf "$X/public"
 cp -r "$WT/public" "$X/public"
 [ -d /tmp/p4b-coldcall ] && cp -r /tmp/p4b-coldcall "$X/public/games/coldcall" && rm -rf /tmp/p4b-coldcall
+if [ "${COLDCALL:-0}" = 1 ]; then   # Cold Call is not merged anywhere yet: overlay origin/coldcall (server module + page + its shell.js patch) to test it in the shell
+  git archive origin/coldcall games/coldcall.js games/coldcall-engine.js games/coldcall-sim.js public/games/coldcall | tar -x -C "$X"
+  sed -i "s#const MODULES = \\['./bender.js'\\]#const MODULES = ['./bender.js', './coldcall.js']#" "$X/games/index.js"
+  git diff "$(git merge-base origin/master origin/coldcall)" origin/coldcall -- public/shell.js | (cd "$X" && patch -p1 -s)
+fi
 D=$(mktemp -d /tmp/p4b-v2data.XXXX)
 (cd "$X" && DATA_DIR=$D PORT=$PORT RIG=${RIG:-1} setsid nohup node server.js > $D/server.log 2>&1 < /dev/null &)
 sleep 3; echo "$D"; echo "ref $(git rev-parse --short "$REF")"; tail -3 "$D/server.log"

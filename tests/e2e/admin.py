@@ -10,19 +10,25 @@ def open_admin(pg, tab):
     pg.evaluate("AdminConsole.open()"); pg.wait_for_selector('.adm-tab')
     pg.click('.adm-tab[data-t=%s]' % tab); pg.wait_for_timeout(700)
 
+V2 = os.environ.get('E2E_V2') == '1'   # against a v2 server the adjust is applied: the row must then show the typed bank
 c = Checks()
 with sync_playwright() as p:
     b = p.chromium.launch(); pg = b.new_page(viewport={'width': 1280, 'height': 900}); fr = Frames(pg)
     pg.on('dialog', lambda d: d.accept())
     sign_in(pg, 'chris')
-    for pref, typed_chips, want_chips, typed_play, want_play in [('chips', '12345', 12345, '4000', 4000), ('usd', '123.45', 12345, '40', 4000), ('auto', '500', 500, '2.5', 250)]:
+    for i, (pref, typed_play, want_play) in enumerate([('chips', '4000', 4000), ('usd', '40', 4000), ('auto', '2.5', 250)]):
         set_pref(pg, pref); open_admin(pg, 'accounts')
         row = 'tr[data-k=by1]'
         pg.click(row + ' [data-a=bal]'); pg.wait_for_selector('#adm-edit')
-        shown = int(pg.evaluate("document.querySelector('tr[data-k=by1] .adm-bal').textContent").replace(',', '').replace('\u2013', '0') or 0)
+        shown = pg.evaluate("(() => { const t = document.querySelector('tr[data-k=by1] .adm-bal').textContent.trim(); const r = Money.parse(t.replace('\\u2013', '0'), Money.modeFor(Money.pref, 'chips')); return r.ok ? r.units : 0 })()")
+        want_chips = shown + 1000 * (i + 1)   # always a real change (rerunnable): typed in the text form of this pref
+        typed_chips = ('%.2f' % (want_chips / 100)) if pref == 'usd' else str(want_chips)
         pg.fill('#adm-edit', typed_chips); fr.clear(); pg.click(row + ' [data-a=bal-ok]'); pg.wait_for_timeout(500)
         got = [(f.get('key'), f.get('delta'), f.get('cur')) for f in fr.of('admin_adjust')]
         c.eq('%s: chips typed %r (bank shows %d) -> admin_adjust.delta' % (pref, typed_chips, shown), got, [('by1', want_chips - shown, 'chips')])
+        if V2:
+            pg.wait_for_timeout(1500)
+            c.eq('%s: server applied the adjust, row shows the typed bank' % pref, pg.evaluate("(() => { const r = Money.parse(document.querySelector('tr[data-k=by1] .adm-bal').textContent.trim(), Money.modeFor(Money.pref, 'chips')); return r.ok ? r.units : null })()"), want_chips)
         pg.click(row + ' [data-a=play]'); pg.wait_for_selector('#adm-edit')
         pg.fill('#adm-edit', typed_play); fr.clear(); pg.click(row + ' [data-a=play-ok]'); pg.wait_for_timeout(500)
         got = [f.get('cents') for f in fr.of('admin_set_play')]

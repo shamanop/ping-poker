@@ -41,6 +41,10 @@ with sync_playwright() as p:
     fr.clear(); pg.fill('#host-sb', 'abc'); pg.click('#host-blinds-save'); pg.wait_for_timeout(300)
     c.eq('garbage blind sends nothing', fr.of('table_update'), [])
     c.ok('garbage blind shows a message', pg.inner_text('#host-blinds-msg').strip() != '')
+    # ui defect 3: at 1280x720 the drawer stays inside the viewport and scrolls
+    pg.set_viewport_size({'width': 1280, 'height': 720}); pg.wait_for_timeout(500)
+    g = pg.evaluate("(() => { const d = document.getElementById('host-drawer'); const r = d.getBoundingClientRect(); return {bottom: r.bottom, h: innerHeight, oy: getComputedStyle(d).overflowY} })()")
+    c.ok('host drawer bottom inside the 720px viewport (%s)' % g, g['bottom'] <= g['h'] + 0.5 and g['oy'] in ('auto', 'scroll'))
     shot(pg, 'host_drawer', '#host-drawer')
     b.close()
 c.done('host_drawer.py')

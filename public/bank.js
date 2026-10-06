@@ -8,6 +8,9 @@
   let data = null, isOpen = false, pollTimer = null, adminHost = null;
   let view = (() => { try { return localStorage.getItem('pp-bank-view') === 'play' ? 'play' : 'chips'; } catch (e) { return 'chips'; } })();
   const isPlay = () => view === 'play';
+  // The view (Chips / Play $) can differ from this table's currency: then at-table figures are not zero, they do not exist (S3-4).
+  const viewIsTableCurrency = () => ((state.unit === 'cents') === isPlay());
+  const startRef = () => (state.gameState && state.gameState.startChips) || 0;
 
   const $ = id => document.getElementById(id);
   // Mode is per view: the Play $ view reads cents, the Chips view reads chips; pref decides $ vs chips for 'auto'.
@@ -188,7 +191,7 @@
         <div class="bp-bal"><b>${p.isBot ? '&mdash;' : fmt(totalOf(p))}</b><span>Total</span></div>
         <div class="bp-stats">
           <div><label>${isPlay() ? 'In wallet' : 'In bank'}</label><b${canEdit && !p.isBot ? ` class="editable" data-name="${E(p.name)}" data-bank="${p.bank || 0}" title="Click to adjust this player's bank (sent as a +/- adjustment)"` : ''}>${p.isBot ? '&mdash;' : fmt(p.bank || 0)}</b></div>
-          <div><label>At table</label><b>${fmt(p.status === 'offline' ? 0 : p.atTable)}</b></div>
+          <div><label>At table</label><b>${!viewIsTableCurrency() ? '&ndash;' : fmt(p.status === 'offline' ? 0 : p.atTable)}</b></div>
           <div><label>Net P&amp;L</label><b class="${netCls}">${p.isBot ? '&mdash;' : signed(p.net)}</b></div>
           <div><label>Best win</label><b>${p.isBot ? '&mdash;' : (p.biggestWin ? fmt(p.biggestWin) : '&ndash;')}</b></div>
         </div>
@@ -237,15 +240,15 @@
     const names = Object.keys(data.series);
     const hands = new Set();
     names.forEach(n => data.series[n].forEach(pt => hands.add(pt[0])));
-    $('bank-hcount').textContent = hands.size ? (isPlay() ? '' : 'Dashed line = 1,500 starting stack \u00b7 ') + hands.size + ' hand' + (hands.size === 1 ? '' : 's') : '';
-    if (!hands.size) { lineGeo = null; setHTML(host, emptyNote('Nothing to plot yet', 'Chips are recorded at the end of every hand. Play one and the lines appear.')); return; }
+    $('bank-hcount').textContent = hands.size ? (isPlay() || !startRef() ? '' : 'Dashed line = starting stack \u00b7 ') + hands.size + ' hand' + (hands.size === 1 ? '' : 's') : '';
+    if (!hands.size) { lineGeo = null; setHTML(host, !viewIsTableCurrency() ? emptyNote('Not played at this table', 'This table uses ' + (state.unit === 'cents' ? 'Play $' : 'Chips') + '. Switch the view above to see its hands.') : emptyNote('Nothing to plot yet', 'Chips are recorded at the end of every hand. Play one and the lines appear.')); return; }
     const W = host.clientWidth, H = host.clientHeight; if (!W || !H) return;
     const u = U();
     const m = { l: 52 * u, r: 92 * u, t: 16 * u, b: 28 * u };
     const hs = [...hands].sort((a, b) => a - b);
     const x0 = hs[0], x1 = hs[hs.length - 1];
     const span = Math.max(1, x1 - x0);
-    let ymax = isPlay() ? 2000 : 1500;
+    let ymax = startRef() || (isPlay() ? 2000 : 1500);
     names.forEach(n => data.series[n].forEach(pt => { ymax = Math.max(ymax, pt[1]); }));
     const step = [250, 500, 1000, 2000, 2500, 5000, 10000, 20000, 25000, 50000, 100000, 250000].find(s => ymax * 1.03 / s <= 5) || 500000;
     const yt = Math.ceil(ymax * 1.03 / step);
@@ -266,7 +269,7 @@
       g += `<text x="${X(h)}" y="${H - m.b + 17 * u}" text-anchor="middle">${h}</text>`;
     });
     g += `<text x="${m.l - 8 * u}" y="${H - m.b + 17 * u}" text-anchor="end" style="letter-spacing:.1em;text-transform:uppercase;font-size:calc(9 * var(--px))">Hand</text>`;
-    if (!isPlay() && 1500 < ymax) g += `<line class="ref" x1="${m.l}" x2="${W - m.r}" y1="${Y(1500)}" y2="${Y(1500)}"/>`;
+    if (!isPlay() && startRef() && startRef() < ymax) g += `<line class="ref" x1="${m.l}" x2="${W - m.r}" y1="${Y(startRef())}" y2="${Y(startRef())}"/>`;
 
     const ends = [];
     names.forEach(n => {
