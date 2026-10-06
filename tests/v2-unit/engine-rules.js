@@ -591,6 +591,20 @@ module.exports = function register(t) {
     assert.deepStrictEqual(H.settle(g).returned, { 0: 250, 1: 0, 2: 0 });
   });
 
+  t.case('E1 does not cover a voluntary fold: SB folds over two short all-ins -> nothing returned, whole blind is dead money (old-server showdown)', () => {
+    // seed 7 hand 8895 of the old-showdown differential: SB 5040 in, BB all-in 2520, caller all-in 2520, SB folds
+    const h = mk({ stacks: { 0: 40320, 1: 2520, 3: 98280, 4: 2520, 7: 80640 }, button: 1, sb: 5040, bb: 7560 });
+    const ev = play(h, [[7, 'fold'], [0, 'fold'], [1, 'call'], [3, 'fold']]);
+    assert.deepStrictEqual(ev.filter(e => e.type === 'returned'), []);
+    runOut(h);
+    assert.strictEqual(h.phase, 'showdown');
+    const r = H.settle(h);
+    assert.deepStrictEqual(r.returned, { 0: 0, 1: 0, 3: 0, 4: 0, 7: 0 });
+    assert.strictEqual(r.payouts[1] + r.payouts[4], 10080);
+    assert.strictEqual(r.net[3], -5040);
+    assert.strictEqual(h.seats[3].stack, 98280 - 5040);
+  });
+
   t.case('E1 heads-up: host limps, P1 raises to 500, host kicks P1 -> P1 gets his uncalled 450 back, host wins 100', () => {
     const h = mk({ stacks: [1000, 1000], button: 0 }); // seat 0 (button/SB) is "the host"
     play(h, [[0, 'call'], [1, 'raise', 500]]);
