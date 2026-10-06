@@ -2,6 +2,7 @@
 // money/ledger.js: one append-only JSONL ledger of transfers. See V2-DESIGN.md "money/".
 // Every write is transfer() or batch(); memory is updated only after the line is on disk.
 const fs = require('fs');
+const crypto = require('crypto');
 
 class MoneyError extends Error {
   constructor(code, details) {
@@ -56,7 +57,18 @@ const sigOf = (item) => JSON.stringify([item.from, item.to, item.amount, item.cu
 
 function open(file, opts = {}) {
   const now = opts.now || Date.now;
-  const fsyncMode = opts.fsync || 'batch'; // 'batch' | 'all' | 'none'
+  // 'all' (default): every transfer and batch is fsynced. 'batch': batches only. 'none': tests and bulk loads.
+  const fsyncMode = opts.fsync || 'all';
+  const log = opts.log || ((m) => console.error('[money] ' + m));
+  // Writer fence (no blocking lock, so a stale lock can never stop a boot): the newest opener writes its token to
+  // <file>.lock and wins. Every append re-reads the lock and the file size; a writer that lost either is refused for good.
+  const lockFile = file + '.lock';
+  const token = crypto.randomBytes(16).toString('hex');
+  const readLock = () => { try { return fs.readFileSync(lockFile, 'utf8').trim(); } catch { return null; } };
+  const prevLock = readLock();
+  if (prevLock) log(`replaced a lock held by another opener (${prevLock.slice(0, 8)}) on ${file}`);
+  fs.writeFileSync(lockFile, token + '\n');
+  let refused = null;                   // 'lost_lock' | 'foreign_write' once fenced out
 
   const bal = { chips: new Map(), play: new Map() };
   const refs = new Map();   // ref -> { id, sig }
@@ -109,25 +121,39 @@ function open(file, opts = {}) {
     lastId = rec.id;
   }
 
+  function releaseLock() { if (readLock() === token) { try { fs.unlinkSync(lockFile); } catch {} } }
+
   // ---- load + replay ----
   let text = '';
   try { text = fs.readFileSync(file, 'utf8'); } catch (e) { if (e.code !== 'ENOENT') throw e; }
   const parts = text.split('\n');
   const tail = parts.pop();            // '' when the file ends with a newline, else a torn (unacknowledged) line
   let good = 0;                        // byte length of the good prefix
-  parts.forEach((ln, i) => {
-    let rec;
-    try { rec = JSON.parse(ln); } catch { throw new MoneyError('corrupt', { line: i + 1, why: 'unparseable line before the end of the file' }); }
-    replayLine(rec, i + 1);
-    good += Buffer.byteLength(ln) + 1;
-  });
-  if (tail !== '') fs.truncateSync(file, good);
+  try {
+    parts.forEach((ln, i) => {
+      let rec;
+      try { rec = JSON.parse(ln); } catch { throw new MoneyError('corrupt', { line: i + 1, why: 'unparseable line before the end of the file' }); }
+      replayLine(rec, i + 1);
+      good += Buffer.byteLength(ln) + 1;
+    });
+    if (tail !== '') fs.truncateSync(file, good);
+  } catch (e) { releaseLock(); throw e; }
   let size = good;
   const fd = fs.openSync(file, 'a');
   let closed = false;
 
+  // Runs before every append. Not atomic with the append itself: a second opener landing between this check and the
+  // write can still get one line in; the next open then fails loudly on the duplicate id (see money/PROGRESS.md).
+  function fence() {
+    if (refused) throw new MoneyError(refused);
+    if (readLock() !== token) { refused = 'lost_lock'; throw new MoneyError('lost_lock', { file }); }
+    const have = fs.fstatSync(fd).size;
+    if (have !== size) { refused = 'foreign_write'; throw new MoneyError('foreign_write', { file, expected: size, have }); }
+  }
+
   function append(rec, doSync) {
     if (closed) throw new MoneyError('closed');
+    fence();
     const buf = Buffer.from(JSON.stringify(rec) + '\n');
     try {
       let off = 0;
@@ -220,9 +246,10 @@ function open(file, opts = {}) {
     return out;
   }
 
-  function close() { if (!closed) { closed = true; try { fs.closeSync(fd); } catch {} } }
+  function sync() { if (!closed) fs.fsyncSync(fd); }
+  function close() { if (!closed) { closed = true; try { fs.closeSync(fd); } catch {} releaseLock(); } }
 
-  return { transfer, batch, balance, list, has, entries, check, close, file, get size() { return size; }, get lastId() { return lastId; } };
+  return { transfer, batch, balance, list, has, entries, check, sync, close, file, get size() { return size; }, get lastId() { return lastId; } };
 }
 
 module.exports = { open, MoneyError, SOURCE_ACCOUNTS, CURS };

@@ -183,9 +183,10 @@ function main(argv, io = { log: console.log, err: console.error }) {
   let target = o.out, tmpDir = null;
   if (o.dry) { tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'migrate-dry-')); target = path.join(tmpDir, 'money.jsonl'); if (o.out && fs.existsSync(o.out)) fs.copyFileSync(o.out, target); }
   let res, check;
-  const ledger = open(target);
+  const ledger = open(target, { fsync: 'none' });   // bulk one-off load: one fsync at the end instead of one per write
   try {
     res = apply(ledger, items);
+    ledger.sync();
     check = ledger.check();
   } finally { ledger.close(); if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true }); }
 

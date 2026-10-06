@@ -107,13 +107,62 @@ t('idempotent refs: retry is a no-op, changed content is a conflict', () => {
   svc.ensureAccount('a');
   eq(svc.buyIn('a', 'T', 100, 'chips', 'chips', 'x').dup, false);
   eq(svc.buyIn('a', 'T', 100, 'chips', 'chips', 'x').dup, true);
-  eq(svc.buyIn('a', 'T', 100, 'chips', 'play', 'y').dup, false);
-  eq(svc.buyIn('a', 'T', 100, 'chips', 'play', 'y').dup, true, 'fx batch retry');
-  eq(ledger.balance('seat:T:a', 'chips'), 200);
+  eq(svc.buyIn('a', 'T2', 100, 'chips', 'play', 'y').dup, false);
+  eq(svc.buyIn('a', 'T2', 100, 'chips', 'play', 'y').dup, true, 'fx batch retry');
+  eq(svc.buyIn('a', 'T', 100, 'chips', 'chips', 'x').dup, true, 'retry of the first buy-in after the seat was funded is still a dup');
+  eq(ledger.balance('seat:T:a', 'chips'), 100); eq(ledger.balance('seat:T2:a', 'chips'), 100);
   throwsCode(() => svc.buyIn('a', 'T', 101, 'chips', 'chips', 'x'), 'ref_conflict');
-  throwsCode(() => svc.buyIn('a', 'T', 100, 'chips', 'chips', 'y'), 'ref_conflict', 'same ref, different fund');
+  throwsCode(() => svc.buyIn('a', 'T2', 100, 'chips', 'chips', 'y'), 'ref_conflict', 'same ref, different fund');
   eq(svc.cashOut('a', 'T', 50, 'chips', 'chips', 'c').dup, false); eq(svc.cashOut('a', 'T', 50, 'chips', 'chips', 'c').dup, true);
-  eq(ledger.balance('seat:T:a', 'chips'), 150);
+  eq(ledger.balance('seat:T:a', 'chips'), 50);
+});
+
+t('one fund per seat while it holds chips: fund_mismatch writes nothing; a 0 seat may switch', () => {
+  const { svc, ledger } = env();
+  svc.ensureAccount('a'); svc.ensureAccount('b');
+  svc.buyIn('a', 'T', 1000, 'chips', 'chips', 'a1');
+  const id = ledger.lastId, snap = JSON.stringify([ledger.list('', 'chips'), ledger.list('', 'play')]);
+  const e = throwsCode(() => svc.buyIn('a', 'T', 500, 'chips', 'play', 'a2'), 'fund_mismatch');
+  eq(e.details.have, 'chips'); eq(e.details.want, 'play');
+  eq(ledger.lastId, id, 'nothing written'); eq(JSON.stringify([ledger.list('', 'chips'), ledger.list('', 'play')]), snap); ok(!ledger.has('a2'));
+  // same-fund rebuy unchanged, 'bank' alias and a missing fund both mean chips on a chips table
+  eq(svc.buyIn('a', 'T', 100, 'chips', 'chips', 'a3').dup, false); svc.buyIn('a', 'T', 100, 'chips', 'bank', 'a4'); svc.buyIn('a', 'T', 100, 'chips', null, 'a5');
+  eq(ledger.balance('seat:T:a', 'chips'), 1300);
+  // a seat funded from Play $: a bank (or default) rebuy is the mismatch
+  svc.buyIn('b', 'T', 400, 'chips', 'play', 'b1'); svc.buyIn('b', 'T', 100, 'chips', 'play', 'b2');
+  const e2 = throwsCode(() => svc.buyIn('b', 'T', 100, 'chips', null, 'b3'), 'fund_mismatch'); eq(e2.details.have, 'play'); eq(e2.details.want, 'chips');
+  throwsCode(() => svc.buyIn('b', 'T', 100, 'chips', 'chips', 'b4'), 'fund_mismatch');
+  eq(ledger.balance('seat:T:b', 'chips'), 500);
+  // a different table is a different seat: the other fund is fine there
+  svc.buyIn('b', 'T9', 100, 'chips', 'chips', 'b5');
+  // switch at 0: b loses everything in a hand, then comes back through the bank
+  svc.settleHand('T', 1, 'chips', { committed: { a: 500, b: 500 }, payouts: { a: 1000 }, returned: {} });
+  eq(ledger.balance('seat:T:b', 'chips'), 0);
+  svc.buyIn('b', 'T', 300, 'chips', 'chips', 'b6');
+  eq(svc.seatFund('T', 'b', 'chips'), 'chips');
+  const bankBefore = ledger.balance('bank:b', 'chips');
+  svc.cashOut('b', 'T', 100, 'chips', 'chips', 'cb');
+  eq(ledger.balance('bank:b', 'chips'), bankBefore + 100);
+  // and the old fund is now the mismatch
+  throwsCode(() => svc.buyIn('b', 'T', 10, 'chips', 'play', 'b7'), 'fund_mismatch');
+  // switch after a full cash-out, and bootRecover returns to the NEW fund
+  svc.cashOut('b', 'T', 200, 'chips', 'chips', 'cb2');
+  svc.buyIn('b', 'T', 250, 'chips', 'play', 'b8'); eq(svc.seatFund('T', 'b', 'chips'), 'play');
+  const playBefore = ledger.balance('play:b', 'play');
+  const rep = svc.bootRecover('boot-x');
+  eq(ledger.balance('play:b', 'play'), playBefore + 250, 'recovered to Play $, the new fund');
+  ok(rep.seats.some(x => x.key === 'b' && x.fund === 'play'));
+  booksOk(ledger);
+});
+
+t('a switched fund survives a restart (read from the ledger) and cashOut honours the caller fund', () => {
+  const e = env(); const { svc } = e;
+  svc.ensureAccount('a'); svc.buyIn('a', 'T', 100, 'chips', 'chips', 'x'); svc.cashOut('a', 'T', 100, 'chips', 'chips', 'y');
+  svc.buyIn('a', 'T', 100, 'chips', 'play', 'z'); e.ledger.close();
+  const e2 = env(e.f); eq(e2.svc.seatFund('T', 'a', 'chips'), 'play');
+  throwsCode(() => e2.svc.buyIn('a', 'T', 5, 'chips', 'chips', 'w'), 'fund_mismatch');
+  e2.svc.buyIn('a', 'T', 5, 'chips', 'play', 'w2'); e2.svc.cashOut('a', 'T', 105, 'chips', 'play', 'out');
+  eq(e2.ledger.balance('play:a', 'play'), START_PLAY);
 });
 
 t('settleHand: payouts, uncalled return, odd chips; conserves; one ledger line', () => {

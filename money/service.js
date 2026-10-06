@@ -56,6 +56,12 @@ function createService(ledger, opts = {}) {
     needStr(key, 'bad_key', 'key'); needStr(tableId, 'bad_table', 'tableId'); needCur(tableCur); needRef(ref);
     fund = needFund(fund, tableCur);
     const seat = seatName(tableId, key), reason = 'buyin:' + fund;
+    // One fund per seat while it holds chips (today's server.js rebuy rule); the fund may change only from a 0 stack.
+    // A retry of a buy-in already in the ledger is allowed through so it answers dup, not fund_mismatch.
+    if (!ledger.has(ref) && ledger.balance(seat, tableCur) > 0) {
+      const have = seatFund(tableId, key, tableCur);
+      if (have !== fund) throw new MoneyError('fund_mismatch', { have, want: fund });
+    }
     if (fund === tableCur) return ledger.transfer(store(fund, key), seat, amount, tableCur, reason, ref);
     return ledger.batch([
       { from: store(fund, key), to: 'fx:' + fund, amount, cur: fund },

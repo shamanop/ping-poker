@@ -9,6 +9,7 @@ let pass = 0, fail = 0;
 function t(name, fn) {
   try { fn(); pass++; } catch (e) { fail++; console.log('FAIL ' + name + ': ' + (e && e.stack ? e.stack.split('\n').slice(0, 3).join(' | ') : e)); }
 }
+const deq = (a, b, m) => eq(JSON.stringify(a), JSON.stringify(b), m || 'deep');
 const eq = (a, b, m) => { if (a !== b) throw new Error((m || 'eq') + ': got ' + JSON.stringify(a) + ' want ' + JSON.stringify(b)); };
 const ok = (c, m) => { if (!c) throw new Error(m || 'not ok'); };
 function throwsCode(fn, code) {
@@ -19,7 +20,8 @@ function throwsCode(fn, code) {
 const dir = fs.mkdtempSync(path.join(process.env.MONEY_TMP || os.tmpdir(), 'money-ledger-'));
 let n = 0;
 const fresh = () => path.join(dir, 'm' + (++n) + '.jsonl');
-const mk = (f) => open(f || fresh(), { now: () => 1000 });
+const quiet = () => {};
+const mk = (f) => open(f || fresh(), { now: () => 1000, log: quiet });
 
 t('amount must be a positive safe integer', () => {
   const l = mk();
@@ -298,9 +300,99 @@ t('a rejected write does not consume its ref; closed ledger refuses writes', () 
   throwsCode(() => l.transfer('mint:signup', 'bank:a', 5, 'chips', 'signup', 'after-close'), 'closed');
 });
 
+t('fsync: default is every write; batch and none are options', () => {
+  const real = fs.fsyncSync; let calls = 0;
+  fs.fsyncSync = (fd) => { calls++; return real(fd); };
+  try {
+    const run = (opts) => {
+      const l = open(fresh(), { log: quiet, ...opts }); calls = 0;
+      l.transfer('mint:signup', 'bank:a', 5, 'chips', 'x', 'a'); const afterT = calls;
+      l.batch([{ from: 'bank:a', to: 'seat:T:a', amount: 5, cur: 'chips' }], 'b', 'x');
+      const out = [afterT, calls - afterT]; eq(l.balance('seat:T:a', 'chips'), 5); l.close(); return out;
+    };
+    deq(run({}), [1, 1], 'default: transfer and batch both fsynced');
+    deq(run({ fsync: 'all' }), [1, 1]); deq(run({ fsync: 'batch' }), [0, 1]); deq(run({ fsync: 'none' }), [0, 0]);
+  } finally { fs.fsyncSync = real; }
+});
+
+const lockOf = (f) => { try { return fs.readFileSync(f + '.lock', 'utf8').trim(); } catch { return null; } };
+const nLines = (f) => fs.readFileSync(f, 'utf8').split('\n').filter(Boolean).length;
+
+t('fence: second opener wins, the first gets lost_lock and its file stays untouched', () => {
+  const f = fresh(); const a = mk(f);
+  a.transfer('mint:signup', 'bank:a', 10, 'chips', 'signup', 'a1');
+  const logs = []; const b = open(f, { now: () => 1, log: (m) => logs.push(m) });
+  eq(logs.length, 1, 'replacing a lock is logged'); ok(/replaced a lock/.test(logs[0]));
+  eq(b.balance('bank:a', 'chips'), 10);
+  b.transfer('mint:signup', 'bank:b', 20, 'chips', 'signup', 'b1');
+  throwsCode(() => a.transfer('mint:signup', 'bank:a', 5, 'chips', 'signup', 'a2'), 'lost_lock');
+  throwsCode(() => a.batch([{ from: 'mint:signup', to: 'bank:a', amount: 5, cur: 'chips' }], 'a3', 'x'), 'lost_lock');
+  eq(nLines(f), 2, 'only a1 and b1 on disk'); ok(!a.has('a2'), 'refused write left memory alone'); eq(a.balance('bank:a', 'chips'), 10);
+  // sticky: even if the lock were handed back, the fenced writer stays refused
+  fs.writeFileSync(f + '.lock', 'garbage'); b.close();
+  throwsCode(() => a.transfer('mint:signup', 'bank:a', 5, 'chips', 'signup', 'a4'), 'lost_lock');
+  // a duplicate is not a write, a read is fine
+  eq(a.transfer('mint:signup', 'bank:a', 10, 'chips', 'signup', 'a1').dup, true);
+  a.close();
+  const c = mk(f); eq(c.lastId, 2); eq(c.balance('bank:b', 'chips'), 20); eq(c.balance('bank:a', 'chips'), 10);
+  const ck = c.check(); ok(ck.chips.ok && ck.play.ok);
+  c.transfer('mint:signup', 'bank:c', 1, 'chips', 'signup', 'c1'); eq(c.lastId, 3);
+});
+
+t('fence: the lock file belongs to the newest opener; close removes only its own', () => {
+  const f = fresh(); const a = mk(f); const ta = lockOf(f); ok(ta && ta.length >= 16);
+  const b = mk(f); const tb = lockOf(f); ok(tb !== ta, 'new token');
+  a.close(); eq(lockOf(f), tb, 'a closing does not remove b\'s lock');
+  b.close(); eq(lockOf(f), null, 'b removes its own lock');
+  const c = mk(f); ok(lockOf(f)); c.close();
+});
+
+t('fence: a stale lock never blocks a boot (and a missing lock fences the writer)', () => {
+  const f = fresh(); fs.writeFileSync(f + '.lock', 'left-by-a-crashed-process\n');
+  const logs = []; const l = open(f, { log: (m) => logs.push(m) });
+  eq(logs.length, 1); l.transfer('mint:signup', 'bank:a', 1, 'chips', 'x', 'r1');
+  fs.unlinkSync(f + '.lock');
+  throwsCode(() => l.transfer('mint:signup', 'bank:a', 1, 'chips', 'x', 'r2'), 'lost_lock');
+  eq(nLines(f), 1); l.close();
+  const l2 = mk(f); eq(l2.balance('bank:a', 'chips'), 1);
+});
+
+t('fence: a foreign append makes the next write throw foreign_write, then it stays refused', () => {
+  for (const foreign of ['torn', 'valid-line', 'garbage-line']) {
+    const f = fresh(); const a = mk(f);
+    a.transfer('mint:signup', 'bank:a', 10, 'chips', 'signup', 'a1');
+    const size = fs.statSync(f).size;
+    if (foreign === 'torn') fs.appendFileSync(f, '{"id":2,"ts":1,"fro');
+    else if (foreign === 'valid-line') fs.appendFileSync(f, JSON.stringify({ id: 2, ts: 1, from: 'mint:signup', to: 'bank:z', amount: 7, cur: 'chips', reason: 'x', ref: 'foreign' }) + '\n');
+    else fs.appendFileSync(f, 'not json at all\n');
+    const before = fs.statSync(f).size;
+    const e = throwsCode(() => a.transfer('mint:signup', 'bank:a', 5, 'chips', 'signup', 'a2'), 'foreign_write');
+    eq(e.details.expected, size); eq(e.details.have, before);
+    throwsCode(() => a.transfer('mint:signup', 'bank:a', 5, 'chips', 'signup', 'a3'), 'foreign_write');
+    eq(fs.statSync(f).size, before, 'the fenced writer wrote nothing');
+    a.close();
+    if (foreign === 'garbage-line') { throwsCode(() => mk(f), 'corrupt'); fs.writeFileSync(f, fs.readFileSync(f, 'utf8').split('\n')[0] + '\n'); }
+    const b = mk(f); const ck = b.check(); ok(ck.chips.ok && ck.play.ok, 'books ok after ' + foreign);
+    eq(b.balance('bank:a', 'chips'), 10); eq(b.balance('bank:z', 'chips'), foreign === 'valid-line' ? 7 : 0);
+    b.transfer('mint:signup', 'bank:a', 5, 'chips', 'signup', 'a2'); eq(b.balance('bank:a', 'chips'), 15); b.close();
+  }
+});
+
+t('fence: a shrunk file is foreign too', () => {
+  const f = fresh(); const a = mk(f);
+  a.transfer('mint:signup', 'bank:a', 10, 'chips', 'signup', 'a1'); a.transfer('mint:signup', 'bank:a', 10, 'chips', 'signup', 'a2');
+  fs.truncateSync(f, 20);
+  throwsCode(() => a.transfer('mint:signup', 'bank:a', 5, 'chips', 'signup', 'a3'), 'foreign_write');
+});
+
+t('fence: a corrupt file does not leave our lock behind', () => {
+  const f = fresh(); fs.writeFileSync(f, 'junk\n{"id":1}\n');
+  throwsCode(() => mk(f), 'corrupt'); eq(lockOf(f), null);
+});
+
 t('fsync option does not change behaviour', () => {
   for (const mode of ['all', 'none', 'batch']) {
-    const l = open(fresh(), { fsync: mode });
+    const l = open(fresh(), { fsync: mode, log: quiet });
     l.transfer('mint:signup', 'bank:a', 5, 'chips', 'x', 'a'); l.batch([{ from: 'bank:a', to: 'seat:T:a', amount: 5, cur: 'chips' }], 'b', 'x');
     eq(l.balance('seat:T:a', 'chips'), 5);
   }
