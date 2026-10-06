@@ -631,6 +631,11 @@ function initBust() {
   $('btn-leave').addEventListener('click', () => {
     if (window.PingGame.isIn() && window.Lobby) leaveToLobby(); else location.reload();
   });
+  // The visible Leave control (Q08): #btn-home is hidden with the brand lockup. Stack goes back to the bank; in a live hand the seat folds and is paid out after it.
+  $('btn-leave-table').addEventListener('click', () => {
+    if (!confirm('Leave the table? Your stack goes back to your bank. If you are in the hand you fold it.')) return;
+    if (window.PingGame.isIn() && window.Lobby) leaveToLobby(); else location.href = location.pathname;
+  });
   $('btn-home').addEventListener('click', () => {
     if (!confirm('Leave the table and go back to the home screen?')) return;
     if (window.PingGame.isIn() && window.Lobby) leaveToLobby(); else location.href = location.pathname;
