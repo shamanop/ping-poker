@@ -85,3 +85,8 @@ body.sh-on { --sh-top: 44px; --sh-dock: 52px; }
 .pot-num { font-size: 12px; }
 .bet-amt, .puck { font-size: 11px; }
 .panel__close { font-size: 18px; }
+.seat-bubble { font-size: 12px; }
+.sd-net, .showdown-pot small { font-size: 11px; }
+.seat-tag { font-size: 12px; }
+.bank-close { font-size: 16px; }
+#game-screen { font-size: 12px; }   /* unclassed text inherits this instead of 14 x 0.5 */

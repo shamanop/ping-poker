@@ -60,7 +60,7 @@
 .bp-stats { grid-area: stats; display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--p8); margin-top: var(--p8); padding-top: var(--p6); border-top: 1px solid var(--line); }
 .bp-stats div { display: flex; flex-direction: column; line-height: 1.1; min-width: 0; }
 .bp-stats label { font-size: var(--fs-1); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-dim); }
-.bp-stats b { font-family: var(--f-display); font-weight: 400; font-size: var(--p18); letter-spacing: .04em; color: var(--ink); white-space: nowrap; }
+.bp-stats b { font-family: var(--f-display); font-weight: 400; font-size: max(var(--p18), 14px); letter-spacing: .04em; color: var(--ink); white-space: nowrap; }
 .pos { color: #7FD3A0 !important; }
 .neg { color: var(--danger-ink) !important; }
 
@@ -100,7 +100,7 @@
 .fe .k.rebuy { color: #E2674F; }
 .fe .k.cashout { color: #7FD3A0; }
 .fe .k.adjust { color: var(--brass-lt); }
-.fe .amt { font-family: var(--f-display); font-size: var(--p16); letter-spacing: .04em; color: var(--ink); }
+.fe .amt { font-family: var(--f-display); font-size: max(var(--p16), 12px); letter-spacing: .04em; color: var(--ink); }
 
 .bank-empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--p6); text-align: center; color: var(--ink-dim); font-size: var(--fs-3); padding: var(--p16); }
 .bank-empty b { font-family: var(--f-display); font-weight: 400; font-size: var(--p20); letter-spacing: .1em; color: var(--brass-lt); }

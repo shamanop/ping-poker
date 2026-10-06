@@ -176,7 +176,12 @@ body.sh-on:has(#game-screen.active) .sh-top { display: none; }
 .pot-num { font-size: 12px; }   /* UI wave 1 audit: nothing on the felt under 11 px */
 .bet-amt { font-size: 11px; }
 .puck { font-size: 11px; }
-.seat-tag { position: absolute; z-index: 5; right: -4px; top: -10px; width: 22px; height: 22px; font-size: 11px; border-width: 1px; }   /* the blind chip sits on the plate corner so the name keeps its width */
+.seat-bubble { font-size: 12px; }
+.sd-net, .showdown-pot small { font-size: 11px; }
+.seat-tag { font-size: 12px; }
+.bank-close { font-size: 16px; }
+#game-screen { font-size: 12px; }   /* unclassed text inherits this instead of 14 x 0.5 */
+.seat-tag { position: absolute; z-index: 5; right: -4px; top: -10px; width: 22px; height: 22px; font-size: 12px; border-width: 1px; }   /* the blind chip sits on the plate corner so the name keeps its width */
 .seat.hero { translate: 0 8px; }   /* the hero plate drops below the hole cards instead of covering their bottom edge (Q02 leftover) */
 .seat-status.secs { font-size: 12px; }
 .hero-label { width: 90px; font-size: 11px; }

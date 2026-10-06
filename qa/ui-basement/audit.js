@@ -32,7 +32,7 @@
     const fs = parseFloat(cs.fontSize), name = (e.id ? '#' + e.id : '') + '.' + String(e.className && e.className.baseVal !== undefined ? e.className.baseVal : e.className).split(/\s+/).filter(Boolean).slice(0, 3).join('.');
     const txt = t.nodeValue.trim().slice(0, 28);
     const act = !!e.closest(ACT), need = act ? 12 : 11;
-    if (fs < need - 0.05) out.small.push({ name, fs: +fs.toFixed(1), need, txt });
+    if (fs < need - 0.05) out.small.push({ name, par: String(e.parentElement && e.parentElement.className || '').split(/\s+/).slice(0, 2).join('.') + '<' + String(e.parentElement && e.parentElement.parentElement && e.parentElement.parentElement.className || '').split(/\s+/).slice(0, 2).join('.'), fs: +fs.toFixed(1), need, txt });
     if (e.closest('button:disabled, [aria-disabled="true"], .act:disabled')) continue;
     // background: composite ancestors, bottom up
     let fg = parse(cs.color) || { r: 255, g: 255, b: 255, a: 1 }, layers = [], img = false;
