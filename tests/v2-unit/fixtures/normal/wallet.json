@@ -1,0 +1,27 @@
+{
+ "chris": {
+  "play": 1000000,
+  "lastTopUp": null,
+  "byGame": {}
+ },
+ "raj": {
+  "play": 742500,
+  "lastTopUp": 1790000000000,
+  "byGame": {}
+ },
+ "pia": {
+  "play": 250,
+  "lastTopUp": null,
+  "byGame": {}
+ },
+ "sam": {
+  "play": 9999999,
+  "lastTopUp": null,
+  "byGame": {}
+ },
+ "lee": {
+  "play": 1000000,
+  "lastTopUp": null,
+  "byGame": {}
+ }
+}

@@ -1,0 +1,21 @@
+{
+ "chris": {
+  "play": -1,
+  "lastTopUp": null,
+  "byGame": {}
+ },
+ "raj": {
+  "play": 99.99,
+  "lastTopUp": null,
+  "byGame": {}
+ },
+ "pia": {
+  "play": "5"
+ },
+ "sam": {
+  "play": 0,
+  "lastTopUp": null,
+  "byGame": {}
+ },
+ "lee": "x"
+}

@@ -1,0 +1,71 @@
+{
+ "version": 1,
+ "accounts": {
+  "chris": {
+   "id": "a_63687269",
+   "key": "chris",
+   "display": "Chris",
+   "avatar": "a01",
+   "kdf": null,
+   "salt": null,
+   "pinHash": null,
+   "claimed": true,
+   "isAdmin": true,
+   "createdAt": 1790000000000,
+   "lastLoginAt": 1790000100000,
+   "prefs": {
+    "currency": "auto",
+    "sound": true
+   },
+   "stats": {},
+   "sessions": [],
+   "legacy": {
+    "bankKey": "chris"
+   }
+  },
+  "raj": {
+   "id": "a_72616a00",
+   "key": "raj",
+   "display": "Raj",
+   "avatar": "a01",
+   "kdf": null,
+   "salt": null,
+   "pinHash": null,
+   "claimed": true,
+   "isAdmin": false,
+   "createdAt": 1790000000000,
+   "lastLoginAt": 1790000100000,
+   "prefs": {
+    "currency": "auto",
+    "sound": true
+   },
+   "stats": {},
+   "sessions": [],
+   "legacy": {
+    "bankKey": "raj"
+   }
+  },
+  "pia": {
+   "id": "a_70696100",
+   "key": "pia",
+   "display": "Pia",
+   "avatar": "a01",
+   "kdf": null,
+   "salt": null,
+   "pinHash": null,
+   "claimed": true,
+   "isAdmin": false,
+   "createdAt": 1790000000000,
+   "lastLoginAt": 1790000100000,
+   "prefs": {
+    "currency": "auto",
+    "sound": true
+   },
+   "stats": {},
+   "sessions": [],
+   "legacy": {
+    "bankKey": "pia"
+   }
+  }
+ }
+}
