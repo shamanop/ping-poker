@@ -1,0 +1,58 @@
+<!doctype html><meta charset="utf-8">
+<style>
+@font-face{font-family:Alfa;src:url(AlfaSlabOne-Regular.woff2)}
+@font-face{font-family:Cour;src:url(CourierPrime-Bold.woff2)}
+*{box-sizing:border-box;margin:0;padding:0}
+body{width:540px;height:960px;overflow:hidden;background:#0b1626;font-family:Alfa;color:#f6e8c4;position:relative}
+#bar{position:absolute;inset:0 0 auto 0;height:24px;background:#0b1626;border-bottom:2px solid #e9b23a;font:700 11px Cour;display:flex;align-items:center;gap:10px;padding:0 10px;z-index:9}
+#bar .pill{border:1.5px solid #e9b23a;border-radius:5px;padding:1px 8px;color:#f6e8c4}
+#bar .pill b{color:#e9b23a}
+#scene{position:absolute;left:0;top:24px;width:540px;height:300px;background:url(scene.jpg) center/cover;}
+#scene:after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(11,22,38,.0) 62%,rgba(11,22,38,.55) 100%),radial-gradient(120% 90% at 40% 60%,transparent 55%,rgba(8,14,26,.55) 100%)}
+#title{position:absolute;left:-2px;top:27px;width:184px;transform:rotate(-5deg);z-index:5;filter:drop-shadow(0 5px 0 rgba(0,0,0,.45)) drop-shadow(0 10px 14px rgba(0,0,0,.6))}
+#bub{position:absolute;right:10px;top:236px;z-index:6;background:#f6e8c4;color:#2a160b;font:700 15px Cour;padding:9px 14px;border-radius:14px;border:3px solid #1a0e08;box-shadow:0 4px 0 #1a0e08}
+#bub:before{content:"";position:absolute;left:-16px;top:8px;border:9px solid transparent;border-right-color:#1a0e08}
+#bub:after{content:"";position:absolute;left:-10px;top:10px;border:7px solid transparent;border-right-color:#f6e8c4}
+#rib{position:absolute;left:8px;right:8px;top:308px;height:32px;z-index:7;background:linear-gradient(#d8402e,#b02a1d);border:3px solid #f6e8c4;outline:3px solid #1a0e08;display:flex;align-items:center;justify-content:space-between;padding:0 14px;font-size:16px;letter-spacing:.5px;text-shadow:0 2px 0 #5c120b}
+#rib .r{color:#ffd058;font-size:13px}
+#mon{position:absolute;left:-12px;top:336px;width:564px;height:486px;z-index:4}
+#glass{position:absolute;left:76px;top:416px;width:398px;height:324px;z-index:3;border-radius:14px;
+ background:radial-gradient(90% 80% at 50% 45%,#1d3f66 0%,#132a47 55%,#0a1728 100%);overflow:hidden}
+#glass:before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(0deg,rgba(255,255,255,.035) 0 1px,transparent 1px 3px)}
+#glass:after{content:"";position:absolute;inset:0;box-shadow:inset 0 0 34px 10px rgba(0,0,0,.65);border-radius:14px}
+#grid{position:absolute;left:79px;top:419px;width:392px;height:318px;z-index:5;display:grid;grid-template-columns:repeat(6,1fr);grid-template-rows:repeat(5,1fr)}
+#grid div{position:relative;border-right:1px solid rgba(160,200,255,.07);border-bottom:1px solid rgba(160,200,255,.07)}
+#grid img{position:absolute;left:50%;top:50%;width:69px;height:69px;transform:translate(-50%,-50%);filter:drop-shadow(0 3px 2px rgba(0,0,0,.55))}
+#win{position:absolute;left:150px;top:758px;width:240px;height:46px;z-index:6;background:linear-gradient(#150a06,#2a140c);border:3px solid #1a0e08;border-radius:8px;box-shadow:inset 0 3px 8px #000,0 2px 0 rgba(255,240,200,.5);display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+#win .l{font-size:14px;color:#d8402e;letter-spacing:2px}
+#win .v{font-size:28px;color:#ffd058;text-shadow:0 0 10px rgba(255,170,40,.7),0 2px 0 #5a2a00}
+#hud{position:absolute;left:0;right:0;top:812px;bottom:0;background:linear-gradient(rgba(9,16,28,.78),rgba(9,16,28,.9)),url(desk.jpg) center 30%/cover;border-top:3px solid #1a0e08;z-index:2}
+.m{position:absolute;top:842px;z-index:8;text-shadow:0 3px 0 #000,0 0 8px #000}
+.m .l{font-size:11px;letter-spacing:2px;color:#ffd058}
+.m .v{font-size:27px;line-height:1.05}
+#bal{left:14px}#bet{right:14px;text-align:right}
+#bet .row{display:flex;align-items:center;gap:8px;justify-content:flex-end}
+.sq{width:34px;height:34px;border-radius:7px;background:linear-gradient(#f4e6bf,#cdb785);border:3px solid #1a0e08;box-shadow:0 3px 0 #1a0e08;color:#2a160b;font:26px/26px Alfa;text-align:center;text-shadow:none}
+#spin{position:absolute;left:204px;top:800px;width:132px;z-index:9;filter:drop-shadow(0 6px 6px rgba(0,0,0,.7))}
+#spinT{position:absolute;left:204px;top:829px;width:132px;text-align:center;z-index:10;font-size:22px;color:#fff3d6;text-shadow:0 2px 0 #6b150c,0 0 6px #6b150c;transform:rotate(-7deg)}
+#keys{position:absolute;left:10px;right:10px;top:914px;height:34px;z-index:8;display:flex;gap:6px}
+.k{flex:1;border-radius:7px;background:linear-gradient(#f4e6bf,#cdb785);border:3px solid #1a0e08;box-shadow:0 3px 0 #1a0e08;color:#2a160b;font-size:12.5px;display:flex;align-items:center;justify-content:center;letter-spacing:.5px}
+.k.buy{flex:2.1;background:linear-gradient(#e2472f,#b02a1d);color:#fff3d6;flex-direction:column;line-height:1;font-size:13.5px;text-shadow:0 2px 0 #5c120b}
+.k.buy small{font:700 9.5px Cour;color:#ffd058;text-shadow:none;margin-top:2px}
+.k.s{flex:.6}
+</style>
+<div id="bar"><span class="pill"><b>Play $</b> &nbsp; Chips</span><span>Practice (no wallet)</span></div>
+<div id="scene"></div><img id="title" src="title.png">
+<div id="bub">Gatekeeper got me.</div>
+<div id="rib"><span>5+ TOUCHING = WIN</span><span class="r">MAX 10,000X</span></div>
+<div id="glass"></div><div id="grid"></div><img id="mon" src="bezel.png">
+<div id="win"><span class="l">WIN</span><span class="v">$0.00</span></div>
+<div id="hud"></div>
+<div class="m" id="bal"><div class="l">PRACTICE</div><div class="v">$999.00</div></div>
+<img id="spin" src="sym/spin_raw.png"><div id="spinT">SPIN</div>
+<div class="m" id="bet"><div class="l">BET</div><div class="row"><span class="sq">-</span><span class="v">$1.00</span><span class="sq">+</span></div></div>
+<div id="keys"><div class="k buy">BUY BONUS<small>from $2.90</small></div><div class="k">AUTO</div><div class="k">TURBO</div><div class="k s">i</div><div class="k">SFX</div><div class="k">MUSIC</div></div>
+<script>
+const B=['cups','mug','mug','ball','mug','mug','cashwad','mug','headset','closer','note','note','mug','headset','note','phone','mug','note','cups','note','note','rx','ball','pile','bell','can','cash','can','can','can'];
+document.getElementById('grid').innerHTML=B.map(n=>`<div><img src="sym/${n}.png"></div>`).join('');
+</script>
