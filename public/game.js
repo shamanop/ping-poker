@@ -1129,24 +1129,6 @@ function renderSeats(gs) {
   }).join('');
   el.innerHTML = html;
 
-  if (window.PingJuice) el.querySelectorAll('.seat:not(.empty) .seat-pill').forEach(pill => {
-    const w = PingJuice.charm(pill, { side: 'right', size: Math.round(81 * state.u), offset: 2, overlap: Math.round(22 * state.u) });
-    if (!w) return;
-    if (state.charmDropped) w.classList.remove('drop');
-    const seat = pill.parentElement;
-    if (seat.classList.contains('upper')) { w.classList.add('above'); w.style.top = 'auto'; w.style.bottom = `calc(100% - ${Math.round(22 * state.u)}px)`; }
-    if (seat.classList.contains('active')) w.classList.add('turn');
-    if (seat.classList.contains('winner')) {
-      w.classList.add('win');
-      const key = state.gameState.handNum + ':' + seat.dataset.playerIdx;
-      if (!state.charmBursts?.[key]) {
-        (state.charmBursts = state.charmBursts || {})[key] = 1;
-        const r = pill.getBoundingClientRect();
-        PingJuice.burst('glitter', r.right - 10 * state.u, r.bottom, { size: 120 * state.u, ms: 800, rotate: false });
-      }
-    }
-  });
-  state.charmDropped = true;
   gs.players.forEach((p, i) => {
     if (prevChipsMap[i] !== undefined && prevChipsMap[i] !== p.chips) {
       const c = el.querySelector(`.seat[data-player-idx="${i}"] .seat-chips`);
