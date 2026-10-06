@@ -13,7 +13,10 @@ const fs = require('fs');
 const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
 const Eng = require('./coldcall-engine.js');
 
-const MAX_THREADS = 6, CHUNK = 1000000;
+const MAX_THREADS = +process.env.CC_MAX_THREADS || 6, CHUNK = 1000000;   // CC_MAX_THREADS raises the ceiling on a bigger machine (default 6)
+// round win / bet bands (plain mode); lower edge inclusive; edges in tenths of the bet. band 0 = no win
+const BAND_EDGES = [1, 10, 20, 50, 200, 1000, 10000], BAND_NAMES = ['0', '<1', '1-2', '2-5', '5-20', '20-100', '100-1000', '1000+'];
+const bandOf = (w) => { if (w <= 0) return 0; let b = 1; while (b < BAND_EDGES.length && w >= BAND_EDGES[b]) b++; return b; };
 const seedOf = (base, k) => { let z = (base + Math.imul(k + 1, 0x9E3779B9)) | 0; z = Math.imul(z ^ (z >>> 16), 0x85EBCA6B); z = Math.imul(z ^ (z >>> 13), 0xC2B2AE35); return (z ^ (z >>> 16)) >>> 0; };
 const mk = () => ({ n: 0, sum: 0, sq: 0 });
 const add = (a, x) => { a.n++; a.sum += x; a.sq += x * x; };
@@ -54,7 +57,7 @@ if (!isMainThread) {
     }
     parentPort.postMessage(out);
   } else {
-    const out = { total: mk(), cluster: mk(), phone: mk(), bonus: [mk(), mk(), mk(), mk()], nBonus: [0, 0, 0, 0], upg: 0, hitAny: 0, hitBase: 0, maxT: 0, capHits: 0,
+    const out = { total: mk(), cluster: mk(), phone: mk(), bonus: [mk(), mk(), mk(), mk()], nBonus: [0, 0, 0, 0], upg: 0, hitAny: 0, hitBase: 0, hitBaseAny: 0, bandN: new Array(8).fill(0), bandSum: new Array(8).fill(0), maxT: 0, capHits: 0,
       capByKind: [0, 0, 0, 0], baseWinSpins: 0, baseCascades: 0, phoneBase: 0, phoneBaseLeads: 0, phoneBaseCloses: 0, over100: 0, over1000: 0, over5000: 0, bells2: 0, bonusSpins: 0, bonusCascades: 0 };
     for (const k of chunks) {
       const rng = Eng.rngFrom(seedOf(baseSeed, k));
@@ -64,6 +67,8 @@ if (!isMainThread) {
         add(out.total, w); add(out.cluster, r.clusterTenths); add(out.phone, r.phoneTenths);
         if (r.bonusKind) { add(out.bonus[r.bonusKind], r.bonusTenths); out.nBonus[r.bonusKind]++; if (r.upgraded) out.upg++; out.bonusSpins += r.bonusSpins; out.bonusCascades += r.cascades - r.baseCascades; }
         if (w > 0) out.hitAny++;
+        if (r.clusterTenths + r.phoneTenths > 0) out.hitBaseAny++;
+        { const bd = bandOf(w); out.bandN[bd]++; out.bandSum[bd] += w; }
         if (r.clusterTenths > 0) { out.hitBase++; out.baseWinSpins++; out.baseCascades += r.baseCascades; }
         if (r.phoneFired) { out.phoneBase++; out.phoneBaseLeads += r.leads; out.phoneBaseCloses += r.closes; }
         if (r.bells === 2) out.bells2++;
@@ -160,9 +165,10 @@ if (!isMainThread) {
     const contrib = (a) => a.sum / total / 10 * 100;
     const o = {
       mode, spins: total, seed, secs, rtpPct: tot.mean * 100, rtpCi: tot.se * 196,
-      hitAnyPct: sumP('hitAny') / total * 100, hitBasePct: sumP('hitBase') / total * 100,
+      hitAnyPct: sumP('hitAny') / total * 100, hitBasePct: sumP('hitBase') / total * 100, hitBaseAnyPct: sumP('hitBaseAny') / total * 100,
+      bands: BAND_NAMES.map((name, i) => ({ band: name, pctSpins: sumArr('bandN', i) / total * 100, pctRtp: sumArr('bandSum', i) / total / 10 * 100, spins: sumArr('bandN', i) })),
       oneIn: { bonus1: nb[1] ? total / nb[1] : null, bonus2: nb[2] ? total / nb[2] : null, bonus3: nb[3] ? total / nb[3] : null, any: nAny ? total / nAny : null },
-      avg: { bonus1: bonusMean(1), bonus2: bonusMean(2), bonus3: bonusMean(3) }, upgradedOfBonus1: nb[1] ? sumP('upg') / nb[1] : 0,
+      avg: { bonus1: bonusMean(1), bonus2: bonusMean(2), bonus3: bonusMean(3), any: nAny ? (nb[1] * bonusMean(1) + nb[2] * bonusMean(2) + nb[3] * bonusMean(3)) / nAny : 0 }, bonusSharePct: (contrib(mergeAcc((p) => p.bonus[1])) + contrib(mergeAcc((p) => p.bonus[2])) + contrib(mergeAcc((p) => p.bonus[3]))) / (tot.mean * 100) * 100, upgradedOfBonus1: nb[1] ? sumP('upg') / nb[1] : 0,
       parts: { cluster: contrib(mergeAcc((p) => p.cluster)), basePhone: contrib(mergeAcc((p) => p.phone)), bonus1: contrib(mergeAcc((p) => p.bonus[1])), bonus2: contrib(mergeAcc((p) => p.bonus[2])), bonus3: contrib(mergeAcc((p) => p.bonus[3])) },
       phoneBase: { oneIn: sumP('phoneBase') ? total / sumP('phoneBase') : null, pctOfSpins: sumP('phoneBase') / total * 100, avgLeads: sumP('phoneBase') ? sumP('phoneBaseLeads') / sumP('phoneBase') : 0, avgCloses: sumP('phoneBase') ? sumP('phoneBaseCloses') / sumP('phoneBase') : 0 },
       avgCascadesPerWinningSpin: sumP('baseWinSpins') ? sumP('baseCascades') / sumP('baseWinSpins') : 0,
@@ -176,9 +182,10 @@ if (!isMainThread) {
     if (asJson) return console.log(JSON.stringify(o));
     console.log(`COLD CALL sim (plain full rounds): ${total} spins, seed ${seed}, ${threads} threads, ${f(secs, 1)}s (${f(total / secs / 1e6, 2)}M spins/s)`);
     console.log(`  total RTP        ${f(o.rtpPct, 3)}% +- ${f(o.rtpCi, 3)} (95%, plain; use --strat for the tight figure)`);
-    console.log(`  hit rate         any win ${f(o.hitAnyPct)}%   base cluster win ${f(o.hitBasePct)}%`);
+    console.log(`  hit rate         whole round (any win) ${f(o.hitAnyPct)}%   base-only (cluster or phone pay) ${f(o.hitBaseAnyPct)}%   base cluster win ${f(o.hitBasePct)}%`);
+    console.log('  bands (round win / bet)  ' + o.bands.map((b) => `${b.band}: ${f(b.pctSpins, 3)}% spins ${f(b.pctRtp, 2)}% RTP`).join(' | '));
     console.log(`  RTP by part      clusters(base) ${f(o.parts.cluster)}%  base phone ${f(o.parts.basePhone)}%  bonus1 ${f(o.parts.bonus1)}%  bonus2 ${f(o.parts.bonus2)}%  bonus3 ${f(o.parts.bonus3)}%`);
-    console.log(`  bonus triggers   bonus1 1 in ${o.oneIn.bonus1 ? f(o.oneIn.bonus1, 0) : 'n/a'} (avg ${f(o.avg.bonus1)}x, upgraded ${f(o.upgradedOfBonus1 * 100, 1)}%)  bonus2 1 in ${o.oneIn.bonus2 ? f(o.oneIn.bonus2, 0) : 'n/a'} (avg ${f(o.avg.bonus2)}x)  bonus3 ${o.oneIn.bonus3 ? '1 in ' + f(o.oneIn.bonus3, 0) : 'none'} (avg ${f(o.avg.bonus3)}x)  any 1 in ${o.oneIn.any ? f(o.oneIn.any, 1) : 'n/a'}`);
+    console.log(`  bonus triggers   bonus1 1 in ${o.oneIn.bonus1 ? f(o.oneIn.bonus1, 0) : 'n/a'} (avg ${f(o.avg.bonus1)}x, upgraded ${f(o.upgradedOfBonus1 * 100, 1)}%)  bonus2 1 in ${o.oneIn.bonus2 ? f(o.oneIn.bonus2, 0) : 'n/a'} (avg ${f(o.avg.bonus2)}x)  bonus3 ${o.oneIn.bonus3 ? '1 in ' + f(o.oneIn.bonus3, 0) : 'none'} (avg ${f(o.avg.bonus3)}x)  all bonuses avg ${f(o.avg.any)}x, ${f(o.bonusSharePct, 1)}% of RTP  any 1 in ${o.oneIn.any ? f(o.oneIn.any, 1) : 'n/a'}`);
     console.log(`  base phone       fires on ${f(o.phoneBase.pctOfSpins, 2)}% of spins (1 in ${o.phoneBase.oneIn ? f(o.phoneBase.oneIn, 1) : 'n/a'}), avg ${f(o.phoneBase.avgLeads, 1)} hot leads, ${f(o.phoneBase.avgCloses, 3)} closes`);
     console.log(`  cascades         ${f(o.avgCascadesPerWinningSpin, 2)} per winning base spin   bonus avg ${f(o.avgBonusSpins, 1)} spins`);
     console.log(`  max win          ${f(o.maxWinX, 1)}x   cap (${Eng.MAX_WIN_X}x) hit ${o.capHits} times${o.capOneIn ? ' (1 in ' + f(o.capOneIn, 0) + ')' : ''}`);
