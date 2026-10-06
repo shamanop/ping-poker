@@ -9,6 +9,7 @@ const crypto  = require('crypto');
 const { createLedger } = require('./ledger');
 const { createAccounts } = require('./accounts');
 const { createTables } = require('./tables');
+const { createRecap } = require('./recap');
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -22,6 +23,7 @@ const LEDGER_FILE     = process.env.LEDGER_FILE || path.join(DATA_DIR, 'ledger.j
 const ACCOUNTS_FILE   = process.env.ACCOUNTS_FILE || path.join(path.dirname(BANK_FILE), 'accounts.json');
 const TABLES_FILE     = process.env.TABLES_FILE || path.join(path.dirname(BANK_FILE), 'tables.json');
 const WALLET_FILE     = process.env.WALLET_FILE || path.join(path.dirname(BANK_FILE), 'wallet.json');
+const RECAP_FILE      = process.env.RECAP_FILE || path.join(path.dirname(BANK_FILE), 'recap-hands.jsonl');
 const BIGWINS_FILE    = process.env.BIGWINS_FILE || path.join(path.dirname(BANK_FILE), 'bigwins.json');
 const TURN_MS         = Number(process.env.TURN_MS) || 30000;
 const SMALL_BLIND     = 10;
@@ -318,6 +320,13 @@ function payOut(room, name, amount, opts = {}) {
   if (fund !== room.mode) { convertFunds(name, (meta && meta.key) || opts.key || bankKey(name), room.mode, fund, amount); if (room.mode === 'chips') out = getBalance(name); }
   return out;
 }
+const recap = createRecap({
+  file: RECAP_FILE, keyOf: bankKey, bootAt: Date.now(), ledger, getTables: () => tables, getRooms: () => rooms,
+  dispOf: k => (accounts.get(k) ? accounts.displayOf(k) : null),
+  avatarOf: k => (accounts.get(k) ? accounts.get(k).avatar : null),
+  picOf: k => (accounts.get(k) ? accounts.picUrl(accounts.get(k)) : null),
+  isAdmin: k => accounts.isAdmin(k),
+});
 const tables = createTables({
   io, rooms, ledger, accounts, file: TABLES_FILE, bankKey, makeRoom, makePlayer, getBalance, getPlay: k => (gameHooks && gameHooks.wallet ? gameHooks.wallet.get(k).play : Infinity), payIn, payOut, AV_EMOJI,
   dropSeat: (...a) => dropSeat(...a), broadcastRoomUpdate: r => broadcastRoomUpdate(r), broadcastGameState: r => broadcastGameState(r),
@@ -751,6 +760,7 @@ function startHand(room) {
   roomLog(room, `Dealer: ${players[room.dealerIdx].name}`);
   roomLog(room, `${players[sbIdx].name} posts SB ${room.sb}`);
   roomLog(room, `${players[bbIdx].name} posts BB ${room.bb}`);
+  recap.startHand(room, sbIdx, bbIdx);
 }
 
 function nextActiveIdx(room, fromIdx, steps) {
@@ -840,6 +850,7 @@ function processAction(room, playerIdx, action, amount) {
   }
   clearTurnTimeout(room); // only an accepted action cancels the pending auto-fold
   room.players[playerIdx].pre = null;
+  recap.onAction(room, p);
   clearStalePre(room);
 
   const remaining = room.players.filter(p => !p.folded && !p.sittingOut && p.connected);
@@ -969,6 +980,7 @@ function showdown(room) {
   if (room.handHistory.length > 10) room.handHistory.pop();
   const reveals = results.map(r => ({ name: r.player.name, handName: r.hand.name, cards: r.player.cards }));
   for (const r of reveals) (room.shown ||= {})[bankKey(r.name)] = [true, true];
+  recap.onShowdown(room, winnerList, reveals);
   io.to(room.id).emit('showdown_result', { winners: winnerList, pot: room.pot, reveals, nextMs: 5000 });
   room.pot = 0;
   scheduleNextHand(room, 5000);
@@ -979,6 +991,7 @@ function showdown(room) {
 function scheduleNextHand(room, delayMs = 5000) {
   if (process.env.HAND_DELAY_MS) delayMs = Number(process.env.HAND_DELAY_MS) || delayMs;
   clearHandTimers(room);
+  try { recap.endHand(room); } catch (e) { console.error('recap endHand failed:', e); }
   try { if (typeof social !== 'undefined') social.onHandEnd(room); } catch {}
   if (room.nightId && room.mode !== 'play') {
     const pot = room.players.reduce((sum, p) => sum + (p.handBet || 0), 0);
@@ -1447,6 +1460,7 @@ io.on('connection', socket => {
     const rec = shown[bankKey(me.name)] || [false, false];
     slots.forEach(i => { rec[i] = true; });
     shown[bankKey(me.name)] = rec;
+    try { recap.onShown(room, me.acct || bankKey(me.name), rec); } catch {}
     io.to(room.id).emit('cards_shown', { handNum: room.handNum, name: me.name, cards: me.cards.map((c, i) => (rec[i] ? c : null)) });
     roomLog(room, `${me.name} shows ${rec[0] && rec[1] ? 'both cards' : 'one card'}`);
   });
@@ -1456,6 +1470,7 @@ io.on('connection', socket => {
   });
 
   tables.register(socket, on, authed);
+  recap.attach(socket, on, authed);
   socket.on('table_create', () => { try { const k = socket.data.acct; if (k && [...tables.tables.values()].some(t => t.hostKey === k && t.id !== tables.LEGACY_ID && Date.now() - t.createdAt < 3000)) social.onAction(socket, 'host'); } catch {} });
 
   // ── join_game ─────────────────────────────────────────────────────────────
