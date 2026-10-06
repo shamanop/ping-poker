@@ -107,6 +107,13 @@ function createWallet(opts = {}) {
     const w = rec(acct); w.ledgerLimit = cents; save(); return view(w);
   }
 
+  function adminSet(acct, cents) {
+    if (!isCents(cents) || cents < 0) throw fail('amount', 'Bad amount');
+    const w = rec(acct); w.play = cents; save();
+    if (onChange) try { onChange(keyOf(acct), view(w)); } catch {}
+    return view(w);
+  }
+
   function topUp(acct) {
     const w = rec(acct);
     if (w.play >= TOPUP_BELOW) throw fail('not_needed', 'Top up is only for balances under 100');
@@ -118,7 +125,7 @@ function createWallet(opts = {}) {
     return view(w);
   }
 
-  return { spend, credit, get, stats, setLimit, topUp, flush, file, START_PLAY, DEFAULT_LIMIT };
+  return { spend, credit, get, stats, setLimit, topUp, adminSet, flush, file, START_PLAY, DEFAULT_LIMIT };
 }
 
 module.exports = { createWallet, START_PLAY, DEFAULT_LIMIT, TOPUP_BELOW, TOPUP_COOLDOWN_MS };

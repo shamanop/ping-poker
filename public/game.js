@@ -507,6 +507,11 @@ function bindSocket() {
   });
 
   s.on('balance_update', ({ balance }) => { state.myBalance = balance; });
+  s.on('money', (m) => {
+    if (!m || typeof m.bank !== 'number') return;
+    state.myBalance = m.bank;
+    const el = $('bank-amount'); if (el) { el.textContent = Money.fmt(m.bank); const d = $('bank-display'); if (d) d.classList.remove('hidden'); }
+  });
 
   s.on('room_joined', ({ roomId, playerIdx, balance }) => {
     state.roomId = roomId;

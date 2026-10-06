@@ -143,8 +143,35 @@ function adjustBank(name, delta, type, room, tableChips, extra) {
   }
   bank[k] = Math.max(0, bank[k] + delta);
   saveBank();
+  pushMoney(k);
   if (type) ledger.log(type, name, Math.abs(delta), bank[k], tableChips, room ? room.handNum : null, room ? room.id : null, extra);
   return bank[k];
+}
+
+let gameHooks = null;
+function atTableOf(k) {
+  let n = 0;
+  for (const r of rooms.values()) {
+    if (r.unit !== 'chips') continue;
+    for (const p of r.players) if (!p.isBot && bankKey(p.name) === k) n += p.chips + (r.status === 'playing' && r.pot > 0 ? (p.handBet || 0) : 0);
+  }
+  return n;
+}
+// One shape for everything a player's own money bar needs: chips bank + table stack, plus the Play$/Ledger$ wallet.
+function moneyView(key) {
+  const k = bankKey(key);
+  const bankChips = bank[k] === undefined ? null : bank[k];
+  const atTable = atTableOf(k);
+  const w = gameHooks && gameHooks.wallet ? gameHooks.wallet.get(k) : null;
+  return { bank: bankChips, atTable, chips: bankChips === null ? null : bankChips + atTable, wallet: w };
+}
+function pushMoney(key) {
+  const k = bankKey(key);
+  if (!k || !io || !io.sockets) return;
+  let view = null;
+  for (const s of io.sockets.sockets.values()) {
+    if (s.data && s.data.acct === k) { view = view || moneyView(k); s.emit('money', view); }
+  }
 }
 
 function bankSummary(roomId) {
@@ -1151,6 +1178,7 @@ io.on('connection', socket => {
     socket.data.sessionH = r.sessionH || crypto.createHash('sha256').update(r.token).digest('hex');
     socket.emit('auth_ok', withToken ? { account: accounts.publicAccount(a), token: r.token } : { account: accounts.publicAccount(a) });
     accounts.emit('auth', socket, a.key);
+    try { socket.emit('money', moneyView(a.key)); } catch {}
     try { socket.emit('account:stats', social.statsView(a.key)); socket.emit('achv:state', social.achvView(a.key)); } catch {}
   };
   const authed = () => { if (!socket.data.acct) { socket.emit('error', { message: 'Sign in first', code: 'auth' }); return null; } return socket.data.acct; };
@@ -1211,13 +1239,10 @@ io.on('connection', socket => {
     for (const s of io.sockets.sockets.values()) if (s.data && s.data.acct) online.add(s.data.acct);
     const rows = Object.values(accounts.all()).map(a => {
       const k = bankKey(a.key);
-      let atTable = 0;
-      for (const r of rooms.values()) {
-        if (r.unit !== 'chips') continue;
-        for (const p of r.players) if (!p.isBot && bankKey(p.name) === k) atTable += p.chips + (r.status === 'playing' && r.pot > 0 ? (p.handBet || 0) : 0);
-      }
+      const atTable = atTableOf(k);
       const seen = Math.max(a.lastLoginAt || 0, ...(a.sessions || []).map(x => x.lastSeen || 0));
-      return { key: a.key, display: a.display, isAdmin: !!a.isAdmin, claimed: !!a.claimed, lastSeen: seen || null, online: online.has(a.key), balance: bank[k] === undefined ? null : bank[k] + atTable };
+      const w = gameHooks && gameHooks.wallet ? gameHooks.wallet.get(k) : null;
+      return { key: a.key, display: a.display, isAdmin: !!a.isAdmin, claimed: !!a.claimed, lastSeen: seen || null, online: online.has(a.key), balance: bank[k] === undefined ? null : bank[k] + atTable, play: w ? w.play : null };
     }).sort((x, y) => (y.online - x.online) || ((y.lastSeen || 0) - (x.lastSeen || 0)) || x.display.localeCompare(y.display));
     socket.emit('admin_overview', {
       accounts: rows,
@@ -1227,6 +1252,19 @@ io.on('connection', socket => {
   on('admin_bank_summary', () => {
     if (!adminOnly()) return;
     socket.emit('bank_summary', bankSummary(ROOM_ID));
+  });
+  on('admin_set_play', ({ key, cents } = {}) => {
+    if (!adminOnly()) return;
+    const k = typeof key === 'string' ? accounts.keyOf(key) : '';
+    const v = Math.round(Number(cents));
+    if (!k || !accounts.get(k)) { socket.emit('admin_result', { op: 'set_play', ok: false, message: 'Unknown player' }); return; }
+    if (!Number.isFinite(v) || v < 0 || v > 100000000000) { socket.emit('admin_result', { op: 'set_play', ok: false, message: 'Enter a Play $ amount from 0 up to 1,000,000,000' }); return; }
+    if (!gameHooks || !gameHooks.wallet) { socket.emit('admin_result', { op: 'set_play', ok: false, message: 'Wallet unavailable' }); return; }
+    gameHooks.wallet.adminSet(k, v);
+    gameHooks.pushWallet(k);
+    pushMoney(k);
+    console.log(`admin ${accounts.displayOf(socket.data.acct)} set Play $ for ${k} to ${v} cents`);
+    socket.emit('admin_result', { op: 'set_play', key: k, ok: true, message: 'Play $ set' });
   });
   on('admin_reset_pin', ({ key, newPin } = {}) => {
     const me = adminOnly(); if (!me) return;
@@ -1280,6 +1318,7 @@ io.on('connection', socket => {
       ledger.log('adjust', target, Math.abs(total - before), bank[k], newStack, room.handNum, room.id, { delta: total - before });
       roomLog(room, `${byName} set ${target}'s money to ${total.toLocaleString()}`);
     }
+    pushMoney(k);
     if (seat && seat.connected) {
       io.to(seat.socketId).emit('balance_data', { balance: bank[k] });
       if (seat.chips === 0) io.to(seat.socketId).emit('bust_out', bustPayload(room, seat));
@@ -1343,6 +1382,7 @@ io.on('connection', socket => {
       p.sittingOut = p.chips === 0 || !!p.sitOutRequest;
     }
 
+    for (const k of Object.keys(bank)) pushMoney(k);
     room.status = 'waiting';
     room.community = []; room.pot = 0; room.currentBet = 0; room.street = null;
     room.actionQueue = []; room.dealerIdx = 0; room.shown = {}; room.lastStacks = {};
@@ -1710,7 +1750,7 @@ function dropSeat(room, player, opts = {}) {
 
 const social = require('./social.js').createSocial({ io, accounts, now: () => Date.now(), file: BIGWINS_FILE });
 process.env.WALLET_FILE = WALLET_FILE;
-try{ const g = require('./games')({io, rooms, ledger, accounts, tables, social, now:()=>Date.now()}); social.setWallet(g.wallet); }catch(e){ if(e.code!=='MODULE_NOT_FOUND') throw e; }
+try{ const g = require('./games')({io, rooms, ledger, accounts, tables, social, now:()=>Date.now()}); social.setWallet(g.wallet); gameHooks = g; }catch(e){ if(e.code!=='MODULE_NOT_FOUND') throw e; }
 
 const PORT = process.env.PORT || 3000;
 if (require.main === module) {
