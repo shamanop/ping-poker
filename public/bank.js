@@ -46,17 +46,7 @@
     else { const chip = $('room-code-btn'); head.insertBefore(btn, chip ? chip.nextSibling : head.children[1]); }
     const pb = document.createElement('div');
     pb.id = 'pause-banner'; pb.className = 'pause-banner hidden';
-    pb.innerHTML = '<b>Paused</b><span>The table is on hold</span><button type="button" id="reset-btn" class="pause-reset hidden">Reset table</button>';
-    pb.querySelector('#reset-btn').addEventListener('click', () => {
-      if (!state.socket) return;
-      const last = Number((state.gameState && state.gameState.startChips) || localStorage.getItem('pp-reset-stack')) || 1500;
-      const raw = window.prompt('Reset the table? The hand is cancelled and bets are refunded. Starting stack for everyone (chips from their bank):', String(last));
-      if (raw === null) return;
-      const amount = Math.floor(Number(String(raw).replace(/[, $]/g, '')));
-      if (!Number.isFinite(amount) || amount < 200) { window.alert('Enter a whole number of chips, 200 or more.'); return; }
-      localStorage.setItem('pp-reset-stack', String(amount));
-      state.socket.emit('reset_table', { amount });
-    });
+    pb.innerHTML = '<b>Paused</b><span>The table is on hold</span>';
     grid.appendChild(pb);
 
     const panel = document.createElement('section');
@@ -195,23 +185,24 @@
         <div class="bp-avw"><div class="bp-av">${avatarFor(p.name)}</div><span class="bp-dot ${p.status}" title="${STATUS[p.status] || ''}"></span></div>
         <div class="bp-who">${E(p.name)}${tag}</div>
         <div class="bp-sub">${E(sub.join(' · '))}</div>
-        <div class="bp-bal"><b${canEdit && !p.isBot ? ` class="editable" data-name="${E(p.name)}" data-total="${totalOf(p)}" title="Click to set this player's money"` : ''}>${p.isBot ? '&mdash;' : fmt(totalOf(p))}</b><span>Total</span></div>
+        <div class="bp-bal"><b>${p.isBot ? '&mdash;' : fmt(totalOf(p))}</b><span>Total</span></div>
         <div class="bp-stats">
-          <div><label>${isPlay() ? 'In wallet' : 'In bank'}</label><b>${p.isBot ? '&mdash;' : fmt(p.bank || 0)}</b></div>
+          <div><label>${isPlay() ? 'In wallet' : 'In bank'}</label><b${canEdit && !p.isBot ? ` class="editable" data-name="${E(p.name)}" data-bank="${p.bank || 0}" title="Click to adjust this player's bank (sent as a +/- adjustment)"` : ''}>${p.isBot ? '&mdash;' : fmt(p.bank || 0)}</b></div>
           <div><label>At table</label><b>${fmt(p.status === 'offline' ? 0 : p.atTable)}</b></div>
           <div><label>Net P&amp;L</label><b class="${netCls}">${p.isBot ? '&mdash;' : signed(p.net)}</b></div>
           <div><label>Best win</label><b>${p.isBot ? '&mdash;' : (p.biggestWin ? fmt(p.biggestWin) : '&ndash;')}</b></div>
         </div>
       </div>`;
     }).join(''));
-    if (changed) $('bank-players').querySelectorAll('.bp-bal b.editable').forEach(b => b.addEventListener('click', () => editBank(b)));
+    if (changed) $('bank-players').querySelectorAll('.bp-stats b.editable').forEach(b => b.addEventListener('click', () => editBank(b)));
   }
 
-  // Inline edit of a player's total: a compact AmountInput (number is the truth, text is a view), Enter saves, Escape or leaving cancels.
+  // Inline edit of a player's BANK balance (not the total: at-table chips are separate in v2). A compact AmountInput; Enter saves
+  // as admin_adjust {delta = typed - shown bank}, Escape or leaving cancels.
   function editBank(b) {
     const name = b.dataset.name;
-    const field = AmountInput({ units: Number(b.dataset.total) || 0, min: 0, max: isPlay() ? 100000000000 : 100000000, unit: isPlay() ? 'cents' : 'chips',
-      scale: 'ladder', compact: true, label: 'New total money for ' + name, rangeLabel: 'New total' });
+    const field = AmountInput({ units: Number(b.dataset.bank) || 0, min: 0, max: isPlay() ? 100000000000 : 100000000, unit: isPlay() ? 'cents' : 'chips',
+      scale: 'ladder', compact: true, label: 'New bank balance for ' + name, rangeLabel: 'New bank' });
     field.input.classList.add('bp-edit');
     b.replaceWith(field.el); field.focus(); field.input.select();
     let done = false;
@@ -220,8 +211,9 @@
       if (save) {
         const amount = field.value();
         if (amount === null) { field.submit(); return; } // stays open with the message; nothing is sent
-        if (state.socket) {
-          state.socket.emit('bank_set', { name, balance: amount });
+        const shown = Number(b.dataset.bank) || 0, delta = amount - shown;
+        if (state.socket && delta !== 0) {
+          state.socket.emit('admin_adjust', { key: name, delta, cur: 'chips', reason: 'bank panel edit' });
           const row = data && data.players.find(p => p.name.toLowerCase() === name.toLowerCase());
           if (row) row.bank = amount;
         }
@@ -367,12 +359,8 @@
     Money.onPrefChange(() => { if (isOpen && data) render(); });
     state.socket.on('game_state', gs => {
       const pb = $('pause-banner');
-      const u = window.Lobby && Lobby.user && Lobby.user();
-      const chris = String(state.myName || '').toLowerCase().trim() === 'chris' || !!(u && (u.key === 'chris' || u.isAdmin));
-      const mine = chris && (!gs.tableId || gs.tableId === 'POKERPING');
       if (pb) {
         pb.classList.toggle('hidden', !gs.paused);
-        const rb = $('reset-btn'); if (rb) rb.classList.toggle('hidden', !mine);
         const g = state.geo;
         if (g) { pb.style.left = g.cx + 'px'; pb.style.top = (g.cy - 165 * g.u) + 'px'; }
       }

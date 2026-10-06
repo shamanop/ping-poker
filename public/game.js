@@ -7,8 +7,6 @@ const state = {
   myIdx:          null,
   myCards:        [],
   gameState:      null,
-  selectedAvatar: '🤠',
-  profilePic:     null,
   myBalance:      null,
   soundOn:        true,
   prevPot:        0,
@@ -60,7 +58,6 @@ const niceStep     = () => Money.niceStep(state.gameState?.bb || BIG_BLIND, tabl
 const niceRound    = v => { const st = niceStep(); return st > 1 ? Math.round(v / st) * st : Math.round(v); };
 let activeTray      = null;
 const prevChipsMap  = {};
-let balanceTimeout  = null;
 
 const $ = id => document.getElementById(id);
 
@@ -87,9 +84,7 @@ function probeArt() {
   let pending = AV_FILES.length;
   const done = () => {
     if (--pending > 0) return;
-    renderAvatarGrid();
-    renderLandingTable();
-    if (state.gameState && $('game-screen').classList.contains('active')) renderGame();
+        if (state.gameState && $('game-screen').classList.contains('active')) renderGame();
   };
   AV_FILES.forEach(f => {
     const im = new Image();
@@ -138,7 +133,6 @@ function onResize() {
 
 function relayout() {
   setScale();
-  placeStaticSockets();
   if (state.gameState && $('game-screen').classList.contains('active')) renderGame();
 }
 
@@ -149,9 +143,6 @@ document.addEventListener('DOMContentLoaded', () => {
   window.PingSocket = state.socket;
   probeArt();
   document.querySelectorAll('svg.t-ping').forEach(fillPing);
-  renderAvatarGrid();
-  renderLandingTable();
-  bindLanding();
   bindWaitPanel();
   bindActions();
   bindSocket();
@@ -164,7 +155,6 @@ document.addEventListener('DOMContentLoaded', () => {
   initPanelSide();
   initBust();
   bindCopy($('room-code-btn'));
-  placeStaticSockets();
 
   $('player-seats').addEventListener('click', (e) => {
     const seat = e.target.closest('.seat[data-player-idx]');
@@ -207,7 +197,6 @@ function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   $(id)?.classList.add('active');
   setScale();
-  placeStaticSockets();
 }
 
 // ─── Toasts (the only fixed layer) ────────────────────────────────
@@ -285,146 +274,7 @@ const SEAT_ANGLES = {
 };
 const anglesFor = n => SEAT_ANGLES[Math.max(2, Math.min(8, n))];
 
-const SAMPLE_COMMUNITY = [
-  { rank: 'A', suit: '♠' }, { rank: 'K', suit: '♥' }, { rank: 'Q', suit: '♦' },
-  { rank: 'J', suit: '♣' }, { rank: '10', suit: '♠' },
-];
-
-// ─── Static table (landing) ──────────────────────────────
-function placeSockets(tb, host, seats) {
-  if (!tb || !host) return;
-  const W = tb.clientWidth, H = tb.clientHeight;
-  if (!W || !H) return;
-  const angles = anglesFor(8);
-  host.querySelectorAll('.sock').forEach((el, i) => {
-    const [ex, ey] = stadiumEdge(W, H, angles[i]);
-    el.style.left = (W / 2 + ex) + 'px';
-    el.style.top  = (H / 2 + ey) + 'px';
-  });
-}
-
-function placeStaticSockets() {
-  placeSockets($('landing-tb'), $('landing-sockets'));
-}
-
-function renderAvatarGrid() {
-  const grid = $('avatar-grid');
-  if (!grid) return;
-  grid.innerHTML = AV_EMOJI.map(e =>
-    `<button type="button" class="avatar-option${e === state.selectedAvatar ? ' selected' : ''}" data-avatar="${e}" aria-label="Avatar ${e}">${avatarInner(e, null)}</button>`
-  ).join('');
-  grid.querySelectorAll('.avatar-option').forEach(el => {
-    el.addEventListener('click', () => {
-      grid.querySelectorAll('.avatar-option').forEach(a => a.classList.remove('selected'));
-      el.classList.add('selected');
-      state.selectedAvatar = el.dataset.avatar;
-      renderLandingTable();
-    });
-  });
-}
-
-function renderLandingTable() {
-  const host = $('landing-sockets');
-  if (!host) return;
-  const name = ($('player-name')?.value || '').trim();
-  host.innerHTML = Array.from({ length: 8 }, (_, i) => {
-    if (i === 0) {
-      return `<div class="sock filled"><span class="av-wrap">${avatarInner(state.selectedAvatar, state.profilePic)}</span>${name ? `<span class="nm">${esc(name)}</span>` : ''}</div>`;
-    }
-    return '<div class="sock"></div>';
-  }).join('');
-  host.querySelectorAll('.sock.filled .av-wrap > img').forEach(im => im.classList.add('av'));
-  const comm = $('landing-community');
-  if (comm && !comm.children.length) {
-    comm.style.setProperty('--cw', 'calc(74 * var(--px))');
-    comm.innerHTML = SAMPLE_COMMUNITY.map((c, i) =>
-      faceCardHtml(c, 'lg', i, `--i:${i};--n:5`)).join('');
-  }
-  const pot = $('landing-pot');
-  if (pot && !pot.children.length) {
-    pot.innerHTML = `<div class="pile">${chipStacksHtml(1280, 3, 5)}</div><div class="pot-txt"><small>Pot</small><span class="pot-num">1,280</span></div>`;
-  }
-  placeStaticSockets();
-}
-
-// ─── Landing ──────────────────────────────────────────────────────
-function bindLanding() {
-  if (!$('btn-join') || !$('player-name')) return;
-  const photoInput = $('photo-input');
-  const photoArea  = $('photo-upload-area');
-  photoArea.addEventListener('click', () => photoInput.click());
-  photoArea.addEventListener('dragover', e => { e.preventDefault(); photoArea.classList.add('drag-over'); });
-  photoArea.addEventListener('dragleave', () => photoArea.classList.remove('drag-over'));
-  photoArea.addEventListener('drop', e => {
-    e.preventDefault(); photoArea.classList.remove('drag-over');
-    const file = e.dataTransfer?.files[0];
-    if (file && file.type.startsWith('image/')) processPhotoUpload(file);
-  });
-  photoInput.addEventListener('change', () => { if (photoInput.files[0]) processPhotoUpload(photoInput.files[0]); });
-
-  $('player-name').addEventListener('input', () => {
-    clearTimeout(balanceTimeout);
-    const name = $('player-name').value.trim();
-    renderLandingTable();
-    if (!name) { $('bank-display').classList.add('hidden'); return; }
-    balanceTimeout = setTimeout(() => {
-      state.socket.emit('check_balance', { name });
-    }, 500);
-  });
-
-  $('btn-demo').addEventListener('click', () => {
-    const name = getPlayerName(); if (!name) return;
-    localStorage.setItem('ppName', name);
-    state.socket.emit('create_demo', { name, avatar: state.selectedAvatar, profilePic: state.profilePic });
-  });
-
-  $('btn-join').addEventListener('click', () => {
-    const name = getPlayerName(); if (!name) return;
-    const password = $('password-input')?.value.trim() || '';
-    if (!password) { showError('Enter the table password'); return; }
-    localStorage.setItem('ppName', name);
-    state.socket.emit('join_game', { name, avatar: state.selectedAvatar, profilePic: state.profilePic, password });
-  });
-
-  $('player-name').addEventListener('keydown', e => { if (e.key === 'Enter') $('btn-join').click(); });
-  $('password-input')?.addEventListener('keydown', e => { if (e.key === 'Enter') $('btn-join').click(); });
-}
-
-function processPhotoUpload(file) {
-  const canvas = document.createElement('canvas');
-  canvas.width = 80; canvas.height = 80;
-  const ctx = canvas.getContext('2d');
-  const img = new Image();
-  const url = URL.createObjectURL(file);
-  img.onload = () => {
-    const size = Math.min(img.width, img.height);
-    ctx.drawImage(img, (img.width - size) / 2, (img.height - size) / 2, size, size, 0, 0, 80, 80);
-    URL.revokeObjectURL(url);
-    state.profilePic = canvas.toDataURL('image/jpeg', 0.65);
-    const preview = $('photo-preview-circle');
-    preview.innerHTML = `<img src="${state.profilePic}" class="photo-preview-img" alt="Profile">`;
-    preview.classList.add('has-photo');
-    renderLandingTable();
-  };
-  img.onerror = () => URL.revokeObjectURL(url);
-  img.src = url;
-}
-
-function getPlayerName() {
-  const name = lobbyName() || ($('player-name')?.value || '').trim();
-  if (!name) { showError('Enter your name first'); return null; }
-  return name;
-}
-
-function showError(msg) {
-  const el = $('landing-error');
-  if (el) {
-    el.textContent = msg; el.classList.add('show');
-    clearTimeout(showError.t);
-    showError.t = setTimeout(() => { el.classList.remove('show'); }, 3000);
-  }
-  if (!$('landing-screen')?.classList.contains('active')) toast(msg, '', 'warn');
-}
+function showError(msg) { toast(msg, '', 'warn'); }
 
 // ─── Waiting panel (on the table, before the first hand) ──────────
 function renderShowPanel(gs) {
@@ -449,13 +299,7 @@ function bindWaitPanel() {
   });
   bindCopy($('wp-invite'));
   $('btn-start').addEventListener('click', () => {
-    const on = document.querySelector('#blind-seg .seg-btn.on');
-    const blindInterval = parseInt(on?.dataset.v || '0');
-    state.socket.emit('start_game', { roomId: state.roomId, blindInterval });
-  });
-  $('blind-seg').addEventListener('click', e => {
-    const b = e.target.closest('.seg-btn'); if (!b) return;
-    document.querySelectorAll('#blind-seg .seg-btn').forEach(x => x.classList.toggle('on', x === b));
+    if (state.roomId) state.socket.emit('table_start', { tableId: state.roomId });
   });
 }
 
@@ -473,7 +317,6 @@ function renderWaitPanel(gs) {
   $('wp-invite-link').textContent = inviteLink().replace(/^https?:\/\//, '');
   $('wp-invite').classList.toggle('hidden', canStart);
   $('btn-start').classList.toggle('hidden', !(isHost && canStart));
-  $('blind-settings').classList.toggle('hidden', !isHost);
 }
 
 // ─── Platform adapter (lobby/shell call these) ────────────────────
@@ -519,25 +362,9 @@ window.PingGame = {
 function bindSocket() {
   const s = state.socket;
 
-  s.on('balance_data', ({ balance }) => {
-    state.myBalance = balance;
-    $('bank-amount').textContent = fmt(balance);
-    $('bank-display').classList.remove('hidden');
-  });
-
   s.on('balance_update', ({ balance }) => { state.myBalance = balance; });
   s.on('money', (m) => {
-    if (!m || typeof m.bank !== 'number') return;
-    state.myBalance = m.bank;
-    const el = $('bank-amount'); if (el) { el.textContent = fmt(m.bank); const d = $('bank-display'); if (d) d.classList.remove('hidden'); }
-  });
-
-  s.on('room_joined', ({ roomId, playerIdx, balance }) => {
-    state.roomId = roomId;
-    state.myIdx  = playerIdx;
-    if (balance !== undefined) state.myBalance = balance;
-    $('room-code').textContent       = roomId;
-    showScreen('game-screen');
+    if (m && typeof m.bank === 'number') state.myBalance = m.bank;
   });
 
   s.on('game_state', gs => {

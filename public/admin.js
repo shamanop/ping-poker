@@ -179,7 +179,9 @@
       if (total === null) { editing.field.submit(); status('Enter an amount from 0 to ' + money(MAX_CHIPS), 'err'); return; }
       if (!window.confirm('Set ' + a.display + "'s total money to " + money(total) + '?')) return;
       editing = null; status('Saving');
-      s.emit('bank_set', { name: a.display, balance: total });
+      const delta = total - (a.balance || 0); // admin_adjust is a delta against the BANK balance shown in this row
+      if (delta === 0) { status('No change', 'ok'); return; }
+      s.emit('admin_adjust', { key, delta, cur: 'chips', reason: 'admin console' });
       pendingBal = { key, total };
       setTimeout(refresh, 350);
     } else if (act === 'play-ok') {
@@ -205,27 +207,21 @@
     const t = overview && overview.table;
     if (!t) { host.innerHTML = '<div class="adm-empty">Loading</div>'; return; }
     // typed amounts live in persistent AmountInputs: a 4 s refresh must never rebuild a box the admin is using
-    const last = Number(localStorage.getItem('pp-reset-stack')) || t.startChips || 1500;
     const wantSb = t.nextSb || t.sb, wantBb = t.nextBb || t.bb;
     if (!tf) {
       tf = { touched: false,
-        sb: amt(wantSb, 'chips', 1, MAX_CHIPS, 'Small blind', 'adm-sb'), bb: amt(wantBb, 'chips', 2, MAX_CHIPS, 'Big blind', 'adm-bb'),
-        stack: amt(last, 'chips', 200, MAX_CHIPS, 'Starting stack', 'adm-stack') };
+        sb: amt(wantSb, 'chips', 1, MAX_CHIPS, 'Small blind', 'adm-sb'), bb: amt(wantBb, 'chips', 2, MAX_CHIPS, 'Big blind', 'adm-bb') };
       [tf.sb, tf.bb].forEach(f => f.input.addEventListener('input', () => { tf.touched = true; }));
     } else if (!tf.touched && !tf.sb.isDirty() && !tf.bb.isDirty()) { tf.sb.set(wantSb, { source: 'server' }); tf.bb.set(wantBb, { source: 'server' }); }
     if (host.contains(document.activeElement) && host.querySelector('#adm-blinds')) return; // typing in here: keep the DOM
     host.innerHTML = `<div class="adm-card"><h3>Main table</h3>
         <p><span class="adm-tag ${t.paused ? 'paused' : 'live'}">${t.paused ? 'Paused' : 'Running'}</span> &nbsp; ${t.seated} seated &middot; ${t.handNum} hands &middot; ${esc(t.status || '')}</p>
         <div class="adm-row"><button type="button" class="adm-btn pri" id="adm-pause">${t.paused ? 'Resume table' : 'Pause table'}</button></div></div>
-      <div class="adm-card"><h3>Reset table</h3>
-        <p>Cancels the current hand, refunds bets, and sets everyone's total money to the starting stack. The table must be paused first.</p>
-        <div class="adm-row"><span id="adm-stack-slot"></span>
-        <button type="button" class="adm-btn danger" id="adm-reset" ${t.paused ? '' : 'disabled'}>Reset table</button></div></div>
       <div class="adm-card"><h3>Blinds</h3>
         <p>Now ${esc(money(t.sb))} / ${esc(money(t.bb))}${t.nextBb ? ' &middot; next hand ' + esc(money(t.nextSb)) + ' / ' + esc(money(t.nextBb)) : ''}. Changes made mid-hand start on the next hand.</p>
         <div class="adm-row"><span id="adm-sb-slot"></span> / <span id="adm-bb-slot"></span>
         <button type="button" class="adm-btn pri" id="adm-blinds">Set blinds</button></div></div>`;
-    $('adm-stack-slot').appendChild(tf.stack.el); $('adm-sb-slot').appendChild(tf.sb.el); $('adm-bb-slot').appendChild(tf.bb.el);
+    $('adm-sb-slot').appendChild(tf.sb.el); $('adm-bb-slot').appendChild(tf.bb.el);
     $('adm-blinds').addEventListener('click', () => {
       const sb = tf.sb.value(), bb = tf.bb.value();
       if (sb === null || bb === null) { if (sb === null) tf.sb.submit(); if (bb === null) tf.bb.submit(); status('Fix the highlighted blind first', 'err'); return; }
@@ -233,14 +229,7 @@
       pendingBlinds = { sb, bb }; status('Working'); sock().emit('table_update', { tableId: 'POKERPING', patch: { blinds: { sb, bb } } });
       setTimeout(refresh, 400); // "Blinds set" is shown by the overview handler once the server's blinds equal what was sent
     });
-    $('adm-pause').addEventListener('click', () => { status('Working'); sock().emit('set_pause', { paused: !t.paused }); setTimeout(refresh, 350); });
-    $('adm-reset').addEventListener('click', () => {
-      const amount = tf.stack.value();
-      if (amount === null) { tf.stack.submit(); status('Enter a starting stack of ' + money(200) + ' or more', 'err'); return; }
-      if (!window.confirm('Reset the table to ' + money(amount) + ' each? The hand is cancelled.')) return;
-      localStorage.setItem('pp-reset-stack', String(amount));
-      status('Working'); sock().emit('reset_table', { amount }); setTimeout(refresh, 450);
-    });
+    $('adm-pause').addEventListener('click', () => { status('Working'); sock().emit('table_pause', { tableId: 'POKERPING', paused: !t.paused }); setTimeout(refresh, 350); });
   }
 
   // ── socket ──

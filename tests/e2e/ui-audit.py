@@ -62,6 +62,11 @@ try:
     pg.wait_for_timeout(300)
     c.ok('showdown plaque inside the stage rect', pg.evaluate("(() => { const o = document.getElementById('showdown-overlay'); if (o.classList.contains('hidden')) return 'hidden'; const r = o.getBoundingClientRect(), s = document.getElementById('stage').getBoundingClientRect(); return r.left >= s.left - 0.5 && r.right <= s.right + 0.5 })()") is True)
     pg.evaluate("document.getElementById('showdown-overlay').classList.add('hidden')")
+    # --- step E: legacy landing/start controls are gone, start is table_start
+    c.eq('legacy elements removed', pg.evaluate("['player-name','password-input','btn-join','btn-demo','bank-display','blind-seg','blind-settings','pause-btn','reset-btn'].filter(i => document.getElementById(i))"), [])
+    fr.clear(); pg.evaluate("document.getElementById('btn-start').click()"); pg.wait_for_timeout(300)
+    c.eq('Start button sends table_start with the room id', [list(f.keys()) for f in fr.of('table_start')], [['tableId']])
+    c.eq('no legacy start event', fr.of('start_game'), [])
     # --- defect 4: hotkeys while an overlay is open
     pg.wait_for_function("!document.getElementById('btn-fold').disabled", timeout=90000)
     pg.click('#bank-btn'); pg.wait_for_selector('#bank-panel.open')

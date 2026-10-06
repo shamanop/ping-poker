@@ -1,6 +1,7 @@
-"""Step C proof, caller 4: admin console amounts (accounts tab chips / Play $, table tab blinds / reset stack).
-Asserts the units that arrive at the server for usd / chips / auto prefs. The deleted events (bank_set, reset_table)
-are still what the legacy server takes; step E/I replace them with admin_adjust. Setup as buyin.py (chris + by1..by6)."""
+"""Step C proof, caller 4: admin console amounts (accounts tab chips / Play $, table tab blinds).
+Asserts the units that arrive at the server for usd / chips / auto prefs. The bank edit is `admin_adjust {key, delta, cur:'chips'}`
+with delta = typed - the BANK balance shown in the row (read from the row). Frames only: a legacy server ignores admin_adjust.
+Setup as buyin.py (chris + by1..by6)."""
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from common import *
@@ -18,9 +19,10 @@ with sync_playwright() as p:
         set_pref(pg, pref); open_admin(pg, 'accounts')
         row = 'tr[data-k=by1]'
         pg.click(row + ' [data-a=bal]'); pg.wait_for_selector('#adm-edit')
+        shown = int(pg.evaluate("document.querySelector('tr[data-k=by1] .adm-bal').textContent").replace(',', '').replace('\u2013', '0') or 0)
         pg.fill('#adm-edit', typed_chips); fr.clear(); pg.click(row + ' [data-a=bal-ok]'); pg.wait_for_timeout(500)
-        got = [f.get('balance') for f in fr.of('bank_set')]
-        c.eq('%s: chips typed %r -> bank_set.balance' % (pref, typed_chips), got, [want_chips])
+        got = [(f.get('key'), f.get('delta'), f.get('cur')) for f in fr.of('admin_adjust')]
+        c.eq('%s: chips typed %r (bank shows %d) -> admin_adjust.delta' % (pref, typed_chips, shown), got, [('by1', want_chips - shown, 'chips')])
         pg.click(row + ' [data-a=play]'); pg.wait_for_selector('#adm-edit')
         pg.fill('#adm-edit', typed_play); fr.clear(); pg.click(row + ' [data-a=play-ok]'); pg.wait_for_timeout(500)
         got = [f.get('cents') for f in fr.of('admin_set_play')]
@@ -30,7 +32,7 @@ with sync_playwright() as p:
     set_pref(pg, 'chips'); open_admin(pg, 'accounts'); pg.click('tr[data-k=by1] [data-a=bal]'); pg.wait_for_selector('#adm-edit')
     for bad in ['abc', '-5', '999999999999', '']:
         pg.fill('#adm-edit', bad); fr.clear(); pg.click('tr[data-k=by1] [data-a=bal-ok]'); pg.wait_for_timeout(250)
-        c.eq('bad chips %r sends nothing' % bad, fr.of('bank_set'), [])
+        c.eq('bad chips %r sends nothing' % bad, fr.of('admin_adjust'), [])
     pg.evaluate("AdminConsole.close()")
     # table tab: blinds in units; typed text survives the 4 s refresh
     for pref, sb, bb, want in [('chips', '50', '100', (50, 100)), ('usd', '1', '2', (100, 200))]:
