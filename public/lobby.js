@@ -163,7 +163,7 @@ function viewSignin() {
   const draw = () => {
     const err = h('div', { class: 'lb-err', id: 'lb-err', role: 'alert' });
     const name = h('input', { class: 'text-input', id: 'lb-name', type: 'text', maxlength: 16, autocomplete: 'username', autocapitalize: 'off', autocorrect: 'off', spellcheck: 'false', placeholder: 'Your name', value: LS.get('ping.name') || '' });
-    const pin = h('input', { class: 'text-input', id: 'lb-pin', type: 'password', inputmode: 'numeric', maxlength: 6, autocomplete: tab === 'in' ? 'current-password' : 'new-password', placeholder: '4 to 6 digits',
+    const pin = h('input', { class: 'text-input pin-mask', id: 'lb-pin', type: 'text', inputmode: 'numeric', pattern: '[0-9]*', maxlength: 6, autocomplete: 'off', autocorrect: 'off', autocapitalize: 'off', spellcheck: 'false', 'data-1p-ignore': 'true', 'data-lpignore': 'true', placeholder: '4 to 6 digits',
       oninput: (e) => { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6); } });
     const room = h('input', { class: 'text-input', id: 'lb-room', type: 'password', autocomplete: 'off', autocapitalize: 'off', autocorrect: 'off', spellcheck: 'false', placeholder: 'Room password' });
     const submit = h('button', { class: 'lb-btn big', id: 'lb-submit', type: 'submit' }, tab === 'in' ? 'Sign in' : claim ? 'Claim name' : 'Create account');
@@ -636,8 +636,8 @@ function openProfile() {
   const p = S.profile || {}, u = S.user, st = p.stats || {};
   let av = u.avatar;
   const net = p.netCents ?? 0, msg = h('div', { class: 'lb-err', id: 'lb-profmsg' });
-  const oldPin = h('input', { class: 'text-input', type: 'password', inputmode: 'numeric', maxlength: 6, placeholder: 'Current PIN', id: 'lb-oldpin' });
-  const newPin = h('input', { class: 'text-input', type: 'password', inputmode: 'numeric', maxlength: 6, placeholder: 'New PIN', id: 'lb-newpin' });
+  const oldPin = h('input', { class: 'text-input', type: 'text', inputmode: 'numeric', pattern: '[0-9]*', maxlength: 6, autocomplete: 'off', 'data-1p-ignore': 'true', 'data-lpignore': 'true', placeholder: 'Current PIN', id: 'lb-oldpin', oninput: (e) => { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6); } });
+  const newPin = h('input', { class: 'text-input', type: 'text', inputmode: 'numeric', pattern: '[0-9]*', maxlength: 6, autocomplete: 'off', 'data-1p-ignore': 'true', 'data-lpignore': 'true', placeholder: 'New PIN', id: 'lb-newpin', oninput: (e) => { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6); } });
   const recent = (p.recent || []).slice(0, 5);
   const nameMsg = h('div', { class: 'lb-err', id: 'lb-namemsg' }), photoMsg = h('div', { class: 'lb-err', id: 'lb-photomsg' });
   const nameIn = h('input', { class: 'text-input', id: 'lb-dispname', type: 'text', maxlength: 16, value: u.display || u.key, autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', onkeydown: (e) => { if (e.key === 'Enter') saveName(); } });
