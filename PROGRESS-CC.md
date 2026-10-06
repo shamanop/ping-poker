@@ -107,15 +107,19 @@ Server events `g:coldcall:state|history|spin` -> `g:coldcall:result`; buy ids `r
   One exception, asked for by Chris directly (2026-10-05 17:54): the concept stills menu was made with GPT image
   through OpenRouter, $3.31 (`cold-call/art/concepts/spend.jsonl`). Nothing else has used a paid API.
 
-## For Isabelle (updated 2026-10-05 18:58)
-- **Chris picked the look: concept still A1** (Boiler Room, painted caricature). His words, 18:45: "i love A1, that looks perfect,
-  lets base everything around that." Everything is now based on `cold-call/art/concepts/stills/A1.jpg`.
-- **Image credit: $1.69 left** on the OpenRouter key you gave me (cap $15). OpenAI direct and my own OpenRouter account are both
-  empty. The final cutouts are blocked on credit; Chris has been asked for a $20 top-up. If you raise the cap instead, say so.
-- Chris asked for GPT-made art himself (17:54), so art is the one place this build uses a paid API. He also cleared shaman for
+## For Isabelle (updated 2026-10-05 19:50)
+- **Look:** Chris picked concept still A1 (Boiler Room, painted caricature) at 18:45, then approved the tile sheets
+  ("this looks perfect"; one change, the powder pile without the donut, done).
+- **Real art is in the game and pushed** (`2c18f07`): 12 reel symbols, the idle hero and a background, cut from the approved
+  sheets, swapped in through `public/games/coldcall/assets/symbols.json` with no code change. Screenshots: `qa/coldcall-art/`.
+- **Milestone 4 is built** (`5c74fdd`): playable front end with both bonuses, buys, SFX/MUSIC switches, the gated QA hook.
+  Its own honest gaps are listed at the end of the Milestone 4 section. I re-ran the tests after the art went in: 31 + 17 pass.
+- **In progress now (skin wave):** frame/buttons/bar from the blue placeholder skin to the painted boiler-room look, the two bonus
+  screens with the painted dial/card-machine/seal pieces, hero moods on events, title and splash. Then milestone 5 QA.
+- **Image credit: $1.45 left** on the OpenRouter key you gave me (cap $15). OpenAI direct and my own OpenRouter account are empty.
+  Still to paint once there is credit: an empty office background, a clean dial, a frame, title art. Chris has been asked.
+- Chris asked for GPT-made art himself (17:54), so art is the one place this build uses a paid API. He cleared shaman for
   compute and testing.
-- Milestone 4 (front end) is being built now on placeholder symbols. Symbols load from one manifest
-  (`public/games/coldcall/assets/symbols.json`), so the final art is a file swap.
 
 ## Milestone 3a: concept stills menu (done; Chris picked A1)
 Five concepts, four stills each (portrait, wide, low angle, mascot), 832x1248. Sent to Chris 2026-10-05; he picked A1 at 18:45.
@@ -149,6 +153,7 @@ Next, after Chris's notes and the credit top-up: each kept piece painted alone a
 (closer, cash, pile, rx, headset, can, mug, note, ball, phone, quote), plus the A1 scene as the background.
 
 ## Log
+- 2026-10-05 19:50 Milestone 4 verified by Frank (tests 31 + 17, engine copies identical, screenshots read). Skin wave started.
 - 2026-10-05 18:58 Look locked to A1 (Chris). Tile design sheets committed (milestone 3b).
 - 2026-10-05 18:50 Milestone 3a committed (concept menu). Frank re-ran `tests/coldcall.js` (27 pass) and `tests/bender.js` (17 pass); engine copies byte-identical.
 - 2026-10-05 Milestone 2 done: engine, server module, sim, 27 tests; 200M-spin sim 98.10% +- 0.10; buys 97.99% / 98.07%.
