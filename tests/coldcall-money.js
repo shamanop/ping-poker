@@ -41,6 +41,7 @@ const CB = (bet) => ({ ...E.newState(), cb: { bet } });
 const countingRng = (seed) => { const base = E.rngFrom(seed); const f = () => { f.draws++; return base(); }; f.draws = 0; return f; };
 const closeLines = (s, id, key = 'ann') => s.lines((e) => e.ref === `coldcall:${key}:${id}:close`);
 const sum = (lines, reason) => lines.filter((e) => e.reason === reason).reduce((n, e) => n + e.amount, 0);
+const diskHas = (s, key = 'ann|play') => !!((s.disk() || {}).open || {})[key];       // the open record as the NEXT boot would read it (the game's file, not memory)
 // audit() (the slot's own state) against the ledger: every escrow listed, every listed round escrowed, the pool numbers equal
 function auditMatches(s) {
   const a = s.audit(), key = (r) => `${r.key}|${r.cur}|${r.roundId}|${r.amount}`;
@@ -402,6 +403,60 @@ function auditMatches(s) {
     assert.strictEqual(sum(ql, 'coldcall:feed'), feedNew, 'a new round feeds at the live feedBps (20)'); assert.ok(q.pot && q.pot.won && q.pot.amount === 500, 'and rolls at the live chance (25 / 400 > 0.02) for the live cap: ' + JSON.stringify(q.pot));
     SRV.setLiveConfig({ overrides: {} });
   });
+
+  // ---------------------------------------------------------------- P6 W3b fix round 1 (the Opus money critic of the slot): C1, C2, C3, C5, C6, C7, C9, C10
+  const R1_BET = 2500, R1_FULL = () => Math.round(E.CFG.pull.list * 10);
+  const NEAR = () => ({ ...E.newState(), lt: R1_FULL() - 5, avg: R1_BET });           // one fill short of a full list: a replay of a plain $25 round that finishes would arm a Callback
+  const pick0 = (p) => ({ k: 'pick', p: p.choices[0] });
+  // the mirror engine walks a round to the first prompt of the wanted kind (every pick answered with the first square); the server sees the same draws
+  function toKind(input, kind, from = 1) {
+    for (let seed = from; seed < from + 6000; seed++) {
+      const decs = []; let r = E.playRound(E.rngFrom(seed), { script: false, now: 1000200, day: '1970-01-01', rnd: E.rngFrom(5), ...input, state: input.state ? clone(input.state) : E.newState() }, decs), g = 0;
+      while (r.status === 'pending' && r.pending.k !== kind && g++ < 6) { decs.push(pick0(r.pending)); r = E.playRound(E.rngFrom(seed), { script: false, now: 1000200, day: '1970-01-01', rnd: E.rngFrom(5), ...input, state: input.state ? clone(input.state) : E.newState() }, decs); }
+      if (r.status === 'pending' && r.pending.k === kind) return { seed, decs };
+    }
+    throw new Error('no seed reaches a ' + kind + ' prompt');
+  }
+  const answerTo = (s, a, r, kind) => { let g = 0; while (r.status === 'pending' && r.pending.k !== kind && g++ < 6) r = decide(s, a, r, pick0(r.pending)); return r; };
+
+  // C1: the round the ledger closed by a VOID is not replayed at boot
+  for (const crash of [true, false]) {
+    await test(`C1: a round the ledger VOIDED (stake back) and whose record was not dropped (${crash ? 'the process died right after the void' : 'the drop could not be written, later restart'}) gives nothing at boot: no ledger line, no state advance, no Callback armed, record dropped; the record was still on disk when the void was written (ledger first)`, async () => {
+      const { seed } = findSeed({ buy: null, bet: R1_BET, state: NEAR(), auto: false }, (r) => r.status === 'pending');
+      const s = setup({ rng: E.rngFrom(seed), roundRng: E.rngFrom(5) }); const a = s.sock('ann');
+      s.store().setPlayer('ann', 'play', NEAR()); s.flush();
+      const before = s.bal('ann', 'play'), st0 = clone(s.disk().players.ann.play);
+      let thrown = false, onDiskAtVoid = null; const emit = a.emit;
+      a.emit = (ev, p) => { if (ev === 'g:coldcall:result' && p && p.status === 'pending' && !thrown) { thrown = true; if (!crash) fs.mkdirSync(s.files.pull + '.tmp'); throw new Error('socket write failed'); } return emit(ev, p); };   // the pending prompt cannot be sent once: the slot voids the round (open_error)
+      s.hooks.before.void = () => { onDiskAtVoid = diskHas(s); };
+      if (crash) s.hooks.after.void = () => { throw new H.Crash(); };
+      s.clock.advance(200); a.send('g:coldcall:spin', { bet: R1_BET, mode: 'play' });
+      assert.ok(thrown, 'the round stopped at a decision'); assert.strictEqual(onDiskAtVoid, true, 'ledger first: the record was still on disk when the void was written');
+      const id = s.disk().open['ann|play'].roundId, voidLines = closeLines(s, id);
+      assert.deepStrictEqual(voidLines.map((e) => [e.reason, e.amount]), [['coldcall:void:open_error', R1_BET]], 'the ledger closed the round by one void line'); assert.strictEqual(s.bal('ann', 'play'), before); assert.ok(diskHas(s), 'and the record is still on disk');
+      if (crash) s.reboot(); else { s.crash(); fs.rmdirSync(s.files.pull + '.tmp'); s.boot(); }
+      assert.deepStrictEqual(closeLines(s, id).map((e) => e.id), voidLines.map((e) => e.id), 'boot wrote no ledger line for it'); assert.strictEqual(s.bal('ann', 'play'), before, 'the stake is back, nothing else moved');
+      assert.deepStrictEqual(s.escrows(), []); assert.strictEqual(s.store().allOpen().length, 0, 'the record is gone'); assert.ok(!diskHas(s), 'also on the disk');
+      const st = s.store().player('ann', 'play'); assert.strictEqual(st.cb, null, 'no Callback armed from a refunded round'); assert.strictEqual(st.lt, st0.lt, 'no leads from a refunded round'); assert.strictEqual(st.rounds, st0.rounds, 'no state advance'); assert.deepStrictEqual(st, st0);
+      const b = s.sock('ann'), h0 = s.house('play'), q = spin(s, b, { bet: 1, mode: 'play', auto: true }); assert.strictEqual(q.callback, false, 'the next spin is a paid spin, not a free Callback'); assert.strictEqual(q.cost, 1);
+      assert.strictEqual(s.lines((e) => /^coldcall:ann:cb/.test(e.ref)).length, 0, 'no Callback round was ever played'); void h0;
+    });
+  }
+
+  // C1 control: a round the ledger closed by a SETTLE is still replayed (state advances, nothing paid), and the probe that tells the two apart writes nothing
+  await test('C1 control: a round the ledger SETTLED, record not dropped: boot answers round_closed / dup through the replay, the state advances, the void probe wrote no line, nothing is paid twice', async () => {
+    const { seed } = toKind({ buy: null, bet: R1_BET, state: NEAR(), auto: false }, 'more');
+    const s = setup({ rng: E.rngFrom(seed), roundRng: E.rngFrom(5) }); const a = s.sock('ann'); s.store().setPlayer('ann', 'play', NEAR()); s.flush();
+    const before = s.bal('ann', 'play'), st0 = clone(s.disk().players.ann.play);
+    let r = answerTo(s, a, spin(s, a, { bet: R1_BET, mode: 'play' }), 'more'); assert.strictEqual(r.pending.k, 'more');
+    s.hooks.after.settle = () => { throw new H.Crash(); };
+    a.send('g:coldcall:decide', { roundId: r.roundId, k: 'more', take: false });
+    const paid = sum(closeLines(s, r.roundId), 'coldcall:credit'), id0 = s.lastId(); assert.ok(diskHas(s), 'the record is on disk');
+    s.reboot();
+    assert.strictEqual(s.lastId(), id0, 'boot wrote nothing'); assert.strictEqual(s.bal('ann', 'play'), before - r.cost + paid); assert.strictEqual(s.store().allOpen().length, 0);
+    const st = s.store().player('ann', 'play'); assert.ok(st.rounds > st0.rounds, 'the state advanced from the replay of the player\'s choices: ' + st.rounds + ' > ' + st0.rounds);
+  });
+
 
   // ---------------------------------------------------------------- no wallet
   await test('NO WALLET: the slot\'s ctx has no wallet, and games/coldcall.js makes no wallet call and no direct ledger / service call', async () => {

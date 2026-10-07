@@ -421,6 +421,11 @@ function recoverOne(o, escrows) {
     let played = false;
     try { played = M().closed(rec.nk, rec.id); } catch (e) { logf('coldcall: recover: cannot tell whether the round was played, leaving the record', rec.id, e && e.message); return; }
     if (!played) { try { store.delOpen(rec.nk, rec.mode); store.flush(); } catch {} logf('coldcall: recover: stale record (no escrow, round not closed), dropped', rec.id); return; }
+    // C1: closed is not the same as played. A round the ledger closed by a VOID (the stake went back) gives nothing at boot: no replay, so no state advance and no Callback armed from a round that was refunded.
+    // The ledger tells the kind of its close only through the void call: a stored void answers dup, a stored settle round_closed. No escrow is held here, so the call writes nothing.
+    let voided = false;
+    try { const v = M().void(rec.nk, rec.mode, rec.id, 'recover'); voided = !!(v && v.dup) || !!(v && v.id != null); } catch (e) { if (!(e && e.code === 'round_closed')) { logf('coldcall: recover: cannot tell how the round was closed, leaving the record', rec.id, e && e.message); return; } }
+    if (voided) { try { store.delOpen(rec.nk, rec.mode); store.flush(); } catch (e) { logf('coldcall: recover: record of a voided round not dropped', rec.id, e && e.message); } logf('coldcall: recover: the ledger closed this round by a void, record dropped, nothing replayed', rec.id); return; }
   }
   let r = null;
   try { r = runRound(rec, rec.decisions, true); if (r.status !== 'done' || r.pay.price !== rec.cost || !!r.callback !== rec.callback) r = null; } catch (e) { r = null; }
