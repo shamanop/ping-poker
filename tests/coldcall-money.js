@@ -627,7 +627,7 @@ function auditMatches(s) {
   }
 
   // C9 (mutant X37): a void leaves the Callback armed, on the disk too
-  await test('C9 void and the Callback: voiding a Callback round (settle_error) and a paid round at boot (unresolvable) leave the entitlement armed ON THE DISK, no ledger line for the Callback', async () => {
+  await test('C9 void and the Callback: voiding a Callback round (settle_error) leaves the entitlement armed ON THE DISK (not only in memory), the record gone, no ledger line', async () => {
     const s = setup({ rng: E.rngFrom(82) }); const a = s.sock('ann'); s.store().setPlayer('ann', 'chips', { ...E.newState(), cb: { bet: 100, id: 'cbvoid2' } }); s.flush();
     delete E.CFG.pull.feed; const id = s.lastId(); s.clock.advance(200); a.send('g:coldcall:spin', { bet: 100, mode: 'chips', auto: true });
     const v = last(a, 'g:coldcall:voided'); assert.ok(v && v.roundId === 'cbvoid2'); assert.strictEqual(s.lastId(), id);
