@@ -301,6 +301,16 @@ const BIG_SWAP = {
     const b = s3.sock('ann'); assert.strictEqual(spin(s3, b, { bet: 100, mode: 'play', buyBonus: 'bonus1', auto: true }).cost, E.buyPrice(700, 100), 'the next spin runs on the new config');
   });
 
+  // T2 (Opus re-check of FIX M1): the memo key of the snapshot names non-finite numbers, so a knob going Infinity <-> NaN rebuilds the snapshot (plain JSON would write both as null)
+  await test('snapshot memo (T2): a knob going Infinity <-> NaN gives a NEW snapshot, not the memoised one; the same content gives the same object', async () => {
+    resetLive(); const snap = () => need().snapshot(); const k = E.CFG.pull.pot;
+    k.oneInPerDollar = Infinity; const a = snap(); assert.strictEqual(a.cfg.pull.pot.oneInPerDollar, Infinity); assert.strictEqual(snap(), a, 'the same content is the memoised object');
+    k.oneInPerDollar = NaN; const b = snap(); assert.notStrictEqual(b, a, 'NaN is a different config from Infinity'); assert.ok(Number.isNaN(b.cfg.pull.pot.oneInPerDollar));
+    k.oneInPerDollar = Infinity; const c = snap(); assert.notStrictEqual(c, b, 'and back to Infinity rebuilds again'); assert.strictEqual(c.cfg.pull.pot.oneInPerDollar, Infinity);
+    k.oneInPerDollar = SHIPPED.pull.pot.oneInPerDollar; const d = snap(); assert.notStrictEqual(d, c); assert.strictEqual(d.cfg.pull.pot.oneInPerDollar, SHIPPED.pull.pot.oneInPerDollar);
+    resetLive();
+  });
+
   // ------------------------------------------------------------------------------------------ item 4: every call site reads the live config
   const BETS = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2500], BUYS = [null, null, null, 'call', 'bonus1', null, 'hunt', 'bonus2', null, null, 'bonus1'];
   const CLASSES = {

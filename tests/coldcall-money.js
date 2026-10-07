@@ -292,6 +292,27 @@ function auditMatches(s) {
     assert.ok(steps > 200 && voids >= 3 && callbacks >= 5 && timeouts >= 5 && disconnects >= 5 && decisions >= 10, [steps, voids, callbacks, timeouts, disconnects, decisions].join());
   });
 
+  // T1 (Opus re-check of FIX M1): an OPEN plain paid round takes its pot feed and its roll chance from its OWN snapshot, not from the live config
+  await test('SNAPSHOT (T1): a plain paid round with a decision pending keeps its own feedBps and hit chance when the live config is swapped; the feed leg of its ledger batch and its roll are the snapshot\'s; the next new round uses the new numbers', async () => {
+    const PLAIN = findSeed({ buy: null, bet: 2500, auto: false }, (r) => r.status === 'pending');
+    let u = 0.02;                                                   // between the old chance (25 / 3000 = 0.0083) and the new one (25 / 400 = 0.0625)
+    const s = setup({ rng: E.rngFrom(PLAIN.seed), roundRng: E.rngFrom(5), potRng: () => u }); const a = s.sock('ann'); s.rich('ann', 'play'); s.seedPool('play', 7000);
+    const P = E.CFG.pull.pot; Object.assign(P, { feedBps: 100, oneInPerDollar: 3000, capCents: 5000, minBal: 1000 });            // the numbers the round is spun under
+    const feedOld = Math.floor(2500 * 100 / 10000), feedNew = Math.floor(2500 * 20 / 10000);
+    let r = spin(s, a, { bet: 2500, mode: 'play' }); assert.strictEqual(r.status, 'pending', 'a plain paid round stopped at a decision'); assert.strictEqual(r.buyBonus, null);
+    SRV.setLiveConfig({ overrides: { pull: { pot: { feedBps: 20, oneInPerDollar: 400, capCents: 500 } } }, note: 'T1 mid-round' });
+    assert.strictEqual(E.CFG.pull.pot.feedBps, 20); assert.strictEqual(E.CFG.pull.pot.oneInPerDollar, 400); assert.strictEqual(s.open.size, 1, 'the swap did not touch the open round');
+    let guard = 0; while (r.status === 'pending' && guard++ < 6) r = decide(s, a, r, r.pending.k === 'pick' ? { k: 'pick', p: r.pending.choices[0] } : { k: 'more', take: false });
+    assert.strictEqual(r.status, 'done'); assert.strictEqual(r.pot, null, 'its own hit chance (25 / 3000) is below u = 0.02: no prize; the live chance (25 / 400) would have hit');
+    const lines = s.lines((e) => e.ref === `coldcall:ann:${r.roundId}:close`);
+    assert.strictEqual(sum(lines, 'coldcall:feed'), feedOld, 'the feed leg is the snapshot\'s feedBps (100), not the live 20'); assert.strictEqual(sum(lines, 'coldcall:prize'), 0);
+    // the next NEW round runs on the new numbers
+    const q = spin(s, a, { bet: 2500, mode: 'play', auto: true }); assert.strictEqual(q.status, 'done');
+    const ql = s.lines((e) => e.ref === `coldcall:ann:${q.roundId}`);
+    assert.strictEqual(sum(ql, 'coldcall:feed'), feedNew, 'a new round feeds at the live feedBps (20)'); assert.ok(q.pot && q.pot.won && q.pot.amount === 500, 'and rolls at the live chance (25 / 400 > 0.02) for the live cap: ' + JSON.stringify(q.pot));
+    SRV.setLiveConfig({ overrides: {} });
+  });
+
   // ---------------------------------------------------------------- no wallet
   await test('NO WALLET: the slot\'s ctx has no wallet, and games/coldcall.js makes no wallet call and no direct ledger / service call', async () => {
     const src = fs.readFileSync(path.join(__dirname, '..', 'games', 'coldcall.js'), 'utf8').split('\n').filter((l) => !/^\s*\/\//.test(l)).join('\n').replace(/\/\/.*$/gm, '');
