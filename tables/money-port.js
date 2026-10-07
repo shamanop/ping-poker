@@ -69,37 +69,11 @@ function createMoneyPort({ service, ledger, bootId, afterWrite, onFence, onWrite
   }
 
   // M10: buy-ins into this seat since the night began, read from the ledger (survives restarts).
-  // The ledger is append-only: the count per (seat, fromId) is kept and only entries after the last id seen are read (D2: no cold scan per call).
-  const buyIns = new Map();     // `${seat}|${fromId}` -> { upTo, n }
-  function buyInCount(table, key, fromId) {
-    const seat = seatAcct(table.id, key);
-    const from = fromId || 0;
-    const k = seat + '|' + from;
-    let c = buyIns.get(k);
-    if (!c) buyIns.set(k, c = { upTo: from, n: 0 });
-    const upTo = ledger.lastId;
-    for (const _ of ledger.entries(e => e.to === seat && e.reason.startsWith('buyin:'), c.upTo)) c.n++;
-    c.upTo = Math.max(c.upTo, upTo);
-    return c.n;
-  }
+  // D2: answered from the service's seat-event index (built in one pass at createService, kept up to date from new lines), never a journal scan.
+  function buyInCount(table, key, fromId) { return service.buyInCount(table.id, key, fromId || 0); }
 
-  // handNo is monotonic per table across restarts: the highest n over refs 'hand:<id>:<n>' (0 if none).
-  // One pass over the hand batches builds every table's maximum; later calls only read the entries after the last id seen.
-  const handMax = new Map();    // tableId -> highest n
-  let handUpTo = 0;
-  function lastHandNo(tableId) {
-    const upTo = ledger.lastId;
-    for (const e of ledger.entries(x => x.batchRef && x.batchRef.startsWith('hand:'), handUpTo)) {
-      const at = e.batchRef.lastIndexOf(':');
-      if (at < 5) continue;
-      const n = Number(e.batchRef.slice(at + 1));
-      if (!Number.isSafeInteger(n)) continue;
-      const id = e.batchRef.slice(5, at);
-      if (n > (handMax.get(id) || 0)) handMax.set(id, n);
-    }
-    handUpTo = Math.max(handUpTo, upTo);
-    return handMax.get(tableId) || 0;
-  }
+  // handNo is monotonic per table across restarts: the highest n over refs 'hand:<id>:<n>' (0 if none), from the same index.
+  function lastHandNo(tableId) { return service.lastHandNo(tableId); }
 
   // Drift check for one table: every non-zero seat account must equal stack + handBet of its seat (contract 3 / 10).
   // `seats` = [{ key, stack, handBet }]. Returns [{ account, ledger, memory }] for each disagreement (empty = clean).

@@ -157,8 +157,8 @@ t('normal play through the service does no cold scan after boot: buy-in, cash-ou
   eq(led.stats().coldLookups, 0, 'the dup retries were served from the window');
   for (let i = 80; i < 200; i++) led.transfer('mint:signup', 'bank:filler' + (i % 3), 1 + i, 'chips', 'noise', 'noise' + i);   // now the buy-in is cold
   const c2 = led.stats().coldScans;
-  eq(svc.seatFund('T', 'ann', 'chips'), 'chips'); eq(led.stats().coldScans - c2, 1, 'a seatFund whose buy-in is cold is one backward scan');
-  svc.cashOut('ann', 'T', 40, 'chips', null, 'co1'); ok(led.stats().coldLookups >= 1, 'a dup retry of a cold ref is one positioned read'); eq(led.stats().coldScans - c2, 1);
+  eq(svc.seatFund('T', 'ann', 'chips'), 'chips'); eq(led.stats().coldScans - c2, 0, 'E2: a seatFund whose buy-in is cold is answered from the index, no scan');
+  svc.cashOut('ann', 'T', 40, 'chips', null, 'co1'); ok(led.stats().coldLookups >= 1, 'a dup retry of a cold ref is one positioned read'); eq(led.stats().coldScans - c2, 0);
   led.close();
 });
 
