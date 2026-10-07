@@ -13,7 +13,7 @@ const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';         // no I, O, 0, 1
 const PERMANENT_ID = 'POKERPING';
 const MAX_OPEN_PER_HOST = 5;
 const ENDED_KEEP_MS = 14 * 86400000;
-const PERSIST = ['id', 'name', 'mode', 'unit', 'buyIn', 'blinds', 'blindIncrease', 'actionTimerSec', 'rebuys', 'rebuyLimit', 'isPrivate', 'autoStart',
+const PERSIST = ['id', 'name', 'mode', 'unit', 'buyIn', 'blinds', 'blindIncrease', 'actionTimerSec', 'rebuys', 'rebuyLimit', 'isPrivate', 'autoStart', 'look',
   'hostKey', 'state', 'permanent', 'nightId', 'nightFromId', 'nightHand0', 'createdAt', 'blindStartAt', 'endedAt'];
 
 const pad = n => String(n).padStart(2, '0');
@@ -116,7 +116,7 @@ function createRegistry(deps) {
     const blinds = legacyBlinds && Number.isInteger(legacyBlinds.sb) && Number.isInteger(legacyBlinds.bb) && legacyBlinds.sb >= 1 && legacyBlinds.sb < legacyBlinds.bb ? { sb: legacyBlinds.sb, bb: legacyBlinds.bb } : d.blinds;
     return build({
       id: PERMANENT_ID, name: 'The Ping', mode: 'chips', unit: 'chips', buyIn: { ...d.buyIn }, blinds, blindIncrease: { enabled: false, everyMin: 15, schedule: 'standard' },
-      seats: 8, actionTimerSec: 30, autoStart: true, isPrivate: false, rebuys: true, rebuyLimit: 0, hostKey: 'chris', state: 'open', permanent: true,
+      seats: 8, actionTimerSec: 30, autoStart: true, isPrivate: false, look: 'basement', rebuys: true, rebuyLimit: 0, hostKey: 'chris', state: 'open', permanent: true,
       nightId: null, nightFromId: 0, nightHand0: 0, createdAt: clock.now(), blindStartAt: 0,
     });
   }
@@ -155,7 +155,7 @@ function createRegistry(deps) {
   function card(t) {
     const b = t.handLive() ? { sb: t.hand.sb, bb: t.hand.bb } : { sb: t.blinds.sb, bb: t.blinds.bb };
     return { id: t.id, name: t.name, mode: t.mode, unit: t.unit, sb: b.sb, bb: b.bb, buyIn: { min: t.buyIn.min, max: t.buyIn.max }, seats: t.maxSeats,
-      seated: t.players().filter(s => s.connected).length, host: { key: t.hostKey, display: profileOf(t.hostKey).display }, state: t.state, isPrivate: t.isPrivate };
+      seated: t.players().filter(s => s.connected).length, host: { key: t.hostKey, display: profileOf(t.hostKey).display }, state: t.state, isPrivate: t.isPrivate, look: t.look || 'basement' };
   }
   function publicTable(t) {
     const b = t.handLive() ? { sb: t.hand.sb, bb: t.hand.bb } : { sb: t.blinds.sb, bb: t.blinds.bb };

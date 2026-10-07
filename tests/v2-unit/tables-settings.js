@@ -14,7 +14,7 @@ const bad = (raw, field) => { const r = validateSettings(raw); ok(!r.ok, 'accept
 t('defaults: chips table', () => {
   const r = validateSettings(base);
   ok(r.ok);
-  eq(r.value, { name: 'Tbl', mode: 'chips', unit: 'chips', buyIn: { min: 500, max: 1000000, default: 2000 }, blinds: { sb: 25, bb: 50 }, blindIncrease: { enabled: false, everyMin: 15, schedule: 'standard' }, seats: 8, actionTimerSec: 30, rebuys: true, rebuyLimit: 0, isPrivate: true, autoStart: true });
+  eq(r.value, { name: 'Tbl', mode: 'chips', unit: 'chips', buyIn: { min: 500, max: 1000000, default: 2000 }, blinds: { sb: 25, bb: 50 }, blindIncrease: { enabled: false, everyMin: 15, schedule: 'standard' }, seats: 8, actionTimerSec: 30, rebuys: true, rebuyLimit: 0, isPrivate: true, autoStart: true, look: 'basement' });
 });
 t('defaults: play table uses cents and its own caps', () => {
   const r = validateSettings({ name: 'Pl' });

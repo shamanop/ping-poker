@@ -3,7 +3,7 @@
 const { TableError } = require('../../tables/errors');
 const { validateSettings } = require('../../tables/settings');
 
-const ALLOWED = ['name', 'blinds', 'actionTimerSec', 'rebuys', 'rebuyLimit', 'isPrivate', 'blindIncrease', 'autoStart', 'buyIn'];
+const ALLOWED = ['name', 'blinds', 'actionTimerSec', 'rebuys', 'rebuyLimit', 'isPrivate', 'blindIncrease', 'autoStart', 'buyIn', 'look'];
 
 function register(ctx, socket, on) {
   const { registry, views, auth, accounts } = ctx;
@@ -46,7 +46,7 @@ function register(ctx, socket, on) {
       if (!ALLOWED.includes(k)) throw new TableError('forbidden', { field: k });
       if (k === 'buyIn' && t.handNo - (t.nightHand0 || 0) > 0) throw new TableError('locked', {}, 'Buy-in limits are locked once a hand has been dealt');
     }
-    const blindsOnly = Object.keys(patch).every(k => k === 'blinds');
+    const blindsOnly = Object.keys(patch).every(k => k === 'blinds' || k === 'look');   // the look is cosmetic: allowed mid-hand
     if (live(t) && !t.paused && !blindsOnly) throw new TableError('paused', {}, 'Change settings between hands');
     const v = validateSettings({ ...registry.recOf(t), ...patch });
     if (!v.ok) { const { code, field, message, ...rest } = v; throw new TableError(code === 'range' ? 'range' : 'bad_request', { field, ...rest }, message); }

@@ -48,11 +48,11 @@
       <header class="sh-top">
         <img class="sh-logo" src="/images/ui/vp-mark.png" alt=""><span class="sh-brand">THE PING</span>
         <span class="sh-lvl" id="sh-lvl"><span id="sh-flame"></span><span id="sh-xp"></span></span>
-        <div class="sh-wallet" id="sh-wallet" title="Play $ is pretend money. Chips are your poker bank."><span id="sh-chips" title="Chips: your poker bank plus what you have at the table"><small>Chips</small>--</span><span id="sh-play"><small>Play</small>--</span></div>
+        <div class="sh-wallet" id="sh-wallet" title="Play $ is pretend money. Chips are your poker bank."><span class="plate plate--row sh-plate" id="sh-chips" title="Chips: your poker bank plus what you have at the table"><small class="plate__label">Chips</small><b class="plate__value">--</b></span><span class="plate plate--row sh-plate" id="sh-play"><small class="plate__label">Play $</small><b class="plate__value">--</b></span></div>
         <span data-money-toggle></span>
-        <button class="sh-bonus" id="sh-bonus" type="button" title="Daily bonus"></button>
-        <button class="sh-acct" id="sh-acct" type="button"></button>
-        <button class="sh-btn" id="sh-out" type="button">Sign out</button>
+        <button class="sh-bonus btn btn--secondary btn--sm" id="sh-bonus" type="button" title="Daily bonus"></button>
+        <button class="sh-acct btn btn--ghost btn--sm" id="sh-acct" type="button"></button>
+        <button class="sh-out btn btn--danger btn--sm" id="sh-out" type="button">Sign out</button>
       </header>
       <nav class="sh-dock" id="sh-dock"></nav>
       <main class="sh-main" id="sh-main"><div class="sh-stage" id="sh-stage"></div><div class="sh-split" id="sh-split"></div></main>`;
@@ -75,7 +75,7 @@
     const g = { def, el: null, di: null, mounted: false };
     games.set(def.id, g);
     const b = document.createElement('button');
-    b.type = 'button'; b.className = 'sh-di'; b.dataset.game = def.id;
+    b.type = 'button'; b.className = 'sh-di btn btn--icon btn--secondary'; b.dataset.game = def.id;
     b.innerHTML = `${def.icon || IC.box}<span class="tip">${def.name}</span><span class="badge"></span>`;
     b.addEventListener('click', () => dockClick(def.id));
     g.di = b;
@@ -111,11 +111,11 @@
   function makeWindow(id) {
     const g = games.get(id), s = gs(id);
     const el = document.createElement('section');
-    el.className = 'sh-win'; el.dataset.game = id;
+    el.className = 'sh-win panel panel--flush'; el.dataset.game = id;
     el.innerHTML = `<div class="sh-title"><b>${g.def.name}</b><div class="sh-wb">
-        <button data-a="dl" title="Dock left" type="button">${WB.dl}</button><button data-a="dr" title="Dock right" type="button">${WB.dr}</button>
-        <button data-a="fl" title="Float" type="button">${WB.fl}</button><button data-a="mn" title="Minimize to dock" type="button">${WB.mn}</button>
-        <button data-a="mx" title="Maximize" type="button">${WB.mx}</button><button data-a="cl" title="Close" type="button">${WB.cl}</button></div></div>
+        <button class="btn btn--icon btn--ghost" data-a="dl" title="Dock left" type="button">${WB.dl}</button><button class="btn btn--icon btn--ghost" data-a="dr" title="Dock right" type="button">${WB.dr}</button>
+        <button class="btn btn--icon btn--ghost" data-a="fl" title="Float" type="button">${WB.fl}</button><button class="btn btn--icon btn--ghost" data-a="mn" title="Minimize to dock" type="button">${WB.mn}</button>
+        <button class="btn btn--icon btn--ghost" data-a="mx" title="Maximize" type="button">${WB.mx}</button><button class="btn btn--icon btn--ghost" data-a="cl" title="Close" type="button">${WB.cl}</button></div></div>
       <div class="sh-body"></div>
       ${['se', 'sw', 'e', 'w', 's'].map((d) => `<i class="sh-h ${d}" data-h="${d}"></i>`).join('')}`;
     ui.main.appendChild(el);
@@ -280,8 +280,8 @@
   if (window.Money && window.Money.onPrefChange) window.Money.onPrefChange(() => { try { refreshTop(); } catch (e) {} try { if (ccReady) toCC({ type: 'pref' }); } catch (e) {} });   // Chips shown as chips or dollars: the slot repaints its idle amounts
   function refreshTop() {
     const p = $('sh-play'); if (!p) return;
-    const c = $('sh-chips'); if (c) c.innerHTML = '<small>Chips</small>' + (chipsTotal == null ? '--' : chipAmt(chipsTotal));
-    p.innerHTML = '<small>Play</small>' + (wallet.play == null ? '--' : dollars(wallet.play));
+    const c = $('sh-chips'); if (c) c.innerHTML = '<small class="plate__label">Chips</small><b class="plate__value">' + (chipsTotal == null ? '--' : chipAmt(chipsTotal)) + '</b>';
+    p.innerHTML = '<small class="plate__label">Play $</small><b class="plate__value">' + (wallet.play == null ? '--' : dollars(wallet.play)) + '</b>';
     const u = user(); $('sh-acct').textContent = u ? (u.display || u.key || '') : '';
   }
   function needsAction() {
@@ -488,8 +488,13 @@
     });
     ui.dock.appendChild(Object.assign(document.createElement('i'), { className: 'sh-sep' }));
     for (const n of ['Blackjack', 'Roulette']) {
-      const b = document.createElement('button'); b.type = 'button'; b.className = 'sh-di soon'; b.disabled = true;
-      b.innerHTML = `${IC.soon}<span class="tip">${n}: coming soon</span>`; ui.dock.appendChild(b);
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'sh-di soon btn btn--icon btn--secondary'; b.setAttribute('aria-disabled', 'true');
+      b.title = n + ': coming soon'; b.setAttribute('aria-label', n + ', coming soon');
+      b.innerHTML = `${IC.soon}<span class="tag tag--soon">Soon</span><span class="tip">${n}: coming soon</span>`; ui.dock.appendChild(b);
+      let lp = null;   // long-press on touch shows the label for two seconds
+      b.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse') return; lp = setTimeout(() => { b.classList.add('show-tip'); setTimeout(() => b.classList.remove('show-tip'), 2000); }, 400); });
+      ['pointerup', 'pointerleave', 'pointercancel'].forEach((ev) => b.addEventListener(ev, () => clearTimeout(lp)));
+      b.addEventListener('click', (e) => { e.preventDefault(); b.classList.add('show-tip'); setTimeout(() => b.classList.remove('show-tip'), 2000); });
     }
   }
 

@@ -1,0 +1,35 @@
+/* Table looks. #game-screen[data-look] picks the room and table layers (public/images/ui/looks/<id>/); basement is the live default in images/ui/.
+   Per-look knobs: --room-img, --table-img, --table-fx (filter on the table layer), --room-fx (vignette strength). Set by public/looks.js. */
+#game-screen { --room-img: url(images/ui/room.jpg); --table-img: url(images/ui/table.png); }
+#game-screen.look-wait { --room-img: none; }
+#game-screen[data-look="yacht"]   { --room-img: url(images/ui/looks/yacht/room.jpg);   --table-img: url(images/ui/looks/yacht/table.png); }
+#game-screen[data-look="miami"]   { --room-img: url(images/ui/looks/miami/room.jpg);   --table-img: url(images/ui/looks/miami/table.png); }
+#game-screen[data-look="redroom"] { --room-img: url(images/ui/looks/redroom/room.jpg); --table-img: url(images/ui/looks/redroom/table.png); }
+#game-screen[data-look="ranch"]   { --room-img: url(images/ui/looks/ranch/room.jpg);   --table-img: url(images/ui/looks/ranch/table.png); }
+#game-screen[data-look="vault"]   { --room-img: url(images/ui/looks/vault/room.jpg);   --table-img: url(images/ui/looks/vault/table.png); }
+#game-screen[data-look="saucer"]  { --room-img: url(images/ui/looks/saucer/room.jpg);  --table-img: url(images/ui/looks/saucer/table.png); }
+
+/* ── picker (create form + host drawer) ── */
+.look-pick { display: grid; grid-template-columns: repeat(auto-fill, minmax(calc(78 * var(--px)), 1fr)); gap: var(--p6); }
+.look-opt { display: grid; gap: var(--p4); padding: var(--p3); background: rgba(0, 0, 0, .28); border: 1px solid var(--line-lt, rgba(255, 255, 255, .16)); border-radius: var(--p6); cursor: pointer; color: var(--ink-dim, #bbb); font: inherit; text-align: center; }
+.look-opt img { display: block; width: 100%; height: auto; aspect-ratio: 3 / 2; object-fit: cover; border-radius: var(--p4); opacity: .78; }
+.look-opt span { font-size: var(--p11); letter-spacing: .04em; line-height: 1.1; padding-bottom: var(--p2); }
+.look-opt:hover img { opacity: 1; }
+.look-opt.on { border-color: #C99A45; box-shadow: 0 0 0 1px #C99A45, 0 0 var(--p10) rgba(201, 154, 69, .45); color: #F0D58E; }
+.look-opt.on img { opacity: 1; }
+.look-opt.on span { font-weight: 700; }
+.look-opt:focus-visible { outline: 2px solid #F0D58E; outline-offset: 1px; }
+.host-drawer .look-pick { grid-template-columns: repeat(4, 1fr); }
+
+/* ── per-look tuning, judged from screenshots (looks-shots/) ── */
+/* the "POT" caption sits on the studded ring: on the pale steel and alloy rails it vanished */
+#game-screen[data-look]:not([data-look="basement"]) .pot-txt small { color: #F2E6C4; text-shadow: 0 0 3px #000, 0 1px 2px #000, 0 0 6px rgba(0, 0, 0, .8); }
+/* Miami: the mirrored table with the powder lines is the point of the room (Chris 2026-10-06). The room is repainted with it at the
+   upper left, clear of the chat panel and the poker table; the rug is darkened in the picture itself, so the room keeps the normal
+   vignette, a little lighter. On landscape screens the room is also drawn 15 percent larger and shifted so the table sits in the gap. */
+#game-screen[data-look="miami"]::before {
+  background: radial-gradient(ellipse 75% 70% at 50% 46%, transparent 38%, rgba(4, 2, 1, .5) 100%), linear-gradient(rgba(8, 5, 3, .1), rgba(8, 5, 3, .1));
+}
+@media (min-aspect-ratio: 5/4) {
+  #game-screen[data-look="miami"] { background-size: 115% auto; background-position: 33% 42%; }
+}
