@@ -103,7 +103,7 @@ t('E2: scripted hour (journal of 6 windows, permanent table nightFromId 0, new p
   const c0 = led.stats().coldScans, l0 = led.stats().coldLookups;
   const T = { id: 'PERM', cur: 'chips' };
   for (let m = 0; m < 60; m++) {
-    for (let j = 0; j < 30; j++) led.transfer('mint:bonus', 'bank:p' + (j % 6), 1, 'chips', 'slot', 'h' + m + 'x' + j);   // slot rounds in between (more than a window over the hour)
+    for (let j = 0; j < 90; j++) led.transfer('mint:bonus', 'bank:p' + (j % 6), 1, 'chips', 'slot', 'h' + m + 'x' + j);   // slot rounds in between (more than a window over the hour)
     const k = 'new' + m;                                                                      // a new player
     led.transfer('mint:signup', 'bank:' + k, 5000, 'chips', 'sign', 'ns' + k);
     eq(port.buyInCount(T, k, 0), 0, 'first buy-in check of a new player at a permanent table');
