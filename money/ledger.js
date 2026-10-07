@@ -63,7 +63,9 @@ function normItem(it, defReason) {
 
 const sigOf = (item) => JSON.stringify([item.from, item.to, item.amount, item.cur, item.reason]);
 // 128 bits of sha256 of the old signature string: the ref index keeps this instead of the string.
-const sigHash = (sig) => crypto.createHash('sha256').update(sig).digest('hex').slice(0, 32);
+const sigHash = typeof crypto.hash === 'function'      // one-shot (node >= 21.7) is about twice as fast as createHash per line
+  ? (sig) => crypto.hash('sha256', sig, 'hex').slice(0, 32)
+  : (sig) => crypto.createHash('sha256').update(sig).digest('hex').slice(0, 32);
 
 const CHUNK = 1 << 20;        // read size for every streamed read of the journal
 const IXK = 1024;             // sparse index: id + file offset of every IXK-th applied line (start points for cold streams)
