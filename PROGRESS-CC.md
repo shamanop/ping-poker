@@ -251,9 +251,7 @@ Server events `g:coldcall:state|history|spin` -> `g:coldcall:result`; buy ids `r
   through OpenRouter, $3.31 (`cold-call/art/concepts/spend.jsonl`). Nothing else has used a paid API.
 
 ## For Isabelle (updated 2026-10-05 23:30)
-- **THE HAND-OVER IS YOURS. Chris, topic 10, 22:45, his words: "send it to isabelle to fork into the repo".** When the list in
-  Status is all green, you merge `coldcall` into master yourself. Frank will not push master and will not open a pull request.
-  Chris's 21:29 hold still stands ("dont push it live yet we are playing"), and your 22:56 note says the same.
+- **SUPERSEDED (2026-10-07): the hand-over that stood here (merge `coldcall` into master) is void. Cold Call ships from `v2-all`: see `HAND-OFF TO ISABELLE` at the top of `PROGRESS-V2.md`. Do not push or merge `coldcall`.**
 - **Flag for you and Chris, not a blocker: Chips exposure.** With Chips now a slot currency, Cold Call's top bet (2,500) times
   the 10,000x cap is a 25,000,000-chip win against the poker bank. If chips are ever settled between friends, someone is the
   counterparty to that. Bender has the same exposure. Your call whether Chips mode gets a lower top bet or a lower cap.

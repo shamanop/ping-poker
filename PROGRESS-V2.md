@@ -3,6 +3,60 @@
 Branch `v2-core` off origin/master 9440541 (live). Owner: Frank. Contracts: `V2-DESIGN.md`. Bugs from playtests: `QA-FRANK.md`.
 Never push or merge `master`.
 
+## HAND-OFF TO ISABELLE, 2026-10-07 05:10 CDT (P6 wave 3c lead; branch `v2-all`). This is the current one; the 2026-10-06 19:50 section further down is the old UI hand-off, done.
+
+**Head: the commit on `origin/v2-all` that carries this section; product code = `fd065d1`** (the commit on top adds only this file, `PROGRESS-CC.md` and QA output). A plain descendant of `origin/master` f34da22 (merged, never rebased; master had not moved at 04:53 CDT). Not merged to master, not deployed: that is yours. Play money only.
+
+**TOP LINE, read before any deploy: a rollback to master f34da22 AS IS does not hold once one Cold Call round has been played.** Master's `money/ledger.js` does not know the account kinds `escrow:` and `pool:`. Tested on a copy of a soak data dir (6,677 lines): master boots, serves, QUARANTINES 995 lines, 28 player balances read wrong (Play $ total 12.2M against 4.36M) and it writes 17 recovery lines on that wrong view. The boot does not stop, which is the dangerous part.
+- What holds (tested, scratch copies): master + the 2-line change `git diff f34da22 a10735a -- money/ledger.js` (the two kinds in `PLAYER_KINDS`) reads the same dir with 0 quarantined and correct balances; open slot rounds stay parked in escrow (master has no slot) and are settled when this head boots again. Before the first slot round is played, master as is reads the dir cleanly (tested).
+- So: either put that 2-line change on master BEFORE this head goes live (it changes nothing for master's own play), or keep a rollback build = master + those 2 lines. Never roll back to plain f34da22 after slot play.
+- D2 adds nothing to this: the checkpoint is a sidecar file that old code ignores, and `money.jsonl` stays byte for byte what the old code writes. Tested on this head's code: soak dir (5,639 lines + sidecar) -> master + 2 lines (14 seats returned, 14 lines appended) -> this head again with verify on: checkpoint used, 320 tail lines replayed, no mismatch, 0 quarantined, 10 open slot rounds settled, and the pre-D2 ledger's full replay of the final journal = this head's state (0 of 43 accounts differ).
+
+**What is in it** (since master f34da22)
+- UI wave 1 from master, merged (wave 3a).
+- The one money system (P6): Bender and Cold Call write through `ctx.money` to `money.jsonl` (escrow per open round, the office pot as a pool account, one ledger line per money event, ledger first / state second / result last); boot rule: seats back to their fund, open slot rounds settled as their 20 s timeout would.
+- Cold Call, lobby + docked in the shell, Play $ and Chips, with the client improvements of `coldcall` 18f1e67 and of `coldcall-fb1` accb6bc (Chris's play notes FB1 wave B: painted pay table / plaque / keypad, fit at 360, FB5 perf, the FB6 motion layer `juice.js`). accb6bc came in by path checkout of 15 files under `public/games/coldcall` (no merge: 47 MB of QA shots left out); nothing outside that folder changed.
+- Ride-along fixes A2-A5, the Opus money critic's fixes (two rounds), the money soak (`tests/soak/`, README there).
+- **D2 ledger checkpoints** (p6-d2 908cb06; `money/ledger.js`, `money/service.js`; D2 sections in `money/PROGRESS.md`): only the newest 20,000 ledger lines are parsed in RAM, older ones are read from the file on demand; `money.jsonl.ckpt` lets a boot replay only the tail; the poker seat events are indexed once at boot so normal play never scans the file. Opus critic, three rounds: r1 DOES NOT HOLD (a checkpoint written under other ledger rules was believed), r2 HOLDS, r3 HOLDS after the second and last fix round. Builder's numbers at 500,000 lines (ledger alone, fix round 1): open with a checkpoint 0.67 s, one boot pass about 1.45 s; before D2 3.3 s and 552 MB RSS.
+
+**What is NOT in it**: watch a friend (`coldcall-w3`), `combo-1006`, the painted poker buttons, anything of `coldcall-fb1` after accb6bc, `qa/coldcall-fb1` and the `cold-call/` art of fb1.
+
+**What I tested myself** (wave 3c lead, clean `git archive` exports; builders' and critics' numbers are named as theirs)
+- Product tree of `fd065d1` (export identical by `diff -rq` to the one the runs used): run-money 567/567, run-tables 180/180, run-engine 96 (seed 1), `tests/coldcall.js` exit 0 (47 / 57 / 61 / 28 / 20 / 46), bender 19 + 5, `tests/v2/run.js --jobs 1` 166 of 166. `cmp games/coldcall-engine.js public/games/coldcall/engine.js` silent.
+- Same tree: `tests/soak/prove.js --seed 7`, default env: clean PASS, 12 of 12 planted bugs CAUGHT. One 8-minute soak (`--seed 14 --kills 12`) under `LEDGER_WINDOW=200 LEDGER_CKPT_EVERY=500 LEDGER_CKPT_VERIFY=1`: CLEAN, 11,156 steps, 5,639 ledger lines, 11,171 checks; 12 of 12 restarts booted from a checkpoint with the full-replay comparison on: 0 mismatches, 0 ignored, 0 quarantined, 0 cold scans. The same pair also on the two earlier D2 heads (9ad1c59, 4af7bc6): clean, 12 of 12 each.
+- Browser on `fd065d1`, real clicks via `qa/p6-w3b/run_leg.sh`: 540x960 Play $ PASS and docked 360x740 Chips PASS, 33 rounds each, 0 fails, 7 of 7 forced features, 4 of 4 buys, 0 console / page errors, 0 bad responses; each leg's `money.jsonl` replayed against its JSON round by round: OK (`qa/p6-w3b/out/w3c-fd065d1-*.json`). I looked at the docked 360 end shot: painted board, nothing broken. The same two legs passed on 0910bef (the fb1 client before D2).
+- Rollback / migration boots of the real `server.js` (the cases in the top line plus a first boot on a master-written dir and a plain boot on a soak dir copy: 14 seats + 10 slot rounds recovered). Scripts in `_scratch/p6/w3c/rb/` on Frank's box, not in the repo.
+- Not mine. Builder: run-money 567/567 in three env settings; 37 + 8 mutants killed. Critic r3 (Opus): 0 of 2,118,490 answers differ from the real pre-D2 service + port; 180 rollback / forward boots between the two last D2 heads equal the full replay. Earlier waves: six-leg browser chain (198 rounds), money critic rounds 1-2.
+- NOT run by anyone: a real phone, iOS, touch, sound; the Railway volume; real traffic; the real server at 500,000 lines (measured on the ledger alone); `f1_u17.js` on this head.
+
+**Open bugs** (severity first)
+- MONEY, only on a line no shipped code writes (critic E14): a batch leg stored WITHOUT its own `reason` that buys into a seat. Pre-D2 code threw for that seat; this head answers, treats the seat's fund as the table currency and can cash a Play $-bought stack out as chips. Also E8's shape (two `topup` legs in one line) is handled as before D2. Check the live journal once before deploy, both counts must be 0:
+  `node -e 'let a=0,b=0,n=0;require("readline").createInterface({input:require("fs").createReadStream(process.argv[1])}).on("line",l=>{n++;try{const r=JSON.parse(l);if(!Array.isArray(r.batch))return;if(r.batch.filter(x=>x.reason==="topup").length>1)a++;if(r.batch.some(x=>typeof x.reason!=="string"))b++}catch(e){}}).on("close",()=>console.log(n,"lines | 2+ topup legs:",a,"| batch legs without a reason:",b))' money.jsonl`
+- MONEY, latent (E15): the checkpoint's rules fingerprint is the `money/ledger.js` file plus the live `SOURCE_ACCOUNTS` / `CURS` at write time. Code that changed that set at run time, at different moments in two processes, could make a boot believe a wrong state. Nothing in the tree does it; `ADD-A-GAME.md` says to edit the file. `LEDGER_CKPT=0` removes the whole class.
+- STATE, no balance (C3, partly): after a crash between a slot ledger line and the state flush the office pot's `paid` / `last` can miss one prize.
+- STATE, on purpose (C4): an instant spin's leads / daily state reach disk within 50 ms, not before the result.
+- LOW, 0 money (D7 residual): `admin_set_play` with a reused op id and a hand-typed matching reason reads as a dup.
+- LOW, display: a second tab opened while a decision is open elsewhere shows BUSY with no prompt; in 1 of 2 runs its meter kept the old number until the next spin (shell plate and ledger right).
+- LOW: a late decision on a closed round answers `no_round`, not `round_closed` (nothing written).
+- LOW, visual, no money path: the `juice.js` small-win rings are still too large (known in accb6bc, not fixed). `juice.js` has no test of its own: in the two legs on this head it was on and its counters ran (cells landed 4,534 / 4,490, puffs 17 / 12, nudges 20 / 19) with 0 page errors; how it looks was not judged by me.
+- NEVER SEEN in a browser: an office pot win; a poker hand played with the slot docked at 360 (played at 540 in wave 3a).
+- U17 (BIG WIN overlay after a lost one-more-call): restated as a detector artefact (the hidden warm-up layer); nothing visible.
+- TEST GAPS (E16): two surviving mutants on the fingerprint (`CURS` not covered, set order); `LEDGER_WINDOW=1` alone fails 13 log-count asserts in `money-ledger.js` (the new "window 1 raised to 2" log line; do not run live with 1). Not reachable by the soak: engine-failure voids, a decision timer exactly across a restart, live buy-price changes.
+
+**Deploy notes**
+- New files beside `money.jsonl` (same volume): `coldcall-pull.json` (slot state), `coldcall-config.json` (live slot config), `money.jsonl.ckpt` (+ `.ckpt.bad` if one was ever refused; both can be deleted at any time, the next boot does a full replay). `money.jsonl.quarantine` only if lines were refused.
+- Env: `COLDCALL_PULL_FILE`, `COLDCALL_CFG_FILE` (optional, default beside `money.jsonl`); `BENDER_ADMIN_TOKEN` (live slot math endpoints, off when unset); `COLDCALL_TEST` must NOT be set (ignored anyway when `NODE_ENV=production`). D2 switches: `LEDGER_CKPT=0` (no checkpoint read or written), `LEDGER_WINDOW=0` (all lines in RAM); both together = pre-D2 reading. `LEDGER_CKPT_VERIFY=1` compares the checkpoint with a full replay at boot and logs `CHECKPOINT MISMATCH` if they differ: suggested for the first live boots.
+- First boot on master's data: no migration; `money.jsonl` is read as it is and its bytes are not touched (tested: prefix `cmp`); after recovery one line `ledger: N lines, M in memory, checkpoint ok` and the sidecar appears. Later boots log `money: checkpoint id ... tail lines replayed`. Every deploy that changes `money/ledger.js` costs ONE full replay on its first boot (`checkpoint ignored: rules changed`), on purpose.
+- The Cold Call motion layer can be switched off per page load with `?nojuice` on the slot URL (loads neither `juice.js` nor `juice.css`); there is no server switch.
+- The push does not need an empty table for the money to be right (a restart voids the hand in flight, returns every seat to its fund, settles open slot rounds), but it does unseat everyone: pick a quiet moment.
+- A bonus claimed on master stays claimed (the gate reads the account record first).
+
+**Needs Chris**
+- D1: a restart settles an open bonus decision as its 20 s timeout would and pays the shown win (was: refund the stake). Every deploy does this.
+- Chips max bet x the 10,000x cap: the exposure of one spin in real poker bank chips (Cold Call top bet 2,500 x 10,000 = 25,000,000 chips; Bender the same kind).
+- iOS / touch / sound: never tested.
+- The 2-line master change for rollback (top line): Isabelle's call, his to know.
+
 ## 2026-10-07 01:45, branch `v2-all`: P6 wave 3b CLOSED, INTERIM head (NOT the hand-off)
 
 Product code head 6634db1, unchanged since the 00:45 push; this update adds only tests (`tests/soak/`, soak head 481104b), browser QA files (`qa/p6-w3b/`) and this entry. Still NOT merged to master, NOT deployed. Still to come before the hand-off: wave 3c (ledger checkpoints, then `HAND-OFF TO ISABELLE`).

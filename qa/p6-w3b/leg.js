@@ -204,6 +204,7 @@ async function dockedInfo() {
     if (pool.some((p) => p.v < 0)) await fail('pool:coldcall:office is negative', { pool });
     if (!(scr === wallet[MODE] && wallet[MODE] === finalBal)) await fail('screen != wallet_get != ledger at the end', res.end);
     if (plate !== plateWant) await fail('shell plate != ledger (+ table stacks)', res.end);
+    res.juice = await fr.evaluate(() => (window.CC && CC.juice ? { on: CC.juice.on, landed: CC.juice.landed, puffs: CC.juice.puffs, nudges: CC.juice.nudges } : null)).catch((e) => 'eval failed: ' + e.message);   // (w3c lead) the fb1 motion layer: loaded and firing on this line? Not a pass / fail condition.
     res.consoleErrors = logs.filter((x) => !/favicon/.test(x)); res.badResponses = bad.filter((x) => !/favicon/.test(x));
     if (res.consoleErrors.length) await fail('console / page errors during the leg', { logs: res.consoleErrors.slice(0, 6) });
     await shot('end');
