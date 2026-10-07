@@ -459,6 +459,18 @@ function auditMatches(s) {
     const st = s.store().player('ann', 'play'); assert.ok(st.rounds > st0.rounds, 'the state advanced from the replay of the player\'s choices: ' + st.rounds + ' > ' + st0.rounds);
   });
 
+  // C10: refund is what the ledger returned, also when the round was already closed
+  await test('C10: a void that meets a round the ledger already SETTLED (record that cannot be rebuilt) answers round_closed: refund 0 in the log, no ledger line, the settled money stays, the record is dropped', async () => {
+    const logs = []; const { seed } = findSeed({ buy: 'bonus1', bet: 100, auto: false }, (r) => r.status === 'pending');
+    const s = setup({ rng: E.rngFrom(seed), roundRng: E.rngFrom(5), log: (...x) => logs.push(x.join(' ')) }); const a = s.sock('ann'); const before = s.bal('ann', 'play');
+    let r = spin(s, a, { bet: 100, mode: 'play', buyBonus: 'bonus1' }); s.hooks.after.settle = () => { throw new H.Crash(); };
+    let g = 0; while (r.status === 'pending' && g++ < 6 && !s.hooks.calls.some((c) => c[0] === 'settle')) { const d = r.pending.k === 'pick' ? pick0(r.pending) : { k: 'more', take: false }; a.send('g:coldcall:decide', { roundId: r.roundId, ...d }); const rs = all(a, 'g:coldcall:result'); r = rs[rs.length - 1]; }
+    const id = r.roundId, paid = sum(closeLines(s, id), 'coldcall:credit'), id0 = s.lastId(); assert.ok(paid > 0 && diskHas(s));
+    s.crash(); const disk = s.disk(); disk.open['ann|play'].v = 1; fs.writeFileSync(s.files.pull, JSON.stringify(disk)); logs.length = 0; s.boot();
+    assert.strictEqual(s.lastId(), id0, 'no ledger line at boot'); assert.strictEqual(s.bal('ann', 'play'), before - r.cost + paid, 'the settled money stays');
+    const l = logs.find((x) => /voided round/.test(x)); assert.ok(l && /refund 0 play/.test(l), 'refund 0: ' + l); assert.strictEqual(s.store().allOpen().length, 0); assert.ok(!diskHas(s));
+  });
+
   // C2: the player's answer is in the stored record BEFORE the result of that answer reaches the client
   const CBG = () => ({ ...E.newState(), cb: { bet: 2500, id: 'cbfeedc0ffee01' } });
   // a seed whose Callback reaches ONE MORE CALL and whose taken gamble pays 0 in total while banking pays W > 0 (mirror engine: take, then bank, the same draws)
@@ -531,6 +543,97 @@ function auditMatches(s) {
       const id2 = s.lastId(); s.reboot(); assert.strictEqual(s.lastId(), id2, 'a second boot writes nothing'); assert.deepStrictEqual(s.potOf('play'), pot, 'and the pot does not move again');
     });
   }
+
+  // C5 (mutant X2): boot replays the decisions the player already made
+  await test('C5: a restart at the next prompt replays the pick the player MADE (not the default square): boot pays the bank that was shown for that pick', async () => {
+    let found = null;
+    for (let seed = 1; seed < 4000 && !found; seed++) {
+      const mk = (decs) => E.playRound(E.rngFrom(seed), { buy: 'bonus1', bet: 100, state: E.newState(), now: 1000200, day: '1970-01-01', script: false, auto: false, rnd: E.rngFrom(5) }, decs);
+      const r0 = mk([]); if (r0.status !== 'pending' || r0.pending.k !== 'pick' || r0.pending.choices.length < 2) continue;
+      const last = { k: 'pick', p: r0.pending.choices[r0.pending.choices.length - 1] }, first = pick0(r0.pending), r1 = mk([last]); if (r1.status !== 'pending' || r1.pending.k !== 'more') continue;
+      const bankLast = mk([last, { k: 'more', take: false }]), bankFirst = mk([first, { k: 'more', take: false }]);
+      if (bankLast.status === 'done' && bankFirst.status === 'done' && bankLast.pay.win !== bankFirst.pay.win) found = { seed, last, bankLast: bankLast.pay.win, bankFirst: bankFirst.pay.win };
+    }
+    assert.ok(found, 'a seed where the picked square and the default square bank different amounts');
+    const s = setup({ rng: E.rngFrom(found.seed), roundRng: E.rngFrom(5) }); const a = s.sock('ann'); const before = s.bal('ann', 'play');
+    let r = spin(s, a, { bet: 100, mode: 'play', buyBonus: 'bonus1' }); r = decide(s, a, r, found.last); assert.strictEqual(r.status, 'pending'); assert.strictEqual(r.pending.k, 'more');
+    assert.deepStrictEqual(s.disk().open['ann|play'].decisions, [found.last], 'the pick is in the stored record before the prompt it led to');
+    s.reboot();
+    assert.strictEqual(sum(closeLines(s, r.roundId), 'coldcall:credit'), found.bankLast, 'boot paid the bank of the pick the player made (the default square would pay ' + found.bankFirst + ')'); assert.strictEqual(s.bal('ann', 'play'), before - r.cost + found.bankLast);
+  });
+
+  // C6 (mutants X3, X7, X23): a record with a stake and no escrow pays nothing
+  await test('C6: the game file holds an open record with a stake, the ledger has no escrow and no close for it (ledger rolled back behind the file): boot pays nothing, makes NO ledger call, drops the record', async () => {
+    const PE = findSeed({ buy: 'bonus1', bet: 2500, auto: false }, (r) => r.status === 'pending');
+    const s = setup({ rng: E.rngFrom(PE.seed), roundRng: E.rngFrom(5) }); const a = s.sock('ann'); s.flush(); fs.copyFileSync(s.files.money, s.files.money + '.bak');
+    const b0 = s.bal('ann', 'play'), id0 = s.lastId(); const r = spin(s, a, { bet: 2500, mode: 'play', buyBonus: 'bonus1' }); assert.strictEqual(r.status, 'pending'); assert.ok(r.cost > 0);
+    s.crash(); fs.copyFileSync(s.files.money + '.bak', s.files.money); const calls0 = s.hooks.calls.length; s.boot();
+    assert.strictEqual(s.bal('ann', 'play'), b0, 'nothing paid'); assert.strictEqual(s.lastId(), id0, 'no ledger line'); assert.strictEqual(s.hooks.calls.length, calls0, 'no money call at all (a stale record is dropped before any replay)');
+    assert.strictEqual(s.store().allOpen().length, 0); assert.ok(!diskHas(s), 'record dropped'); assert.deepStrictEqual(s.escrows(), []);
+  });
+  await test('C6: an escrow that holds less than the recorded stake is never settled on the stake the record names (stake_mismatch): boot returns what the escrow holds and pays no win', async () => {
+    const s = setup({ rng: E.rngFrom(PEND.seed), roundRng: E.rngFrom(5) }); const a = s.sock('ann'); const before = s.bal('ann', 'play');
+    const r = spin(s, a, { bet: 100, mode: 'play', buyBonus: 'bonus1' }); tamper(s, r.roundId, 7); const kept = s.escrowSum('play');
+    s.reboot(); const L = closeLines(s, r.roundId);
+    assert.deepStrictEqual(L.map((e) => [e.reason, e.amount]), [['coldcall:void:unresolvable', kept]], 'one void line for the escrow as it is, no spend, no credit'); assert.strictEqual(s.bal('ann', 'play'), before); assert.deepStrictEqual(s.escrows(), []);
+  });
+
+  // C7 (mutant X21): a void the ledger refuses is not "done"
+  await test('C7: a refused void (money.void throws internal) keeps the round open: no g:coldcall:voided, the stake stays in escrow, the record stays, an error is told; once the ledger works the round finishes and the stake is not stranded', async () => {
+    const s = setup({ rng: E.rngFrom(PEND.seed), roundRng: E.rngFrom(5) }); const a = s.sock('ann'); const before = s.bal('ann', 'play'); E.CFG.pull.decision.timeoutMs = 40;
+    let thrown = false; const emit = a.emit; a.emit = (ev, p) => { if (ev === 'g:coldcall:result' && p && p.status === 'pending' && !thrown) { thrown = true; throw new Error('socket write failed'); } return emit(ev, p); };
+    let voids = 0; s.hooks.before.void = () => { voids++; throw Object.assign(new Error('refused'), { code: 'internal' }); };
+    s.clock.advance(200); a.send('g:coldcall:spin', { bet: 100, mode: 'play', buyBonus: 'bonus1' });
+    assert.ok(thrown && voids >= 1, 'the slot tried to void the round'); assert.strictEqual(all(a, 'g:coldcall:voided').length, 0, 'the client is NOT told it was voided'); assert.ok(all(a, 'error').length >= 1, 'it is told an error');
+    const cost = 100 * E.CFG.buyCost.bonus1 / 10; assert.strictEqual(s.escrowSum('play'), cost, 'the stake is still in escrow'); assert.ok(diskHas(s), 'the record is still on disk'); assert.strictEqual(s.open.size, 1, 'the round is still open'); assert.ok(s.bal('ann', 'play') < before);
+    delete s.hooks.before.void; await sleep(150);
+    assert.deepStrictEqual(s.escrows(), [], 'the stake is not stranded: the round finished as a timeout'); assert.strictEqual(s.open.size, 0); assert.ok(!diskHas(s)); assert.ok(closeLines(s, s.lines((e) => e.reason === 'coldcall:open')[0].ref.split(':')[2]).length >= 1, 'a close line exists');
+  });
+
+  // C9 (mutant X6): the state and the dropped record are on the DISK before the result reaches the client
+  await test('C9 flush order: when a result goes out, the settled round\'s record is already off the disk and its state / pot are on it (a paid round, a Callback, a plain spin that wins the pot)', async () => {
+    const cl = (x) => (x === undefined ? undefined : clone(x));
+    const check = (s, a, tag, wantPot) => {
+      const seen = []; const emit = a.emit;
+      a.emit = (ev, p) => { if (ev === 'g:coldcall:result' && p && p.status === 'done') { const d = s.disk() || {}; seen.push({ open: Object.keys(d.open || {}).length, state: cl((d.players || {}).ann && d.players.ann.play), pot: cl((d.pot || {}).play) }); } return emit(ev, p); };
+      return { seen, restore: () => { a.emit = emit; } };
+    };
+    { const s = setup({ rng: E.rngFrom(PEND.seed), roundRng: E.rngFrom(5) }); const a = s.sock('ann'); const c = check(s, a);
+      play(s, a, { bet: 100, mode: 'play', buyBonus: 'bonus1' }); assert.strictEqual(c.seen.length, 1); assert.strictEqual(c.seen[0].open, 0, 'paid round: the record was off the disk when the result went out'); assert.deepStrictEqual(c.seen[0].state, clone(s.store().player('ann', 'play')), 'and the new state was on it'); }
+    { const s = setup({ rng: E.rngFrom(66), roundRng: E.rngFrom(5) }); const a = s.sock('ann'); s.store().setPlayer('ann', 'play', CB(100)); s.flush(); const c = check(s, a);
+      play(s, a, { bet: 100, mode: 'play', auto: true }); assert.strictEqual(c.seen.length, 1); assert.strictEqual(c.seen[0].open, 0, 'Callback: the record was off the disk when the result went out'); assert.strictEqual(c.seen[0].state.cb, null, 'and the consumed Callback was on it'); }
+    { const s = setup({ rng: E.rngFrom(7), roundRng: E.rngFrom(5), potRng: () => 0 }); const a = s.sock('ann'); s.seedPool('play', 7000); E.CFG.pull.pot.capCents = 5000; const c = check(s, a);
+      const r = play(s, a, { bet: 100, mode: 'play', auto: true }); assert.ok(r.pot && r.pot.won, 'the plain spin won the pot'); assert.strictEqual(c.seen.length, 1); assert.strictEqual(c.seen[0].pot.paid, 5000, 'pot win: the prize was on the disk when the result went out'); assert.strictEqual(c.seen[0].pot.last.amount, 5000); }
+  });
+
+  // C9 (mutant X15): the pot balance that sizes a prize is the LEDGER's, never the game file's mirror
+  await test('C9 pool source: a stale mirror in the game file (far too low, far too high) changes neither the roll nor the prize: they follow the ledger pool', async () => {
+    for (const mirror of [0, 99999999]) {
+      const s = setup({ rng: E.rngFrom(7), roundRng: E.rngFrom(5), potRng: () => 0 }); const a = s.sock('ann'); s.seedPool('play', 7000); E.CFG.pull.pot.capCents = 5000;
+      s.potOf('play').bal = mirror; s.store().potChanged(); const pool0 = s.pool('play');
+      const r = spin(s, a, { bet: 100, mode: 'play', auto: true }); assert.ok(!r.error, 'mirror ' + mirror + ': the spin is not refused: ' + JSON.stringify(r.error));
+      assert.ok(r.pot && r.pot.won && r.pot.amount === 5000, 'mirror ' + mirror + ': the prize is the capped ledger pool, not sized from the mirror: ' + JSON.stringify(r.pot));
+      const L = s.lines((e) => e.ref === `coldcall:ann:${r.roundId}`); assert.strictEqual(sum(L, 'coldcall:prize'), 5000); assert.strictEqual(s.pool('play'), pool0 + sum(L, 'coldcall:feed') - 5000);
+    }
+  });
+
+  // C9 (mutant X14): the replay is checked against the record
+  for (const [what, tweak] of [['the Callback flag', (o) => { o.callback = true; }], ['the bet (the replayed price is not the recorded one)', (o) => { o.pbet = o.pbet + 5; }]]) {
+    await test(`C9 replay check: a stored record whose ${what} does not match its replay is voided at boot (the stake comes back, no spend / credit line), never settled on the replay`, async () => {
+      const s = setup({ rng: E.rngFrom(PEND.seed), roundRng: E.rngFrom(5) }); const a = s.sock('ann'); const before = s.bal('ann', 'play');
+      const r = spin(s, a, { bet: 100, mode: 'play', buyBonus: 'bonus1' }); assert.strictEqual(r.status, 'pending'); s.crash();
+      const d = s.disk(); tweak(d.open['ann|play']); fs.writeFileSync(s.files.pull, JSON.stringify(d)); s.boot();
+      assert.deepStrictEqual(closeLines(s, r.roundId).map((e) => e.reason), ['coldcall:void:unresolvable'], 'one void line only: ' + JSON.stringify(closeLines(s, r.roundId).map((e) => e.reason))); assert.strictEqual(s.bal('ann', 'play'), before); assert.deepStrictEqual(s.escrows(), []); assert.strictEqual(s.store().allOpen().length, 0);
+    });
+  }
+
+  // C9 (mutant X37): a void leaves the Callback armed, on the disk too
+  await test('C9 void and the Callback: voiding a Callback round (settle_error) and a paid round at boot (unresolvable) leave the entitlement armed ON THE DISK, no ledger line for the Callback', async () => {
+    const s = setup({ rng: E.rngFrom(82) }); const a = s.sock('ann'); s.store().setPlayer('ann', 'chips', { ...E.newState(), cb: { bet: 100, id: 'cbvoid2' } }); s.flush();
+    delete E.CFG.pull.feed; const id = s.lastId(); s.clock.advance(200); a.send('g:coldcall:spin', { bet: 100, mode: 'chips', auto: true });
+    const v = last(a, 'g:coldcall:voided'); assert.ok(v && v.roundId === 'cbvoid2'); assert.strictEqual(s.lastId(), id);
+    assert.deepStrictEqual(s.disk().players.ann.chips.cb, { bet: 100, id: 'cbvoid2' }, 'still armed on the disk'); assert.ok(!diskHas(s, 'ann|chips'), 'the record is gone');
+  });
 
 
   // ---------------------------------------------------------------- no wallet
