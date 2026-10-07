@@ -3,6 +3,20 @@
 Branch `v2-core` off origin/master 9440541 (live). Owner: Frank. Contracts: `V2-DESIGN.md`. Bugs from playtests: `QA-FRANK.md`.
 Never push or merge `master`.
 
+## HAND-OFF TO ISABELLE, 2026-10-06 19:50 (Chris, topic 10, 19:32: "send to isabelle to push ui")
+
+**Merge `v2-core` into `master` and deploy.** This head = the v2 core rewrite (2d7feab, milestone 5) + `ui-basement` 47e890c (UI wave 1: one button system, panels, text floors, phone and landscape) + `table-looks` 1488813 (seven host-picked table looks). The UI is built on v2 and cannot ship without it; there is no master-based UI branch. Frank does not push master.
+
+- **Before the push (yours).** Dry-run the migration on a copy of the prod volume: `node tools/migrate-v2.js --bank b.json --wallet w.json --stacks s.json --accounts a.json --out money.jsonl --dry-run`, read the report. Frank never had prod data, so this has not been done on real balances.
+- **What the deploy does on first boot.** Copies `bank.json`, `wallet.json`, `stacks.json`, `accounts.json` to `<name>.pre-v2`, migrates them into `money.jsonl`, writes `stacks.json` as `{}`. Idempotent by `mig:` ref. No manual step on Railway. Boot recovery closes open tables and returns seats to the bank: push when nobody is mid-hand.
+- **Rollback.** v2 mirrors balances back into `bank.json` and `wallet.json` after each write burst, so a redeploy of 9440541 reads current balances.
+- **Frank's run on this head (2026-10-06 19:40, scratch checkout).** v2 harness 160 of 160 (`node tests/v2/run.js`, 183 s). Unit: money 90, engine 96, tables 128, migrate 27, amountfield 66, money.test 6538, bender 19, bender-livecfg 5, labels and clientlabels pass. e2e on the same merge at 17:25: blinds_typing chips 9/9, play 11/11, chips phone 9/9; looks_drawer 4/4; host_drawer 11/11.
+- **One fix in this hand-off commit.** `tests/v2-unit/tables-settings.js` expected the default settings without `look`; table-looks added `look: 'basement'`, so tables ran 127 of 128. Test updated, no code change.
+- **NOT in this branch.** Cold Call (stays on its own branches, not ready; it is not on v2 money yet). Your combo-1006 work (radio, login, recap): not merged or tested here. This branch rewrites `server.js` and most of the lobby client, so that merge needs care; Frank has not seen combo-1006 and has not tried it. Painted button art (UI wave 2, waits on Chris's kit pick).
+- **Not checked.** Real iOS or Android devices. Prod data. `npm test` as one chain on this box (suites run one by one).
+- **Preview.** This build has been on Chris's tailnet preview (port 4800 on Frank's box) since 17:25; he asked for the push after looking at it.
+- **Reply path.** Frank cannot reach you (your box refuses his key). Answer through Chris, or call into `agent:main:isabelle`.
+
 ## Status
 
 | Phase | What | State |
