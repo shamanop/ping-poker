@@ -46,8 +46,9 @@ const readyLast = new Map(); // the same limit for `ready`, kept apart so a spin
 function err(socket, code, message, extra) { socket.emit('error', { message, code, game: 'coldcall', ...(extra || {}) }); }
 
 // a refused bet: `funds` is told as it always was; any other refusal of the ledger is the generic one
-function walletErr(socket, e) {
-  if (e && e.code === 'funds') return err(socket, 'funds', e.message);
+const fundsMsg = (mode) => (mode === 'chips' ? 'Not enough chips' : 'Not enough Play $');
+function walletErr(socket, e, mode) {
+  if (e && e.code === 'funds') return err(socket, 'funds', fundsMsg(mode));
   return err(socket, 'bad_request', 'Could not place that bet');
 }
 
@@ -256,7 +257,7 @@ function moneyFailed(rec, e, where) {
     rec.pending = null; rec.partial = null;
     const t = rec.cfg && rec.cfg.decision && rec.cfg.decision.timeoutMs; rec.timeoutMs = Number.isFinite(t) && t > 0 ? t : DEFAULT_TIMEOUT_MS;
   }
-  const payload = e && e.code === 'funds' ? { message: e.message, code: 'funds', game: 'coldcall' } : { message: 'Server error', code: 'internal', game: 'coldcall' };
+  const payload = e && e.code === 'funds' ? { message: fundsMsg(rec.mode), code: 'funds', game: 'coldcall' } : { message: 'Server error', code: 'internal', game: 'coldcall' };
   if (open.has(rec.id)) { emitAcct(rec, 'error', payload); setTimer(rec, rec.timeoutMs || DEFAULT_TIMEOUT_MS); }
   else if (rec.socket) { try { rec.socket.emit('error', payload); } catch {} }
   return null;
@@ -482,11 +483,11 @@ function pullSpin(socket, p, buy, now) {
     try { store.putOpen(openRecord(rec)); store.flush(); }
     catch (e) { logf('coldcall: callback record not flushed, nothing played', rec.id, e && e.message); try { store.delOpen(nk, mode); } catch {} return err(socket, 'bad_request', 'Could not place that bet'); }
   } else {
-    try { if (cost > 0 && M().balance(key, mode) < cost) return err(socket, 'funds', mode === 'chips' ? 'Not enough chips' : 'Not enough Play $'); } catch (e) { return walletErr(socket, e); }
+    try { if (cost > 0 && M().balance(key, mode) < cost) return err(socket, 'funds', fundsMsg(mode)); } catch (e) { return walletErr(socket, e, mode); }
   }
 
   if (r.status === 'pending') {
-    if (!callback) { try { M().open(key, mode, rec.id, cost); } catch (e) { return walletErr(socket, e); } rec.escrow = true; }
+    if (!callback) { try { M().open(key, mode, rec.id, cost); } catch (e) { return walletErr(socket, e, mode); } rec.escrow = true; }
     // the stake is in escrow (or the Callback record is on disk): anything that throws from here on is voided, never an open round without a timer (W1B N4)
     try {
       rec.pending = r.pending; rec.partial = r.partial; rec.stored = true;
@@ -634,7 +635,7 @@ module.exports = {
       let cost, totalWin, pay;
       try { pay = Eng.payRound(r.round, p.bet, module.exports.roundRng || cryptoRng(), K.cfg.maxWinTenths); cost = pay.price; totalWin = pay.win; } catch (e) { return err(socket, 'bad_request', 'Could not place that bet'); }
       let w;
-      try { M().round(key, p.mode, roundId, { cost, win: totalWin }); } catch (e) { return walletErr(socket, e); }
+      try { M().round(key, p.mode, roundId, { cost, win: totalWin }); } catch (e) { return walletErr(socket, e, p.mode); }
       try { w = balances(key); } catch (e) { w = null; }
 
       const hk = nkey(key), h = history.get(hk) || [];

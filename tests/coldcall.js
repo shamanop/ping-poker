@@ -1,5 +1,5 @@
 'use strict';
-// node tests/coldcall.js  (self-contained: temp WALLET_FILE, fake io, no network, no server)
+// node tests/coldcall.js  (self-contained: a real ledger on a temp dir through tests/lib-coldcall-ledger.js, fake io, no network, no server)
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -7,9 +7,7 @@ const assert = require('assert');
 const EventEmitter = require('events');
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'coldcall-'));
-process.env.WALLET_FILE = path.join(tmp, 'wallet.json');
-const { createWallet } = require('../wallet.js');
-const games = require('../games');
+const H = require('./lib-coldcall-ledger.js');
 const E = require('../games/coldcall-engine.js');
 E.CFG.pull.on = false;   // these tests script the rng through the old stateless path; THE PULL has its own files (run at the end)
 
@@ -19,35 +17,10 @@ const tick = () => new Promise((r) => setImmediate(r));
 const clone = (o) => JSON.parse(JSON.stringify(o));
 const cfgWith = (patch) => Object.assign(clone(E.CFG), patch);
 
-function makeSocket(io, acct) {
-  const s = new EventEmitter();
-  s.data = acct ? { acct: { key: acct } } : {};
-  s.out = [];
-  const emit = s.emit.bind(s);
-  s.send = (ev, p) => emit(ev, p);             // client -> server
-  s.emit = (ev, p) => { if (ev in { error: 1, wallet: 1 } || ev.startsWith('g:')) { s.out.push([ev, p]); return true; } return emit(ev, p); };
-  io.sockets.sockets.set(String(Math.random()), s);
-  io.emit('connection', s);
-  return s;
-}
-const last = (s, ev) => { for (let i = s.out.length - 1; i >= 0; i--) if (s.out[i][0] === ev) return s.out[i][1]; return null; };
-const all = (s, ev) => s.out.filter((o) => o[0] === ev).map((o) => o[1]);
+const last = H.last, all = H.all;
 
-function setup(opts = {}) {
-  const io = new EventEmitter(); io.sockets = { sockets: new Map() };
-  const rows = [];
-  const ledger = { log: (...a) => { rows.push(a); } };
-  let t = 1000000;
-  const clock = { now: () => t, advance: (ms) => { t += ms; } };
-  const file = path.join(tmp, 'w' + Math.random().toString(36).slice(2) + '.json');
-  const hook = { push: () => {} };
-  const bank = new Map();
-  const chips = { get: (k) => (bank.has(k) ? bank.get(k) : 10000), add: (k, d) => { bank.set(k, Math.max(0, chips.get(k) + d)); hook.push(k); } };
-  const wallet = createWallet({ file, ledger, chips, now: clock.now, onChange: (k) => hook.push(k), logPlay: !!opts.logPlay });
-  const g = games({ io, ledger, now: clock.now, rng: opts.rng, accounts: {}, tables: {}, rooms: {}, wallet, chips });
-  hook.push = g.pushWallet;
-  return { io, rows, clock, wallet, g, file, bank, chips, sock: (a) => makeSocket(io, a) };
-}
+// one world per test: a real ledger, ctx.money, the games registry (boot recovery included) and games/coldcall.js, all on a temp dir (tests/lib-coldcall-ledger.js)
+function setup(opts = {}) { return H.world({ rng: opts.rng, dir: fs.mkdtempSync(path.join(tmp, 'w')) }); }
 
 // ---------------------------------------------------------------- test helpers
 function payTable(cfg) { return E.SYM.slice(0, 10).map((n) => cfg.pay[n].map((v) => Math.max(1, Math.round(v * cfg.payScale)))); }
@@ -193,43 +166,43 @@ function replayRound(s, cfg) {
 }
 
 (async () => {
-  await test('wallet: new account starts at 10,000.00 Play $ and the chips bank balance', () => {
-    const { wallet } = setup();
-    assert.deepStrictEqual(wallet.get('ann'), { play: 1000000, chips: 10000 });
+  await test('ledger: a new account starts at 10,000.00 Play $ and the chips bank balance', () => {
+    const w = setup(); w.addKey('ann');
+    assert.deepStrictEqual(w.balances('ann'), { play: 1000000, chips: 10000 });
+    assert.strictEqual(w.money.balance('ann', 'play'), 1000000); assert.strictEqual(w.money.balance('ann', 'chips'), 10000);   // ctx.money reads the same ledger accounts
   });
 
-  await test('wallet: spend/credit math + per-game stats for coldcall', () => {
-    const { wallet } = setup();
-    wallet.spend('ann', 'play', 100, { game: 'coldcall', round: 'r1' });
-    wallet.credit('ann', 'play', 250, { game: 'coldcall', round: 'r1' });
-    assert.strictEqual(wallet.get('ann').play, 1000000 - 100 + 250);
-    wallet.spend('ann', 'chips', 500, { game: 'coldcall', round: 'r2' });
-    assert.strictEqual(wallet.get('ann').chips, 9500);
-    wallet.credit('ann', 'chips', 1500, { game: 'coldcall', round: 'r2' });
-    assert.strictEqual(wallet.get('ann').chips, 11000);
-    const st = wallet.stats('ann').coldcall;
-    assert.deepStrictEqual(st.play, { rounds: 1, wagered: 100, won: 250 });
-    assert.deepStrictEqual(st.chips, { rounds: 1, wagered: 500, won: 1500 });
+  await test('ctx.money: one round = one batch, spend/win math and the house result in both currencies (replaces the wallet.js stats test)', () => {
+    const w = setup(); w.addKey('ann'); const m = w.money;
+    m.round('ann', 'play', 'r1', { cost: 100, win: 250 });
+    assert.strictEqual(w.bal('ann', 'play'), 1000000 - 100 + 250);
+    m.round('ann', 'chips', 'r2', { cost: 500, win: 1500 });
+    assert.strictEqual(w.bal('ann', 'chips'), 9500 + 1500);
+    // the old per-game stats {rounds, wagered, won} are ledger facts now: one batch line per round, house:coldcall = wagered - won
+    const spent = (cur) => w.lines((e) => e.cur === cur && e.reason === 'coldcall:spend').reduce((n, e) => n + e.amount, 0);
+    const paid = (cur) => w.lines((e) => e.cur === cur && e.reason === 'coldcall:credit').reduce((n, e) => n + e.amount, 0);
+    assert.deepStrictEqual([w.lines((e) => e.ref === 'coldcall:ann:r1').length, spent('play'), paid('play'), w.house('play')], [2, 100, 250, 100 - 250]);
+    assert.deepStrictEqual([w.lines((e) => e.ref === 'coldcall:ann:r2').length, spent('chips'), paid('chips'), w.house('chips')], [2, 500, 1500, 500 - 1500]);
   });
 
-  await test('wallet: float, negative, NaN, string, Infinity, huge amounts and bad mode are rejected, nothing moves', () => {
-    const { wallet } = setup();
-    for (const bad of [-1, 1.5, 0.1 + 0.2, NaN, Infinity, '10', null, undefined, 2 ** 60, 1e21]) {
-      assert.throws(() => wallet.spend('ann', 'play', bad), (e) => e.code === 'amount', 'spend ' + String(bad));
-      assert.throws(() => wallet.credit('ann', 'play', bad), (e) => e.code === 'amount', 'credit ' + String(bad));
+  await test('ctx.money: float, negative, NaN, string, Infinity, huge amounts and a bad mode are rejected, nothing moves', () => {
+    const w = setup(); w.addKey('ann'); const m = w.money, id = w.lastId();
+    for (const bad of [-1, 1.5, 0.1 + 0.2, NaN, Infinity, '10', 2 ** 60, 1e21]) {
+      assert.throws(() => m.round('ann', 'play', 'x' + String(bad).replace(/\W/g, ''), { cost: bad }), (e) => e.code === 'amount', 'cost ' + String(bad));
+      assert.throws(() => m.round('ann', 'play', 'y' + String(bad).replace(/\W/g, ''), { cost: 1, win: bad }), (e) => e.code === 'amount', 'win ' + String(bad));
     }
-    assert.throws(() => wallet.spend('ann', 'ledger', 10), (e) => e.code === 'mode');
-    assert.deepStrictEqual(wallet.get('ann'), { play: 1000000, chips: 10000 });
+    assert.throws(() => m.round('ann', 'ledger', 'z1', { cost: 10 }), (e) => e.code === 'mode');
+    assert.strictEqual(w.lastId(), id); assert.deepStrictEqual(w.balances('ann'), { play: 1000000, chips: 10000 });
   });
 
-  await test('wallet: insufficient funds are exact in both purses, chips never go negative', () => {
-    const { wallet } = setup();
-    wallet.spend('bo', 'play', 999950, { game: 'coldcall' });
-    assert.throws(() => wallet.spend('bo', 'play', 100), (e) => e.code === 'funds');
-    assert.strictEqual(wallet.get('bo').play, 50);
-    wallet.spend('cy', 'chips', 10000);
-    assert.throws(() => wallet.spend('cy', 'chips', 10), (e) => e.code === 'funds');
-    assert.strictEqual(wallet.get('cy').chips, 0);
+  await test('ctx.money: insufficient funds are exact in both purses, chips never go negative', () => {
+    const w = setup(); w.addKey('bo'); w.addKey('cy'); const m = w.money;
+    w.setBal('bo', 'play', 50);
+    assert.throws(() => m.round('bo', 'play', 'a1', { cost: 100 }), (e) => e.code === 'funds');
+    assert.strictEqual(w.bal('bo', 'play'), 50);
+    m.round('cy', 'chips', 'a2', { cost: 10000 });
+    assert.throws(() => m.round('cy', 'chips', 'a3', { cost: 10 }), (e) => e.code === 'funds');
+    assert.strictEqual(w.bal('cy', 'chips'), 0);
   });
 
   // ---------------------------------------------------------------- engine (v2: 6x5 clusters, super cascade, hot leads, three bonuses)
@@ -610,7 +583,7 @@ function replayRound(s, cfg) {
     const s = setup(); assert.ok(s.g.modules.some((m) => m.id === 'coldcall' && m.kind === 'solo' && typeof m.handlers.spin === 'function'));
   });
 
-  await test('coldcall: unsigned socket gets auth error, wallet untouched', async () => {
+  await test('coldcall: unsigned socket gets auth error, ledger untouched', async () => {
     const s = setup(); const u = s.sock(null);
     u.send('g:coldcall:spin', { bet: 10, mode: 'play' }); u.send('g:coldcall:state');
     assert.strictEqual(all(u, 'error').length, 2);
@@ -630,7 +603,7 @@ function replayRound(s, cfg) {
       expect += -bet + r.totalWin; assert.strictEqual(r.wallet.play, expect); assert.strictEqual(r.wallet.chips, 10000);
       for (const k of ['roundId', 'script', 'totalWin', 'tier', 'wallet']) assert.ok(k in r, k);
     }
-    assert.deepStrictEqual(s.wallet.get('ann').play, expect);
+    assert.deepStrictEqual(s.bal('ann', 'play'), expect);
     await tick(); assert.strictEqual(last(a, 'wallet').play, expect);
   });
 
@@ -640,7 +613,7 @@ function replayRound(s, cfg) {
     const r = last(a, 'g:coldcall:result');
     assert.strictEqual(r.mode, 'chips');
     assert.strictEqual(r.wallet.play, 1000000); assert.strictEqual(r.wallet.chips, 10000 - 200 + r.totalWin);
-    assert.strictEqual(s.chips.get('ann'), r.wallet.chips);
+    assert.strictEqual(s.bal('ann', 'chips'), r.wallet.chips);
   });
 
   await test('coldcall: buys charge costTenths*bet/10, play the chosen bonus, and the engine win is paid exactly', async () => {
@@ -659,28 +632,28 @@ function replayRound(s, cfg) {
 
   await test('coldcall: a buy the player cannot afford is refused with funds and nothing moves', async () => {
     const s = setup({ rng: E.rngFrom(14) }); const a = s.sock('ann');
-    s.wallet.spend('ann', 'play', 1000000 - 1000);       // 10.00 left; a bonus2 buy at a 25.00 bet costs far more
+    s.setBal('ann', 'play', 1000);                          // 10.00 left; a bonus2 buy at a 25.00 bet costs far more
     a.send('g:coldcall:spin', { bet: 2500, mode: 'play', buyBonus: 'bonus2' });
     assert.strictEqual(last(a, 'error').code, 'funds'); assert.strictEqual(all(a, 'g:coldcall:result').length, 0);
-    assert.strictEqual(s.wallet.get('ann').play, 1000);
+    assert.strictEqual(s.bal('ann', 'play'), 1000);
     s.clock.advance(200); a.send('g:coldcall:spin', { bet: 1000, mode: 'play' });   // exactly the balance: allowed
     assert.strictEqual(all(a, 'g:coldcall:result').length, 1);
-    assert.ok(s.wallet.get('ann').play >= 0);
+    assert.ok(s.bal('ann', 'play') >= 0);
   });
 
   await test('coldcall: an empty chips bank stops spins, no negative play, balances never go below zero', async () => {
     const s = setup({ rng: E.rngFrom(7) }); const a = s.sock('ann');
-    s.wallet.spend('ann', 'chips', 9900);
+    s.setBal('ann', 'chips', 100);
     for (let i = 0; i < 40; i++) { s.clock.advance(200); a.send('g:coldcall:spin', { bet: 1000, mode: 'chips' }); }
     const e = all(a, 'error').find((x) => x.code === 'funds');
     assert.ok(e && /chips/.test(e.message));
-    assert.ok(s.chips.get('ann') >= 0);
-    const b = s.sock('bo'); s.wallet.spend('bo', 'play', 999900);
+    assert.ok(s.bal('ann', 'chips') >= 0);
+    const b = s.sock('bo'); s.setBal('bo', 'play', 100);
     s.clock.advance(200); b.send('g:coldcall:spin', { bet: 500, mode: 'play' });
-    assert.strictEqual(last(b, 'error').code, 'funds'); assert.strictEqual(s.wallet.get('bo').play, 100);
+    assert.strictEqual(last(b, 'error').code, 'funds'); assert.strictEqual(s.bal('bo', 'play'), 100);
   });
 
-  await test('coldcall: bad bets, modes, buys and payload shapes are rejected without touching the wallet', async () => {
+  await test('coldcall: bad bets, modes, buys and payload shapes are rejected without touching the ledger', async () => {
     const s = setup(); const a = s.sock('ann');
     const bad = [{ bet: 0, mode: 'play' }, { bet: -10, mode: 'play' }, { bet: 15, mode: 'play' }, { bet: 1.5, mode: 'play' }, { bet: NaN, mode: 'play' }, { bet: Infinity, mode: 'play' },
       { bet: 1e21, mode: 'play' }, { bet: 2 ** 60, mode: 'play' }, { bet: Number.MAX_SAFE_INTEGER, mode: 'play' }, { bet: 5000, mode: 'play' }, { bet: [100], mode: 'play' },
@@ -690,7 +663,7 @@ function replayRound(s, cfg) {
     for (const p of bad) { s.clock.advance(200); a.send('g:coldcall:spin', p); }
     assert.strictEqual(all(a, 'error').length, bad.length);
     assert.strictEqual(all(a, 'g:coldcall:result').length, 0);
-    assert.deepStrictEqual(s.wallet.get('ann'), { play: 1000000, chips: 10000 });
+    assert.deepStrictEqual(s.balances('ann'), { play: 1000000, chips: 10000 });
   });
 
   await test('coldcall: client-sent amounts are ignored (win, cost, amount fields in the payload change nothing)', async () => {
@@ -720,7 +693,7 @@ function replayRound(s, cfg) {
       const mine = socks.filter((k) => k.data.acct.key === key);
       const results = mine.flatMap((k) => all(k, 'g:coldcall:result'));
       const play = results.filter((r) => r.mode === 'play'), led = results.filter((r) => r.mode === 'chips');
-      const w = s.wallet.get(key);
+      const w = s.balances(key);
       assert.strictEqual(w.play, 1000000 - play.reduce((a, r) => a + r.cost, 0) + play.reduce((a, r) => a + r.totalWin, 0));
       assert.strictEqual(w.chips, 10000 - led.reduce((a, r) => a + r.cost, 0) + led.reduce((a, r) => a + r.totalWin, 0));
       for (const k of mine) assert.deepStrictEqual(last(k, 'wallet'), w);
@@ -732,12 +705,12 @@ function replayRound(s, cfg) {
     for (const mode of ['play', 'chips']) {
       const other = mode === 'play' ? 'chips' : 'play';
       const s = setup({ rng: E.rngFrom(mode === 'play' ? 21 : 22) }); const a = s.sock('ann');
-      if (mode === 'chips') s.bank.set('ann', 1000000000); else s.wallet.credit('ann', 'play', 1000000000);
-      const start = s.wallet.get('ann'); let bal = start[mode], n = 0, paid = 0, bought = 0;
+      s.setBal('ann', mode, 1000000000);
+      const start = s.balances('ann'); let bal = start[mode], n = 0, paid = 0, bought = 0;
       for (let i = 0; i < 480; i++) {
         const bet = E.BET_LEVELS[i % E.BET_LEVELS.length], buy = plays[(i / E.BET_LEVELS.length | 0) % plays.length];
         s.clock.advance(200);
-        assert.strictEqual(s.wallet.get('ann')[mode], bal);
+        assert.strictEqual(s.bal('ann', mode), bal);
         a.send('g:coldcall:spin', { bet, mode, buyBonus: buy });
         a.send('g:coldcall:spin', { bet, mode, buyBonus: buy });                    // the double click, same instant: refused, not charged
         assert.strictEqual(last(a, 'error').code, 'rate');
@@ -749,13 +722,15 @@ function replayRound(s, cfg) {
         bal += -cost + r.totalWin; if (r.totalWin) paid++; if (buy) bought++;
         assert.strictEqual(r.wallet[mode], bal, mode + ' round ' + i + ': before - cost + win = after');
         assert.strictEqual(r.wallet[other], start[other]);
-        assert.deepStrictEqual(s.wallet.get('ann'), r.wallet);
-        if (mode === 'chips') assert.strictEqual(s.chips.get('ann'), bal);
+        assert.deepStrictEqual(s.balances('ann'), r.wallet);
+        assert.strictEqual(s.bal('ann', mode), bal);
         await tick(); assert.deepStrictEqual(last(a, 'wallet'), r.wallet, 'the pushed wallet is the settled one');
       }
       assert.ok(paid > 60 && bought > 150, 'the run covered wins and buys: ' + paid + ' / ' + bought);
-      const st = s.wallet.stats('ann').coldcall[mode];
-      assert.strictEqual(st.rounds, n); assert.strictEqual(start[mode] - st.wagered + st.won, bal);
+      // wallet stats {rounds, wagered, won} are ledger facts: one batch per round, and what the house holds is exactly what the player lost
+      assert.strictEqual(s.lines((e) => e.cur === mode && e.reason === 'coldcall:round' && e.ref.startsWith('coldcall:ann:')).length, 0);   // a batch is one line per leg
+      assert.strictEqual(new Set(s.lines((e) => e.cur === mode && /^coldcall:ann:/.test(e.ref)).map((e) => e.ref)).size, n, 'one ledger ref per round');
+      assert.strictEqual(s.house(mode), start[mode] - bal); assert.strictEqual(s.pool(mode), 0);
     }
   });
 
@@ -764,7 +739,7 @@ function replayRound(s, cfg) {
     for (let i = 0; i < 25; i++) { s.clock.advance(200); a.send('g:coldcall:spin', { bet: 10, mode: 'play' }); }
     a.send('g:coldcall:history'); const h = last(a, 'g:coldcall:history');
     assert.strictEqual(h.rounds.length, 20); assert.strictEqual(h.rounds[0].roundId, all(a, 'g:coldcall:result').slice(-1)[0].roundId);
-    a.send('wallet_get'); assert.strictEqual(last(a, 'wallet').play, s.wallet.get('ann').play);
+    a.send('wallet_get'); assert.strictEqual(last(a, 'wallet').play, s.bal('ann', 'play'));
   });
 
   // ---------------------------------------------------------------- QA hook (COLDCALL_TEST)
@@ -803,7 +778,7 @@ function replayRound(s, cfg) {
     }
   });
 
-  await test('coldcall QA hook: with COLDCALL_TEST=1 each force plays that feature, through the normal spend/credit path, in both purses', async () => {
+  await test('coldcall QA hook: with COLDCALL_TEST=1 each force plays that feature, through the normal ledger path (ctx.money.round), in both purses', async () => {
     await withEnv({ COLDCALL_TEST: '1', NODE_ENV: null }, async () => {
       const s = setup({ rng: E.rngFrom(79) }); const a = s.sock('ann'); let bal = 1000000;
       a.send('g:coldcall:state'); assert.strictEqual(last(a, 'g:coldcall:state').qaHook, true);
@@ -817,11 +792,11 @@ function replayRound(s, cfg) {
         if (f === 'big') assert.ok(r.totalWinMult >= 25, 'big win ' + r.totalWinMult);
         if (f === 'tease') { assert.strictEqual(sc.spin.bells, 2); assert.strictEqual(sc.bonus, null); }
         assert.strictEqual(r.cost, 200); assert.strictEqual(r.totalWin, r.totalWinTenths * 200 / 10);
-        const w = s.wallet.get('ann');
+        const w = s.balances('ann');
         if (mode === 'play') { bal += -r.cost + r.totalWin; assert.strictEqual(w.play, bal); assert.strictEqual(r.wallet.play, bal); }
         else assert.strictEqual(w.chips, r.wallet.chips);
       }
-      assert.strictEqual(s.wallet.stats('ann').coldcall.play.rounds, 7);
+      assert.strictEqual(new Set(s.lines((e) => e.cur === 'play' && /^coldcall:ann:/.test(e.ref)).map((e) => e.ref)).size, 7, 'seven forced Play $ rounds, one ledger ref each');
     });
   });
 
@@ -830,9 +805,9 @@ function replayRound(s, cfg) {
       const s = setup({ rng: E.rngFrom(80) }); const a = s.sock('ann');
       s.clock.advance(200); a.send('g:coldcall:spin', { bet: 100, mode: 'play', buyBonus: 'bonus1', force: 'bonus3' });
       const r = last(a, 'g:coldcall:result'); assert.strictEqual(r.forced, undefined); assert.strictEqual(r.script.bonus.kind, 'bonus1'); assert.strictEqual(r.cost, E.CFG.buyCost.bonus1 * 10);
-      const b = s.sock('bo'); s.wallet.spend('bo', 'play', 999990, { game: 'coldcall' });
+      const b = s.sock('bo'); s.setBal('bo', 'play', 10);
       s.clock.advance(200); b.send('g:coldcall:spin', { bet: 100, mode: 'play', force: 'big' });
-      assert.strictEqual(last(b, 'error').code, 'funds'); assert.strictEqual(s.wallet.get('bo').play, 10);
+      assert.strictEqual(last(b, 'error').code, 'funds'); assert.strictEqual(s.bal('bo', 'play'), 10);
       s.clock.advance(200); b.send('g:coldcall:spin', { bet: 100, mode: 'play', force: 'bogus' }); // unknown force: normal paid spin path (here: funds)
       assert.strictEqual(last(b, 'error').code, 'funds');
     });

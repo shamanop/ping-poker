@@ -22,6 +22,7 @@ const SRV = require('../games/coldcall.js');
 
 const base = fs.mkdtempSync(path.join(os.tmpdir(), 'coldcall-ledger-'));
 let counter = 0;
+let current = null;           // games/coldcall.js is one module per process, so there is one live world: a new world (the same dir = a restart) first "crashes" the old one (nothing unwritten is flushed, its files are closed)
 
 const last = (s, ev) => { for (let i = s.out.length - 1; i >= 0; i--) if (s.out[i][0] === ev) return s.out[i][1]; return null; };
 const all = (s, ev) => s.out.filter((o) => o[0] === ev).map((o) => o[1]);
@@ -34,6 +35,7 @@ const acct = (key, cur) => (cur === 'chips' ? 'bank:' : 'play:') + String(key).t
 
 function world(opts = {}) {
   const dir = opts.dir || fs.mkdtempSync(path.join(base, 'w'));
+  if (current) { try { current.crash(); } catch {} }
   const files = { money: path.join(dir, 'money.jsonl'), pull: path.join(dir, 'coldcall-pull.json'), cfg: path.join(dir, 'coldcall-config.json') };
   const io = new EventEmitter(); io.sockets = { sockets: new Map() };
   let t = opts.t || 1000000;
@@ -70,6 +72,7 @@ function world(opts = {}) {
       },
     };
     const wallet = createWalletAdapter({ service, ledger, onChange, log: () => {} });
+    w.money = real.forGame('coldcall');                // the bound ctx.money as a module sees it, without the call log or the hooks
     io.removeAllListeners('connection');
     reg = w.g = games({ io, wallet, money: gm, service, modules: [SRV], accounts: {}, tables: {}, rooms: {}, now: clock.now, rng: opts.rng, files: { coldcallPull: files.pull, coldcallConfig: files.cfg }, ledger: { log: () => {} } });
     w.wallet = wallet;
@@ -103,6 +106,8 @@ function world(opts = {}) {
     return r;
   };
   w.rich = (key, cur = 'play') => w.fund(key, cur, 1e10);
+  // set a balance to an exact number (a delta through the service)
+  w.setBal = (key, cur, v) => { const d = v - w.bal(key, cur); if (d) w.fund(key, cur, d); return v; };
 
   // ---- reads, all from the ledger ----
   w.bal = (key, cur) => w.ledger.balance(acct(key, curOf(cur)), curOf(cur));
@@ -127,6 +132,8 @@ function world(opts = {}) {
   // the game's own file as the next boot will read it (written state, not memory)
   w.disk = () => { try { return JSON.parse(fs.readFileSync(files.pull, 'utf8')); } catch { return null; } };
   w.store = () => SRV._pull.store;
+  w.potOf = (mode) => SRV._pull.store.pot(mode);          // the game's own pot record (mirror, statistics, remainder): never the money
+  w.open = SRV._pull.open;
   w.flush = () => SRV._pull.store.flush();
 
   // "crash and reboot": whatever the old instance had not written is gone, then the same files are opened by a fresh ledger / service / registry and recover() runs
@@ -140,6 +147,7 @@ function world(opts = {}) {
   w.boot = boot;
   w.audit = () => SRV.audit();
   boot();
+  current = w;
   return w;
 }
 

@@ -1,5 +1,5 @@
 'use strict';
-// node tests/coldcall-livecfg.js  (self-contained: temp dir, fake io, no network except the admin API test on 127.0.0.1, ephemeral port)
+// node tests/coldcall-livecfg.js  (self-contained: a real ledger on a temp dir through tests/lib-coldcall-ledger.js, fake io, no network except the admin API test on 127.0.0.1, ephemeral port)
 // COLD CALL live config (JOB B, wave DENOMS + LIVECFG): validate, smoke-test, swap without a restart, persist, reload; an open round
 // finishes on the whole config it started on; every server call site reads the live config; the admin API; stored state under a changed config.
 // Mirrors tests/bender-livecfg.js (five tests) and adds the rest. Contract: cold-call/PULL-ENGINE.md section 8.
@@ -13,14 +13,12 @@ const EventEmitter = require('events');
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'coldcall-livecfg-'));
 const CFG_FILE = path.join(tmp, 'coldcall-config.json');
-process.env.WALLET_FILE = path.join(tmp, 'wallet.json');
 process.env.COLDCALL_CFG_FILE = CFG_FILE;
 for (const k of ['COLDCALL_PULL_FILE', 'DATA_DIR', 'RAILWAY_VOLUME_MOUNT_PATH', 'BENDER_ADMIN_TOKEN']) delete process.env[k];
 const E = require('../games/coldcall-engine.js');
 let L = null; try { L = require('../games/coldcall-livecfg.js'); } catch (e) { L = null; }   // the old tree has no such file: every test then fails on its own
 const SRV = require('../games/coldcall.js');
-const games = require('../games');
-const { createWallet } = require('../wallet.js');
+const H = require('./lib-coldcall-ledger.js');
 
 const SHIPPED = structuredClone(E.CFG);          // the values the code ships with
 const cfgJson = () => JSON.stringify(E.CFG);
@@ -31,19 +29,7 @@ let pass = 0;
 const test = async (name, fn) => { try { await fn(); pass++; console.log('ok   ' + name); } catch (e) { console.error('FAIL ' + name + '\n' + (e.stack || e)); process.exitCode = 1; } };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-function makeSocket(io, acct) {
-  const s = new EventEmitter();
-  s.data = acct ? { acct: typeof acct === 'string' ? { key: acct } : acct } : {};
-  s.out = [];
-  const emit = s.emit.bind(s);
-  s.send = (ev, p) => emit(ev, p);             // client -> server
-  s.emit = (ev, p) => { if (ev in { error: 1, wallet: 1 } || ev.startsWith('g:') || ev.startsWith('floor:')) { s.out.push([ev, p]); return true; } return emit(ev, p); };
-  io.sockets.sockets.set(String(Math.random()), s);
-  io.emit('connection', s);
-  return s;
-}
-const last = (s, ev) => { for (let i = s.out.length - 1; i >= 0; i--) if (s.out[i][0] === ev) return s.out[i][1]; return null; };
-const all = (s, ev) => s.out.filter((o) => o[0] === ev).map((o) => o[1]);
+const last = H.last, all = H.all;
 
 // put the live config back to the shipped values (module state, file and Eng.CFG), as a fresh process would have it
 function resetLive() {
@@ -57,26 +43,10 @@ function freshProcess() {      // Eng.CFG as a new process has it (shipped value
   Object.assign(E.CFG, structuredClone(SHIPPED));
 }
 
-// each setup has its own dir (wallet.json + coldcall-pull.json next to it); pass { dir, bank, t } to restart over the same files
+// each setup is a world over its own dir (money.jsonl + coldcall-pull.json next to it); pass { dir, t } to restart over the same files (the old world is crashed first)
 function setup(opts = {}) {
   SRV._history.clear();
-  SRV.log = opts.log || (() => {});
-  SRV.potRng = opts.potRng || (() => 1);          // never hits unless a test says so
-  SRV.roundRng = opts.roundRng;
-  const dir = opts.dir || fs.mkdtempSync(path.join(tmp, 's'));
-  const io = new EventEmitter(); io.sockets = { sockets: new Map() };
-  const ledger = { log: () => {} };
-  let t = opts.t || 1000000;
-  const clock = { now: () => t, advance: (ms) => { t += ms; } };
-  const hook = { push: () => {} };
-  const bank = opts.bank || new Map();
-  const chips = { get: (k) => (bank.has(k) ? bank.get(k) : 10000), add: (k, d) => { bank.set(k, Math.max(0, chips.get(k) + d)); hook.push(k); } };
-  const wallet = createWallet({ file: path.join(dir, 'wallet.json'), ledger, chips, now: clock.now, onChange: (k) => hook.push(k) });
-  const g = games({ io, ledger, now: clock.now, rng: opts.rng, accounts: {}, tables: {}, rooms: {}, wallet, chips });
-  hook.push = g.pushWallet;
-  const store = () => SRV._pull.store;
-  const potOf = (mode) => store().pot(mode, E.CFG.pull.pot.seed);
-  return { io, clock, wallet, g, dir, bank, chips, store, potOf, sock: (a) => makeSocket(io, a), open: SRV._pull.open };
+  return H.world({ dir: opts.dir || fs.mkdtempSync(path.join(tmp, 's')), rng: opts.rng, roundRng: opts.roundRng, potRng: opts.potRng, log: opts.log, t: opts.t });
 }
 
 function spin(s, sock, payload) {
@@ -110,7 +80,7 @@ function toPending(s, sock, kind, mode = 'play', bet = 10) {
   }
   throw new Error('no ' + kind + ' decision in 600 buys');
 }
-const rich = (s, key) => s.wallet.credit(key, 'play', 1e10);
+const rich = (s, key) => s.rich(key, 'play');
 const state = (s, sock) => { sock.send('g:coldcall:state'); return last(sock, 'g:coldcall:state'); };
 const dayFmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago' });
 
@@ -225,12 +195,14 @@ const BIG_SWAP = {
   await test('the file location: COLDCALL_CFG_FILE, else DATA_DIR, else RAILWAY_VOLUME_MOUNT_PATH, else the repo parent', async () => {
     const keep = { ...process.env };
     try {
-      delete process.env.COLDCALL_CFG_FILE; delete process.env.DATA_DIR; delete process.env.RAILWAY_VOLUME_MOUNT_PATH;
-      assert.strictEqual(need().file(), path.join(__dirname, '..', 'coldcall-config.json'));
+      delete process.env.COLDCALL_CFG_FILE; delete process.env.DATA_DIR; delete process.env.RAILWAY_VOLUME_MOUNT_PATH; need().setFile(null);
+      assert.strictEqual(L.file(), path.join(__dirname, '..', 'coldcall-config.json'));
+      L.setFile('/given/by/server.json'); assert.strictEqual(L.file(), '/given/by/server.json', 'P6: the path server.js hands the game (next to money.jsonl) beats DATA_DIR');
+      process.env.DATA_DIR = '/data'; assert.strictEqual(L.file(), '/given/by/server.json'); delete process.env.DATA_DIR; L.setFile(null);
       process.env.RAILWAY_VOLUME_MOUNT_PATH = '/vol'; assert.strictEqual(L.file(), path.join('/vol', 'coldcall-config.json'));
       process.env.DATA_DIR = '/data'; assert.strictEqual(L.file(), path.join('/data', 'coldcall-config.json'));
       process.env.COLDCALL_CFG_FILE = '/x/y.json'; assert.strictEqual(L.file(), '/x/y.json');
-    } finally { for (const k of ['COLDCALL_CFG_FILE', 'DATA_DIR', 'RAILWAY_VOLUME_MOUNT_PATH']) { if (keep[k] === undefined) delete process.env[k]; else process.env[k] = keep[k]; } }
+    } finally { L.setFile(null); for (const k of ['COLDCALL_CFG_FILE', 'DATA_DIR', 'RAILWAY_VOLUME_MOUNT_PATH']) { if (keep[k] === undefined) delete process.env[k]; else process.env[k] = keep[k]; } }
   });
 
   // ------------------------------------------------------------------------------------------ item 6: the RTP label
@@ -308,20 +280,24 @@ const BIG_SWAP = {
     assert.ok(rec.settled);
   });
 
-  await test('item 3b: swap, then restart while a decision is open: refunded once, nothing paid under the new config, state untouched, the new config is in force', async () => {
+  await test('item 3b (D1): swap, then restart while a decision is open: the restart settles it ONCE exactly as its timeout would, on the config it started on (nothing paid under the new config), the new config is in force, a second restart writes nothing', async () => {
     resetLive(); const logs = [];
     const s = setup({ rng: E.rngFrom(71), roundRng: E.rngFrom(9) }); const a = s.sock('ann'); rich(s, 'ann');
-    const r = toPending(s, a, 'more'); const before = s.wallet.get('ann').play + r.cost;       // the balance before the pending spin
-    const stored0 = JSON.stringify(s.store().player('ann', 'play')), pot0 = JSON.stringify(s.potOf('play'));
-    SRV.setLiveConfig({ overrides: BIG_SWAP }); s.store().flush(); s.wallet.flush && s.wallet.flush();
+    const r = toPending(s, a, 'more'); const before = s.bal('ann', 'play') + r.cost, bank0 = r.pending.bankCents;       // the balance before the pending spin, and what the safe default (bank it) pays
+    const rounds0 = (s.store().player('ann', 'play') || { rounds: 0 }).rounds, pot0 = JSON.stringify(s.potOf('play'));
+    assert.deepStrictEqual(s.escrows().map((x) => x.balance), [r.cost], 'the stake sits in escrow while the decision is open');
+    SRV.setLiveConfig({ overrides: BIG_SWAP }); s.flush();
     freshProcess();                                                                              // a new process: shipped values in memory, the saved file on the volume
-    const s2 = setup({ dir: s.dir, bank: s.bank, rng: E.rngFrom(72), t: s.clock.now() + 5000, log: (...x) => logs.push(x.join(' ')) });
+    const s2 = setup({ dir: s.dir, rng: E.rngFrom(72), t: s.clock.now() + 5000, log: (...x) => logs.push(x.join(' ')) });
     assert.strictEqual(E.CFG.payScale, 3, 'the saved config is loaded at boot'); assert.strictEqual(E.CFG.buyCost.bonus1, 700);
-    assert.strictEqual(s2.wallet.get('ann').play, before, 'refunded the cost, nothing else'); assert.strictEqual(s2.open.size, 0); assert.strictEqual(s2.store().allOpen().length, 0);
-    assert.strictEqual(JSON.stringify(s2.store().player('ann', 'play')), stored0, 'player state untouched'); assert.strictEqual(JSON.stringify(s2.potOf('play')), pot0, 'pot untouched (no slice, no prize)');
-    assert.ok(logs.some((l) => l.includes(r.roundId) && l.includes('restart')), 'the void is logged');
-    const s3 = setup({ dir: s.dir, bank: s.bank, rng: E.rngFrom(73), t: s.clock.now() + 9000 }); await sleep(60);
-    assert.strictEqual(s3.wallet.get('ann').play, before, 'a second restart refunds nothing more');
+    assert.strictEqual(s2.bal('ann', 'play'), before - r.cost + bank0, 'settled as the timeout would: the default banks the amount that was shown, on the config the round started on');
+    assert.strictEqual(s2.open.size, 0); assert.strictEqual(s2.store().allOpen().length, 0); assert.deepStrictEqual(s2.escrows(), [], 'no escrow is left');
+    assert.strictEqual(s2.report.games.coldcall.found, 1); assert.strictEqual(s2.report.games.coldcall.settledOrVoidedByGame, 1); assert.deepStrictEqual(s2.report.voided, []);
+    assert.strictEqual((s2.store().player('ann', 'play') || { rounds: 0 }).rounds, rounds0, 'a buy never touches the player state (leads, Callback)'); assert.strictEqual(JSON.stringify(s2.potOf('play')), pot0, 'a buy never touches the pot (no slice, no prize)');
+    const h = SRV._history.get('ann'); assert.ok(h && h[0].roundId === r.roundId && h[0].auto === 'restart' && h[0].totalWin === bank0, 'the boot-settled round is in the history with auto: restart');
+    const id = s2.lastId(), ref = `coldcall:ann:${r.roundId}:close`; assert.ok(s2.has(ref), 'one :close line');
+    const s3 = setup({ dir: s.dir, rng: E.rngFrom(73), t: s.clock.now() + 9000 }); await sleep(60);
+    assert.strictEqual(s3.lastId(), id, 'a second restart writes nothing'); assert.strictEqual(s3.bal('ann', 'play'), before - r.cost + bank0);
     const b = s3.sock('ann'); assert.strictEqual(spin(s3, b, { bet: 100, mode: 'play', buyBonus: 'bonus1', auto: true }).cost, E.buyPrice(700, 100), 'the next spin runs on the new config');
   });
 
@@ -365,7 +341,7 @@ const BIG_SWAP = {
     SRV.setLiveConfig({ overrides: { pull: { pot: { feedBps: 150, oneInPerDollar: 5, minBal: 1, capCents: 8 }, feed: { minWinX: 0, minWinCents: 0 }, decision: { timeoutMs: 7000 } } } });
     let sumCost = 0, wins = 0, prizes = 0;
     for (let i = 0; i < 60; i++) { const r = spin(s, a, { bet: 100, mode: 'play', auto: true }); sumCost += r.cost; if (r.totalWin > 0) wins++; if (r.pot) { prizes++; assert.ok(r.pot.amount <= 8); } }
-    const p = s.potOf('play'); assert.strictEqual(p.fed * 10000 + p.rem, sumCost * 150, 'slice at the live 150 bps'); assert.strictEqual(p.fed + p.seeded, p.paid + p.bal); assert.ok(prizes >= 3, 'the live 1-in-5 per dollar pot paid: ' + prizes);
+    const p = s.potOf('play'); assert.strictEqual(p.fed * 10000 + p.rem, sumCost * 150, 'slice at the live 150 bps'); assert.strictEqual(p.fed, p.paid + p.bal, 'fed = paid + bal (statistics)'); assert.strictEqual(s.pool('play'), p.bal, 'and the mirror is the ledger pool'); assert.strictEqual(s.pool('play'), s.lines((e) => e.cur === 'play' && e.reason === 'coldcall:feed').reduce((n, e) => n + e.amount, 0) - s.lines((e) => e.cur === 'play' && e.reason === 'coldcall:prize').reduce((n, e) => n + e.amount, 0), 'pool = feeds - prizes, from the ledger lines'); assert.ok(prizes >= 3, 'the live 1-in-5 per dollar pot paid: ' + prizes);
     const feedWins = all(a, 'floor:feed').filter((e) => e.kind === 'win').length; assert.ok(wins > 3 && feedWins >= wins, 'live feed threshold 0: every win is an event ' + feedWins + '/' + wins);
     assert.strictEqual(toPending(s, a, 'more').timeoutMs, 7000);
   });
@@ -438,7 +414,7 @@ const BIG_SWAP = {
     const today = () => dayFmt.format(new Date(s.clock.now())), put = (x) => s.store().setPlayer('ann', 'play', Object.assign(E.newState(), { lt: 3000, avg: 100, rounds: 5, carry: 2.5, day: today(), streak: 1 }, x));
     put({}); SRV.setLiveConfig({ overrides: { pull: { list: 200 } } });
     const v0 = state(s, a).pull.play; assert.strictEqual(v0.leads, 300); assert.strictEqual(v0.list, 200); assert.strictEqual(v0.cb, null, 'nothing arms by itself, only at a paid spin');
-    let w = s.wallet.get('ann').play;
+    let w = s.bal('ann', 'play');
     const r1 = play(s, a, { bet: 100, mode: 'play' }); assert.strictEqual(r1.pull.armed, true); assert.ok(r1.pull.state.cb && r1.pull.state.cb.bet >= 1 && r1.pull.state.cb.bet <= 2500);
     w += -r1.cost + r1.totalWin + (r1.pot ? r1.pot.amount : 0); assert.strictEqual(r1.wallet.play, w);
     let st = s.store().player('ann', 'play'); assert.ok(st.lt >= 0 && Number.isFinite(st.lt)); assert.ok(st.lt >= 1000 && st.lt < 1300, 'one list taken off: ' + st.lt); assert.ok(st.carry >= 0 && st.carry < 10); assert.strictEqual(st.carry, 2.5, 'the carry is untouched here (avg 100 + 2.5 plays 100, keeps 2.5)');
@@ -446,7 +422,7 @@ const BIG_SWAP = {
     st = s.store().player('ann', 'play'); assert.strictEqual(st.cb, null); assert.strictEqual(st.callbacks, 1);
     const r3 = play(s, a, { bet: 100, mode: 'play' }); assert.strictEqual(r3.pull.armed, false, '1000 tenths left is under the new list of 2000'); assert.strictEqual(r3.callback, false);
     // a big stock: every list worth of leads becomes one Callback, one at a time
-    put({ lt: 9000, cb: null, callbacks: 0, carry: 0 }); let cbs = 0, armed = 0; w = s.wallet.get('ann').play;
+    put({ lt: 9000, cb: null, callbacks: 0, carry: 0 }); let cbs = 0, armed = 0; w = s.bal('ann', 'play');
     for (let i = 0; i < 14; i++) {
       const r = play(s, a, { bet: 100, mode: 'play' }); if (r.callback) { cbs++; assert.strictEqual(r.cost, 0); } if (r.pull.armed) armed++;
       w += -r.cost + r.totalWin + (r.pot ? r.pot.amount : 0); assert.strictEqual(r.wallet.play, w, 'round ' + i + ' settles to the cent');
@@ -477,7 +453,7 @@ const BIG_SWAP = {
     for (const bad of DAMAGED) {
       resetLive(); const s = setup({ rng: E.rngFrom(85), roundRng: E.rngFrom(86) }); const a = s.sock('ann'); rich(s, 'ann');
       s.store().setPlayer('ann', 'play', Object.assign(E.newState(), { lt: 800, avg: 100 }, bad));
-      assert.doesNotThrow(() => state(s, a), JSON.stringify(bad)); const w0 = s.wallet.get('ann').play;
+      assert.doesNotThrow(() => state(s, a), JSON.stringify(bad)); const w0 = s.bal('ann', 'play');
       const r = play(s, a, { bet: 10, mode: 'play' }); assert.ok(!r.error, JSON.stringify(bad) + ' -> ' + JSON.stringify(r.error)); assert.strictEqual(r.status, 'done');
       assert.strictEqual(r.wallet.play, w0 - r.cost + r.totalWin + (r.pot ? r.pot.amount : 0), 'settles to the cent: ' + JSON.stringify(bad));
       const q = s.store().player('ann', 'play'); assert.ok(Number.isFinite(q.lt) && q.lt >= 0 && q.carry >= 0 && q.carry < 10 && (q.cb === null || (Number.isInteger(q.cb.bet) && q.cb.bet >= 1 && q.cb.bet <= 2500)) && Number.isInteger(q.warmBet) && q.warmBet >= 0, 'state repaired: ' + JSON.stringify(bad));
@@ -485,7 +461,7 @@ const BIG_SWAP = {
     }
     resetLive(); const s = setup({ rng: E.rngFrom(87), roundRng: E.rngFrom(88) }); const a = s.sock('ann'); rich(s, 'ann');
     s.store().setPlayer('ann', 'play', Object.assign(E.newState(), { lt: 800, avg: 100, cb: { bet: 15 } }));
-    let w = s.wallet.get('ann').play; const r = play(s, a, { bet: 100, mode: 'play' });
+    let w = s.bal('ann', 'play'); const r = play(s, a, { bet: 100, mode: 'play' });
     assert.strictEqual(r.callback, true); assert.strictEqual(r.betCents, 15, 'a Callback at a bet that is not a ladder level (any whole cents in [1, 2500]) is played as stored'); assert.strictEqual(r.cost, 0); assert.ok(Number.isInteger(r.totalWin)); assert.strictEqual(r.wallet.play, w + r.totalWin + (r.pot ? r.pot.amount : 0));
     s.store().setPlayer('ann', 'play', Object.assign(E.newState(), { lt: 800, avg: 100, warm: [1, 2], warmBet: 7, coldAt: s.clock.now() + 1e9 }));
     const r2 = play(s, a, { bet: 10, mode: 'play' }); assert.strictEqual(r2.pull.warmDropped, 2, 'a warmBet that is not a ladder level never matches: the squares are dropped, nothing else happens'); assert.strictEqual(r2.status, 'done');
@@ -497,7 +473,7 @@ const BIG_SWAP = {
     s.store().setPlayer('ann', 'play', clone(base));
     SRV.setLiveConfig({ overrides: { pull: { on: false } } });
     const st = state(s, a); assert.ok(!('pull' in st) || !st.pull, 'no pull block while it is off'); assert.strictEqual(SRV.clientCfg().rules.on, false);
-    let w = s.wallet.get('ann').play;
+    let w = s.bal('ann', 'play');
     for (let i = 0; i < 6; i++) { const r = play(s, a, { bet: 100, mode: 'play' }); assert.ok(!r.error); assert.ok(!r.status, 'the old stateless round'); assert.strictEqual(r.wallet.play, w - r.cost + r.totalWin); w = r.wallet.play; }
     assert.deepStrictEqual(clone(s.store().player('ann', 'play')), clone(base), 'while off: the stored state is not touched');
     SRV.setLiveConfig({ overrides: {} });
@@ -513,10 +489,14 @@ const BIG_SWAP = {
   await test('admin API: GET / POST /api/admin/coldcall-config with the same token as Bender (403 without, wrong, or unset); 400 + text on a bad config and nothing changes; ok swaps, saves, broadcasts g:coldcall:cfg, logs the note only; reset restores', async () => {
     resetLive();
     const dir = fs.mkdtempSync(path.join(tmp, 'api')); fs.writeFileSync(path.join(dir, 'bank.json'), '{}'); fs.writeFileSync(path.join(dir, 'ledger.json'), '[]');
-    Object.assign(process.env, { BANK_FILE: path.join(dir, 'bank.json'), LEDGER_FILE: path.join(dir, 'ledger.json'), PORT: '0', COLDCALL_PULL_FILE: path.join(dir, 'coldcall-pull.json') });
-    const srv = require('../server.js');
-    await new Promise((res, rej) => { srv.server.once('error', rej); srv.server.listen(0, '127.0.0.1', res); });   // an ephemeral port: 4640 / 4641 may be busy with somebody's dev server
+    delete process.env.COLDCALL_PULL_FILE;
+    Object.assign(process.env, { BANK_FILE: path.join(dir, 'bank.json'), LEDGER_FILE: path.join(dir, 'ledger.json'), PORT: '0' });
+    const logOrig0 = console.log; console.log = () => {};
+    const srv = require('../server.js').start(process.env);                                    // v2: a real boot (ledger, accounts, registry, games recover) listening on an ephemeral port
+    console.log = logOrig0;
+    await new Promise((res, rej) => { if (srv.server.listening) return res(); srv.server.once('error', rej); srv.server.once('listening', res); });
     const PORT = srv.server.address().port;
+    assert.strictEqual(SRV._pull.store.file, path.join(dir, 'coldcall-pull.json'), 'P6: the game\'s state file lives next to money.jsonl');
     const emitted = []; const ioEmit = srv.io.emit; srv.io.emit = function (ev, ...rest) { emitted.push([ev, ...rest]); return ioEmit.call(this, ev, ...rest); };
     const logs = []; const logOrig = console.log; console.log = (...x) => { logs.push(x.join(' ')); };
     const TOKEN = crypto.randomBytes(18).toString('hex');
@@ -562,7 +542,7 @@ const BIG_SWAP = {
       const lab = await call('POST', P, good, preset('rtp96')); assert.strictEqual(lab.status, 200, lab.text); assert.strictEqual(lab.json.warning, null); assert.strictEqual(lab.json.rtpLabel, preset('rtp96').rtpLabel, 'a preset file POSTed as it is keeps its label'); assert.ok(typeof lab.json.configHash === 'string');
       await call('POST', P, good, { reset: true });
     } finally {
-      console.log = logOrig; srv.io.emit = ioEmit; delete process.env.BENDER_ADMIN_TOKEN; await new Promise((r) => srv.server.close(r));
+      console.log = logOrig; srv.io.emit = ioEmit; delete process.env.BENDER_ADMIN_TOKEN; await new Promise((r) => srv.server.close(r)); try { srv.ctx.ledger.close(); } catch {}
     }
   });
 
