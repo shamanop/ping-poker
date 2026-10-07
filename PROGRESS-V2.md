@@ -3,6 +3,30 @@
 Branch `v2-core` off origin/master 9440541 (live). Owner: Frank. Contracts: `V2-DESIGN.md`. Bugs from playtests: `QA-FRANK.md`.
 Never push or merge `master`.
 
+## 2026-10-07 00:45, branch `v2-all`: P6 wave 3b, INTERIM head (NOT the hand-off)
+
+Code head 6634db1 (this commit adds only this entry). Still NOT merged to master, NOT deployed. Still to come before the hand-off: the money soak merge (branch `p6-soak`, local), the browser chain result, wave 3c (ledger checkpoints, then `HAND-OFF TO ISABELLE`).
+
+**What changed** (166beca -> 6634db1; `public/games/coldcall/**` and both engine copies untouched)
+- Bender writes a round as ONE ledger line and answers an error, never a result, when the ledger refuses; a buy whose cost rounds to 0 is refused.
+- Daily bonus and achievements: the mint line in the ledger is the gate (paid first, flag second). After a crash between the two: no second payment, the streak and the Full Week achievement carry on.
+- Admin adjust / set Play: the admin page sends one op id per confirmed click; a resend writes nothing. A request without an op id works as before.
+- Slot: a live `stake_mismatch` voids the round once (it retried forever); `g:coldcall:voided.refund` is what the ledger returned (0 when nothing was charged).
+- Slot, from the Opus money critic (two passes): a round the ledger closed by a void gives nothing at boot (it could arm a free Callback); a player's final decision is on disk before the money call (a Callback gamble lost for 0 could be re-paid as banked after a crash). About 40 new tests on ledger lines.
+
+**What I tested** (the lead's own runs, clean export of 6634db1)
+- run-money 120/120, run-tables 180/180 (was 151), run-engine 96 (seed 1), `tests/coldcall.js` 47 / 57 / 61 / 28 / 20 / coldcall-money 46 (was 18), bender 19 + 5, `tests/v2/run.js --jobs 1` 166 of 166 (494 s).
+- Builders' and critic's numbers, not mine: every fix shown to fail without its line; the critic's mutants killed; critic pass 2 found no way left to make the ledger pay twice or pay a returned stake.
+- NOT run on this head: any browser (a six-leg real-click chain is running on 24fe5cf, whose slot code is identical; first leg 540x960 Play $ 33 rounds 0 fails, builder's number); the soak's `prove.js` (builder reports clean runs on 166beca, not merged, not re-run by me); a real boot with the recovery line.
+
+**Open bugs**
+- State only, no balance: after a crash between a slot ledger line and the state flush the office pot's `paid` / `last` can miss one prize; an instant spin's leads / daily state reach disk within 50 ms, not before the result.
+- `admin_set_play` with a reused op id AND a hand-typed matching reason reads as a dup (0 money).
+- Seen in the browser by the chain builder, not yet confirmed: a second tab stays busy with a stale balance after the first tab's round closes.
+- From wave 3a, unchanged: the decision-error toast wording, `/favicon.ico` 404, the showdown banner over the board cards with the slot docked at 1280x800.
+
+**Needs Chris**: nothing new. (Still his: a restart settles an open bonus as its timeout would; the Chips max-bet cap exposure; iOS / touch / sound never tested.)
+
 ## 2026-10-06 21:20, branch `v2-all`: P6 wave 3a, INTERIM head (NOT the hand-off)
 
 **This push is an interim head. It is not the hand-off and it is not ready for master.** Still to come on this branch: wave 3b (ride-along money fixes, the money soak with a Cold Call actor, an Opus money critic over the slot port, the three-size browser chain) and wave 3c (ledger checkpoints, then a section titled `HAND-OFF TO ISABELLE` at the top of this file). Estimate for the hand-off: Wed 2026-10-07, about 12:00 CDT.
