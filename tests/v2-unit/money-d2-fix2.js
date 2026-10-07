@@ -29,5 +29,19 @@ t('E8 a line with `topup` legs to two players sets both cooldowns: topUp(a) insi
   l.close();
 });
 
+// ---- E9: a leg the replay accepts never stops createService ----
+t('E9 a batch leg without its own reason (stored as null): createService returns, the other seats and accounts answer', () => {
+  const f = file();
+  fs.writeFileSync(f, ['{"id":1,"ts":1,"from":"mint:signup","to":"bank:a","amount":100,"cur":"chips","reason":"signup","ref":"s1"}',
+    '{"id":2,"ts":2,"batch":[{"from":"bank:a","to":"seat:T:a","amount":10,"cur":"chips"}],"ref":"b1","reason":"buyin:chips"}'].join('\n') + '\n');
+  const l = OPEN(f); eq(l.quarantined.length, 0); eq(l.balance('seat:T:a', 'chips'), 10);
+  const s = createService(l, { now });
+  eq(s.ensureAccount('b').created, true); eq(s.seatFund('T', 'b'), null);
+  eq(s.seatFund('T', 'a'), null, 'not a buy-in: no fund found (a10735a threw a TypeError here)');
+  eq(s.buyInCount('T', 'a', 0), 0); eq(s.nightSummary('T').perKey.a.buyIn, 0);
+  s.buyIn('b', 'T', 5, 'chips', 'chips', 'bb1'); eq(s.buyInCount('T', 'b', 0), 1); eq(s.seatFund('T', 'b'), 'chips');
+  l.close();
+});
+
 fs.rmSync(root, { recursive: true, force: true });
 run.done();

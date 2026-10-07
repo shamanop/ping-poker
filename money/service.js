@@ -59,11 +59,11 @@ function createService(ledger, opts = {}) {
         else if (a.startsWith('play:')) (known2 || (known2 = [])).push(a.slice(5));
       }
       if (e.reason === 'topup' && e.to.startsWith('play:')) (top || (top = [])).push([e.to.slice(5), e.ts]);     // one time per leg, as before D2
-      const to = seatParts(e.to), from = seatParts(e.from);
-      if (to && e.reason.startsWith('buyin:')) {
+      const to = seatParts(e.to), from = seatParts(e.from), rs = typeof e.reason === 'string' ? e.reason : '';   // a hand-made leg may have no reason
+      if (to && rs.startsWith('buyin:')) {
         ev.push([to[1], { id: e.id, key: to[2], amount: e.amount, out: false }]);
-        ins.push([to[1] + ':' + to[2], e.id]); last.push([to[1] + ':' + to[2], e.reason.slice(6)]);
-      } else if (from && (e.reason.startsWith('cashout:') || e.reason.startsWith('boot:'))) {
+        ins.push([to[1] + ':' + to[2], e.id]); last.push([to[1] + ':' + to[2], rs.slice(6)]);
+      } else if (from && (rs.startsWith('cashout:') || rs.startsWith('boot:'))) {
         // exactly the old nightSummary rule: a leg into a seat of the same table counts as a buy-in of the `to` key
         if (to && to[1] === from[1]) ev.push([from[1], { id: e.id, key: to[2], amount: e.amount, out: false }]);
         else ev.push([from[1], { id: e.id, key: from[2], amount: e.amount, out: true }]);
