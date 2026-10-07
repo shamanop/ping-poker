@@ -9,7 +9,7 @@ const root = L.mkdir('money-d2-misc-');
 let n = 0;
 const now = () => 1000;
 const file = () => path.join(root, 'm' + (++n) + '.jsonl');
-const OPEN = (f, o = {}) => { const log = L.logger(); const led = New.open(f, { now, fsync: 'none', log, ...o }); led.logs = log.lines; return led; };
+const OPEN = (f, o = {}) => { const log = L.logger(); const led = New.open(f, { now, fsync: 'none', log, ckptEvery: 0, ckptVerify: false, ...o }); led.logs = log.lines; return led; };
 const REFOPEN = (f) => Ref.open(f, { now, fsync: 'none', log: () => {} });
 const tr = (led, i, extra = {}) => led.transfer(extra.from || 'mint:signup', extra.to || 'bank:a', 1 + (i % 5), 'chips', extra.reason || 'x', (extra.tag || 'r') + i);
 
@@ -93,7 +93,9 @@ t('window bounds and refs: at least W and at most 2W lines in memory, every ref 
     led.close();
   }
   const l0 = OPEN(file(), { window: 0 }); for (let i = 0; i < 60; i++) tr(l0, i); eq(l0.stats().inMemory, 60); eq(l0.stats().window, 0); l0.close();
-  eq(OPEN(file()).stats().window, 20000);
+  const keep = process.env.LEDGER_WINDOW; delete process.env.LEDGER_WINDOW;
+  try { const d = OPEN(file()); eq(d.stats().window, 20000); d.close(); } finally { if (keep != null) process.env.LEDGER_WINDOW = keep; }
+  process.env.LEDGER_WINDOW = '9'; try { const e = OPEN(file()); eq(e.stats().window, 9); e.close(); } finally { if (keep != null) process.env.LEDGER_WINDOW = keep; else delete process.env.LEDGER_WINDOW; }
 });
 
 t('stats(): { lines, inMemory, window, coldScans, coldScanMs, coldLookups, ckpt }', () => {

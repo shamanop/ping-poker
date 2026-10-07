@@ -9,7 +9,7 @@ const root = L.mkdir('money-d2-ckpt-');
 let n = 0;
 const now = () => 1000;
 const mkDir = () => { const d = path.join(root, 'c' + (++n)); fs.mkdirSync(d); return d; };
-const OPEN = (f, o = {}) => { const log = L.logger(); const led = New.open(f, { now, fsync: 'none', log, window: 5, ...o }); led.logs = log.lines; return led; };
+const OPEN = (f, o = {}) => { const log = L.logger(); const led = New.open(f, { now, fsync: 'none', log, window: 5, ckptEvery: 0, ckptVerify: false, ...o }); led.logs = log.lines; return led; };
 
 // n lines of mixed transfers and batches (and a few refused calls), refs `${tag}<i>`
 function fill(led, from, to, tag = 'r') {
