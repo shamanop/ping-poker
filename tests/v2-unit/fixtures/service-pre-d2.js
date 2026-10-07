@@ -1,3 +1,4 @@
+// FROZEN pre-D2 service (git show a10735a:money/service.js), kept only so tests/v2-unit/money-d2-callsites.js can compare the D2 service against it. Loaded through a stub require ('./ledger' -> ledger-pre-d2.js). Do not edit.
 'use strict';
 // money/service.js: the named money operations the table layer calls. Every operation is one ledger
 // transfer() or batch() with a caller-supplied ref, so a retry after a crash is a no-op (dup) and a
@@ -39,67 +40,17 @@ function createService(ledger, opts = {}) {
   const known = { chips: new Set(), play: new Set() };     // keys that have ever had a bank:/play: account
   const lastTopUp = new Map();                              // key -> ts of the last mint:topup
   let scanned = 0;
-
-  // ---- D2 seat-event index: built in ONE pass over the journal (createService, before the server listens) and then kept up
-  // to date from new lines only (ledger.onLine -> refresh). It holds poker seat events only (never slot rounds), so buyInCount,
-  // nightSummary, seatFund and lastHandNo are answered from memory and normal play never does a cold scan.
-  // Cost: one { id, key, amount, kind } object per buy-in / cash-out / boot return (about 90 bytes with the arrays), one number
-  // per buy-in in the per-seat list, one Map entry per seat that was ever bought into, one per table with a hand.
-  const tableEv = new Map();    // tableId -> [{ id, key, amount, out }], ascending id; out=false is a buy-in (also the seat->seat quirk below)
-  const seatIns = new Map();    // `${tableId}:${key}` -> [id of every buy-in leg into that seat], ascending
-  const seatLast = new Map();   // `${tableId}:${key}` -> fund of the newest buy-in leg into that seat
-  const handMax = new Map();    // tableId -> highest n over refs 'hand:<id>:<n>'
-  const seatParts = (a) => { if (typeof a !== 'string' || !a.startsWith('seat:')) return null; const p = a.split(':'); return p.length === 3 ? p : null; };
-  function indexLine(legs) {           // computes into locals, commits after: never half a line
-    let known1 = null, known2 = null, top = null;
-    const ev = [], ins = [], last = [], hands = [];
-    for (const e of legs) {
-      for (const a of [e.from, e.to]) {
-        if (a.startsWith('bank:')) (known1 || (known1 = [])).push(a.slice(5));
-        else if (a.startsWith('play:')) (known2 || (known2 = [])).push(a.slice(5));
-      }
-      if (e.reason === 'topup' && e.to.startsWith('play:')) (top || (top = [])).push([e.to.slice(5), e.ts]);     // one time per leg, as before D2
-      const to = seatParts(e.to), from = seatParts(e.from), rs = typeof e.reason === 'string' ? e.reason : '';   // a hand-made leg may have no reason
-      if (to && rs.startsWith('buyin:')) {
-        ev.push([to[1], { id: e.id, key: to[2], amount: e.amount, out: false }]);
-        ins.push([to[1] + ':' + to[2], e.id]); last.push([to[1] + ':' + to[2], rs.slice(6)]);
-      } else if (from && (rs.startsWith('cashout:') || rs.startsWith('boot:'))) {
-        // exactly the old nightSummary rule: a leg into a seat of the same table counts as a buy-in of the `to` key
-        if (to && to[1] === from[1]) ev.push([from[1], { id: e.id, key: to[2], amount: e.amount, out: false }]);
-        else ev.push([from[1], { id: e.id, key: from[2], amount: e.amount, out: true }]);
-      }
-      if (e.batchRef && e.batchRef.startsWith('hand:')) {
-        const at = e.batchRef.lastIndexOf(':');
-        if (at >= 5) { const n = Number(e.batchRef.slice(at + 1)); if (Number.isSafeInteger(n)) hands.push([e.batchRef.slice(5, at), n]); }
-      }
-    }
-    if (known1) for (const k of known1) known.chips.add(k);
-    if (known2) for (const k of known2) known.play.add(k);
-    if (top) for (const [k, ts] of top) lastTopUp.set(k, ts);
-    for (const [t, x] of ev) { let l = tableEv.get(t); if (!l) tableEv.set(t, l = []); l.push(x); }
-    for (const [k, id] of ins) { let l = seatIns.get(k); if (!l) seatIns.set(k, l = []); l.push(id); }
-    for (const [k, f] of last) seatLast.set(k, f);
-    for (const [t, n] of hands) if (n > (handMax.get(t) || 0)) handMax.set(t, n);
-  }
   function refresh() {
-    let cur = [];
     for (const e of ledger.entries(null, scanned)) {
-      if (cur.length && cur[0].id !== e.id) { indexLine(cur); scanned = cur[0].id; cur = []; }
-      cur.push(e);
+      for (const a of [e.from, e.to]) {
+        if (a.startsWith('bank:')) known.chips.add(a.slice(5));
+        else if (a.startsWith('play:')) known.play.add(a.slice(5));
+      }
+      if (e.reason === 'topup' && e.to.startsWith('play:')) lastTopUp.set(e.to.slice(5), e.ts);
+      scanned = e.id;
     }
-    if (cur.length) { indexLine(cur); scanned = cur[0].id; }
     scanned = Math.max(scanned, ledger.lastId);
   }
-  const firstAfter = (arr, id, get) => { let lo = 0, hi = arr.length; while (lo < hi) { const m = (lo + hi) >> 1; if (get(arr[m]) <= id) lo = m + 1; else hi = m; } return lo; };
-  // buy-in legs into one seat after ledger id fromId
-  function buyInCount(tableId, key, fromId) {
-    refresh();
-    const l = seatIns.get(tableId + ':' + key);
-    return l ? l.length - firstAfter(l, fromId || 0, x => x) : 0;
-  }
-  function lastHandNo(tableId) { refresh(); return handMax.get(tableId) || 0; }
-  refresh();                           // the one boot pass
-  if (typeof ledger.onLine === 'function') ledger.onLine(refresh);
 
   const seatName = (tableId, key) => `seat:${tableId}:${key}`;
 
@@ -159,7 +110,7 @@ function createService(ledger, opts = {}) {
     if (fund != null && fund !== '') fund = needFund(fund, tableCur);
     if (ledger.has(ref)) {
       if (fund == null || fund === '') { // infer the original fund from the entry the ref wrote (cashout:<fund>)
-        for (const e of ledger.entriesOf(ref)) { if (e.reason.startsWith('cashout:')) { fund = e.reason.slice(8); break; } }
+        for (const e of ledger.entries(x => x.ref === ref && x.reason.startsWith('cashout:'))) { fund = e.reason.slice(8); break; }
       }
     } else {
       const have = seatFund(tableId, key, tableCur);
@@ -293,7 +244,7 @@ function createService(ledger, opts = {}) {
   // stake = the escrow leg (<game>:spend) of a settle. Only runs on a retry, so the scan over the ledger is not on any hot path.
   function closeOf(game, ref) {
     let out = null;
-    for (const e of ledger.entriesOf(ref)) {
+    for (const e of ledger.entries(x => x.ref === ref)) {
       if (!out) out = { id: e.id, kind: 'settle', cur: e.cur, stake: 0, win: 0, feed: 0, prize: 0, pool: null };
       if (e.reason.startsWith(game + ':void:')) out.kind = 'void';
       else if (e.reason === game + ':spend') out.stake += e.amount;
@@ -433,7 +384,7 @@ function createService(ledger, opts = {}) {
   function topUp(key, ref) {
     needRef(ref);
     if (ledger.has(ref)) { // replay: re-issue the original amount so the ledger answers dup or ref_conflict
-      for (const e of ledger.entriesOf(ref)) return mint('topup', key, e.amount, 'play', ref);
+      for (const e of ledger.entries(x => x.ref === ref)) return mint('topup', key, e.amount, 'play', ref);
     }
     const e = topUpEligible(key);
     if (!e.eligible) throw new MoneyError(e.why, { retryMs: e.retryMs, total: e.total });
@@ -443,8 +394,8 @@ function createService(ledger, opts = {}) {
   // The fund a seat was bought in from, read from the ledger only: the most recent buyin:<fund> entry into the seat.
   function seatFund(tableId, key, cur) {
     const seat = seatName(tableId, key);
-    refresh();
-    const fund = seatLast.get(tableId + ':' + key);
+    let fund = null;
+    for (const e of ledger.entries(x => x.to === seat && x.reason.startsWith('buyin:'))) fund = e.reason.slice(6);
     if (fund) return fund;
     if (cur) return cur;
     return null;
@@ -518,37 +469,16 @@ function createService(ledger, opts = {}) {
   // Buy-ins, cash-outs and net per key for one table, from the ledger. Boot recovery counts as a cash-out.
   // `open` is what seats still hold (stack + committed), so zeroSum holds during and after a night.
   // opts.fromId limits the window to entries after that ledger id (a table that is reused across nights).
-  // The ledger is append-only, so the buy-in / cash-out sums per (table, fromId) are kept and only the entries after the last id seen are read
-  // (D2: with old lines on disk, a full scan per call would be a cold scan). Same answers as scanning from fromId every time.
-  const nights = new Map();     // `${tableId}|${fromId}` -> { pos, rows: Map key -> { buyIn, cashOut } } (first-seen order); pos = next event of tableEv
   function nightSummary(tableId, o = {}) {
     needStr(tableId, 'bad_table', 'tableId');
     const prefix = `seat:${tableId}:`;
-    const fromId = o.fromId || 0;
-    const nk = tableId + '|' + fromId;
-    refresh();
-    const evs = tableEv.get(tableId) || [];
-    let c = nights.get(nk);
-    if (!c) { c = { pos: firstAfter(evs, fromId, x => x.id), rows: new Map() }; nights.set(nk, c); }
-    if (c.pos < evs.length) {                    // fold the new events into a copy, commit after the loop
-      const add = new Map();
-      for (let i = c.pos; i < evs.length; i++) {
-        const e = evs[i];
-        if (e.id <= fromId) continue;                // a line at or before fromId is not of this night, whenever it was first seen
-        let r = add.get(e.key);
-        if (!r) add.set(e.key, r = { buyIn: 0, cashOut: 0 });
-        if (e.out) r.cashOut += e.amount; else r.buyIn += e.amount;
-      }
-      for (const [k, d] of add) {
-        let r = c.rows.get(k);
-        if (!r) c.rows.set(k, r = { buyIn: 0, cashOut: 0 });
-        r.buyIn += d.buyIn; r.cashOut += d.cashOut;
-      }
-      c.pos = evs.length;
-    }
     const per = {};
     const row = (k) => (per[k] || (per[k] = { buyIn: 0, cashOut: 0, open: 0, net: 0 }));
-    for (const [k, r] of c.rows) { const x = row(k); x.buyIn = r.buyIn; x.cashOut = r.cashOut; }
+    const f = (e) => (e.to.startsWith(prefix) && e.reason.startsWith('buyin:')) || (e.from.startsWith(prefix) && (e.reason.startsWith('cashout:') || e.reason.startsWith('boot:')));
+    for (const e of ledger.entries(f, o.fromId || 0)) {
+      if (e.to.startsWith(prefix)) row(e.to.slice(prefix.length)).buyIn += e.amount;
+      else row(e.from.slice(prefix.length)).cashOut += e.amount;
+    }
     for (const cur of CURS) for (const { account, balance } of ledger.list(prefix, cur)) row(account.slice(prefix.length)).open += balance;
     let sum = 0;
     for (const r of Object.values(per)) { r.net = r.cashOut + r.open - r.buyIn; sum += r.net; }
@@ -576,7 +506,7 @@ function createService(ledger, opts = {}) {
   return {
     ensureAccount, buyIn, cashOut, settleHand, mint, houseSpend, houseCredit, houseRound, adminAdjust,
     openRound, settleRound, voidRound, openRounds, roundClosed, poolBalance, sweepEscrows,
-    topUpEligible, topUp, bootRecover, mirror, nightSummary, balances, seatFund, buyInCount, lastHandNo, ledger, GAMES,
+    topUpEligible, topUp, bootRecover, mirror, nightSummary, balances, seatFund, ledger, GAMES,
     START_CHIPS, START_PLAY, TOPUP_BELOW, TOPUP_COOLDOWN_MS,
   };
 }

@@ -1,3 +1,4 @@
+// FROZEN pre-D2 money port (git show a10735a:tables/money-port.js), kept only for tests/v2-unit/money-d2-callsites.js. Do not edit.
 'use strict';
 // The ONLY place a money `ref` is built and the ONLY caller of the money service for table operations (contract section 3).
 // `table` arguments are anything with { id, cur } (cur = 'chips' | 'play', the table's currency).
@@ -69,11 +70,23 @@ function createMoneyPort({ service, ledger, bootId, afterWrite, onFence, onWrite
   }
 
   // M10: buy-ins into this seat since the night began, read from the ledger (survives restarts).
-  // D2: answered from the service's seat-event index (built in one pass at createService, kept up to date from new lines), never a journal scan.
-  function buyInCount(table, key, fromId) { return service.buyInCount(table.id, key, fromId || 0); }
+  function buyInCount(table, key, fromId) {
+    const seat = seatAcct(table.id, key);
+    let n = 0;
+    for (const _ of ledger.entries(e => e.to === seat && e.reason.startsWith('buyin:'), fromId || 0)) n++;
+    return n;
+  }
 
-  // handNo is monotonic per table across restarts: the highest n over refs 'hand:<id>:<n>' (0 if none), from the same index.
-  function lastHandNo(tableId) { return service.lastHandNo(tableId); }
+  // handNo is monotonic per table across restarts: the highest n over refs 'hand:<id>:<n>' (0 if none).
+  function lastHandNo(tableId) {
+    const prefix = `hand:${tableId}:`;
+    let max = 0;
+    for (const e of ledger.entries(x => x.batchRef && x.batchRef.startsWith(prefix))) {
+      const n = Number(e.batchRef.slice(prefix.length));
+      if (Number.isSafeInteger(n) && n > max) max = n;
+    }
+    return max;
+  }
 
   // Drift check for one table: every non-zero seat account must equal stack + handBet of its seat (contract 3 / 10).
   // `seats` = [{ key, stack, handBet }]. Returns [{ account, ledger, memory }] for each disagreement (empty = clean).
