@@ -534,6 +534,7 @@ function createService(ledger, opts = {}) {
       const add = new Map();
       for (let i = c.pos; i < evs.length; i++) {
         const e = evs[i];
+        if (e.id <= fromId) continue;                // a line at or before fromId is not of this night, whenever it was first seen
         let r = add.get(e.key);
         if (!r) add.set(e.key, r = { buyIn: 0, cashOut: 0 });
         if (e.out) r.cashOut += e.amount; else r.buyIn += e.amount;

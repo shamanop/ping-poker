@@ -43,5 +43,17 @@ t('E9 a batch leg without its own reason (stored as null): createService returns
   l.close();
 });
 
+// ---- E10: nightSummary counts exactly the events with id > fromId, however early it was first asked ----
+t('E10 first asked while fromId is ahead of lastId, then lines with id <= fromId: same answer as after a restart', () => {
+  const f = file(); let l = OPEN(f), s = createService(l, { now });
+  l.transfer('mint:signup', 'bank:a', 1000, 'chips', 'signup', 's1');
+  s.nightSummary('T', { fromId: 3 });
+  s.buyIn('a', 'T', 100, 'chips', 'chips', 'b1'); s.buyIn('a', 'T', 50, 'chips', 'chips', 'b2'); s.buyIn('a', 'T', 7, 'chips', 'chips', 'b3');
+  const live = s.nightSummary('T', { fromId: 3 }).perKey.a;
+  l.close(); l = OPEN(f); s = createService(l, { now });
+  const boot = s.nightSummary('T', { fromId: 3 }).perKey.a;
+  eq(live.buyIn, 7); deq(live, boot); l.close();
+});
+
 fs.rmSync(root, { recursive: true, force: true });
 run.done();
