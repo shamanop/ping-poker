@@ -73,7 +73,7 @@ function runView(rec) {
 }
 function stateView(nk) {
   const rec = runs.get(nk);
-  return { betLevels: E.BET_LEVELS.slice(), modes: MODES.slice(), rtp: RTP_LABEL, maxWinX: MAX_WIN_X, capX: CAP_X, idleMs: idleMs(), map: { ...E.MAP, tiers: E.TIERS }, balances: safeBalances(nk), run: rec ? runView(rec) : null };
+  return { betLevels: E.BET_LEVELS.slice(), modes: MODES.slice(), rtp: RTP_LABEL, maxWinX: MAX_WIN_X, capX: CAP_X, idleMs: idleMs(), map: { ...E.MAP, tiers: E.MAP.tiers || E.TIERS }, balances: safeBalances(nk), run: rec ? runView(rec) : null };
 }
 function endView(rec, run, reason, win, failedAt) {
   return { roundId: rec.roundId, reason, mode: rec.cur, bet: rec.bet, mx: run.mx, win, at: run.at, failedAt: failedAt || null, trail: run.trail.slice(), steps: run.steps, balances: safeBalances(rec.nk) };
@@ -327,5 +327,5 @@ module.exports = {
   },
   recover, audit,
   handlers: { state, start, step, cash },
-  _test: { runs, get store() { return store; }, idleMs },
+  _test: { runs, get store() { return store; }, idleMs, autoClose },
 };
