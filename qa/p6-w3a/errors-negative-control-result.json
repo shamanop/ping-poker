@@ -1,0 +1,266 @@
+{
+ "driver": "errors.js",
+ "base": "http://127.0.0.1:4760",
+ "negativeControl": "/home/frank/.openclaw/workspace/projects/ping-v2-core/_scratch/p6/w3/builder/game_old.js",
+ "at": "2026-10-07T01:45:08.406Z",
+ "passed": 20,
+ "failed": 9,
+ "notes": [
+  "fixtures: {\"recordedAt\":\"2026-10-07T01:34:54.144Z\",\"server\":\"http://127.0.0.1:4760\",\"mode\":\"play\",\"bet\":10,\"buy\":\"bonus1\",\"buys\":1,\"kinds\":[\"pick\",\"more\",\"done\"],\"roundId\":\"80b06d6bf714\",\"initKeys\":[\"type\",\"wallet\",\"mode\",\"bets\",\"state\",\"name\"],\"initWallet\":{\"play\":1010000,\"chips\":10000},\"pendingKeys\":[\"round"
+ ],
+ "rows": [
+  {
+   "name": "round_closed/E1: the error was delivered",
+   "pass": true,
+   "expected": true,
+   "got": 1791337439160
+  },
+  {
+   "name": "round_closed/E1: not busy, SPIN idle (label \"SPIN\"), within 3 s",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "busy": false,
+    "label": "SPIN",
+    "spinRun": false,
+    "ms": 3039
+   }
+  },
+  {
+   "name": "round_closed/E1: no scrim, no prompt node left on screen",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "scrims": 0,
+    "pullNodes": 0
+   }
+  },
+  {
+   "name": "round_closed/E1: CC.dbg.error unset",
+   "pass": true,
+   "expected": true,
+   "got": null
+  },
+  {
+   "name": "round_closed/E1: the iframe sent hello AFTER the error",
+   "pass": false,
+   "expected": true,
+   "got": {
+    "hellosAfterError": 0
+   }
+  },
+  {
+   "name": "round_closed/E1: the meter shows the server's second init (123456 cents, first was 1010000) within 3 s (settled 3039 ms after the error)",
+   "pass": false,
+   "expected": 123456,
+   "got": 1010000
+  },
+  {
+   "name": "round_closed/E1: the bet buttons work (bet index 3 -> 4 -> 3)",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "b1": 3,
+    "s1": 4,
+    "s2": 3
+   }
+  },
+  {
+   "name": "round_closed/E1: a real click on SPIN sends a spin message (the board is usable)",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "at": 1791337450770,
+    "type": "spin",
+    "reqId": 2,
+    "bet": 10,
+    "mode": "play",
+    "buy": null,
+    "auto": false
+   }
+  },
+  {
+   "name": "round_closed/E1: no page error",
+   "pass": true,
+   "expected": true,
+   "got": []
+  },
+  {
+   "name": "round_closed/E2: the error was delivered",
+   "pass": true,
+   "expected": true,
+   "got": 1791337460655
+  },
+  {
+   "name": "round_closed/E2: not busy, SPIN idle (label \"SPIN\"), within 3 s",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "busy": false,
+    "label": "SPIN",
+    "spinRun": false,
+    "ms": 3049
+   }
+  },
+  {
+   "name": "round_closed/E2: no scrim, no prompt node left on screen",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "scrims": 0,
+    "pullNodes": 0
+   }
+  },
+  {
+   "name": "round_closed/E2: CC.dbg.error unset",
+   "pass": true,
+   "expected": true,
+   "got": null
+  },
+  {
+   "name": "round_closed/E2: the iframe sent hello AFTER the error",
+   "pass": false,
+   "expected": true,
+   "got": {
+    "hellosAfterError": 0
+   }
+  },
+  {
+   "name": "round_closed/E2: the meter shows the server's second init (123456 cents, first was 1010000) within 3 s (settled 3049 ms after the error)",
+   "pass": false,
+   "expected": 123456,
+   "got": 1010000
+  },
+  {
+   "name": "round_closed/E2: the bet buttons work (bet index 3 -> 4 -> 3)",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "b1": 3,
+    "s1": 4,
+    "s2": 3
+   }
+  },
+  {
+   "name": "round_closed/E2: a real click on SPIN sends a spin message (the board is usable)",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "at": 1791337472125,
+    "type": "spin",
+    "reqId": 2,
+    "bet": 10,
+    "mode": "play",
+    "buy": null,
+    "auto": false
+   }
+  },
+  {
+   "name": "round_closed/E2: no page error",
+   "pass": true,
+   "expected": true,
+   "got": []
+  },
+  {
+   "name": "round_closed/E6: with a Callback pending the button reads CALLBACK",
+   "pass": true,
+   "expected": "CALLBACK",
+   "got": "CALLBACK"
+  },
+  {
+   "name": "round_closed/E6: the error was delivered",
+   "pass": true,
+   "expected": true,
+   "got": 1791337488508
+  },
+  {
+   "name": "round_closed/E6: not busy, SPIN idle (label \"CALLBACK\"), within 3 s",
+   "pass": false,
+   "expected": true,
+   "got": {
+    "busy": false,
+    "label": "CALLBACK",
+    "spinRun": false,
+    "ms": 3025
+   }
+  },
+  {
+   "name": "round_closed/E6: no scrim, no prompt node left on screen",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "scrims": 0,
+    "pullNodes": 0
+   }
+  },
+  {
+   "name": "round_closed/E6: CC.dbg.error unset",
+   "pass": true,
+   "expected": true,
+   "got": null
+  },
+  {
+   "name": "round_closed/E6: the iframe sent hello AFTER the error",
+   "pass": false,
+   "expected": true,
+   "got": {
+    "hellosAfterError": 0
+   }
+  },
+  {
+   "name": "round_closed/E6: the meter shows the server's second init (123456 cents, first was 1010000) within 3 s (settled 3025 ms after the error)",
+   "pass": false,
+   "expected": 123456,
+   "got": 1010000
+  },
+  {
+   "name": "round_closed/E6: the bet buttons work (bet index 6 -> 6 -> 6)",
+   "pass": false,
+   "expected": true,
+   "got": {
+    "b1": 6,
+    "s1": 6,
+    "s2": 6
+   }
+  },
+  {
+   "name": "round_closed/E6: a real click on SPIN sends a spin message (the board is usable)",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "at": 1791337507917,
+    "type": "spin",
+    "reqId": 2,
+    "bet": 100,
+    "mode": "play",
+    "buy": null,
+    "auto": false
+   }
+  },
+  {
+   "name": "round_closed/E6: that spin is a normal paid one: label SPIN, bet shown $0.10 (= $1.00), message bet 100 (the Callback's own bet was 10; not a free Callback)",
+   "pass": false,
+   "expected": true,
+   "got": {
+    "label": "CALLBACK",
+    "betTxt": "$0.10",
+    "want": "$1.00",
+    "sent": {
+     "at": 1791337507917,
+     "type": "spin",
+     "reqId": 2,
+     "bet": 100,
+     "mode": "play",
+     "buy": null,
+     "auto": false
+    }
+   }
+  },
+  {
+   "name": "round_closed/E6: no page error",
+   "pass": true,
+   "expected": true,
+   "got": []
+  }
+ ]
+}

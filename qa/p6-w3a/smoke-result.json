@@ -1,0 +1,964 @@
+{
+ "driver": "smoke.js",
+ "base": "http://127.0.0.1:4761",
+ "at": "2026-10-07T02:07:07.711Z",
+ "passed": 134,
+ "failed": 0,
+ "notes": [
+  "play: fresh account w3apgnesl (key w3apgnesl); funding = sign-up grant, daily bonus claimed by real click: true",
+  "play: burst of 20 clicks took 67 ms (a fast burst on this loaded box); server rounds 1, screen rounds 1, ledger rounds 1",
+  "play: console errors / bad responses: [\"console.error: Failed to load resource: the server responded with a status of 404 (Not Found) @http://127.0.0.1:4761/favicon.ico\"]",
+  "chips: fresh account w3acgrez2 (key w3acgrez2); funding = sign-up grant, daily bonus claimed by real click: true",
+  "chips: burst of 20 clicks took 67 ms (a fast burst on this loaded box); server rounds 1, screen rounds 1, ledger rounds 1",
+  "poker: leave-table confirm dialog: Leave the table? Your stack goes back to your bank. If you are in the hand you fold it.",
+  "chips: console errors / bad responses: [\"console.error: Failed to load resource: the server responded with a status of 404 (Not Found) @http://127.0.0.1:4761/favicon.ico\"]"
+ ],
+ "rows": [
+  {
+   "name": "play/dock: Cold Call and Ballot Bender buttons carry btn btn--icon",
+   "pass": true,
+   "expected": true,
+   "got": [
+    {
+     "t": "Poker",
+     "ok": true
+    },
+    {
+     "t": "Ballot Bender",
+     "ok": true
+    },
+    {
+     "t": "Cold Call",
+     "ok": true
+    }
+   ]
+  },
+  {
+   "name": "play/open: the slot is live (bridge), not practice",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "live": true,
+    "kind": "bridge"
+   }
+  },
+  {
+   "name": "play/open: slot mode",
+   "pass": true,
+   "expected": "play",
+   "got": "play"
+  },
+  {
+   "name": "play/open (before any round): ledger before 1010000 - cost 0 + win 0 + pot 0 = after (0 rounds)",
+   "pass": true,
+   "expected": 1010000,
+   "got": 1010000
+  },
+  {
+   "name": "play/open (before any round): slot meter = ledger balance",
+   "pass": true,
+   "expected": 1010000,
+   "got": 1010000
+  },
+  {
+   "name": "play/open (before any round): shell plate = ledger balance ({\"play\":\"$10,100\",\"chips\":\"10,000\"})",
+   "pass": true,
+   "expected": 1010000,
+   "got": 1010000
+  },
+  {
+   "name": "play/open (before any round): no escrow account holds money while idle",
+   "pass": true,
+   "expected": [],
+   "got": []
+  },
+  {
+   "name": "play/open (before any round): CC.dbg.mismatch empty",
+   "pass": true,
+   "expected": [],
+   "got": []
+  },
+  {
+   "name": "play/open (before any round): CC.dbg.aborted is 0",
+   "pass": true,
+   "expected": true,
+   "got": 0
+  },
+  {
+   "name": "play/open (before any round): CC.dbg.error unset, not busy, no prompt/scrim left",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "error": null,
+    "busy": false,
+    "prompt": null,
+    "scrims": 0
+   }
+  },
+  {
+   "name": "play/open (before any round): rig audit clean (ledger ok, no drift, no open coldcall round)",
+   "pass": true,
+   "expected": true,
+   "got": true
+  },
+  {
+   "name": "play/10 plain spins: ledger before 1010000 - cost 100 + win 33 + pot 0 = after (10 rounds)",
+   "pass": true,
+   "expected": 1009933,
+   "got": 1009933
+  },
+  {
+   "name": "play/10 plain spins: slot meter = ledger balance",
+   "pass": true,
+   "expected": 1009933,
+   "got": 1009933
+  },
+  {
+   "name": "play/10 plain spins: shell plate = ledger balance ({\"play\":\"$10,099.33\",\"chips\":\"10,000\"})",
+   "pass": true,
+   "expected": 1009933,
+   "got": 1009933
+  },
+  {
+   "name": "play/10 plain spins: no escrow account holds money while idle",
+   "pass": true,
+   "expected": [],
+   "got": []
+  },
+  {
+   "name": "play/10 plain spins: CC.dbg.mismatch empty",
+   "pass": true,
+   "expected": [],
+   "got": []
+  },
+  {
+   "name": "play/10 plain spins: CC.dbg.aborted is 0",
+   "pass": true,
+   "expected": true,
+   "got": 0
+  },
+  {
+   "name": "play/10 plain spins: CC.dbg.error unset, not busy, no prompt/scrim left",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "error": null,
+    "busy": false,
+    "prompt": null,
+    "scrims": 0
+   }
+  },
+  {
+   "name": "play/10 plain spins: rig audit clean (ledger ok, no drift, no open coldcall round)",
+   "pass": true,
+   "expected": true,
+   "got": true
+  },
+  {
+   "name": "play/10 plain spins: the server settled 10 or more rounds, the screen ran the same count",
+   "pass": true,
+   "expected": true,
+   "got": 10
+  },
+  {
+   "name": "play/bonus buys with decisions (2 buys, {\"pick\":2,\"more\":1,\"hang\":1}): ledger before 1009933 - cost 964 + win 281 + pot 0 = after (2 rounds)",
+   "pass": true,
+   "expected": 1009250,
+   "got": 1009250
+  },
+  {
+   "name": "play/bonus buys with decisions (2 buys, {\"pick\":2,\"more\":1,\"hang\":1}): slot meter = ledger balance",
+   "pass": true,
+   "expected": 1009250,
+   "got": 1009250
+  },
+  {
+   "name": "play/bonus buys with decisions (2 buys, {\"pick\":2,\"more\":1,\"hang\":1}): shell plate = ledger balance ({\"play\":\"$10,092.50\",\"chips\":\"10,000\"})",
+   "pass": true,
+   "expected": 1009250,
+   "got": 1009250
+  },
+  {
+   "name": "play/bonus buys with decisions (2 buys, {\"pick\":2,\"more\":1,\"hang\":1}): no escrow account holds money while idle",
+   "pass": true,
+   "expected": [],
+   "got": []
+  },
+  {
+   "name": "play/bonus buys with decisions (2 buys, {\"pick\":2,\"more\":1,\"hang\":1}): CC.dbg.mismatch empty",
+   "pass": true,
+   "expected": [],
+   "got": []
+  },
+  {
+   "name": "play/bonus buys with decisions (2 buys, {\"pick\":2,\"more\":1,\"hang\":1}): CC.dbg.aborted is 0",
+   "pass": true,
+   "expected": true,
+   "got": 0
+  },
+  {
+   "name": "play/bonus buys with decisions (2 buys, {\"pick\":2,\"more\":1,\"hang\":1}): CC.dbg.error unset, not busy, no prompt/scrim left",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "error": null,
+    "busy": false,
+    "prompt": null,
+    "scrims": 0
+   }
+  },
+  {
+   "name": "play/bonus buys with decisions (2 buys, {\"pick\":2,\"more\":1,\"hang\":1}): rig audit clean (ledger ok, no drift, no open coldcall round)",
+   "pass": true,
+   "expected": true,
+   "got": true
+  },
+  {
+   "name": "play/decisions: PICK YOUR LEAD answered by a real click",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "pick": 2,
+    "more": 1,
+    "hang": 1
+   }
+  },
+  {
+   "name": "play/decisions: ONE MORE CALL (take) answered by a real click",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "pick": 2,
+    "more": 1,
+    "hang": 1
+   }
+  },
+  {
+   "name": "play/one bonus2 buy (decisions {\"pick\":1,\"more\":0,\"hang\":1}): ledger before 1009250 - cost 1455 + win 1499 + pot 0 = after (1 rounds)",
+   "pass": true,
+   "expected": 1009294,
+   "got": 1009294
+  },
+  {
+   "name": "play/one bonus2 buy (decisions {\"pick\":1,\"more\":0,\"hang\":1}): slot meter = ledger balance",
+   "pass": true,
+   "expected": 1009294,
+   "got": 1009294
+  },
+  {
+   "name": "play/one bonus2 buy (decisions {\"pick\":1,\"more\":0,\"hang\":1}): shell plate = ledger balance ({\"play\":\"$10,092.94\",\"chips\":\"10,000\"})",
+   "pass": true,
+   "expected": 1009294,
+   "got": 1009294
+  },
+  {
+   "name": "play/one bonus2 buy (decisions {\"pick\":1,\"more\":0,\"hang\":1}): no escrow account holds money while idle",
+   "pass": true,
+   "expected": [],
+   "got": []
+  },
+  {
+   "name": "play/one bonus2 buy (decisions {\"pick\":1,\"more\":0,\"hang\":1}): CC.dbg.mismatch empty",
+   "pass": true,
+   "expected": [],
+   "got": []
+  },
+  {
+   "name": "play/one bonus2 buy (decisions {\"pick\":1,\"more\":0,\"hang\":1}): CC.dbg.aborted is 0",
+   "pass": true,
+   "expected": true,
+   "got": 0
+  },
+  {
+   "name": "play/one bonus2 buy (decisions {\"pick\":1,\"more\":0,\"hang\":1}): CC.dbg.error unset, not busy, no prompt/scrim left",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "error": null,
+    "busy": false,
+    "prompt": null,
+    "scrims": 0
+   }
+  },
+  {
+   "name": "play/one bonus2 buy (decisions {\"pick\":1,\"more\":0,\"hang\":1}): rig audit clean (ledger ok, no drift, no open coldcall round)",
+   "pass": true,
+   "expected": true,
+   "got": true
+  },
+  {
+   "name": "play/buy: the server settled exactly one round, a bought bonus2",
+   "pass": true,
+   "expected": true,
+   "got": [
+    "bonus2"
+   ]
+  },
+  {
+   "name": "play/fast-click burst (20 clicks in 67 ms): ledger before 1009294 - cost 5 + win 5 + pot 0 = after (1 rounds)",
+   "pass": true,
+   "expected": 1009294,
+   "got": 1009294
+  },
+  {
+   "name": "play/fast-click burst (20 clicks in 67 ms): slot meter = ledger balance",
+   "pass": true,
+   "expected": 1009294,
+   "got": 1009294
+  },
+  {
+   "name": "play/fast-click burst (20 clicks in 67 ms): shell plate = ledger balance ({\"play\":\"$10,092.94\",\"chips\":\"10,000\"})",
+   "pass": true,
+   "expected": 1009294,
+   "got": 1009294
+  },
+  {
+   "name": "play/fast-click burst (20 clicks in 67 ms): no escrow account holds money while idle",
+   "pass": true,
+   "expected": [],
+   "got": []
+  },
+  {
+   "name": "play/fast-click burst (20 clicks in 67 ms): CC.dbg.mismatch empty",
+   "pass": true,
+   "expected": [],
+   "got": []
+  },
+  {
+   "name": "play/fast-click burst (20 clicks in 67 ms): CC.dbg.aborted is 0",
+   "pass": true,
+   "expected": true,
+   "got": 0
+  },
+  {
+   "name": "play/fast-click burst (20 clicks in 67 ms): CC.dbg.error unset, not busy, no prompt/scrim left",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "error": null,
+    "busy": false,
+    "prompt": null,
+    "scrims": 0
+   }
+  },
+  {
+   "name": "play/fast-click burst (20 clicks in 67 ms): rig audit clean (ledger ok, no drift, no open coldcall round)",
+   "pass": true,
+   "expected": true,
+   "got": true
+  },
+  {
+   "name": "play/burst: rounds the server played = rounds the screen ran",
+   "pass": true,
+   "expected": 1,
+   "got": 1
+  },
+  {
+   "name": "play/burst: rounds in the ledger = rounds the server played",
+   "pass": true,
+   "expected": 1,
+   "got": 1
+  },
+  {
+   "name": "play/burst: at least one round ran",
+   "pass": true,
+   "expected": true,
+   "got": 1
+  },
+  {
+   "name": "play/end of run: ledger before 1009294 - cost 0 + win 0 + pot 0 = after (0 rounds)",
+   "pass": true,
+   "expected": 1009294,
+   "got": 1009294
+  },
+  {
+   "name": "play/end of run: slot meter = ledger balance",
+   "pass": true,
+   "expected": 1009294,
+   "got": 1009294
+  },
+  {
+   "name": "play/end of run: shell plate = ledger balance ({\"play\":\"$10,092.94\",\"chips\":\"10,000\"})",
+   "pass": true,
+   "expected": 1009294,
+   "got": 1009294
+  },
+  {
+   "name": "play/end of run: no escrow account holds money while idle",
+   "pass": true,
+   "expected": [],
+   "got": []
+  },
+  {
+   "name": "play/end of run: CC.dbg.mismatch empty",
+   "pass": true,
+   "expected": [],
+   "got": []
+  },
+  {
+   "name": "play/end of run: CC.dbg.aborted is 0",
+   "pass": true,
+   "expected": true,
+   "got": 0
+  },
+  {
+   "name": "play/end of run: CC.dbg.error unset, not busy, no prompt/scrim left",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "error": null,
+    "busy": false,
+    "prompt": null,
+    "scrims": 0
+   }
+  },
+  {
+   "name": "play/end of run: rig audit clean (ledger ok, no drift, no open coldcall round)",
+   "pass": true,
+   "expected": true,
+   "got": true
+  },
+  {
+   "name": "play/end: no page error, no console error (favicon 404 excluded and listed)",
+   "pass": true,
+   "expected": true,
+   "got": [
+    "console.error: Failed to load resource: the server responded with a status of 404 (Not Found) @http://127.0.0.1:4761/favicon.ico",
+    "console.error: Failed to load resource: the server responded with a status of 404 (Not Found) @http://127.0.0.1:4761/favicon.ico"
+   ]
+  },
+  {
+   "name": "chips/dock: Cold Call and Ballot Bender buttons carry btn btn--icon",
+   "pass": true,
+   "expected": true,
+   "got": [
+    {
+     "t": "Poker",
+     "ok": true
+    },
+    {
+     "t": "Ballot Bender",
+     "ok": true
+    },
+    {
+     "t": "Cold Call",
+     "ok": true
+    }
+   ]
+  },
+  {
+   "name": "chips/open: the slot is live (bridge), not practice",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "live": true,
+    "kind": "bridge"
+   }
+  },
+  {
+   "name": "chips/open: slot mode",
+   "pass": true,
+   "expected": "chips",
+   "got": "chips"
+  },
+  {
+   "name": "chips/open (before any round): ledger before 10000 - cost 0 + win 0 + pot 0 = after (0 rounds)",
+   "pass": true,
+   "expected": 10000,
+   "got": 10000
+  },
+  {
+   "name": "chips/open (before any round): slot meter = ledger balance",
+   "pass": true,
+   "expected": 10000,
+   "got": 10000
+  },
+  {
+   "name": "chips/open (before any round): shell plate = ledger balance ({\"play\":\"$10,100\",\"chips\":\"10,000\"})",
+   "pass": true,
+   "expected": 10000,
+   "got": 10000
+  },
+  {
+   "name": "chips/open (before any round): no escrow account holds money while idle",
+   "pass": true,
+   "expected": [],
+   "got": []
+  },
+  {
+   "name": "chips/open (before any round): CC.dbg.mismatch empty",
+   "pass": true,
+   "expected": [],
+   "got": []
+  },
+  {
+   "name": "chips/open (before any round): CC.dbg.aborted is 0",
+   "pass": true,
+   "expected": true,
+   "got": 0
+  },
+  {
+   "name": "chips/open (before any round): CC.dbg.error unset, not busy, no prompt/scrim left",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "error": null,
+    "busy": false,
+    "prompt": null,
+    "scrims": 0
+   }
+  },
+  {
+   "name": "chips/open (before any round): rig audit clean (ledger ok, no drift, no open coldcall round)",
+   "pass": true,
+   "expected": true,
+   "got": true
+  },
+  {
+   "name": "chips/10 plain spins: ledger before 10000 - cost 100 + win 10 + pot 0 = after (10 rounds)",
+   "pass": true,
+   "expected": 9910,
+   "got": 9910
+  },
+  {
+   "name": "chips/10 plain spins: slot meter = ledger balance",
+   "pass": true,
+   "expected": 9910,
+   "got": 9910
+  },
+  {
+   "name": "chips/10 plain spins: shell plate = ledger balance ({\"play\":\"$10,100\",\"chips\":\"9,910\"})",
+   "pass": true,
+   "expected": 9910,
+   "got": 9910
+  },
+  {
+   "name": "chips/10 plain spins: no escrow account holds money while idle",
+   "pass": true,
+   "expected": [],
+   "got": []
+  },
+  {
+   "name": "chips/10 plain spins: CC.dbg.mismatch empty",
+   "pass": true,
+   "expected": [],
+   "got": []
+  },
+  {
+   "name": "chips/10 plain spins: CC.dbg.aborted is 0",
+   "pass": true,
+   "expected": true,
+   "got": 0
+  },
+  {
+   "name": "chips/10 plain spins: CC.dbg.error unset, not busy, no prompt/scrim left",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "error": null,
+    "busy": false,
+    "prompt": null,
+    "scrims": 0
+   }
+  },
+  {
+   "name": "chips/10 plain spins: rig audit clean (ledger ok, no drift, no open coldcall round)",
+   "pass": true,
+   "expected": true,
+   "got": true
+  },
+  {
+   "name": "chips/10 plain spins: the server settled 10 or more rounds, the screen ran the same count",
+   "pass": true,
+   "expected": true,
+   "got": 10
+  },
+  {
+   "name": "chips/bonus buys with decisions (2 buys, {\"pick\":2,\"more\":1,\"hang\":1}): ledger before 9910 - cost 964 + win 1071 + pot 0 = after (2 rounds)",
+   "pass": true,
+   "expected": 10017,
+   "got": 10017
+  },
+  {
+   "name": "chips/bonus buys with decisions (2 buys, {\"pick\":2,\"more\":1,\"hang\":1}): slot meter = ledger balance",
+   "pass": true,
+   "expected": 10017,
+   "got": 10017
+  },
+  {
+   "name": "chips/bonus buys with decisions (2 buys, {\"pick\":2,\"more\":1,\"hang\":1}): shell plate = ledger balance ({\"play\":\"$10,100\",\"chips\":\"10,017\"})",
+   "pass": true,
+   "expected": 10017,
+   "got": 10017
+  },
+  {
+   "name": "chips/bonus buys with decisions (2 buys, {\"pick\":2,\"more\":1,\"hang\":1}): no escrow account holds money while idle",
+   "pass": true,
+   "expected": [],
+   "got": []
+  },
+  {
+   "name": "chips/bonus buys with decisions (2 buys, {\"pick\":2,\"more\":1,\"hang\":1}): CC.dbg.mismatch empty",
+   "pass": true,
+   "expected": [],
+   "got": []
+  },
+  {
+   "name": "chips/bonus buys with decisions (2 buys, {\"pick\":2,\"more\":1,\"hang\":1}): CC.dbg.aborted is 0",
+   "pass": true,
+   "expected": true,
+   "got": 0
+  },
+  {
+   "name": "chips/bonus buys with decisions (2 buys, {\"pick\":2,\"more\":1,\"hang\":1}): CC.dbg.error unset, not busy, no prompt/scrim left",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "error": null,
+    "busy": false,
+    "prompt": null,
+    "scrims": 0
+   }
+  },
+  {
+   "name": "chips/bonus buys with decisions (2 buys, {\"pick\":2,\"more\":1,\"hang\":1}): rig audit clean (ledger ok, no drift, no open coldcall round)",
+   "pass": true,
+   "expected": true,
+   "got": true
+  },
+  {
+   "name": "chips/decisions: PICK YOUR LEAD answered by a real click",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "pick": 2,
+    "more": 1,
+    "hang": 1
+   }
+  },
+  {
+   "name": "chips/decisions: ONE MORE CALL (take) answered by a real click",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "pick": 2,
+    "more": 1,
+    "hang": 1
+   }
+  },
+  {
+   "name": "chips/one bonus2 buy (decisions {\"pick\":1,\"more\":0,\"hang\":1}): ledger before 10017 - cost 1455 + win 1789 + pot 0 = after (1 rounds)",
+   "pass": true,
+   "expected": 10351,
+   "got": 10351
+  },
+  {
+   "name": "chips/one bonus2 buy (decisions {\"pick\":1,\"more\":0,\"hang\":1}): slot meter = ledger balance",
+   "pass": true,
+   "expected": 10351,
+   "got": 10351
+  },
+  {
+   "name": "chips/one bonus2 buy (decisions {\"pick\":1,\"more\":0,\"hang\":1}): shell plate = ledger balance ({\"play\":\"$10,100\",\"chips\":\"10,351\"})",
+   "pass": true,
+   "expected": 10351,
+   "got": 10351
+  },
+  {
+   "name": "chips/one bonus2 buy (decisions {\"pick\":1,\"more\":0,\"hang\":1}): no escrow account holds money while idle",
+   "pass": true,
+   "expected": [],
+   "got": []
+  },
+  {
+   "name": "chips/one bonus2 buy (decisions {\"pick\":1,\"more\":0,\"hang\":1}): CC.dbg.mismatch empty",
+   "pass": true,
+   "expected": [],
+   "got": []
+  },
+  {
+   "name": "chips/one bonus2 buy (decisions {\"pick\":1,\"more\":0,\"hang\":1}): CC.dbg.aborted is 0",
+   "pass": true,
+   "expected": true,
+   "got": 0
+  },
+  {
+   "name": "chips/one bonus2 buy (decisions {\"pick\":1,\"more\":0,\"hang\":1}): CC.dbg.error unset, not busy, no prompt/scrim left",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "error": null,
+    "busy": false,
+    "prompt": null,
+    "scrims": 0
+   }
+  },
+  {
+   "name": "chips/one bonus2 buy (decisions {\"pick\":1,\"more\":0,\"hang\":1}): rig audit clean (ledger ok, no drift, no open coldcall round)",
+   "pass": true,
+   "expected": true,
+   "got": true
+  },
+  {
+   "name": "chips/buy: the server settled exactly one round, a bought bonus2",
+   "pass": true,
+   "expected": true,
+   "got": [
+    "bonus2"
+   ]
+  },
+  {
+   "name": "chips/fast-click burst (20 clicks in 67 ms): ledger before 10351 - cost 5 + win 5 + pot 0 = after (1 rounds)",
+   "pass": true,
+   "expected": 10351,
+   "got": 10351
+  },
+  {
+   "name": "chips/fast-click burst (20 clicks in 67 ms): slot meter = ledger balance",
+   "pass": true,
+   "expected": 10351,
+   "got": 10351
+  },
+  {
+   "name": "chips/fast-click burst (20 clicks in 67 ms): shell plate = ledger balance ({\"play\":\"$10,100\",\"chips\":\"10,351\"})",
+   "pass": true,
+   "expected": 10351,
+   "got": 10351
+  },
+  {
+   "name": "chips/fast-click burst (20 clicks in 67 ms): no escrow account holds money while idle",
+   "pass": true,
+   "expected": [],
+   "got": []
+  },
+  {
+   "name": "chips/fast-click burst (20 clicks in 67 ms): CC.dbg.mismatch empty",
+   "pass": true,
+   "expected": [],
+   "got": []
+  },
+  {
+   "name": "chips/fast-click burst (20 clicks in 67 ms): CC.dbg.aborted is 0",
+   "pass": true,
+   "expected": true,
+   "got": 0
+  },
+  {
+   "name": "chips/fast-click burst (20 clicks in 67 ms): CC.dbg.error unset, not busy, no prompt/scrim left",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "error": null,
+    "busy": false,
+    "prompt": null,
+    "scrims": 0
+   }
+  },
+  {
+   "name": "chips/fast-click burst (20 clicks in 67 ms): rig audit clean (ledger ok, no drift, no open coldcall round)",
+   "pass": true,
+   "expected": true,
+   "got": true
+  },
+  {
+   "name": "chips/burst: rounds the server played = rounds the screen ran",
+   "pass": true,
+   "expected": 1,
+   "got": 1
+  },
+  {
+   "name": "chips/burst: rounds in the ledger = rounds the server played",
+   "pass": true,
+   "expected": 1,
+   "got": 1
+  },
+  {
+   "name": "chips/burst: at least one round ran",
+   "pass": true,
+   "expected": true,
+   "got": 1
+  },
+  {
+   "name": "poker: the Cold Call window is docked and still open",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "cls": "sh-win panel panel--flush open docked focused",
+    "open": true
+   }
+  },
+  {
+   "name": "poker: both players seated, chips conserved before the hand (bank + seats of both accounts)",
+   "pass": true,
+   "expected": 20351,
+   "got": 20351
+  },
+  {
+   "name": "poker: the page made real clicks on CHECK/CALL",
+   "pass": true,
+   "expected": true,
+   "got": 4
+  },
+  {
+   "name": "poker: action buttons carry the UI wave 1 classes (act act-fold / act-call / act-raise)",
+   "pass": true,
+   "expected": true,
+   "got": [
+    {
+     "id": "btn-fold",
+     "cls": "act act-fold"
+    },
+    {
+     "id": "btn-check-call",
+     "cls": "act act-call"
+    },
+    {
+     "id": "btn-raise",
+     "cls": "act act-raise"
+    }
+   ]
+  },
+  {
+   "name": "poker: the hand reached its end",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "showdowns": 1,
+    "status": "waiting_next"
+   }
+  },
+  {
+   "name": "poker: chips conserved after the hand (bank + seats of both accounts)",
+   "pass": true,
+   "expected": 20351,
+   "got": 20351
+  },
+  {
+   "name": "poker: no pot / escrow account holds chips when the hand is over",
+   "pass": true,
+   "expected": [],
+   "got": []
+  },
+  {
+   "name": "poker: rig audit clean after the hand",
+   "pass": true,
+   "expected": true,
+   "got": true
+  },
+  {
+   "name": "chips/docked spin after the poker hand: ledger before 10401 - cost 5 + win 0 + pot 0 = after (1 rounds)",
+   "pass": true,
+   "expected": 10396,
+   "got": 10396
+  },
+  {
+   "name": "chips/docked spin after the poker hand: slot meter = ledger balance",
+   "pass": true,
+   "expected": 10396,
+   "got": 10396
+  },
+  {
+   "name": "chips/docked spin after the poker hand: shell plate = ledger balance ({\"play\":\"$10,225\",\"chips\":\"10,396\"})",
+   "pass": true,
+   "expected": 10396,
+   "got": 10396
+  },
+  {
+   "name": "chips/docked spin after the poker hand: no escrow account holds money while idle",
+   "pass": true,
+   "expected": [],
+   "got": []
+  },
+  {
+   "name": "chips/docked spin after the poker hand: CC.dbg.mismatch empty",
+   "pass": true,
+   "expected": [],
+   "got": []
+  },
+  {
+   "name": "chips/docked spin after the poker hand: CC.dbg.aborted is 0",
+   "pass": true,
+   "expected": true,
+   "got": 0
+  },
+  {
+   "name": "chips/docked spin after the poker hand: CC.dbg.error unset, not busy, no prompt/scrim left",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "error": null,
+    "busy": false,
+    "prompt": null,
+    "scrims": 0
+   }
+  },
+  {
+   "name": "chips/docked spin after the poker hand: rig audit clean (ledger ok, no drift, no open coldcall round)",
+   "pass": true,
+   "expected": true,
+   "got": true
+  },
+  {
+   "name": "chips/end of run: ledger before 10396 - cost 0 + win 0 + pot 0 = after (0 rounds)",
+   "pass": true,
+   "expected": 10396,
+   "got": 10396
+  },
+  {
+   "name": "chips/end of run: slot meter = ledger balance",
+   "pass": true,
+   "expected": 10396,
+   "got": 10396
+  },
+  {
+   "name": "chips/end of run: shell plate = ledger balance ({\"play\":\"$10,225\",\"chips\":\"10,396\"})",
+   "pass": true,
+   "expected": 10396,
+   "got": 10396
+  },
+  {
+   "name": "chips/end of run: no escrow account holds money while idle",
+   "pass": true,
+   "expected": [],
+   "got": []
+  },
+  {
+   "name": "chips/end of run: CC.dbg.mismatch empty",
+   "pass": true,
+   "expected": [],
+   "got": []
+  },
+  {
+   "name": "chips/end of run: CC.dbg.aborted is 0",
+   "pass": true,
+   "expected": true,
+   "got": 0
+  },
+  {
+   "name": "chips/end of run: CC.dbg.error unset, not busy, no prompt/scrim left",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "error": null,
+    "busy": false,
+    "prompt": null,
+    "scrims": 0
+   }
+  },
+  {
+   "name": "chips/end of run: rig audit clean (ledger ok, no drift, no open coldcall round)",
+   "pass": true,
+   "expected": true,
+   "got": true
+  },
+  {
+   "name": "chips/end: no page error, no console error (favicon 404 excluded and listed)",
+   "pass": true,
+   "expected": true,
+   "got": [
+    "console.error: Failed to load resource: the server responded with a status of 404 (Not Found) @http://127.0.0.1:4761/favicon.ico",
+    "console.error: Failed to load resource: the server responded with a status of 404 (Not Found) @http://127.0.0.1:4761/favicon.ico"
+   ]
+  }
+ ]
+}

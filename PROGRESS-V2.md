@@ -3,6 +3,42 @@
 Branch `v2-core` off origin/master 9440541 (live). Owner: Frank. Contracts: `V2-DESIGN.md`. Bugs from playtests: `QA-FRANK.md`.
 Never push or merge `master`.
 
+## 2026-10-06 21:20, branch `v2-all`: P6 wave 3a, INTERIM head (NOT the hand-off)
+
+**This push is an interim head. It is not the hand-off and it is not ready for master.** Still to come on this branch: wave 3b (ride-along money fixes, the money soak with a Cold Call actor, an Opus money critic over the slot port, the three-size browser chain) and wave 3c (ledger checkpoints, then a section titled `HAND-OFF TO ISABELLE` at the top of this file). Estimate for the hand-off: Wed 2026-10-07, about 12:00 CDT.
+Note on the push log: `origin/v2-all` showed `e596336` from 20:14. That push came from another of Frank's sessions by mistake (same commits, nothing rewritten); this entry is the first note that describes it.
+
+**What changed** (729b829 -> this head; master is an ancestor, nothing rebased)
+- 7eeb617: merge of `origin/master` f34da22 (the live v2 core + poker UI wave 1 + table looks). One conflict, this file, both texts kept. `public/shell.js` = master's wave 1 markup + the Cold Call bridge; against master it differs only by the Cold Call lines.
+- 732f1d6: merge of `origin/coldcall` 18f1e67 (code = `coldcall-fb1` 7a57245): today's Cold Call client. SPIN no longer waits for the leads update, slim leads strip, keypad instead of the rotary dial, painted UI, GPU warm-up. Client only: nothing under `games/`, `money/`, `transport/`, `tests/`, `server.js` changed by it. cdb9316: the same branch again at 5d03ed1, `PROGRESS-CC.md` only (its old "coldcall fast-forwards master" note is replaced by a pointer here).
+- e596336: one line in `public/games/coldcall/game.js`. The ledger build can answer a spin, a buy or a decision with an error (`round_closed`, `internal`, `funds`) instead of a result. A decision error already ended the round on screen, unlocked and asked the server for the state. A refused spin or buy unlocked but put the meter back from the page's own copy and kept a stale Callback view; it now asks the server for the state too.
+- `qa/p6-w3a/`: two browser drivers and `run.sh` (smoke of the slot and one poker hand against the ledger; the error cases through a stub parent page).
+- Proofs: `git diff 18f1e67 HEAD -- public/games/coldcall` = that one line; `cmp games/coldcall-engine.js public/games/coldcall/engine.js` silent; `git diff b55e7cb HEAD -- games money transport tests/v2-unit` = 3 files, 8 lines, all from master (table looks).
+- NOT in it: watch a friend (`coldcall-w3`, `coldcall-pull` past b9ab3a5), combo-1006 (radio, login, recap), painted poker buttons.
+
+**What I tested** (the wave 3a lead's own runs, clean export of e596336; every later commit is docs or `qa/` only)
+- run-money 120/120, run-tables 151/151, run-engine 96 passed (seed 1).
+- `node tests/coldcall.js` exit 0: 47 / 57 / 61 / 28 / 20 / 18. `tests/bender.js` 19, `tests/bender-livecfg.js` 5.
+- `node tests/v2/run.js --jobs 1`: 166 of 166, twice (494 s and 506 s). 166 = master's 160 + the 6 checks of `tests/v2/18_escrow_boot.js`, which only this branch has (it had 156 before the merge; master's `28_looks.js` adds 10). The first run overlapped another session's run on the same fixed ports for about 4 minutes, so I ran it again alone: same result.
+- Real boot on an empty data dir: `game recovery: bender 0 open/0 by game/0 kept, coldcall 0 open/0 by game/0 kept, 0 escrows voided`.
+- `qa/p6-w3a/run.sh` on a fresh server (headless Chromium, real pointer clicks): smoke 134 of 134, errors 166 of 166.
+  - Smoke, 540x960, a fresh account in Play $ and one in Chips: lobby, the dock lists Cold Call, 10 plain spins, bonuses with PICK YOUR LEAD / ONE MORE CALL / HANG UP answered by clicks, one more buy, a 20-click burst. After each step: ledger before - cost + win + pot = ledger after, the slot's meter = the shell's plate = the ledger, no escrow left, audit clean, no mismatch on screen.
+  - Poker with the slot docked (1280x800, Chips): one heads-up hand against a socket bot by real clicks, chips conserved in the ledger, then one more spin in the docked slot.
+  - Errors: `round_closed` and `internal` on a spin, a buy, ONE MORE CALL, HANG UP, a pick, an unsolicited error under an open prompt, and a spin with a Callback pending; `funds` on a spin and a buy. Each time: unlocked, no prompt left, state asked again, meter = the server's number, next spin goes out.
+- The builder's runs (Sonnet, not mine): the same two drivers, same counts; and a negative control: the client from before e596336 fails 9 of 29 of those checks (no state request, meter stays, the Callback label stays).
+- NOT tested here: a forced bonus on a PLAIN paid spin (the server runs without the QA hook, so every decision in the smoke came from a bought bonus; plain spins that happened to ask were answered too, not counted on); a `round_closed` produced by a real server (the errors are injected by the stub page); 360 and 1440 widths; phone-width poker with the slot docked; Bender in a browser; the admin console; iOS, touch, sound. The six-leg chain that another builder ran on the sibling head cd9336b is not counted here.
+
+**Open bugs**
+- Carried from wave 2, for wave 3b: a live `stake_mismatch` retries on every timeout forever (boot voids it); `g:coldcall:voided` names a refund for an instant round that was never charged (wrong number, no money moves); the money soak is unfinished and has no Cold Call actor; no Opus critic has read the slot's money port yet.
+- Not ready for live until wave 3c: the ledger file has no checkpoints (measured: 500,000 lines = 132 MB, 5.3 s boot, 957 MB RSS).
+- Low: after a decision error the toast reads "Lost the line. Your round is settled on the server." also for `round_closed` (true, but not the cause).
+- Low: `/favicon.ico` answers 404 (one console error per page load).
+- Seen in one screenshot, not compared with master: with the slot docked at 1280x800 the showdown banner and the hand text overlap the board cards (`qa/p6-w3a/shots/chips_7_poker_docked.jpg`).
+- Known driver fail U17 (BIG WIN overlay element after a lost one-more-call): not re-run in this wave.
+
+**Needs Chris**
+- Nothing new. Still his: D1 (a restart settles an open bonus decision and pays the shown win), the Chips max-bet x 10,000x cap exposure, and that iOS / touch / sound were never tested.
+
 ## 2026-10-06 19:50, branch `v2-all`: P6 wave 2, the slot on the one money system (head of the code: b55e7cb)
 
 `v2-all` = `v2-core` + the money soak (wave 1, unfinished) + P6 wave 2. NOT merged anywhere, NOT deployed. Hand-off between lead sessions: `P6-STATE.md` (outside the repo); the builder's report: `P6-W2C-REPORT.md`.

@@ -1,0 +1,1430 @@
+{
+ "driver": "errors.js",
+ "base": "http://127.0.0.1:4761",
+ "at": "2026-10-07T02:14:30.954Z",
+ "passed": 166,
+ "failed": 0,
+ "notes": [
+  "fixtures: {\"recordedAt\":\"2026-10-07T01:34:54.144Z\",\"server\":\"http://127.0.0.1:4760\",\"mode\":\"play\",\"bet\":10,\"buy\":\"bonus1\",\"buys\":1,\"kinds\":[\"pick\",\"more\",\"done\"],\"roundId\":\"80b06d6bf714\",\"initKeys\":[\"type\",\"wallet\",\"mode\",\"bets\",\"state\",\"name\"],\"initWallet\":{\"play\":1010000,\"chips\":10000},\"pendingKeys\":[\"round"
+ ],
+ "rows": [
+  {
+   "name": "round_closed/E1: the error was delivered",
+   "pass": true,
+   "expected": true,
+   "got": 1791338843165
+  },
+  {
+   "name": "round_closed/E1: not busy, SPIN idle (label \"SPIN\"), within 3 s",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "busy": false,
+    "label": "SPIN",
+    "spinRun": false,
+    "ms": 7
+   }
+  },
+  {
+   "name": "round_closed/E1: no scrim, no prompt node left on screen",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "scrims": 0,
+    "pullNodes": 0
+   }
+  },
+  {
+   "name": "round_closed/E1: CC.dbg.error unset",
+   "pass": true,
+   "expected": true,
+   "got": null
+  },
+  {
+   "name": "round_closed/E1: the iframe sent hello AFTER the error",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "hellosAfterError": 1
+   }
+  },
+  {
+   "name": "round_closed/E1: the meter shows the server's second init (123456 cents, first was 1010000) within 3 s (settled 7 ms after the error)",
+   "pass": true,
+   "expected": 123456,
+   "got": 123456
+  },
+  {
+   "name": "round_closed/E1: the bet buttons work (bet index 3 -> 4 -> 3)",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "b1": 3,
+    "s1": 4,
+    "s2": 3
+   }
+  },
+  {
+   "name": "round_closed/E1: a real click on SPIN sends a spin message (the board is usable)",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "at": 1791338852294,
+    "type": "spin",
+    "reqId": 2,
+    "bet": 10,
+    "mode": "play",
+    "buy": null,
+    "auto": false
+   }
+  },
+  {
+   "name": "round_closed/E1: no page error",
+   "pass": true,
+   "expected": true,
+   "got": []
+  },
+  {
+   "name": "round_closed/E2: the error was delivered",
+   "pass": true,
+   "expected": true,
+   "got": 1791338859475
+  },
+  {
+   "name": "round_closed/E2: not busy, SPIN idle (label \"SPIN\"), within 3 s",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "busy": false,
+    "label": "SPIN",
+    "spinRun": false,
+    "ms": 103
+   }
+  },
+  {
+   "name": "round_closed/E2: no scrim, no prompt node left on screen",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "scrims": 0,
+    "pullNodes": 0
+   }
+  },
+  {
+   "name": "round_closed/E2: CC.dbg.error unset",
+   "pass": true,
+   "expected": true,
+   "got": null
+  },
+  {
+   "name": "round_closed/E2: the iframe sent hello AFTER the error",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "hellosAfterError": 1
+   }
+  },
+  {
+   "name": "round_closed/E2: the meter shows the server's second init (123456 cents, first was 1010000) within 3 s (settled 103 ms after the error)",
+   "pass": true,
+   "expected": 123456,
+   "got": 123456
+  },
+  {
+   "name": "round_closed/E2: the bet buttons work (bet index 3 -> 4 -> 3)",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "b1": 3,
+    "s1": 4,
+    "s2": 3
+   }
+  },
+  {
+   "name": "round_closed/E2: a real click on SPIN sends a spin message (the board is usable)",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "at": 1791338868102,
+    "type": "spin",
+    "reqId": 2,
+    "bet": 10,
+    "mode": "play",
+    "buy": null,
+    "auto": false
+   }
+  },
+  {
+   "name": "round_closed/E2: no page error",
+   "pass": true,
+   "expected": true,
+   "got": []
+  },
+  {
+   "name": "round_closed/E3: the error was delivered",
+   "pass": true,
+   "expected": true,
+   "got": 1791338890316
+  },
+  {
+   "name": "round_closed/E3: not busy, SPIN idle (label \"SPIN\"), within 3 s",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "busy": false,
+    "label": "SPIN",
+    "spinRun": false,
+    "ms": 11
+   }
+  },
+  {
+   "name": "round_closed/E3: no scrim, no prompt node left on screen",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "scrims": 0,
+    "pullNodes": 0
+   }
+  },
+  {
+   "name": "round_closed/E3: CC.dbg.error unset",
+   "pass": true,
+   "expected": true,
+   "got": null
+  },
+  {
+   "name": "round_closed/E3: the iframe sent hello AFTER the error",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "hellosAfterError": 1
+   }
+  },
+  {
+   "name": "round_closed/E3: the meter shows the server's second init (123456 cents, first was 1010000) within 3 s (settled 11 ms after the error)",
+   "pass": true,
+   "expected": 123456,
+   "got": 123456
+  },
+  {
+   "name": "round_closed/E3: the bet buttons work (bet index 3 -> 4 -> 3)",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "b1": 3,
+    "s1": 4,
+    "s2": 3
+   }
+  },
+  {
+   "name": "round_closed/E3: a real click on SPIN sends a spin message (the board is usable)",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "at": 1791338898954,
+    "type": "spin",
+    "reqId": 4,
+    "bet": 10,
+    "mode": "play",
+    "buy": null,
+    "auto": false
+   }
+  },
+  {
+   "name": "round_closed/E3: no page error",
+   "pass": true,
+   "expected": true,
+   "got": []
+  },
+  {
+   "name": "round_closed/E3b: the error was delivered",
+   "pass": true,
+   "expected": true,
+   "got": 1791338920770
+  },
+  {
+   "name": "round_closed/E3b: not busy, SPIN idle (label \"SPIN\"), within 3 s",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "busy": false,
+    "label": "SPIN",
+    "spinRun": false,
+    "ms": 80
+   }
+  },
+  {
+   "name": "round_closed/E3b: no scrim, no prompt node left on screen",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "scrims": 0,
+    "pullNodes": 0
+   }
+  },
+  {
+   "name": "round_closed/E3b: CC.dbg.error unset",
+   "pass": true,
+   "expected": true,
+   "got": null
+  },
+  {
+   "name": "round_closed/E3b: the iframe sent hello AFTER the error",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "hellosAfterError": 1
+   }
+  },
+  {
+   "name": "round_closed/E3b: the meter shows the server's second init (123456 cents, first was 1010000) within 3 s (settled 80 ms after the error)",
+   "pass": true,
+   "expected": 123456,
+   "got": 123456
+  },
+  {
+   "name": "round_closed/E3b: the bet buttons work (bet index 3 -> 4 -> 3)",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "b1": 3,
+    "s1": 4,
+    "s2": 3
+   }
+  },
+  {
+   "name": "round_closed/E3b: a real click on SPIN sends a spin message (the board is usable)",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "at": 1791338929798,
+    "type": "spin",
+    "reqId": 4,
+    "bet": 10,
+    "mode": "play",
+    "buy": null,
+    "auto": false
+   }
+  },
+  {
+   "name": "round_closed/E3b: no page error",
+   "pass": true,
+   "expected": true,
+   "got": []
+  },
+  {
+   "name": "round_closed/E4: the error was delivered",
+   "pass": true,
+   "expected": true,
+   "got": 1791338942875
+  },
+  {
+   "name": "round_closed/E4: not busy, SPIN idle (label \"SPIN\"), within 3 s",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "busy": false,
+    "label": "SPIN",
+    "spinRun": false,
+    "ms": 79
+   }
+  },
+  {
+   "name": "round_closed/E4: no scrim, no prompt node left on screen",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "scrims": 0,
+    "pullNodes": 0
+   }
+  },
+  {
+   "name": "round_closed/E4: CC.dbg.error unset",
+   "pass": true,
+   "expected": true,
+   "got": null
+  },
+  {
+   "name": "round_closed/E4: the iframe sent hello AFTER the error",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "hellosAfterError": 1
+   }
+  },
+  {
+   "name": "round_closed/E4: the meter shows the server's second init (123456 cents, first was 1010000) within 3 s (settled 79 ms after the error)",
+   "pass": true,
+   "expected": 123456,
+   "got": 123456
+  },
+  {
+   "name": "round_closed/E4: the bet buttons work (bet index 3 -> 4 -> 3)",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "b1": 3,
+    "s1": 4,
+    "s2": 3
+   }
+  },
+  {
+   "name": "round_closed/E4: a real click on SPIN sends a spin message (the board is usable)",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "at": 1791338951894,
+    "type": "spin",
+    "reqId": 3,
+    "bet": 10,
+    "mode": "play",
+    "buy": null,
+    "auto": false
+   }
+  },
+  {
+   "name": "round_closed/E4: no page error",
+   "pass": true,
+   "expected": true,
+   "got": []
+  },
+  {
+   "name": "round_closed/E5: the error was delivered",
+   "pass": true,
+   "expected": true,
+   "got": 1791338965143
+  },
+  {
+   "name": "round_closed/E5: not busy, SPIN idle (label \"SPIN\"), within 3 s",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "busy": false,
+    "label": "SPIN",
+    "spinRun": false,
+    "ms": 504
+   }
+  },
+  {
+   "name": "round_closed/E5: no scrim, no prompt node left on screen",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "scrims": 0,
+    "pullNodes": 0
+   }
+  },
+  {
+   "name": "round_closed/E5: CC.dbg.error unset",
+   "pass": true,
+   "expected": true,
+   "got": null
+  },
+  {
+   "name": "round_closed/E5: the iframe sent hello AFTER the error",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "hellosAfterError": 1
+   }
+  },
+  {
+   "name": "round_closed/E5: the meter shows the server's second init (123456 cents, first was 1010000) within 3 s (settled 504 ms after the error)",
+   "pass": true,
+   "expected": 123456,
+   "got": 123456
+  },
+  {
+   "name": "round_closed/E5: the bet buttons work (bet index 3 -> 4 -> 3)",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "b1": 3,
+    "s1": 4,
+    "s2": 3
+   }
+  },
+  {
+   "name": "round_closed/E5: a real click on SPIN sends a spin message (the board is usable)",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "at": 1791338974522,
+    "type": "spin",
+    "reqId": 2,
+    "bet": 10,
+    "mode": "play",
+    "buy": null,
+    "auto": false
+   }
+  },
+  {
+   "name": "round_closed/E5: no page error",
+   "pass": true,
+   "expected": true,
+   "got": []
+  },
+  {
+   "name": "round_closed/E5m: the error was delivered",
+   "pass": true,
+   "expected": true,
+   "got": 1791338997048
+  },
+  {
+   "name": "round_closed/E5m: not busy, SPIN idle (label \"SPIN\"), within 3 s",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "busy": false,
+    "label": "SPIN",
+    "spinRun": false,
+    "ms": 504
+   }
+  },
+  {
+   "name": "round_closed/E5m: no scrim, no prompt node left on screen",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "scrims": 0,
+    "pullNodes": 0
+   }
+  },
+  {
+   "name": "round_closed/E5m: CC.dbg.error unset",
+   "pass": true,
+   "expected": true,
+   "got": null
+  },
+  {
+   "name": "round_closed/E5m: the iframe sent hello AFTER the error",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "hellosAfterError": 1
+   }
+  },
+  {
+   "name": "round_closed/E5m: the meter shows the server's second init (123456 cents, first was 1010000) within 3 s (settled 504 ms after the error)",
+   "pass": true,
+   "expected": 123456,
+   "got": 123456
+  },
+  {
+   "name": "round_closed/E5m: the bet buttons work (bet index 3 -> 4 -> 3)",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "b1": 3,
+    "s1": 4,
+    "s2": 3
+   }
+  },
+  {
+   "name": "round_closed/E5m: a real click on SPIN sends a spin message (the board is usable)",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "at": 1791339006454,
+    "type": "spin",
+    "reqId": 3,
+    "bet": 10,
+    "mode": "play",
+    "buy": null,
+    "auto": false
+   }
+  },
+  {
+   "name": "round_closed/E5m: no page error",
+   "pass": true,
+   "expected": true,
+   "got": []
+  },
+  {
+   "name": "round_closed/E6: with a Callback pending the button reads CALLBACK",
+   "pass": true,
+   "expected": "CALLBACK",
+   "got": "CALLBACK"
+  },
+  {
+   "name": "round_closed/E6: the error was delivered",
+   "pass": true,
+   "expected": true,
+   "got": 1791339020620
+  },
+  {
+   "name": "round_closed/E6: not busy, SPIN idle (label \"SPIN\"), within 3 s",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "busy": false,
+    "label": "SPIN",
+    "spinRun": false,
+    "ms": 9
+   }
+  },
+  {
+   "name": "round_closed/E6: no scrim, no prompt node left on screen",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "scrims": 0,
+    "pullNodes": 0
+   }
+  },
+  {
+   "name": "round_closed/E6: CC.dbg.error unset",
+   "pass": true,
+   "expected": true,
+   "got": null
+  },
+  {
+   "name": "round_closed/E6: the iframe sent hello AFTER the error",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "hellosAfterError": 1
+   }
+  },
+  {
+   "name": "round_closed/E6: the meter shows the server's second init (123456 cents, first was 1010000) within 3 s (settled 9 ms after the error)",
+   "pass": true,
+   "expected": 123456,
+   "got": 123456
+  },
+  {
+   "name": "round_closed/E6: the bet buttons work (bet index 6 -> 7 -> 6)",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "b1": 6,
+    "s1": 7,
+    "s2": 6
+   }
+  },
+  {
+   "name": "round_closed/E6: a real click on SPIN sends a spin message (the board is usable)",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "at": 1791339029643,
+    "type": "spin",
+    "reqId": 2,
+    "bet": 100,
+    "mode": "play",
+    "buy": null,
+    "auto": false
+   }
+  },
+  {
+   "name": "round_closed/E6: that spin is a normal paid one: label SPIN, bet shown $1.00 (= $1.00), message bet 100 (the Callback's own bet was 10; not a free Callback)",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "label": "SPIN",
+    "betTxt": "$1.00",
+    "want": "$1.00",
+    "sent": {
+     "at": 1791339029643,
+     "type": "spin",
+     "reqId": 2,
+     "bet": 100,
+     "mode": "play",
+     "buy": null,
+     "auto": false
+    }
+   }
+  },
+  {
+   "name": "round_closed/E6: no page error",
+   "pass": true,
+   "expected": true,
+   "got": []
+  },
+  {
+   "name": "internal/E1: the error was delivered",
+   "pass": true,
+   "expected": true,
+   "got": 1791339044470
+  },
+  {
+   "name": "internal/E1: not busy, SPIN idle (label \"SPIN\"), within 3 s",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "busy": false,
+    "label": "SPIN",
+    "spinRun": false,
+    "ms": 82
+   }
+  },
+  {
+   "name": "internal/E1: no scrim, no prompt node left on screen",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "scrims": 0,
+    "pullNodes": 0
+   }
+  },
+  {
+   "name": "internal/E1: CC.dbg.error unset",
+   "pass": true,
+   "expected": true,
+   "got": null
+  },
+  {
+   "name": "internal/E1: the iframe sent hello AFTER the error",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "hellosAfterError": 1
+   }
+  },
+  {
+   "name": "internal/E1: the meter shows the server's second init (123456 cents, first was 1010000) within 3 s (settled 82 ms after the error)",
+   "pass": true,
+   "expected": 123456,
+   "got": 123456
+  },
+  {
+   "name": "internal/E1: the bet buttons work (bet index 3 -> 4 -> 3)",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "b1": 3,
+    "s1": 4,
+    "s2": 3
+   }
+  },
+  {
+   "name": "internal/E1: a real click on SPIN sends a spin message (the board is usable)",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "at": 1791339053499,
+    "type": "spin",
+    "reqId": 2,
+    "bet": 10,
+    "mode": "play",
+    "buy": null,
+    "auto": false
+   }
+  },
+  {
+   "name": "internal/E1: no page error",
+   "pass": true,
+   "expected": true,
+   "got": []
+  },
+  {
+   "name": "internal/E2: the error was delivered",
+   "pass": true,
+   "expected": true,
+   "got": 1791339061109
+  },
+  {
+   "name": "internal/E2: not busy, SPIN idle (label \"SPIN\"), within 3 s",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "busy": false,
+    "label": "SPIN",
+    "spinRun": false,
+    "ms": 112
+   }
+  },
+  {
+   "name": "internal/E2: no scrim, no prompt node left on screen",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "scrims": 0,
+    "pullNodes": 0
+   }
+  },
+  {
+   "name": "internal/E2: CC.dbg.error unset",
+   "pass": true,
+   "expected": true,
+   "got": null
+  },
+  {
+   "name": "internal/E2: the iframe sent hello AFTER the error",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "hellosAfterError": 1
+   }
+  },
+  {
+   "name": "internal/E2: the meter shows the server's second init (123456 cents, first was 1010000) within 3 s (settled 112 ms after the error)",
+   "pass": true,
+   "expected": 123456,
+   "got": 123456
+  },
+  {
+   "name": "internal/E2: the bet buttons work (bet index 3 -> 4 -> 3)",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "b1": 3,
+    "s1": 4,
+    "s2": 3
+   }
+  },
+  {
+   "name": "internal/E2: a real click on SPIN sends a spin message (the board is usable)",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "at": 1791339070170,
+    "type": "spin",
+    "reqId": 2,
+    "bet": 10,
+    "mode": "play",
+    "buy": null,
+    "auto": false
+   }
+  },
+  {
+   "name": "internal/E2: no page error",
+   "pass": true,
+   "expected": true,
+   "got": []
+  },
+  {
+   "name": "internal/E3: the error was delivered",
+   "pass": true,
+   "expected": true,
+   "got": 1791339092357
+  },
+  {
+   "name": "internal/E3: not busy, SPIN idle (label \"SPIN\"), within 3 s",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "busy": false,
+    "label": "SPIN",
+    "spinRun": false,
+    "ms": 79
+   }
+  },
+  {
+   "name": "internal/E3: no scrim, no prompt node left on screen",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "scrims": 0,
+    "pullNodes": 0
+   }
+  },
+  {
+   "name": "internal/E3: CC.dbg.error unset",
+   "pass": true,
+   "expected": true,
+   "got": null
+  },
+  {
+   "name": "internal/E3: the iframe sent hello AFTER the error",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "hellosAfterError": 1
+   }
+  },
+  {
+   "name": "internal/E3: the meter shows the server's second init (123456 cents, first was 1010000) within 3 s (settled 79 ms after the error)",
+   "pass": true,
+   "expected": 123456,
+   "got": 123456
+  },
+  {
+   "name": "internal/E3: the bet buttons work (bet index 3 -> 4 -> 3)",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "b1": 3,
+    "s1": 4,
+    "s2": 3
+   }
+  },
+  {
+   "name": "internal/E3: a real click on SPIN sends a spin message (the board is usable)",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "at": 1791339100923,
+    "type": "spin",
+    "reqId": 4,
+    "bet": 10,
+    "mode": "play",
+    "buy": null,
+    "auto": false
+   }
+  },
+  {
+   "name": "internal/E3: no page error",
+   "pass": true,
+   "expected": true,
+   "got": []
+  },
+  {
+   "name": "internal/E3b: the error was delivered",
+   "pass": true,
+   "expected": true,
+   "got": 1791339122957
+  },
+  {
+   "name": "internal/E3b: not busy, SPIN idle (label \"SPIN\"), within 3 s",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "busy": false,
+    "label": "SPIN",
+    "spinRun": false,
+    "ms": 81
+   }
+  },
+  {
+   "name": "internal/E3b: no scrim, no prompt node left on screen",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "scrims": 0,
+    "pullNodes": 0
+   }
+  },
+  {
+   "name": "internal/E3b: CC.dbg.error unset",
+   "pass": true,
+   "expected": true,
+   "got": null
+  },
+  {
+   "name": "internal/E3b: the iframe sent hello AFTER the error",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "hellosAfterError": 1
+   }
+  },
+  {
+   "name": "internal/E3b: the meter shows the server's second init (123456 cents, first was 1010000) within 3 s (settled 81 ms after the error)",
+   "pass": true,
+   "expected": 123456,
+   "got": 123456
+  },
+  {
+   "name": "internal/E3b: the bet buttons work (bet index 3 -> 4 -> 3)",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "b1": 3,
+    "s1": 4,
+    "s2": 3
+   }
+  },
+  {
+   "name": "internal/E3b: a real click on SPIN sends a spin message (the board is usable)",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "at": 1791339132047,
+    "type": "spin",
+    "reqId": 4,
+    "bet": 10,
+    "mode": "play",
+    "buy": null,
+    "auto": false
+   }
+  },
+  {
+   "name": "internal/E3b: no page error",
+   "pass": true,
+   "expected": true,
+   "got": []
+  },
+  {
+   "name": "internal/E4: the error was delivered",
+   "pass": true,
+   "expected": true,
+   "got": 1791339145091
+  },
+  {
+   "name": "internal/E4: not busy, SPIN idle (label \"SPIN\"), within 3 s",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "busy": false,
+    "label": "SPIN",
+    "spinRun": false,
+    "ms": 91
+   }
+  },
+  {
+   "name": "internal/E4: no scrim, no prompt node left on screen",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "scrims": 0,
+    "pullNodes": 0
+   }
+  },
+  {
+   "name": "internal/E4: CC.dbg.error unset",
+   "pass": true,
+   "expected": true,
+   "got": null
+  },
+  {
+   "name": "internal/E4: the iframe sent hello AFTER the error",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "hellosAfterError": 1
+   }
+  },
+  {
+   "name": "internal/E4: the meter shows the server's second init (123456 cents, first was 1010000) within 3 s (settled 91 ms after the error)",
+   "pass": true,
+   "expected": 123456,
+   "got": 123456
+  },
+  {
+   "name": "internal/E4: the bet buttons work (bet index 3 -> 4 -> 3)",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "b1": 3,
+    "s1": 4,
+    "s2": 3
+   }
+  },
+  {
+   "name": "internal/E4: a real click on SPIN sends a spin message (the board is usable)",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "at": 1791339154096,
+    "type": "spin",
+    "reqId": 3,
+    "bet": 10,
+    "mode": "play",
+    "buy": null,
+    "auto": false
+   }
+  },
+  {
+   "name": "internal/E4: no page error",
+   "pass": true,
+   "expected": true,
+   "got": []
+  },
+  {
+   "name": "internal/E5: the error was delivered",
+   "pass": true,
+   "expected": true,
+   "got": 1791339167083
+  },
+  {
+   "name": "internal/E5: not busy, SPIN idle (label \"SPIN\"), within 3 s",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "busy": false,
+    "label": "SPIN",
+    "spinRun": false,
+    "ms": 502
+   }
+  },
+  {
+   "name": "internal/E5: no scrim, no prompt node left on screen",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "scrims": 0,
+    "pullNodes": 0
+   }
+  },
+  {
+   "name": "internal/E5: CC.dbg.error unset",
+   "pass": true,
+   "expected": true,
+   "got": null
+  },
+  {
+   "name": "internal/E5: the iframe sent hello AFTER the error",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "hellosAfterError": 1
+   }
+  },
+  {
+   "name": "internal/E5: the meter shows the server's second init (123456 cents, first was 1010000) within 3 s (settled 502 ms after the error)",
+   "pass": true,
+   "expected": 123456,
+   "got": 123456
+  },
+  {
+   "name": "internal/E5: the bet buttons work (bet index 3 -> 4 -> 3)",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "b1": 3,
+    "s1": 4,
+    "s2": 3
+   }
+  },
+  {
+   "name": "internal/E5: a real click on SPIN sends a spin message (the board is usable)",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "at": 1791339176479,
+    "type": "spin",
+    "reqId": 2,
+    "bet": 10,
+    "mode": "play",
+    "buy": null,
+    "auto": false
+   }
+  },
+  {
+   "name": "internal/E5: no page error",
+   "pass": true,
+   "expected": true,
+   "got": []
+  },
+  {
+   "name": "internal/E5m: the error was delivered",
+   "pass": true,
+   "expected": true,
+   "got": 1791339197228
+  },
+  {
+   "name": "internal/E5m: not busy, SPIN idle (label \"SPIN\"), within 3 s",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "busy": false,
+    "label": "SPIN",
+    "spinRun": false,
+    "ms": 501
+   }
+  },
+  {
+   "name": "internal/E5m: no scrim, no prompt node left on screen",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "scrims": 0,
+    "pullNodes": 0
+   }
+  },
+  {
+   "name": "internal/E5m: CC.dbg.error unset",
+   "pass": true,
+   "expected": true,
+   "got": null
+  },
+  {
+   "name": "internal/E5m: the iframe sent hello AFTER the error",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "hellosAfterError": 1
+   }
+  },
+  {
+   "name": "internal/E5m: the meter shows the server's second init (123456 cents, first was 1010000) within 3 s (settled 501 ms after the error)",
+   "pass": true,
+   "expected": 123456,
+   "got": 123456
+  },
+  {
+   "name": "internal/E5m: the bet buttons work (bet index 3 -> 4 -> 3)",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "b1": 3,
+    "s1": 4,
+    "s2": 3
+   }
+  },
+  {
+   "name": "internal/E5m: a real click on SPIN sends a spin message (the board is usable)",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "at": 1791339206286,
+    "type": "spin",
+    "reqId": 3,
+    "bet": 10,
+    "mode": "play",
+    "buy": null,
+    "auto": false
+   }
+  },
+  {
+   "name": "internal/E5m: no page error",
+   "pass": true,
+   "expected": true,
+   "got": []
+  },
+  {
+   "name": "internal/E6: with a Callback pending the button reads CALLBACK",
+   "pass": true,
+   "expected": "CALLBACK",
+   "got": "CALLBACK"
+  },
+  {
+   "name": "internal/E6: the error was delivered",
+   "pass": true,
+   "expected": true,
+   "got": 1791339221243
+  },
+  {
+   "name": "internal/E6: not busy, SPIN idle (label \"SPIN\"), within 3 s",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "busy": false,
+    "label": "SPIN",
+    "spinRun": false,
+    "ms": 10
+   }
+  },
+  {
+   "name": "internal/E6: no scrim, no prompt node left on screen",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "scrims": 0,
+    "pullNodes": 0
+   }
+  },
+  {
+   "name": "internal/E6: CC.dbg.error unset",
+   "pass": true,
+   "expected": true,
+   "got": null
+  },
+  {
+   "name": "internal/E6: the iframe sent hello AFTER the error",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "hellosAfterError": 1
+   }
+  },
+  {
+   "name": "internal/E6: the meter shows the server's second init (123456 cents, first was 1010000) within 3 s (settled 10 ms after the error)",
+   "pass": true,
+   "expected": 123456,
+   "got": 123456
+  },
+  {
+   "name": "internal/E6: the bet buttons work (bet index 6 -> 7 -> 6)",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "b1": 6,
+    "s1": 7,
+    "s2": 6
+   }
+  },
+  {
+   "name": "internal/E6: a real click on SPIN sends a spin message (the board is usable)",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "at": 1791339230390,
+    "type": "spin",
+    "reqId": 2,
+    "bet": 100,
+    "mode": "play",
+    "buy": null,
+    "auto": false
+   }
+  },
+  {
+   "name": "internal/E6: that spin is a normal paid one: label SPIN, bet shown $1.00 (= $1.00), message bet 100 (the Callback's own bet was 10; not a free Callback)",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "label": "SPIN",
+    "betTxt": "$1.00",
+    "want": "$1.00",
+    "sent": {
+     "at": 1791339230390,
+     "type": "spin",
+     "reqId": 2,
+     "bet": 100,
+     "mode": "play",
+     "buy": null,
+     "auto": false
+    }
+   }
+  },
+  {
+   "name": "internal/E6: no page error",
+   "pass": true,
+   "expected": true,
+   "got": []
+  },
+  {
+   "name": "funds/E1: the error was delivered",
+   "pass": true,
+   "expected": true,
+   "got": 1791339245303
+  },
+  {
+   "name": "funds/E1: not busy, SPIN idle (label \"SPIN\"), within 3 s",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "busy": false,
+    "label": "SPIN",
+    "spinRun": false,
+    "ms": 10
+   }
+  },
+  {
+   "name": "funds/E1: no scrim, no prompt node left on screen",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "scrims": 0,
+    "pullNodes": 0
+   }
+  },
+  {
+   "name": "funds/E1: CC.dbg.error unset",
+   "pass": true,
+   "expected": true,
+   "got": null
+  },
+  {
+   "name": "funds/E1: the iframe sent hello AFTER the error",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "hellosAfterError": 1
+   }
+  },
+  {
+   "name": "funds/E1: the meter shows the server's second init (123456 cents, first was 1010000) within 3 s (settled 10 ms after the error)",
+   "pass": true,
+   "expected": 123456,
+   "got": 123456
+  },
+  {
+   "name": "funds/E1: the bet buttons work (bet index 3 -> 4 -> 3)",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "b1": 3,
+    "s1": 4,
+    "s2": 3
+   }
+  },
+  {
+   "name": "funds/E1: a real click on SPIN sends a spin message (the board is usable)",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "at": 1791339253890,
+    "type": "spin",
+    "reqId": 2,
+    "bet": 10,
+    "mode": "play",
+    "buy": null,
+    "auto": false
+   }
+  },
+  {
+   "name": "funds/E1: no page error",
+   "pass": true,
+   "expected": true,
+   "got": []
+  },
+  {
+   "name": "funds/E2: the error was delivered",
+   "pass": true,
+   "expected": true,
+   "got": 1791339261917
+  },
+  {
+   "name": "funds/E2: not busy, SPIN idle (label \"SPIN\"), within 3 s",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "busy": false,
+    "label": "SPIN",
+    "spinRun": false,
+    "ms": 87
+   }
+  },
+  {
+   "name": "funds/E2: no scrim, no prompt node left on screen",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "scrims": 0,
+    "pullNodes": 0
+   }
+  },
+  {
+   "name": "funds/E2: CC.dbg.error unset",
+   "pass": true,
+   "expected": true,
+   "got": null
+  },
+  {
+   "name": "funds/E2: the iframe sent hello AFTER the error",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "hellosAfterError": 1
+   }
+  },
+  {
+   "name": "funds/E2: the meter shows the server's second init (123456 cents, first was 1010000) within 3 s (settled 87 ms after the error)",
+   "pass": true,
+   "expected": 123456,
+   "got": 123456
+  },
+  {
+   "name": "funds/E2: the bet buttons work (bet index 3 -> 4 -> 3)",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "b1": 3,
+    "s1": 4,
+    "s2": 3
+   }
+  },
+  {
+   "name": "funds/E2: a real click on SPIN sends a spin message (the board is usable)",
+   "pass": true,
+   "expected": true,
+   "got": {
+    "at": 1791339270631,
+    "type": "spin",
+    "reqId": 2,
+    "bet": 10,
+    "mode": "play",
+    "buy": null,
+    "auto": false
+   }
+  },
+  {
+   "name": "funds/E2: no page error",
+   "pass": true,
+   "expected": true,
+   "got": []
+  }
+ ]
+}
