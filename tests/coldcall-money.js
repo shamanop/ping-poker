@@ -221,6 +221,29 @@ function auditMatches(s) {
     assert.strictEqual(s.bal('ann', 'play'), before - cost + done[0].totalWin); assert.deepStrictEqual(s.escrows(), []); assert.strictEqual(s.open.size, 0);
   });
 
+  // ---------------------------------------------------------------- the game's own file
+  await test('FILE: a store write that fails is told to the caller (audit finding 14): a paid round that cannot flush its record is voided (stake back), a Callback that cannot flush its record plays nothing and stays armed', async () => {
+    const s = setup({ rng: E.rngFrom(PEND.seed), roundRng: E.rngFrom(5) }); const a = s.sock('ann'); const before = s.bal('ann', 'play');
+    s.store().setPlayer('ann', 'chips', { ...E.newState(), cb: { bet: 100, id: 'cbtest1' } }); s.flush();
+    fs.mkdirSync(s.files.pull + '.tmp');                              // the disk refuses every write from here on
+    s.store().potChanged(); assert.throws(() => s.flush(), 'flush() throws when the write failed'); assert.throws(() => s.flush(), 'and keeps throwing until a write succeeds');
+    s.clock.advance(200); a.send('g:coldcall:spin', { bet: 100, mode: 'play', buyBonus: 'bonus1' }); let r;
+    assert.strictEqual(all(a, 'g:coldcall:result').length, 0, 'no pending result without a record on disk'); const v = last(a, 'g:coldcall:voided'); assert.ok(v && v.reason === 'open_error', 'voided: ' + JSON.stringify(v));
+    assert.strictEqual(s.bal('ann', 'play'), before, 'the stake is back'); assert.deepStrictEqual(s.escrows(), []); assert.strictEqual(s.open.size, 0);
+    const id = s.lastId(), draws = []; r = spin(s, a, { bet: 100, mode: 'chips', auto: true });
+    assert.ok(r.error, 'the Callback is not played when its record cannot be written'); assert.strictEqual(all(a, 'g:coldcall:result').length, 0); assert.strictEqual(s.lastId(), id, 'and no ledger line was written'); assert.ok(s.store().player('ann', 'chips').cb, 'the entitlement is still armed'); assert.strictEqual(s.store().allOpen().length, 0); void draws;
+    fs.rmdirSync(s.files.pull + '.tmp');
+    const ok = spin(s, a, { bet: 100, mode: 'chips', auto: true }); assert.strictEqual(ok.status, 'done'); assert.strictEqual(ok.callback, true, 'once the disk works the Callback plays'); assert.strictEqual(ok.roundId, 'cbtest1');
+  });
+
+  await test('FILE: a corrupt or missing game file loses state, never money: the open stake comes back by the registry sweep, the pool (a ledger balance) is untouched', async () => {
+    const s = setup({ rng: E.rngFrom(PEND.seed), roundRng: E.rngFrom(5) }); const a = s.sock('ann'); s.seedPool('play', 4000); const before = s.bal('ann', 'play'), pool = s.pool('play');
+    const r = spin(s, a, { bet: 100, mode: 'play', buyBonus: 'bonus1' }); assert.strictEqual(r.status, 'pending'); assert.strictEqual(s.escrowSum('play'), r.cost);
+    s.crash(); fs.writeFileSync(s.files.pull, '{ not json'); s.boot();
+    assert.strictEqual(s.report.voided.length, 1, 'the registry returned the stake whose record was lost'); assert.strictEqual(s.bal('ann', 'play'), before, 'back to what it was before the spin'); assert.deepStrictEqual(s.escrows(), []); assert.strictEqual(s.pool('play'), pool, 'the pool is a ledger balance');
+    assert.strictEqual(s.potOf('play').bal, pool, 'and the mirror is re-read from it'); auditMatches(s);
+  });
+
   // ---------------------------------------------------------------- the pot
   await test('POT: the prize is pool -> player in the SAME batch as the stake; a prize can never exceed the pool (pool_short is not reachable from the slot\'s own arithmetic over a fuzz of pot states and knobs)', async () => {
     const rnd = E.rngFrom(4242); let hits = 0, spins = 0, empty = 0;
