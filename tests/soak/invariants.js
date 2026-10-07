@@ -36,6 +36,7 @@ class Checker {
     this.pending = [];                          // violations found by poll() not yet returned
     this.opLines = new Map();                   // 'kind:table:key' -> lines (buyin|rebuy|leave|kick|sweep|grace|night)
     this.killMark = null;
+    this.slotPending = [];                      // closing lines of rounds not matched with a round the harness knows yet
     this.slotRounds = new Map();                // 'key:rid' -> { open: L, instant: L, close: L } (the Cold Call lines of one round)
     this.slotScan = { idx: 0, S: { chips: 0, play: 0 }, F: { chips: 0, play: 0 }, n: 0 };   // the pot-feed bound, see checkSlot
     this.stat = { lines: 0, checks: 0 };
@@ -168,6 +169,7 @@ class Checker {
     if ((kind === 'instant' && (e.open || e.close)) || (kind !== 'instant' && e.instant)) bad(`round ${id} has both an instant line and open/close lines`);
     if (kind === 'close' && e.close) bad(`round ${id} closed twice`);
     e[kind] = L; this.slotRounds.set(id, e);
+    if (kind !== 'open') this.slotPending.push({ id, L });
   }
 
   // ---------- derived ----------
@@ -353,6 +355,13 @@ class Checker {
       if (bad.length) out.push({ id: 'I7', message: `ledger ${closeL.ref} does not match what the client was told: ${bad.join('; ')}`, accounts: { ref: closeL.ref, key: r.key }, expected: `cost ${r.cost} win ${r.win} prize ${r.prize}`, got: `cost ${s.spend} win ${s.credit} prize ${s.prize} feed ${s.feed}` });
       else r.checked = true;
     }
+    // a2. a closing line for a round nobody told the harness about (acked or adopted), once the answer has had time to arrive: money moved for a round no client has
+    const nowMs = Date.now();
+    this.slotPending = this.slotPending.filter(({ id, L }) => {
+      if (B.rounds.has(id) || B.open.has(id)) return false;
+      if (nowMs - L.seenAt > 1500) out.push({ id: 'I7', message: `ledger line ${L.ref} closes a Cold Call round that no client was told about (spend ${L.slot.spend}, win ${L.slot.credit}, void ${L.slot.voided})`, accounts: { ref: L.ref }, expected: 'a round the harness knows', got: L.reason });
+      return true;
+    });
     // b. open rounds: the stake is in escrow, the open line is in the ledger, no close line exists
     for (const [id, o] of B.open) {
       const e = this.slotRounds.get(id) || {};
