@@ -133,11 +133,13 @@ function stateView(state, now, day, K) {
   };
 }
 // the pot is the ledger's pool account; `last` is game state
-const potView = (mode) => ({ bal: M().pool(POOL, mode), last: store.pot(mode).last });
+const potView = (mode) => { const p = store.peekPot(mode); return { bal: M().pool(POOL, mode), last: p ? p.last : null }; };
 const potsView = () => ({ play: potView('play'), chips: potView('chips') });
 // the mirror in the store (audit() reads it, no decision does) is set from the ledger after every call that can move the pool
 function syncPot(mode) {
-  const p = store.pot(mode), bal = M().pool(POOL, mode);
+  const bal = M().pool(POOL, mode);
+  let p = store.peekPot(mode);
+  if (!p) { if (bal === 0) return 0; p = store.pot(mode); }       // no pot record and nothing in the pool: nothing to mirror (a game that never ran a pot leaves none)
   if (p.bal !== bal) { p.bal = bal; store.potChanged(); }
   return bal;
 }
@@ -298,7 +300,7 @@ function settle(rec, r, autoWhy, extraSocket) {
       pool = { name: POOL, feed: slice.slice, prize: prize || 0 };
     }
     minWinX = cfg.feed.minWinX; minWinCents = Number.isFinite(cfg.feed.minWinCents) && cfg.feed.minWinCents >= 0 ? cfg.feed.minWinCents : FEED_MIN_CENTS;
-    if (r.newState && r.newState.cb && !r.newState.cb.id) r.newState.cb.id = 'cb' + rec.id;     // a Callback armed by this round: its round id is fixed now and travels with the state
+    if (r.pull && r.pull.armed && r.newState && r.newState.cb && !r.newState.cb.id) r.newState.cb.id = 'cb' + rec.id;     // a Callback armed by this round: its round id is fixed now and travels with the state
     view = stateView(r.newState, rec.now, rec.day, viewK(rec));
   } catch (e) { logf('coldcall: settle failed, voiding', rec.id, e && e.message); return voidRound(rec, 'settle_error'); }
 
@@ -428,8 +430,8 @@ function recover(rounds) {
   for (const o of store.allOpen().slice()) { try { recoverOne(o, escrows); } catch (e) { logf('coldcall: recover threw on a record', o && o.roundId, e && e.message); } }
   for (const mode of ['play', 'chips']) {
     try {
-      const p = store.pot(mode), bal = M().pool(POOL, mode);
-      if (p.bal !== bal) { logf('coldcall: pot mirror differs from the ledger (' + mode + '): store', p.bal, 'ledger', bal); p.bal = bal; store.potChanged(); }
+      const bal = M().pool(POOL, mode), p = store.peekPot(mode) || (bal ? store.pot(mode) : null);
+      if (p && p.bal !== bal) { logf('coldcall: pot mirror differs from the ledger (' + mode + '): store', p.bal, 'ledger', bal); p.bal = bal; store.potChanged(); }
     } catch (e) { logf('coldcall: pot mirror not set', mode, e && e.message); }
   }
   try { store.flush(); } catch (e) { logf('coldcall: store flush failed after recover', e && e.message); }
@@ -438,7 +440,7 @@ function recover(rounds) {
 function audit() {
   const openRounds = [];
   if (store) for (const o of store.allOpen()) if (o && isInt(o.cost) && o.cost > 0) openRounds.push({ key: o.key, cur: o.mode, roundId: o.roundId, amount: o.cost });
-  const pot = (m) => (store ? store.pot(m).bal : 0);
+  const pot = (m) => { const p = store && store.peekPot(m); return p ? p.bal : 0; };
   return { openRounds, pools: { [POOL]: { chips: pot('chips'), play: pot('play') } } };
 }
 
@@ -456,9 +458,9 @@ function pullSpin(socket, p, buy, now) {
   if (o) return err(socket, 'decision_open', 'Finish your open decision first', { open: o.pending ? pendingView(o) : null });
   const day = chicagoDay(now);
   const state = loadState(nk, mode);
-  const callback = buy === null && !!state.cb;
-  if (callback) { try { ensureCbId(nk, mode, state); } catch (e) { logf('coldcall: callback id not flushed', e && e.message); return err(socket, 'bad_request', 'Could not place that bet'); } }
   const force = testHookOn() && buy === null && FORCES.includes(p.force) ? p.force : null;
+  const callback = buy === null && !force && !!state.cb;       // a QA-forced round is a stateless paid spin: the waiting Callback is not played
+  if (callback) { try { ensureCbId(nk, mode, state); } catch (e) { logf('coldcall: callback id not flushed', e && e.message); return err(socket, 'bad_request', 'Could not place that bet'); } }
   const rec = {
     id: callback ? state.cb.id : crypto.randomBytes(6).toString('hex'), key, nk, mode, who: whoOf(socket), socket, buy, bet: p.bet,
     betCents: callback ? state.cb.bet : p.bet, callback, state, now, day, t: now, tape: [], rtape: [], decisions: [], force, forced: force, stored: false, escrow: false, settled: false,

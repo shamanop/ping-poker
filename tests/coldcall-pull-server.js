@@ -1,5 +1,5 @@
 'use strict';
-// node tests/coldcall-pull-server.js  (self-contained: temp dir, fake io, no network, no server). THE PULL, server side: store, pot, decisions, feed.
+// node tests/coldcall-pull-server.js  (self-contained: a real ledger on a temp dir through tests/lib-coldcall-ledger.js, fake io, no network, no server). THE PULL, server side: store, pot, decisions, feed.
 // Contract: cold-call/PULL-ENGINE.md section 4 and 6. Runs against the real engine.
 const fs = require('fs');
 const os = require('os');
@@ -8,10 +8,8 @@ const assert = require('assert');
 const EventEmitter = require('events');
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'coldcall-pull-srv-'));
-process.env.WALLET_FILE = path.join(tmp, 'wallet.json');
 delete process.env.COLDCALL_PULL_FILE;
-const { createWallet } = require('../wallet.js');
-const games = require('../games');
+const H = require('./lib-coldcall-ledger.js');
 const E = require('../games/coldcall-engine.js');
 const PIN = require('./lib-pull-pin.js').pin(E);   // mechanism tests run on fixed knob numbers (the levers agent owns the real values)
 const SRV = require('../games/coldcall.js');
@@ -25,41 +23,13 @@ const test = async (name, fn) => { try { await fn(); pass++; console.log('ok   '
 const tick = () => new Promise((r) => setImmediate(r));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-function makeSocket(io, acct) {
-  const s = new EventEmitter();
-  s.data = acct ? { acct: typeof acct === 'string' ? { key: acct } : acct } : {};
-  s.out = [];
-  const emit = s.emit.bind(s);
-  s.send = (ev, p) => emit(ev, p);             // client -> server
-  s.emit = (ev, p) => { if (ev in { error: 1, wallet: 1 } || ev.startsWith('g:') || ev.startsWith('floor:')) { s.out.push([ev, p]); return true; } return emit(ev, p); };
-  io.sockets.sockets.set(String(Math.random()), s);
-  io.emit('connection', s);
-  return s;
-}
-const last = (s, ev) => { for (let i = s.out.length - 1; i >= 0; i--) if (s.out[i][0] === ev) return s.out[i][1]; return null; };
-const all = (s, ev) => s.out.filter((o) => o[0] === ev).map((o) => o[1]);
+const last = H.last, all = H.all;
 
-// each setup has its own dir (wallet.json + coldcall-pull.json next to it); pass { dir, bank, t } to restart over the same files
+// each setup is a world over its own dir (money.jsonl + coldcall-pull.json + coldcall-config.json); pass { dir, t } to restart over the same files (the old world is crashed first: what it had not written is gone)
 function setup(opts = {}) {
   resetCfg();
   SRV._history.clear();
-  SRV.log = opts.log || (() => {});
-  SRV.potRng = opts.potRng || (() => 1);          // never hits unless a test says so
-  SRV.roundRng = opts.roundRng;                   // the whole-cent rounding source (undefined = crypto); a separate stream from the round's own rng
-  const dir = opts.dir || fs.mkdtempSync(path.join(tmp, 's'));
-  const io = new EventEmitter(); io.sockets = { sockets: new Map() };
-  const ledger = { log: () => {} };
-  let t = opts.t || 1000000;
-  const clock = { now: () => t, advance: (ms) => { t += ms; } };
-  const hook = { push: () => {} };
-  const bank = opts.bank || new Map();
-  const chips = { get: (k) => (bank.has(k) ? bank.get(k) : 10000), add: (k, d) => { bank.set(k, Math.max(0, chips.get(k) + d)); hook.push(k); } };
-  const wallet = createWallet({ file: path.join(dir, 'wallet.json'), ledger, chips, now: clock.now, onChange: (k) => hook.push(k) });
-  const g = games({ io, ledger, now: clock.now, rng: opts.rng, accounts: {}, tables: {}, rooms: {}, wallet, chips });
-  hook.push = g.pushWallet;
-  const store = () => SRV._pull.store;
-  const potOf = (mode) => store().pot(mode, E.CFG.pull.pot.seed);
-  return { io, clock, wallet, g, dir, bank, chips, store, potOf, sock: (a) => makeSocket(io, a), open: SRV._pull.open };
+  return H.world({ dir: opts.dir || fs.mkdtempSync(path.join(tmp, 's')), rng: opts.rng, roundRng: opts.roundRng, potRng: opts.potRng, log: opts.log, t: opts.t });
 }
 
 // send a spin 200 ms after the last thing; returns the newest result (or error) that this send produced
@@ -98,8 +68,9 @@ function toPending(s, sock, kind, mode = 'play', bet = 10) {
   }
   throw new Error('no ' + kind + ' decision in 600 buys');
 }
-const rich = (s, key, mode = 'play') => { if (mode === 'chips') s.bank.set(key, 1e10); else s.wallet.credit(key, 'play', 1e10); };
-const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot invariant fed + seeded = paid + bal');
+const rich = (s, key, mode = 'play') => s.rich(key, mode);
+// P6: the pot is the ledger's pool account; the record in the game's file is a mirror (bal) plus statistics (fed, paid): they must agree with each other and, when the world is given, with the ledger
+const potOk = (p, s, mode) => { assert.strictEqual(p.fed, p.paid + p.bal, 'pot statistics: fed = paid + bal'); if (s) assert.strictEqual(s.pool(mode), p.bal, 'the mirror is the ledger pool'); };
 
 (async () => {
   await test('store: file next to the wallet, atomic, survives a restart (state, pot), state is per currency', async () => {
@@ -133,10 +104,10 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
       const s = setup({ rng: E.rngFrom(mode === 'play' ? 41 : 42), potRng: E.rngFrom(7) }); const a = s.sock('ann');
       E.CFG.pull.pot.oneInPerDollar = 40;               // make prizes common enough to be exercised (only plain spins roll since FIX M1)
       rich(s, 'ann', mode);
-      const start = s.wallet.get('ann'); let bal = start[mode], sumCost = 0, prizes = 0, takes = 0, wins = 0, picks = 0, mores = 0, callbacks = 0;
+      const start = s.balances('ann'); let bal = start[mode], sumCost = 0, prizes = 0, takes = 0, wins = 0, picks = 0, mores = 0, callbacks = 0;
       for (let i = 0; i < 240; i++) {
         const bet = E.BET_LEVELS[i % E.BET_LEVELS.length], buy = buys[(i / E.BET_LEVELS.length | 0) % buys.length];
-        const before = s.wallet.get('ann')[mode];
+        const before = s.bal('ann', mode);
         assert.strictEqual(before, bal);
         const r = play(s, a, { bet, mode, buyBonus: buy }, i);
         assert.strictEqual(r.status, 'done'); assert.strictEqual(r.mode, mode); assert.strictEqual(r.buyBonus, buy);
@@ -148,47 +119,47 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
         bal += -cost + r.totalWin + prize;
         assert.strictEqual(r.wallet[mode], bal, mode + ' round ' + i + ': before - cost + win + prize = after');
         assert.strictEqual(r.wallet[other], start[other], 'the other purse never moves');
-        assert.deepStrictEqual(s.wallet.get('ann'), r.wallet);
-        if (mode === 'chips') assert.strictEqual(s.chips.get('ann'), bal);
+        assert.deepStrictEqual(s.balances('ann'), r.wallet);
+        assert.strictEqual(s.bal('ann', mode), bal);
         if (!buy) sumCost += cost;                      // FIX M1: only a plain paid spin feeds the pot; a buy never feeds, never rolls
         if (buy) assert.strictEqual(prize, 0, 'a buy wins no pot');
         if (prize) prizes++; if (r.totalWin) wins++; if (r.callback) callbacks++;
         if (r.pull && r.pull.more && r.pull.more.take) takes++; if (r.pull && r.pull.pick) picks++; if (r.pull && r.pull.more) mores++;
-        const p = s.potOf(mode); potOk(p);
+        const p = s.potOf(mode); potOk(p, s, mode);
         assert.strictEqual(p.fed * 10000 + p.rem, sumCost * E.CFG.pull.pot.feedBps, 'the slice is exact: fed + rem = cost x bps / 10000');
         assert.ok(p.bal >= 0);
         const ow = s.potOf(other); assert.strictEqual(ow.fed, 0, 'the other currency pot is untouched');
       }
       assert.ok(prizes >= 1, 'the pot paid at least once: ' + prizes); assert.ok(wins > 40 && takes >= 3 && picks >= 1 && mores >= 10, [wins, takes, picks, mores].join());
       const p = s.potOf(mode); assert.strictEqual(p.paid, last(a, 'g:coldcall:result').pot ? p.paid : p.paid);
-      const st = s.wallet.stats('ann').coldcall[mode];
-      assert.strictEqual(start[mode] - st.wagered + st.won, bal, 'the wallet stats reconcile');
+      // the old wallet stats are ledger facts: the house and the pool hold exactly what the player lost, and nothing is in escrow
+      assert.strictEqual(s.house(mode) + s.pool(mode), start[mode] - bal, 'house + pool = what the player lost'); assert.strictEqual(s.escrowSum(mode), 0);
       assert.strictEqual(s.open.size, 0, 'nothing left open');
     }
   });
 
   await test('spin: a refused spend (funds) leaves state, pot, store and open decisions untouched (plain spin and a bonus buy)', async () => {
     const s = setup({ rng: E.rngFrom(43) }); const a = s.sock('bo');
-    s.wallet.spend('bo', 'play', 1000000 - 500, { game: 'x' });     // 5.00 left
+    s.setBal('bo', 'play', 500);     // 5.00 left
     const snap = JSON.stringify(s.store()._data());
     let r = spin(s, a, { bet: 1000, mode: 'play' }); assert.strictEqual(r.error.code, 'funds');
     r = spin(s, a, { bet: 10, mode: 'play', buyBonus: 'bonus1' }); assert.strictEqual(r.error.code, 'funds');
     assert.strictEqual(JSON.stringify(s.store()._data()), snap, 'store untouched'); assert.strictEqual(s.open.size, 0);
-    assert.strictEqual(s.wallet.get('bo').play, 500); assert.strictEqual(all(a, 'g:coldcall:result').length, 0);
+    assert.strictEqual(s.bal('bo', 'play'), 500); assert.strictEqual(all(a, 'g:coldcall:result').length, 0);
     r = spin(s, a, { bet: 10, mode: 'play' }); assert.strictEqual(r.status, 'done'); assert.strictEqual(r.wallet.play, 500 - 10 + r.totalWin);
   });
 
   await test('decisions: a pending round emits only the partial script, no outcome, charges the cost once, and finishing it credits the win once', async () => {
     const s = setup({ rng: E.rngFrom(44) }); const a = s.sock('ann'); rich(s, 'ann');
     for (const kind of ['pick', 'more']) {
-      const before = s.wallet.get('ann').play;
+      const before = s.bal('ann', 'play');
       const r = toPending(s, a, kind);
       const cost = r.cost; assert.strictEqual(r.status, 'pending'); assert.strictEqual(r.pending.k, kind);
       for (const k of ['script', 'totalWin', 'totalWinTenths', 'totalWinMult', 'tier', 'maxed']) assert.ok(!(k in r), 'pending must not carry ' + k);
       assert.ok(r.partial && r.partial.partial === true, 'only the partial script'); assert.ok(r.timeoutMs > 0 && r.expiresAt > s.clock.now());
       assert.strictEqual(r.pot, null);
       assert.strictEqual(s.open.size, 1); const rec = s.open.get(r.roundId); assert.ok(rec.timer && rec.timer.hasRef() === false, 'timer is unref\'d');
-      const mid = s.wallet.get('ann').play;
+      const mid = s.bal('ann', 'play');
       const f = decide(s, a, r, kind === 'pick' ? { k: 'pick', p: r.pending.choices[r.pending.choices.length - 1] } : { k: 'more', take: false });
       let fin = f; while (fin.status === 'pending') fin = decide(s, a, fin, policy(0, fin.pending));
       assert.strictEqual(fin.status, 'done'); assert.strictEqual(fin.resolved, true); assert.strictEqual(fin.auto, null);
@@ -235,23 +206,23 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
 
   await test('decisions: wrong account, unknown round, wrong kind are rejected and leave everything as it was', async () => {
     const s = setup({ rng: E.rngFrom(47) }); const a = s.sock('ann'), b = s.sock('bo'); rich(s, 'ann');
-    const r = toPending(s, a, 'more'); const snap = JSON.stringify(s.store()._data()); const wal = s.wallet.get('ann');
+    const r = toPending(s, a, 'more'); const snap = JSON.stringify(s.store()._data()); const wal = s.balances('ann');
     b.send('g:coldcall:decide', { roundId: r.roundId, k: 'more', take: true }); assert.strictEqual(last(b, 'error').code, 'forbidden');
     a.send('g:coldcall:decide', { roundId: 'nope', k: 'more', take: true }); assert.strictEqual(last(a, 'error').code, 'no_round');
     a.send('g:coldcall:decide', { roundId: r.roundId, k: 'pick', p: 3 }); assert.strictEqual(last(a, 'error').code, 'bad_request');
     a.send('g:coldcall:decide', { roundId: r.roundId, k: 'more', take: 'yes' }); assert.strictEqual(last(a, 'error').code, 'bad_request');
     a.send('g:coldcall:decide', null); assert.strictEqual(last(a, 'error').code, 'no_round');
-    assert.strictEqual(JSON.stringify(s.store()._data()), snap); assert.deepStrictEqual(s.wallet.get('ann'), wal); assert.strictEqual(s.open.size, 1);
+    assert.strictEqual(JSON.stringify(s.store()._data()), snap); assert.deepStrictEqual(s.balances('ann'), wal); assert.strictEqual(s.open.size, 1);
     const u = s.sock(null); u.send('g:coldcall:decide', { roundId: r.roundId, k: 'more', take: true }); assert.strictEqual(last(u, 'error').code, 'auth'); assert.strictEqual(s.open.size, 1);
     assert.strictEqual(decide(s, a, r, { k: 'more', take: false }).status, 'done');
   });
 
   await test('decisions: a spin while a decision is open is REJECTED (not defaulted) with the pending payload; the other currency is free; state shows the open decision', async () => {
     const s = setup({ rng: E.rngFrom(48) }); const a = s.sock('ann'); rich(s, 'ann'); rich(s, 'ann', 'chips');
-    const r = toPending(s, a, 'more'); const wal = s.wallet.get('ann');
+    const r = toPending(s, a, 'more'); const wal = s.balances('ann');
     const e = spin(s, a, { bet: 10, mode: 'play' }).error;
     assert.strictEqual(e.code, 'decision_open'); assert.strictEqual(e.open.roundId, r.roundId); assert.deepStrictEqual(e.open.pending, r.pending); assert.strictEqual(e.open.status, 'pending');
-    assert.deepStrictEqual(s.wallet.get('ann'), wal, 'nothing charged'); assert.strictEqual(s.open.size, 1);
+    assert.deepStrictEqual(s.balances('ann'), wal, 'nothing charged'); assert.strictEqual(s.open.size, 1);
     a.send('g:coldcall:state'); const st = last(a, 'g:coldcall:state'); assert.strictEqual(st.open.roundId, r.roundId); assert.strictEqual(st.opens.length, 1);
     const c = spin(s, a, { bet: 10, mode: 'chips' }); assert.ok(c.status === 'done' || c.status === 'pending', 'chips is a separate round');
     if (c.status === 'pending') decide(s, a, c, { k: c.pending.k, ...(c.pending.k === 'more' ? { take: false } : { p: c.pending.choices[0] }) });
@@ -267,7 +238,7 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
     const s = setup({ rng: E.rngFrom(49) }); const a = s.sock('ann'); rich(s, 'ann');
     E.CFG.pull.decision.timeoutMs = 40;
     for (const kind of ['pick', 'more']) {
-      const r = toPending(s, a, kind); const n = all(a, 'g:coldcall:result').length; const mid = s.wallet.get('ann').play;
+      const r = toPending(s, a, kind); const n = all(a, 'g:coldcall:result').length; const mid = s.bal('ann', 'play');
       rdy(s, a, r.roundId); await sleep(120);
       const rs = all(a, 'g:coldcall:result'); assert.strictEqual(rs.length, n + 1, 'exactly one settlement');
       const f = rs[rs.length - 1]; assert.strictEqual(f.roundId, r.roundId); assert.strictEqual(f.status, 'done'); assert.strictEqual(f.auto, 'timeout'); assert.strictEqual(f.resolved, true);
@@ -296,12 +267,12 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
   await test('default on disconnect of the owning socket (bank), settles once, the pending timer is gone, a later timeout does nothing', async () => {
     const s = setup({ rng: E.rngFrom(51) }); const a = s.sock('ann'); rich(s, 'ann');
     E.CFG.pull.decision.timeoutMs = 60;
-    const r = toPending(s, a, 'more'); const mid = s.wallet.get('ann').play; const n = all(a, 'g:coldcall:result').length;
+    const r = toPending(s, a, 'more'); const mid = s.bal('ann', 'play'); const n = all(a, 'g:coldcall:result').length;
     a.send('disconnect');
     const rs = all(a, 'g:coldcall:result'); assert.strictEqual(rs.length, n + 1); const f = rs[rs.length - 1];
     assert.strictEqual(f.auto, 'disconnect'); assert.strictEqual(f.pull.more.take, false); assert.strictEqual(f.pull.more.auto, true);
     assert.strictEqual(f.wallet.play, mid + f.totalWin + (f.pot ? f.pot.amount : 0)); assert.strictEqual(s.open.size, 0); assert.strictEqual(s.store().allOpen().length, 0);
-    await sleep(150); assert.strictEqual(all(a, 'g:coldcall:result').length, n + 1, 'no second settlement'); assert.strictEqual(s.wallet.get('ann').play, f.wallet.play);
+    await sleep(150); assert.strictEqual(all(a, 'g:coldcall:result').length, n + 1, 'no second settlement'); assert.strictEqual(s.bal('ann', 'play'), f.wallet.play);
     // a disconnect with nothing open is harmless, another socket of the account is not defaulted
     const b = s.sock('ann'), c = s.sock('ann'); const r2 = spin(s, b, { bet: 10, mode: 'play', buyBonus: 'bonus1' });
     c.send('disconnect'); if (r2.status === 'pending') assert.strictEqual(s.open.size, 1);
@@ -309,7 +280,7 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
 
   await test('autoplay: auto true never stops at a decision, defaults every one (first square, bank), marks autoplay, and settles', async () => {
     const s = setup({ rng: E.rngFrom(52) }); const a = s.sock('ann'); rich(s, 'ann');
-    let marked = 0, bal = s.wallet.get('ann').play;
+    let marked = 0, bal = s.bal('ann', 'play');
     for (let i = 0; i < 60; i++) {
       const r = spin(s, a, { bet: 10, mode: 'play', buyBonus: i % 2 ? 'bonus2' : 'bonus1', auto: true });
       assert.strictEqual(r.status, 'done'); assert.strictEqual(s.open.size, 0);
@@ -323,53 +294,57 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
     const plain = spin(s, a, { bet: 10, mode: 'play', auto: true }); assert.strictEqual(plain.status, 'done'); assert.strictEqual(plain.auto, null);
   });
 
-  await test('restart: an open decision is voided at init, the cost refunded exactly once, state and pot untouched, record dropped, logged; a second restart refunds nothing more', async () => {
+  await test('restart (D1): an open decision is settled at boot exactly as its timeout would (the default banks the amount shown), ONCE, from the ledger escrow; state and pot as the round leaves them, record dropped; a second restart writes nothing', async () => {
     const logs = [];
     const s = setup({ rng: E.rngFrom(53) }); const a = s.sock('ann'); rich(s, 'ann');
     for (let i = 0; i < 5; i++) play(s, a, { bet: 100, mode: 'play' }, i);
-    const r = toPending(s, a, 'more', 'play', 100);
-    const spent = s.wallet.get('ann').play;
+    const r = toPending(s, a, 'more', 'play', 100), bank = r.pending.bankCents;
+    const spent = s.bal('ann', 'play');
     // exact state right now (the open round has changed neither the state nor the pot)
     const stNow = clone(s.store().player('ann', 'play')), potNow = clone(s.potOf('play'));
     const onDisk = JSON.parse(fs.readFileSync(path.join(s.dir, 'coldcall-pull.json'), 'utf8'));
     assert.strictEqual(Object.keys(onDisk.open).length, 1, 'the open record is on disk the moment the round opens');
     assert.strictEqual(onDisk.open['ann|play'].cost, r.cost);
-    assert.strictEqual(JSON.parse(fs.readFileSync(path.join(s.dir, 'wallet.json'), 'utf8')).ann.play, spent, 'and so is the spend');
-    const s2 = setup({ dir: s.dir, bank: s.bank, rng: E.rngFrom(54), t: s.clock.now() + 5000, log: (...x) => logs.push(x.join(' ')) });
-    assert.strictEqual(s2.wallet.get('ann').play, spent + r.cost, 'refunded the cost');
-    assert.deepStrictEqual(clone(s2.store().player('ann', 'play')), stNow, 'state untouched'); assert.deepStrictEqual(clone(s2.potOf('play')), potNow, 'pot untouched');
-    assert.strictEqual(s2.store().allOpen().length, 0); assert.strictEqual(s2.open.size, 0); assert.ok(logs.some((l) => l.includes(r.roundId)), 'logged');
+    assert.deepStrictEqual(s.escrows('play').map((x) => [x.account, x.balance]), [[`escrow:coldcall:ann:${r.roundId}`, r.cost]], 'and the stake sits in escrow in the ledger');
+    const s2 = setup({ dir: s.dir, rng: E.rngFrom(54), t: s.clock.now() + 5000, log: (...x) => logs.push(x.join(' ')) });
+    assert.strictEqual(s2.bal('ann', 'play'), spent + bank, 'settled as the timeout would: the shown bank amount is paid, the stake was already out');
+    assert.deepStrictEqual(clone(s2.store().player('ann', 'play')), stNow, 'a buy leaves the state as it was'); assert.deepStrictEqual(clone(s2.potOf('play')), potNow, 'a buy leaves the pot as it was');
+    assert.strictEqual(s2.store().allOpen().length, 0); assert.strictEqual(s2.open.size, 0); assert.deepStrictEqual(s2.escrows(), [], 'no escrow left');
+    assert.strictEqual(s2.report.games.coldcall.found, 1); assert.strictEqual(s2.report.games.coldcall.settledOrVoidedByGame, 1); assert.deepStrictEqual(s2.report.voided, [], 'the registry had nothing left to void');
     assert.strictEqual(JSON.parse(fs.readFileSync(path.join(s.dir, 'coldcall-pull.json'), 'utf8')).open['ann|play'], undefined);
-    const s3 = setup({ dir: s.dir, bank: s.bank, rng: E.rngFrom(55), t: s.clock.now() + 9000 });
-    assert.strictEqual(s3.wallet.get('ann').play, spent + r.cost, 'a second restart refunds nothing more');
-    await sleep(60); assert.strictEqual(s3.wallet.get('ann').play, spent + r.cost);
+    assert.strictEqual(s2.lines((e) => e.ref === `coldcall:ann:${r.roundId}:close`).filter((e) => e.reason === 'coldcall:credit').reduce((n, e) => n + e.amount, 0), bank, 'one :close batch paid the win');
+    const h = SRV._history.get('ann')[0]; assert.strictEqual(h.roundId, r.roundId); assert.strictEqual(h.auto, 'restart'); assert.strictEqual(h.totalWin, bank);
+    const id = s2.lastId();
+    const s3 = setup({ dir: s.dir, rng: E.rngFrom(55), t: s.clock.now() + 9000 });
+    assert.strictEqual(s3.bal('ann', 'play'), spent + bank, 'a second restart pays nothing more'); assert.strictEqual(s3.lastId(), id, 'and writes no ledger line at all');
+    await sleep(60); assert.strictEqual(s3.bal('ann', 'play'), spent + bank);
   });
 
-  await test('restart: the same for Chips (refund goes to the bank), alongside a Play $ decision at the same time', async () => {
+  await test('restart (D1): the same for Chips (the payout goes to the bank account), alongside a Play $ decision at the same time', async () => {
     const s = setup({ rng: E.rngFrom(56) }); const a = s.sock('ann'); rich(s, 'ann'); rich(s, 'ann', 'chips');
     const p = toPending(s, a, 'more', 'play'); const c = toPending(s, a, 'more', 'chips');
-    assert.strictEqual(s.store().allOpen().length, 2);
-    const w = s.wallet.get('ann');
-    const s2 = setup({ dir: s.dir, bank: s.bank, rng: E.rngFrom(57), t: s.clock.now() + 1000 });
-    assert.strictEqual(s2.wallet.get('ann').play, w.play + p.cost); assert.strictEqual(s2.wallet.get('ann').chips, w.chips + c.cost); assert.strictEqual(s2.bank.get('ann'), w.chips + c.cost);
-    assert.strictEqual(s2.store().allOpen().length, 0);
+    assert.strictEqual(s.store().allOpen().length, 2); assert.strictEqual(s.escrows().length, 2);
+    const w = s.balances('ann');
+    const s2 = setup({ dir: s.dir, rng: E.rngFrom(57), t: s.clock.now() + 1000 });
+    assert.strictEqual(s2.bal('ann', 'play'), w.play + p.pending.bankCents); assert.strictEqual(s2.bal('ann', 'chips'), w.chips + c.pending.bankCents);
+    assert.strictEqual(s2.store().allOpen().length, 0); assert.deepStrictEqual(s2.escrows(), []);
   });
 
   // FIX M1 (money critic 2): a buy (call, bonus1, bonus2, hunt) is priced at 98.0 with no pot, so it feeds no slice, moves no remainder, rolls no pot and can win none. Only a plain paid spin feeds and rolls.
   await test('FIX M1: every buy (call, bonus1, bonus2, hunt) at 1c, $1 and $25, Play $ and Chips, on a pot of $50+ with the roll forced to hit: no prize, pot bal / fed / paid / rem / seeded unchanged, wallet moves by win - cost only, no pot in the result, the history row, the feed or floor:pot', async () => {
     for (const mode of ['play', 'chips']) for (const buy of ['call', 'bonus1', 'bonus2', 'hunt']) for (const bet of [1, 100, 2500]) {
       const s = setup({ rng: E.rngFrom(700 + bet), potRng: () => 0, roundRng: E.rngFrom(bet + 9) }); const a = s.sock('ann'), b = s.sock('bo'); rich(s, 'ann', mode); E.CFG.pull.pot.capCents = 5000;
-      const pot = s.potOf(mode); pot.bal = 7000; pot.fed = 7000; pot.rem = 4321; s.store().potChanged();
+      s.seedPool(mode, 7000); const pot = s.potOf(mode); pot.rem = 4321; s.store().potChanged();   // the pot's money is a pool balance in the ledger; `rem` is the game's own remainder
       const snap = clone(pot), potEvents = all(b, 'floor:pot').length, feedEvents = all(b, 'floor:feed').length;
-      const w0 = s.wallet.get('ann')[mode];
+      const w0 = s.bal('ann', mode);
       const r = play(s, a, { bet, mode, buyBonus: buy }, bet);
       const tag = mode + ' ' + buy + ' ' + bet + 'c';
       assert.strictEqual(r.status, 'done', tag); assert.strictEqual(r.buyBonus, buy, tag); assert.ok(r.cost > 0, tag + ' a buy is a paid round');
       assert.strictEqual(r.pot, null, tag + ': no pot part in the result');
       assert.deepStrictEqual(clone(pot), snap, tag + ': bal, fed, paid, rem, seeded and last do not move');
-      assert.strictEqual(s.wallet.get('ann')[mode], w0 - r.cost + r.totalWin, tag + ': the wallet moves by win - cost only');
+      assert.strictEqual(s.bal('ann', mode), w0 - r.cost + r.totalWin, tag + ': the wallet moves by win - cost only');
       assert.strictEqual(r.wallet[mode], w0 - r.cost + r.totalWin, tag);
-      potOk(pot);
+      potOk(pot, s, mode);
       a.send('g:coldcall:history'); assert.strictEqual(last(a, 'g:coldcall:history').rounds[0].pot, null, tag + ': the history row carries no pot');
       assert.strictEqual(all(b, 'floor:pot').length, potEvents, tag + ': no floor:pot event');
       assert.ok(!all(b, 'floor:feed').slice(feedEvents).some((e) => e.kind === 'pot'), tag + ': no pot event in the room feed');
@@ -379,12 +354,12 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
   await test('FIX M1: a plain paid spin in the same state still feeds the pot and still wins it (guard against over-fixing)', async () => {
     for (const mode of ['play', 'chips']) for (const bet of [1, 100, 2500]) {
       const s = setup({ rng: E.rngFrom(710 + bet), potRng: () => 0 }); const a = s.sock('ann'); rich(s, 'ann', mode); E.CFG.pull.pot.capCents = 5000;
-      const pot = s.potOf(mode); pot.bal = 7000; pot.fed = 7000; s.store().potChanged();
-      const w0 = s.wallet.get('ann')[mode];
+      s.seedPool(mode, 7000); const pot = s.potOf(mode);
+      const w0 = s.bal('ann', mode);
       const r = play(s, a, { bet, mode, auto: true }, bet);
       assert.strictEqual(r.buyBonus, null); assert.ok(r.pot && r.pot.won && r.pot.amount === 5000, mode + ' ' + bet + 'c: the plain spin won the capped pot: ' + JSON.stringify(r.pot));
-      assert.strictEqual(pot.paid, 5000); assert.strictEqual(pot.fed * 10000 + pot.rem, 7000 * 10000 + r.cost * E.CFG.pull.pot.feedBps, 'it fed its slice (a cent or the remainder)'); potOk(pot);
-      assert.strictEqual(s.wallet.get('ann')[mode], w0 - r.cost + r.totalWin + 5000);
+      assert.strictEqual(pot.paid, 5000); assert.strictEqual(pot.fed * 10000 + pot.rem, 7000 * 10000 + r.cost * E.CFG.pull.pot.feedBps, 'it fed its slice (a cent or the remainder)'); potOk(pot, s, mode);
+      assert.strictEqual(s.bal('ann', mode), w0 - r.cost + r.totalWin + 5000);
       a.send('g:coldcall:history'); assert.strictEqual(last(a, 'g:coldcall:history').rounds[0].pot.amount, 5000);
       assert.ok(all(a, 'floor:pot').length >= 1, 'floor:pot sent after the plain spin');
     }
@@ -396,13 +371,13 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
     for (const mode of ['play', 'chips']) {
       const s = setup({ rng: E.rngFrom(720), potRng: E.rngFrom(721), roundRng: E.rngFrom(722) }); const a = s.sock('ann'); rich(s, 'ann', mode);
       E.CFG.pull.pot.oneInPerDollar = 40; E.CFG.pull.pot.minBal = 1; E.CFG.pull.pot.feedBps = 500;     // fill fast and hit often
-      let bal = s.wallet.get('ann')[mode], plainCost = 0;
+      let bal = s.bal('ann', mode), plainCost = 0;
       for (let i = 0; i < 700; i++) {
         const bet = [1, 100, 2500, 100][i % 4], buy = buys[i % buys.length], pot = s.potOf(mode), before = clone(pot);
         const r = play(s, a, { bet, mode, buyBonus: buy }, i);
         const prize = r.pot ? r.pot.amount : 0; bal += -r.cost + r.totalWin + prize;
         assert.strictEqual(r.wallet[mode], bal, mode + ' round ' + i);
-        potOk(pot); assert.ok(pot.bal >= 0);
+        potOk(pot, s, mode); assert.ok(pot.bal >= 0);
         if (buy || r.callback) { assert.strictEqual(prize, 0, 'no prize on a buy or a Callback'); assert.deepStrictEqual(clone(pot), before, 'the pot did not move on round ' + i); if (buy) buysDone++; }
         else { plainCost += r.cost; if (prize) hitsPlain++; }
         assert.strictEqual(pot.fed * 10000 + pot.rem, plainCost * E.CFG.pull.pot.feedBps, 'the slice is exact on plain spins only');
@@ -415,41 +390,43 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
     for (const mode of ['play', 'chips']) {
       const s = setup({ rng: E.rngFrom(61), potRng: () => 0 }); const a = s.sock('ann'), b = s.sock('bo');
       rich(s, 'ann', mode); rich(s, 'bo', mode);
-      const pot = s.potOf(mode); pot.bal += 5000; pot.fed += 5000; s.store().potChanged();
-      const w0 = { ann: s.wallet.get('ann')[mode], bo: s.wallet.get('bo')[mode] };
+      s.seedPool(mode, 5000); const pot = s.potOf(mode);
+      const w0 = { ann: s.bal('ann', mode), bo: s.bal('bo', mode) };
       s.clock.advance(300);
       a.send('g:coldcall:spin', { bet: 100, mode, auto: true }); b.send('g:coldcall:spin', { bet: 100, mode, auto: true });     // same tick, one synchronous block each
       const ra = last(a, 'g:coldcall:result'), rb = last(b, 'g:coldcall:result');
       const hits = [ra, rb].filter((r) => r.pot);
       assert.strictEqual(hits.length, 1, 'one winner'); const w = hits[0];
       assert.ok(w.pot.won && w.pot.amount >= 5000 && w.pot.amount <= 5000 + 10, 'took the whole pot: ' + w.pot.amount); assert.strictEqual(w.pot.who, w === ra ? 'ann' : 'bo');
-      potOk(pot); assert.strictEqual(pot.paid, w.pot.amount); assert.ok(pot.bal < 5, 'pot emptied (only a fresh slice left): ' + pot.bal); assert.strictEqual(pot.last.who, w.pot.who); assert.strictEqual(pot.last.amount, w.pot.amount);
-      assert.strictEqual(s.wallet.get('ann')[mode], w0.ann - 100 + ra.totalWin + (ra.pot ? ra.pot.amount : 0));
-      assert.strictEqual(s.wallet.get('bo')[mode], w0.bo - 100 + rb.totalWin + (rb.pot ? rb.pot.amount : 0));
-      const total = (s.wallet.get('ann')[mode] - w0.ann) + (s.wallet.get('bo')[mode] - w0.bo);
+      potOk(pot, s, mode); assert.strictEqual(pot.paid, w.pot.amount); assert.ok(pot.bal < 5, 'pot emptied (only a fresh slice left): ' + pot.bal); assert.strictEqual(pot.last.who, w.pot.who); assert.strictEqual(pot.last.amount, w.pot.amount);
+      assert.strictEqual(s.bal('ann', mode), w0.ann - 100 + ra.totalWin + (ra.pot ? ra.pot.amount : 0));
+      assert.strictEqual(s.bal('bo', mode), w0.bo - 100 + rb.totalWin + (rb.pot ? rb.pot.amount : 0));
+      const total = (s.bal('ann', mode) - w0.ann) + (s.bal('bo', mode) - w0.bo);
       assert.strictEqual(total, -200 + ra.totalWin + rb.totalWin + pot.paid, 'wallet sums = costs, wins, one prize');
     }
   });
 
-  await test('pot: seed (tracked house money), minBal, capCents cap (the same for every bet), no slice and no roll on a Callback, hit chance follows the cost', async () => {
-    let s = setup({ rng: E.rngFrom(62), potRng: () => 0 }); let a = s.sock('ann');
-    E.CFG.pull.pot.seed = 700; E.CFG.pull.pot.capCents = 300;   // re-pinned (POT-CAP): the cap used to be maxPayX x bet = 3 x 100; it is now money, 300 cents, whatever the bet
-    // the pot is created lazily with its seed
-    s.potOf('play'); let p = s.potOf('play'); assert.strictEqual(p.bal, 700); assert.strictEqual(p.seeded, 700); potOk(p);
+  await test('pot (D2): a pool is fed only from stakes (a seed in the knobs is ignored and logged, never minted), minBal, capCents cap (the same for every bet), no slice and no roll on a Callback, hit chance follows the cost', async () => {
+    const logs = [];
+    let s = setup({ rng: E.rngFrom(62), potRng: () => 0, log: (...x) => logs.push(x.join(' ')) }); let a = s.sock('ann');
+    E.CFG.pull.pot.seed = 700; E.CFG.pull.pot.capCents = 300;   // re-pinned (POT-CAP): the cap is money, 300 cents, whatever the bet. A seed above 0 is refused by the live-config validator; set in place here, the game must ignore it
+    assert.strictEqual(s.pool('play'), 0, 'the pot is created empty: nothing is minted by a seed'); let p = s.potOf('play'); assert.strictEqual(p.bal, 0); assert.ok(!('seeded' in p)); potOk(p, s, 'play');
+    s.seedPool('play', 700);                                   // a pot of 700 that came from stakes
+    const slice = Math.floor(100 * E.CFG.pull.pot.feedBps / 10000);
     const r = spin(s, a, { bet: 100, mode: 'play', auto: true });
     assert.ok(r.pot, 'forced hit on a pot above minBal'); assert.strictEqual(r.pot.amount, 300, 'prize = min(bal, capCents) = 300');
-    p = s.potOf('play'); potOk(p); assert.strictEqual(p.paid, 300); assert.strictEqual(p.bal, 700 - 300 + 700 + 0, 'the seed is put back after a hit') ;
-    assert.strictEqual(p.seeded, 1400);
+    p = s.potOf('play'); potOk(p, s, 'play'); assert.strictEqual(p.paid, 300); assert.strictEqual(p.bal, 700 + slice - 300, 'no seed is put back after a hit'); assert.strictEqual(s.pool('play'), 700 + slice - 300);
+    assert.ok(logs.some((l) => /pot\.seed ignored/.test(l)), 'the ignored seed is logged');
     // minBal
     s = setup({ rng: E.rngFrom(63), potRng: () => 0 }); a = s.sock('ann'); E.CFG.pull.pot.minBal = 1000;
-    const r2 = spin(s, a, { bet: 10, mode: 'play', auto: true }); assert.strictEqual(r2.pot, null, 'below minBal there is no prize'); potOk(s.potOf('play'));
+    const r2 = spin(s, a, { bet: 10, mode: 'play', auto: true }); assert.strictEqual(r2.pot, null, 'below minBal there is no prize'); potOk(s.potOf('play'), s, 'play');
     // Callback: free, no slice, no roll
     s = setup({ rng: E.rngFrom(64), potRng: () => 0 }); a = s.sock('ann');
-    const pot = s.potOf('play'); pot.bal = 9000; pot.fed = 9000; s.store().potChanged();
+    s.seedPool('play', 9000); const pot = s.potOf('play');
     s.store().setPlayer('ann', 'play', { ...E.newState(), cb: { bet: 100 } });
-    const w0 = s.wallet.get('ann').play; const rc = spin(s, a, { bet: 10, mode: 'play', auto: true });
+    const w0 = s.bal('ann', 'play'); const rc = spin(s, a, { bet: 10, mode: 'play', auto: true });
     assert.strictEqual(rc.callback, true); assert.strictEqual(rc.cost, 0); assert.strictEqual(rc.bet, 100); assert.strictEqual(rc.betCents, 100); assert.strictEqual(rc.pot, null, 'no pot roll on a free round');
-    assert.strictEqual(pot.fed, 9000); assert.strictEqual(pot.rem, 0); assert.strictEqual(pot.bal, 9000); assert.strictEqual(s.wallet.get('ann').play, w0 + rc.totalWin);
+    assert.strictEqual(pot.fed, 9000); assert.strictEqual(pot.rem, 0); assert.strictEqual(pot.bal, 9000); assert.strictEqual(s.bal('ann', 'play'), w0 + rc.totalWin);
     assert.strictEqual(rc.totalWin, rc.totalWinTenths * 100 / 10, 'a Callback pays at cb.bet'); assert.strictEqual(rc.pull.state.cb, null, 'Callback consumed');
     // the next paid spin feeds again
     const rn = spin(s, a, { bet: 100, mode: 'play', auto: true }); assert.ok(rn.cost === 100); assert.ok(pot.fed * 10000 + pot.rem === 100 * E.CFG.pull.pot.feedBps + 9000 * 10000);
@@ -458,8 +435,8 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
   await test('FIX POT-CAP: a hit pays min(balance, capCents) at every bet (a 10c hit on a $40 pot pays the cap, not 50 x 10c), never above the balance, damaged knob -> default cap; invariant holds over 4k scripted spins at mixed bets (the 200k run is in the engine test)', async () => {
     const hit = (bet, bal, cap, mode = 'play') => {
       const s = setup({ rng: E.rngFrom(91), potRng: () => 0 }); const a = s.sock('ann'); rich(s, 'ann', mode); E.CFG.pull.pot.minBal = 100; if (cap !== 'keep') E.CFG.pull.pot.capCents = cap;
-      const pot = s.potOf(mode); pot.bal = bal; pot.fed = bal; pot.rem = 0; s.store().potChanged();
-      const r = spin(s, a, { bet, mode, auto: true }); potOk(pot); return { r, pot };
+      s.seedPool(mode, bal); const pot = s.potOf(mode);
+      const r = spin(s, a, { bet, mode, auto: true }); potOk(pot, s, mode); return { r, pot };
     };
     for (const bet of [10, 100, 2500]) { const { r, pot } = hit(bet, 4000, 3000); assert.ok(r.pot, 'hit at ' + bet); assert.strictEqual(r.pot.amount, 3000, 'bet ' + bet + ': prize = capCents, not a multiple of the bet'); assert.strictEqual(pot.paid, 3000); }
     { const { r, pot } = hit(10, 4000, 5000, 'chips'); assert.strictEqual(r.pot.amount, 4000, 'below the cap the whole balance is paid (chips pot too)'); assert.ok(pot.bal < 5, 'the pot is empty but for a fresh slice'); }
@@ -472,15 +449,15 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
       const r = spin(s, a, { bet: bets[i % 8], mode: 'play', auto: true }); if (r.error) throw new Error('spin ' + i + ' ' + JSON.stringify(r.error));
       while (r.status === 'pending') throw new Error('auto spin left a decision');
       if (r.pot) { hits++; assert.ok(r.pot.amount <= 3000, 'prize ' + r.pot.amount); if (r.pot.amount === 3000) big++; paid0 += r.pot.amount; }
-      if (i % 500 === 0) potOk(pot);
+      if (i % 500 === 0) potOk(pot, s, 'play');
     }
-    potOk(pot); assert.strictEqual(pot.paid, paid0, 'the pot file paid what the results said'); assert.ok(hits > 60 && big > 20, 'hits ' + hits + ' capped ' + big);
+    potOk(pot, s, 'play'); assert.strictEqual(pot.paid, paid0, 'the pot file paid what the results said'); assert.ok(hits > 60 && big > 20, 'hits ' + hits + ' capped ' + big);
   });
 
   await test('pot: the hit roll uses its own rng with chance = (cost / 100) / oneInPerDollar (a roll just below hits, just above misses)', async () => {
     const chance = (100 / 100) / E.CFG.pull.pot.oneInPerDollar;
     for (const [u, want] of [[chance * 0.999, true], [chance * 1.001, false]]) {
-      const s = setup({ rng: E.rngFrom(65), potRng: () => u }); const a = s.sock('ann'); const pot = s.potOf('play'); pot.bal = 5000; pot.fed = 5000;
+      const s = setup({ rng: E.rngFrom(65), potRng: () => u }); const a = s.sock('ann'); s.seedPool('play', 5000);
       const r = spin(s, a, { bet: 100, mode: 'play', auto: true }); assert.strictEqual(!!r.pot, want, 'u=' + u);
     }
   });
@@ -492,7 +469,7 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
     for (let i = 0; i < 40 && armedAt < 0; i++) { const r = spin(s, a, { bet: 100, mode: 'play', auto: true }); assert.ok(!r.callback); if (r.pull.armed) { armedAt = i; cb = r.pull.state.cb; } }
     assert.ok(armedAt >= 0 && armedAt <= 20, 'armed after ' + armedAt); assert.deepStrictEqual(cb, { bet: 100 });
     a.send('g:coldcall:state'); const st = last(a, 'g:coldcall:state'); assert.deepStrictEqual(st.pull.play.cb, { bet: 100 }); assert.strictEqual(st.pull.chips.cb, null); assert.strictEqual(st.pull.chips.lt, 0, 'chips list untouched');
-    const w0 = s.wallet.get('ann');
+    const w0 = s.balances('ann');
     const cr = spin(s, a, { bet: 10, mode: 'chips', auto: true }); assert.strictEqual(cr.callback, false, 'the Play $ Callback is not used by a Chips spin'); assert.ok(cr.cost === 10);
     const r = spin(s, a, { bet: 10, mode: 'play', auto: true }); assert.strictEqual(r.callback, true); assert.strictEqual(r.cost, 0); assert.strictEqual(r.bet, 100);
     assert.strictEqual(r.wallet.play, w0.play + r.totalWin); assert.ok(r.script.callback === true);
@@ -503,7 +480,7 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
     const s = setup({ rng: E.rngFrom(67), potRng: () => 0 });
     const a = s.sock({ key: 'ann', display: 'Ann K' }), b = s.sock('bo'), u = s.sock(null); rich(s, 'ann');
     E.CFG.pull.feed.minWinX = 1; E.CFG.pull.list = 3;
-    const pot = s.potOf('play'); pot.bal = 5000; pot.fed = 5000;
+    s.seedPool('play', 5000); const pot = s.potOf('play');
     const kinds = new Set();
     for (let i = 0; i < 60; i++) { play(s, a, { bet: 100, mode: 'play', buyBonus: i % 4 === 1 ? 'bonus1' : null }, i); if (i === 0) potRngOff(); }
     function potRngOff() { SRV.potRng = () => 1; }
@@ -573,7 +550,7 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
 
   await test('history: entries carry callback / auto / pot; pending rounds enter the history only when settled', async () => {
     const s = setup({ rng: E.rngFrom(71), potRng: () => 0 }); const a = s.sock('ann'); rich(s, 'ann');
-    const pot = s.potOf('play'); pot.bal = 3000; pot.fed = 3000;
+    s.seedPool('play', 3000); const pot = s.potOf('play');
     const r = spin(s, a, { bet: 100, mode: 'play', auto: true }); assert.ok(r.pot);
     a.send('g:coldcall:history'); let h = last(a, 'g:coldcall:history').rounds; assert.strictEqual(h.length, 1);
     for (const k of ['roundId', 't', 'bet', 'cost', 'mode', 'buy', 'totalWin', 'tier', 'callback', 'auto', 'pot']) assert.ok(k in h[0], k);
@@ -603,7 +580,7 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
       process.env.COLDCALL_TEST = '1'; delete process.env.NODE_ENV;
       const s = setup({ rng: E.rngFrom(75) }); const a = s.sock('ann');
       s.store().setPlayer('ann', 'play', { ...E.newState(), cb: { bet: 100 }, lt: 100 });
-      const w0 = s.wallet.get('ann').play;
+      const w0 = s.bal('ann', 'play');
       const r = spin(s, a, { bet: 200, mode: 'play', force: 'big' });
       assert.strictEqual(r.status, 'done'); assert.strictEqual(r.forced, 'big'); assert.ok(r.totalWinMult >= 25); assert.strictEqual(r.cost, 200); assert.strictEqual(r.callback, false); assert.strictEqual(r.betCents, 200);
       assert.strictEqual(r.wallet.play, w0 - 200 + r.totalWin);
@@ -618,7 +595,7 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
     const s = setup({ rng: E.rngFrom(73), potRng: E.rngFrom(9) }); E.CFG.pull.pot.oneInPerDollar = 1000;
     const names = ['ann', 'bo', 'cy', 'di']; const socks = names.flatMap((n) => [s.sock(n), s.sock(n)]);
     for (const n of names) { rich(s, n); rich(s, n, 'chips'); }
-    const w0 = Object.fromEntries(names.map((n) => [n, s.wallet.get(n)]));
+    const w0 = Object.fromEntries(names.map((n) => [n, s.balances(n)]));
     let spent = 0, won = 0, prizes = 0;
     for (let i = 0; i < 80; i++) {
       s.clock.advance(200);
@@ -636,7 +613,7 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
     const seen = new Set();   // a settled round that was open goes to every live socket of the account: count each round once
     for (const k of socks) for (const r of all(k, 'g:coldcall:result')) if (r.status === 'done' && !seen.has(r.roundId) && seen.add(r.roundId)) { delta[r.mode] += -r.cost + r.totalWin + (r.pot ? r.pot.amount : 0); spent += r.cost; won += r.totalWin; if (r.pot) prizes++; }
     for (const mode of ['play', 'chips']) {
-      const sum = names.reduce((a, n) => a + s.wallet.get(n)[mode] - w0[n][mode], 0); assert.strictEqual(sum, delta[mode], mode + ' wallets = the results'); potOk(s.potOf(mode));
+      const sum = names.reduce((a, n) => a + s.balances(n)[mode] - w0[n][mode], 0); assert.strictEqual(sum, delta[mode], mode + ' wallets = the results'); potOk(s.potOf(mode), s, mode);
     }
     assert.ok(spent > 0 && won > 0);
   });
@@ -673,7 +650,7 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
     for (const how of ['disconnect', 'decide']) for (const [name, edit] of Object.entries(wreck)) {
       const s = setup({ rng: E.rngFrom(81) }); const a = s.sock('ann'); rich(s, 'ann');
       const r = toMore(s, a, true);
-      const mid = s.wallet.get('ann').play, W = r.pending.W, shown = clone(r.partial.spin);
+      const mid = s.bal('ann', 'play'), W = r.pending.W, shown = clone(r.partial.spin);
       edit();
       let f;
       if (how === 'disconnect') { a.send('disconnect'); f = last(a, 'g:coldcall:result'); } else f = decide(s, a, r, { k: 'more', take: false });
@@ -687,11 +664,11 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
 
   await test('F4: a throw while settling (pot / feed knob block removed) ends in exactly one refund, never a bare lost cost; every live socket of the account hears it', async () => {
     for (const knob of ['pot', 'feed']) {
-      const s = setup({ rng: E.rngFrom(82) }); const a = s.sock('ann'), a2 = s.sock('ann'); const start = s.wallet.get('ann').play;
+      const s = setup({ rng: E.rngFrom(82) }); const a = s.sock('ann'), a2 = s.sock('ann'); const start = s.bal('ann', 'play');
       delete E.CFG.pull[knob];
       const n = all(a, 'g:coldcall:result').length;
       s.clock.advance(200); a.send('g:coldcall:spin', { bet: 2500, mode: 'play' });
-      const bal = s.wallet.get('ann').play, voids = all(a, 'g:coldcall:voided'), done = all(a, 'g:coldcall:result').slice(n).filter((r) => r.status === 'done');
+      const bal = s.bal('ann', 'play'), voids = all(a, 'g:coldcall:voided'), done = all(a, 'g:coldcall:result').slice(n).filter((r) => r.status === 'done');
       assert.ok(!all(a, 'error').some((e) => e.code === 'internal'), knob + ': no router "Server error"');
       if (voids.length) { assert.strictEqual(voids.length, 1); assert.strictEqual(bal, start, knob + ': refunded exactly once'); assert.strictEqual(voids[0].refund, 2500); assert.strictEqual(all(a2, 'g:coldcall:voided').length, 1, 'the other tab hears it'); }
       else { assert.strictEqual(done.length, 1); assert.strictEqual(bal, start - 2500 + done[0].totalWin + (done[0].pot ? done[0].pot.amount : 0)); }
@@ -718,7 +695,7 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
       s.store().setPlayer('ann', mode, bad);
       a.send('g:coldcall:state'); const st = last(a, 'g:coldcall:state'); assert.ok(st && st.pull && st.pull[mode] && st.pull[other], 'state handler works: ' + JSON.stringify(bad));
       assert.ok(!all(a, 'error').length, 'no error: ' + JSON.stringify(all(a, 'error')));
-      const before = s.wallet.get('ann')[mode];
+      const before = s.bal('ann', mode);
       const r = play(s, a, { bet: 100, mode }); assert.strictEqual(r.status, 'done', JSON.stringify(bad));
       assert.strictEqual(r.wallet[mode], before - r.cost + r.totalWin + (r.pot ? r.pot.amount : 0));
       const r2 = play(s, a, { bet: 100, mode: other }); assert.strictEqual(r2.status, 'done');
@@ -800,15 +777,20 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
     const loaded = require('../games/coldcall-store.js').createStore(f); assert.strictEqual(({}).play, undefined); assert.strictEqual(loaded.player('__proto__', 'play').lt, 77); assert.strictEqual(loaded.player('x', 'play'), null);
   });
 
-  await test('F9d: a pot prize is flushed to disk before it is credited (the pot file never still holds a prize the wallet has)', async () => {
+  await test('F9d (D4): the stake, the pot feed, the pot prize and the win are legs of ONE ledger batch (one line id, one ref), written before any result goes out; the game file only mirrors the pool', async () => {
     const s = setup({ rng: E.rngFrom(89), potRng: () => 0 }); const a = s.sock('ann');
     E.CFG.pull.pot.minBal = 1; E.CFG.pull.pot.oneInPerDollar = 1;
-    let seenOnDisk = null;
-    const credit = s.wallet.credit.bind(s.wallet);
-    s.wallet.credit = (key, mode, amt, ref) => { if (ref && ref.pot) { try { seenOnDisk = JSON.parse(fs.readFileSync(path.join(s.dir, 'coldcall-pull.json'), 'utf8')).pot[mode]; } catch { seenOnDisk = null; } } return credit(key, mode, amt, ref); };
+    let resultsAtCall = null;
+    s.hooks.after.round = () => { resultsAtCall = all(a, 'g:coldcall:result').length; };
     const r = spin(s, a, { bet: 2500, mode: 'play', auto: true });
     assert.strictEqual(r.status, 'done'); assert.ok(r.pot && r.pot.won, 'the pot was won');
-    assert.ok(seenOnDisk && seenOnDisk.paid === r.pot.amount, 'at the moment of the prize credit the pot file already says paid ' + r.pot.amount + ': ' + JSON.stringify(seenOnDisk));
+    assert.strictEqual(resultsAtCall, 0, 'the ledger call returned before the client heard anything');
+    const batch = s.lines((e) => e.ref === `coldcall:ann:${r.roundId}`);
+    assert.strictEqual(new Set(batch.map((e) => e.id)).size, 1, 'one ledger line (one atomic batch) holds every leg'); assert.ok(batch.every((e) => e.batchRef === `coldcall:ann:${r.roundId}`));
+    const leg = (reason) => batch.filter((e) => e.reason === reason).reduce((n, e) => n + e.amount, 0);
+    assert.strictEqual(leg('coldcall:spend'), 2500); assert.strictEqual(leg('coldcall:prize'), r.pot.amount, 'the prize is a pool -> player leg of the same batch'); const feed = Math.floor(2500 * E.CFG.pull.pot.feedBps / 10000); assert.ok(feed > 0); assert.strictEqual(leg('coldcall:feed'), feed, 'the pool was fed its slice of the stake');
+    assert.strictEqual(leg('coldcall:credit'), r.totalWin); assert.ok(batch.find((e) => e.reason === 'coldcall:prize').from === 'pool:coldcall:office' && batch.find((e) => e.reason === 'coldcall:prize').to === 'play:ann');
+    assert.strictEqual(s.pool('play'), feed - r.pot.amount); assert.strictEqual(s.potOf('play').bal, s.pool('play')); assert.strictEqual(s.potOf('play').paid, r.pot.amount);
   });
 
   await test('F9e / W2 / W6: a settled round goes to every live socket of the account, never to a socket that has since signed in as someone else', async () => {
@@ -987,10 +969,10 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
     let voided = 0, spins = 0;
     try {
       for (let i = 0; i < 400 && !voided; i++) {
-        const before = s.wallet.get('ann').play, nv = all(a, 'g:coldcall:voided').length;
+        const before = s.bal('ann', 'play'), nv = all(a, 'g:coldcall:voided').length;
         s.clock.advance(200); const ne = all(a, 'error').length; a.send('g:coldcall:spin', { bet: 10, mode: 'play', buyBonus: i % 3 === 2 ? 'bonus2' : 'bonus1' }); spins++;
         assert.ok(!all(a, 'error').slice(ne).some((e) => e.code === 'internal'), 'no "Server error": ' + JSON.stringify(all(a, 'error').slice(ne)));
-        if (all(a, 'g:coldcall:voided').length > nv) { voided++; const v = last(a, 'g:coldcall:voided'); assert.strictEqual(v.reason, 'open_error'); assert.strictEqual(s.wallet.get('ann').play, before, 'refunded exactly once'); }
+        if (all(a, 'g:coldcall:voided').length > nv) { voided++; const v = last(a, 'g:coldcall:voided'); assert.strictEqual(v.reason, 'open_error'); assert.strictEqual(s.bal('ann', 'play'), before, 'refunded exactly once'); }
         assert.strictEqual(s.open.size, 0, 'no open round'); assert.strictEqual(st.allOpen().length, 0);
       }
     } finally { st.putOpen = realPut; }
@@ -1014,20 +996,20 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
       const s = setup({ dir, rng: E.rngFrom(93) }); const a = s.sock('ann'); rich(s, 'ann'); rich(s, 'ann', 'chips');
       a.send('g:coldcall:state'); assert.ok(last(a, 'g:coldcall:state'), 'state handler works: ' + JSON.stringify(f));
       for (const mode of ['play', 'chips']) for (let i = 0; i < 6; i++) {
-        const before = s.wallet.get('ann')[mode]; const r = play(s, a, { bet: 100, mode }, i);
+        const before = s.bal('ann', mode); const r = play(s, a, { bet: 100, mode }, i);
         assert.strictEqual(r.status, 'done', JSON.stringify(f)); assert.strictEqual(r.wallet[mode], before - r.cost + r.totalWin + (r.pot ? r.pot.amount : 0), JSON.stringify(f));
       }
-      potOk(s.potOf('play')); potOk(s.potOf('chips')); assert.ok(!all(a, 'error').length, JSON.stringify(all(a, 'error')));
+      potOk(s.potOf('play'), s, 'play'); potOk(s.potOf('chips'), s, 'chips'); assert.ok(!all(a, 'error').length, JSON.stringify(all(a, 'error')));
       // a decision left to time out settles without a throw in the timer
-      E.CFG.pull.decision.timeoutMs = 30; const p = toPending(s, a, 'more', 'play', 10); rdy(s, a, p.roundId); const before = s.wallet.get('ann').play; await sleep(120);
+      E.CFG.pull.decision.timeoutMs = 30; const p = toPending(s, a, 'more', 'play', 10); rdy(s, a, p.roundId); const before = s.bal('ann', 'play'); await sleep(120);
       assert.strictEqual(s.open.size, 0, 'the timer settled it'); assert.ok(all(a, 'g:coldcall:result').some((r) => r.roundId === p.roundId && r.status === 'done'));
-      assert.ok(s.wallet.get('ann').play >= before, 'settled, win credited');
+      assert.ok(s.bal('ann', 'play') >= before, 'settled, win credited');
     }
     for (const day of ['zzz', '2026-13-45', '2026-1-5', 42, '']) for (const mode of ['play', 'chips']) {
       const s = setup({ rng: E.rngFrom(94) }); const a = s.sock('ann'); rich(s, 'ann', mode);
       s.store().setPlayer('ann', mode, Object.assign(E.newState(), { day }));
       a.send('g:coldcall:state'); assert.ok(last(a, 'g:coldcall:state') && !all(a, 'error').length, 'state handler works for day ' + JSON.stringify(day) + ': ' + JSON.stringify(all(a, 'error')));
-      const before = s.wallet.get('ann')[mode]; const r = play(s, a, { bet: 100, mode }); assert.strictEqual(r.status, 'done'); assert.strictEqual(r.wallet[mode], before - r.cost + r.totalWin + (r.pot ? r.pot.amount : 0));
+      const before = s.bal('ann', mode); const r = play(s, a, { bet: 100, mode }); assert.strictEqual(r.status, 'done'); assert.strictEqual(r.wallet[mode], before - r.cost + r.totalWin + (r.pot ? r.pot.amount : 0));
     }
   });
 
@@ -1042,14 +1024,14 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
       try {
         let r = p, n = 0;
         while (r.status === 'pending') r = decide(s, a, r, r.pending.k === 'pick' ? { k: 'pick', p: r.pending.choices[0] } : { k: 'more', take: n++ % 2 === 0 });
-        return { r, wallet: s.wallet.get('ann').play };
+        return { r, wallet: s.bal('ann', 'play') };
       } finally { restore(); }
     };
     for (const kind of ['pick', 'more']) {
       const ctl = run(kind, null), edt = run(kind, edits);
       assert.strictEqual(edt.r.totalWin, ctl.r.totalWin, kind + ': decided round pays the same under an edit'); assert.deepStrictEqual(edt.r.script, ctl.r.script, kind + ': same bonus script'); assert.strictEqual(edt.wallet, ctl.wallet);
       // a disconnect defaults the round under the snapshot too
-      const run2 = (edit) => { const s = setup({ rng: E.rngFrom(96) }); const a = s.sock('ann'); rich(s, 'ann'); const p = toPending(s, a, kind, 'play', 10); if (edit) edit(); try { SRV.onDisconnect(a); return { r: last(a, 'g:coldcall:result'), wallet: s.wallet.get('ann').play }; } finally { restore(); } };
+      const run2 = (edit) => { const s = setup({ rng: E.rngFrom(96) }); const a = s.sock('ann'); rich(s, 'ann'); const p = toPending(s, a, kind, 'play', 10); if (edit) edit(); try { SRV.onDisconnect(a); return { r: last(a, 'g:coldcall:result'), wallet: s.bal('ann', 'play') }; } finally { restore(); } };
       const c2 = run2(null), e2 = run2(edits);
       assert.strictEqual(c2.r.status, 'done'); assert.strictEqual(e2.r.totalWin, c2.r.totalWin, kind + ': defaulted round pays the same under an edit'); assert.deepStrictEqual(e2.r.script, c2.r.script); assert.strictEqual(e2.wallet, c2.wallet);
     }
@@ -1067,9 +1049,9 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
       const other = mode === 'play' ? 'chips' : 'play';
       const s = setup({ rng: E.rngFrom(bet * 10 + (mode === 'play' ? 1 : 2)), potRng: E.rngFrom(bet + 700), roundRng: E.rngFrom(bet + 900) }); const a = s.sock('ann'); rich(s, 'ann', mode);
       E.CFG.pull.pot.oneInPerDollar = 0.4; E.CFG.pull.pot.minBal = 1; E.CFG.pull.pot.feedBps = 10000;     // fill fast and hit often: prizes at 1c bets need a pot
-      const start = s.wallet.get('ann'); let bal = start[mode], sumCost = 0, paid = 0, exact = 0, sq = 0;
+      const start = s.balances('ann'); let bal = start[mode], sumCost = 0, paid = 0, exact = 0, sq = 0;
       for (let i = 0; i < 1500; i++) {
-        const buy = buys[i % buys.length]; assert.strictEqual(s.wallet.get('ann')[mode], bal);
+        const buy = buys[i % buys.length]; assert.strictEqual(s.bal('ann', mode), bal);
         const r = play(s, a, { bet, mode, buyBonus: buy }, i);
         assert.strictEqual(r.status, 'done'); assert.strictEqual(r.mode, mode); assert.strictEqual(r.buyBonus, buy);
         const played = r.betCents, price = buy ? E.buyPrice(E.CFG.buyCost[buy], bet) : bet, cost = r.callback ? 0 : price;
@@ -1080,15 +1062,15 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
         assert.ok(r.totalWin <= E.MAX_WIN_X * played, 'cap'); assert.ok(r.callback ? played >= 1 : played === bet);
         bal += -cost + r.totalWin + prize; assert.strictEqual(r.wallet[mode], bal, mode + ' ' + bet + 'c round ' + i + ': before - cost + win + prize = after');
         assert.strictEqual(r.wallet[other], start[other], 'the other purse never moves');
-        if (mode === 'chips') assert.strictEqual(s.chips.get('ann'), bal);
+        assert.strictEqual(s.bal('ann', mode), bal);
         if (!buy) sumCost += cost; if (buy) assert.strictEqual(prize, 0, 'a buy wins no pot (FIX M1)'); if (prize) prizes++; if (r.callback) callbacks++; else { paid += r.totalWin; exact += ex; sq += (r.totalWin - ex) * (r.totalWin - ex); }
         if (r.pull && r.pull.more && r.pull.more.take) takes++; if (r.pull && r.pull.pick) picks++; rounds++;
-        const p = s.potOf(mode); potOk(p); assert.strictEqual(p.fed * 10000 + p.rem, sumCost * E.CFG.pull.pot.feedBps, 'the slice is exact: fed + rem = cost x bps / 10000 (remainders carried)'); assert.ok(p.bal >= 0);
+        const p = s.potOf(mode); potOk(p, s, mode); assert.strictEqual(p.fed * 10000 + p.rem, sumCost * E.CFG.pull.pot.feedBps, 'the slice is exact: fed + rem = cost x bps / 10000 (remainders carried)'); assert.ok(p.bal >= 0);
         assert.strictEqual(s.potOf(other).fed, 0);
       }
       assert.strictEqual(s.open.size, 0, 'nothing left open');
       assert.ok(Math.abs(paid - exact) < 6 * Math.sqrt(sq) + 2, mode + ' ' + bet + 'c: paid ' + paid + ' vs exact ' + exact + ' differ by rounding noise only');
-      const st = s.wallet.stats('ann').coldcall[mode]; assert.strictEqual(start[mode] - st.wagered + st.won, bal, 'the wallet stats reconcile');
+      assert.strictEqual(s.house(mode) + s.pool(mode), start[mode] - bal, 'the ledger reconciles: house + pool = what the player lost'); assert.strictEqual(s.escrowSum(mode), 0);
     }
     assert.ok(rounds === 9000 && takes >= 20 && picks >= 10 && callbacks >= 10 && prizes >= 20, [rounds, takes, picks, callbacks, prizes].join());
   });
@@ -1120,24 +1102,25 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
     assert.strictEqual(a10.n, 0, 'no rounding draw at 10c'); assert.ok(a1.n >= 40 * 2 && a1.n % 2 === 0, 'two per done round at 1c: ' + a1.n);
   });
 
-  await test('DENOMS restart with an open decision at a 1c bet: the open record keeps the rounding draws, the cost (the whole-cent price) is refunded exactly once, nothing else moves', async () => {
+  await test('DENOMS restart (D1) with an open decision at a 1c bet: the open record keeps the rounding draws, the restart settles it ONCE on the cents that were shown (the whole-cent stake was already in escrow), nothing else moves; an old-format record is dropped and pays nothing', async () => {
     const logs = [];
     const s = setup({ rng: E.rngFrom(313), roundRng: E.rngFrom(314) }); const a = s.sock('ann'); rich(s, 'ann');
     for (let i = 0; i < 5; i++) play(s, a, { bet: 1, mode: 'play' }, i);
     const r = toPending(s, a, 'more', 'play', 1); assert.ok(r.cost >= 1 && r.cost === E.buyPrice(E.CFG.buyCost[r.buyBonus], 1), 'cost ' + r.cost);
-    const spent = s.wallet.get('ann').play, stNow = clone(s.store().player('ann', 'play')), potNow = clone(s.potOf('play'));
+    const spent = s.bal('ann', 'play'), stNow = clone(s.store().player('ann', 'play')), potNow = clone(s.potOf('play'));
     s.store().flush();
     const onDisk = JSON.parse(fs.readFileSync(path.join(s.dir, 'coldcall-pull.json'), 'utf8')), rec = onDisk.open['ann|play'];
-    assert.ok(rec && rec.cost === r.cost && rec.bet === 1, 'the open record is on disk'); assert.ok(Array.isArray(rec.rnd) && rec.rnd.length === 2 && rec.rnd.every((x) => x >= 0 && x < 1), 'the rounding draws survive in the stored record: ' + JSON.stringify(rec.rnd));
-    const s2 = setup({ dir: s.dir, bank: s.bank, rng: E.rngFrom(315), t: s.clock.now() + 5000, log: (...x) => logs.push(x.join(' ')) });
-    assert.strictEqual(s2.wallet.get('ann').play, spent + r.cost, 'refunded the cost'); assert.deepStrictEqual(clone(s2.store().player('ann', 'play')), stNow); assert.deepStrictEqual(clone(s2.potOf('play')), potNow);
-    assert.strictEqual(s2.store().allOpen().length, 0); assert.ok(logs.some((l) => l.includes(r.roundId)));
-    const s3 = setup({ dir: s.dir, bank: s.bank, rng: E.rngFrom(316), t: s.clock.now() + 9000 }); await sleep(60);
-    assert.strictEqual(s3.wallet.get('ann').play, spent + r.cost, 'a second restart refunds nothing more');
-    // an old open record without the rounding draws (written before this change) is refunded the same way
+    assert.ok(rec && rec.cost === r.cost && rec.bet === 1, 'the open record is on disk'); assert.ok(Array.isArray(rec.rtape) && rec.rtape.length === 2 && rec.rtape.every((x) => x >= 0 && x < 1), 'the rounding draws survive in the stored record: ' + JSON.stringify(rec.rtape));
+    assert.ok(Array.isArray(rec.tape) && rec.tape.length > 0 && rec.cfg && rec.cfg.pull && rec.state && Array.isArray(rec.decisions), 'the record holds the tape, the config snapshot, the pre-round state and the decisions');
+    const s2 = setup({ dir: s.dir, rng: E.rngFrom(315), t: s.clock.now() + 5000, log: (...x) => logs.push(x.join(' ')) });
+    assert.strictEqual(s2.bal('ann', 'play'), spent + r.pending.bankCents, 'settled on the shown cents (the default banks them)'); assert.deepStrictEqual(clone(s2.store().player('ann', 'play')), stNow); assert.deepStrictEqual(clone(s2.potOf('play')), potNow);
+    assert.strictEqual(s2.store().allOpen().length, 0); assert.deepStrictEqual(s2.escrows(), []);
+    const id = s2.lastId(), s3 = setup({ dir: s.dir, rng: E.rngFrom(316), t: s.clock.now() + 9000 }); await sleep(60);
+    assert.strictEqual(s3.bal('ann', 'play'), spent + r.pending.bankCents, 'a second restart pays nothing more'); assert.strictEqual(s3.lastId(), id);
+    // an old open record (written before P6: no tape, no config) cannot be replayed and has no escrow: it is dropped and nothing is paid
     const old = JSON.parse(fs.readFileSync(path.join(s.dir, 'coldcall-pull.json'), 'utf8')); old.open['ann|play'] = { roundId: 'old1', key: 'ann', mode: 'play', cost: 7, bet: 1, buy: 'call', t: 1 };
     fs.writeFileSync(path.join(s.dir, 'coldcall-pull.json'), JSON.stringify(old));
-    const s4 = setup({ dir: s.dir, bank: s.bank, rng: E.rngFrom(317), t: s.clock.now() + 12000 }); assert.strictEqual(s4.wallet.get('ann').play, spent + r.cost + 7);
+    const s4 = setup({ dir: s.dir, rng: E.rngFrom(317), t: s.clock.now() + 12000 }); assert.strictEqual(s4.bal('ann', 'play'), spent + r.pending.bankCents, 'an unreplayable record pays nothing'); assert.strictEqual(s4.store().allOpen().length, 0); assert.strictEqual(s4.lastId(), id);
   });
 
   await test('DENOMS stored state: normState accepts cb.bet 1..2500 (any whole number of cents) and a carry in [0, 10); damaged values read as safe defaults; the Callback at 1c is played at 1c', async () => {
@@ -1146,7 +1129,7 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
       const s = setup({ rng: E.rngFrom(318), roundRng: E.rngFrom(319) }); const a = s.sock('ann'); rich(s, 'ann');
       s.store().setPlayer('ann', 'play', mk({ cb, carry })); a.send('g:coldcall:state'); const v = last(a, 'g:coldcall:state').pull.play;
       assert.deepStrictEqual(v.cb, cb, 'kept ' + JSON.stringify(cb)); assert.strictEqual(v.lt, 120); assert.deepStrictEqual(v.warm, [3, 4]);
-      const w0 = s.wallet.get('ann').play, r = play(s, a, { bet: 100, mode: 'play' }); assert.strictEqual(r.callback, true); assert.strictEqual(r.betCents, cb.bet); assert.strictEqual(r.cost, 0); assert.ok(Number.isInteger(r.totalWin)); assert.strictEqual(r.wallet.play, w0 + r.totalWin + (r.pot ? r.pot.amount : 0));
+      const w0 = s.bal('ann', 'play'), r = play(s, a, { bet: 100, mode: 'play' }); assert.strictEqual(r.callback, true); assert.strictEqual(r.betCents, cb.bet); assert.strictEqual(r.cost, 0); assert.ok(Number.isInteger(r.totalWin)); assert.strictEqual(r.wallet.play, w0 + r.totalWin + (r.pot ? r.pot.amount : 0));
       assert.strictEqual(s.store().player('ann', 'play').carry, carry, 'a Callback round leaves the carry as it is');
     }
     for (const carry of [-1, 10, 12, NaN, 'x', null, [], {}, Infinity]) {          // damaged carry: reads as 0, the rest of the state is kept
@@ -1189,7 +1172,7 @@ const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot i
 
   await test('DENOMS legacy server (pull.on = false) at 1c: whole-cent price and rounded win, wallet balances to the cent', async () => {
     const s = setup({ rng: E.rngFrom(328), roundRng: E.rngFrom(329) }); const a = s.sock('ann'); rich(s, 'ann'); E.CFG.pull.on = false;
-    let bal = s.wallet.get('ann').play;
+    let bal = s.bal('ann', 'play');
     for (let i = 0; i < 400; i++) { const bet = SMALL[i % 3], buy = [null, 'call', 'bonus1', 'hunt', 'bonus2'][i % 5]; const r = spin(s, a, { bet, mode: 'play', buyBonus: buy }); assert.ok(!r.error, JSON.stringify(r.error));
       assert.strictEqual(r.cost, buy ? E.buyPrice(E.CFG.buyCost[buy], bet) : bet); assert.ok(Number.isInteger(r.totalWin) && r.totalWin <= E.MAX_WIN_X * bet); bal += -r.cost + r.totalWin; assert.strictEqual(r.wallet.play, bal); }
   });

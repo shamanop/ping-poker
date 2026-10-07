@@ -70,6 +70,8 @@ function createStore(file, opts = {}) {
       if (!validPot(p)) { p = data.pot[mode] = { bal: 0, fed: 0, paid: 0, rem: 0, last: null }; save(); }
       return p;
     },
+    // the pot record if there is one (never creates it): a game that never ran a pot leaves no pot in its file
+    peekPot(mode) { checkMode(mode); const p = data.pot[mode]; return validPot(p) ? p : null; },
     potChanged: save,
     // open rounds (a decision pending, or a Callback in flight)
     putOpen(rec) { checkMode(rec.mode); data.open[openKey(rec.key, rec.mode)] = rec; save(); },

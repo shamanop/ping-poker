@@ -106,6 +106,14 @@ function world(opts = {}) {
     return r;
   };
   w.rich = (key, cur = 'play') => w.fund(key, cur, 1e10);
+  // put money into the office pot through the ledger, the only way it gets there: a real round of a funded player whose whole stake is the pot feed (pool legs of ONE batch, house nets 0).
+  // The game's mirror of the pot (a record in its own file, never money) is refreshed so a test can read it at once.
+  w.seedPool = (cur, n) => {
+    cur = curOf(cur); const k = 'poolfeeder'; w.addKey(k); w.fund(k, cur, n);
+    w.money.round(k, cur, 'seed' + (++counter), { cost: n, pool: { name: 'office', feed: n } });
+    const p = SRV._pull.store.pot(cur); p.bal = w.pool(cur); p.fed += n; SRV._pull.store.potChanged();
+    return w.pool(cur);
+  };
   // set a balance to an exact number (a delta through the service)
   w.setBal = (key, cur, v) => { const d = v - w.bal(key, cur); if (d) w.fund(key, cur, d); return v; };
 
