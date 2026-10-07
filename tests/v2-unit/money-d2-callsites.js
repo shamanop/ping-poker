@@ -74,5 +74,53 @@ function seed(s) {
   led.close(); ref.close();
 }
 for (let s = 1; s <= SEEDS; s++) run.t('call sites vs brute force, seed ' + s, () => seed(s));
+
+// ---- fix2 E13: the expected answers come from the REAL a10735a service + port on the frozen ledger (fixtures/), same calls on both sides,
+// asked also with fromId AHEAD of lastId, with hand-made lines (two top-up legs in one line, seat->seat, a leg without a reason) ----
+const loadPre = (file, map) => {
+  const m = { exports: {} };
+  new Function('require', 'module', 'exports', fs.readFileSync(path.join(__dirname, 'fixtures', file), 'utf8'))((r) => map[r] || require(r), m, m.exports);
+  return m.exports;
+};
+const PreSvc = loadPre('service-pre-d2.js', { './ledger': Ref, './errors': require('../../tables/errors') });
+const PrePort = loadPre('money-port-pre-d2.js', { './errors': require('../../tables/errors') });
+function realOldSeed(s) {
+  const rng = mulberry32(s * 977 + 5);
+  const fo = path.join(root, 'ro' + s + '.jsonl'), fn = path.join(root, 'rn' + s + '.jsonl');
+  const o = { fsync: 'none', log: () => {}, window: rng.pick([1, 2, 3, 10]), ckpt: true, ckptEvery: rng.pick([0, 3]), ckptVerify: false };
+  let clock = 1e12; const clk = () => clock;
+  let A, B;
+  const open = () => {
+    const lo = Ref.open(fo, { fsync: 'none', log: () => {}, now: clk }), ln = New.open(fn, { ...o, now: clk });
+    const so = PreSvc.createService(lo, { now: clk }), sn = createService(ln, { now: clk });
+    A = { l: lo, s: so, p: PrePort.createMoneyPort({ service: so, ledger: lo, bootId: 'b', afterWrite: () => {}, onFence: () => {} }) };
+    B = { l: ln, s: sn, p: createMoneyPort({ service: sn, ledger: ln, bootId: 'b', afterWrite: () => {}, onFence: () => {} }) };
+  };
+  open();
+  const call = (fn) => { try { return JSON.stringify(fn()); } catch (e) { if (!e.code) throw e; return 'E:' + e.code; } };
+  const both = (what, fn) => eq(call(() => fn(B)), call(() => fn(A)), `seed ${s} ${what}`);
+  const tables = ['T', 'U', 'π'], keys = ['a', 'b', 'é'];
+  for (let i = 0; i < 90; i++) {
+    clock += 1000 * rng.range(0, 3000);
+    const t = rng.pick(tables), k = rng.pick(keys), k2 = rng.pick(keys), cur = rng.pick(['chips', 'play']), a = rng.range(1, 30), ref = 'x' + s + '.' + i, w = rng.int(14);
+    if (w < 2) both('ensure', X => X.s.ensureAccount(k));
+    else if (w < 5) both('buyIn', X => X.s.buyIn(k, t, a, cur, cur, ref));
+    else if (w < 7) both('cashOut', X => X.s.cashOut(k, t, a, cur, null, ref));
+    else if (w < 8) both('settle', X => X.s.settleHand(t, i, cur, { committed: { [k]: 2 }, payouts: { [k]: 2 } }));
+    else if (w < 9) both('topUp', X => X.s.topUp(k, ref));
+    else if (w < 10) both('two top-up legs in one line', X => X.l.batch([{ from: 'mint:topup', to: 'play:' + k, amount: a, cur: 'play' }, { from: 'mint:topup', to: 'play:' + k2, amount: a, cur: 'play' }], ref, 'topup'));
+    else if (w < 11) both('seat->seat', X => X.l.batch([{ from: `seat:${t}:${k}`, to: `seat:${t}:${k2}`, amount: 1, cur }], ref, 'cashout:' + cur));
+    else if (w < 12) { A.l.close(); if (rng.chance(0.5)) B.l.checkpoint(); B.l.close(); open(); }
+    for (const tb of tables) {
+      const last = A.l.lastId;
+      for (const from of [0, undefined, last, last + 3, rng.int(last + 1)]) both(`nightSummary ${tb} ${from}`, X => X.s.nightSummary(tb, { fromId: from }));
+      both('lastHandNo ' + tb, X => X.p.lastHandNo(tb));
+      for (const ky of keys) { both(`seatFund ${tb} ${ky}`, X => X.s.seatFund(tb, ky, 'chips')); both(`buyInCount ${tb} ${ky}`, X => [X.p.buyInCount({ id: tb }, ky, 0), X.p.buyInCount({ id: tb }, ky, last + 3)]); }
+    }
+    for (const ky of keys) both('topUpEligible ' + ky, X => X.s.topUpEligible(ky));
+  }
+  A.l.close(); B.l.close();
+}
+for (let s = 1; s <= Math.max(10, SEEDS / 3); s++) run.t('real a10735a service + port, same calls (also fromId ahead of lastId, two top-up legs in one line), seed ' + s, () => realOldSeed(s));
 fs.rmSync(root, { recursive: true, force: true });
 run.done();

@@ -86,5 +86,30 @@ t('E12 window 1: 2000 appends do 0 cold scans, one log line says the window was 
   eq(z.stats().inMemory, 30); z.close();
 });
 
+// ---- E13: the sidecar shape (N1, N2, N13) ----
+const lines = (f) => fs.readFileSync(f + '.ckpt', 'utf8').split('\n').filter(Boolean);
+const writeCk = (f, ls) => fs.writeFileSync(f + '.ckpt', ls.join('\n') + '\n');
+function mkCk(accounts = 20) {
+  const f = file(), l = OPEN(f); for (let i = 0; i < accounts; i++) l.transfer('mint:signup', 'bank:p' + i, 1 + (i % 9), 'chips', 'sign', 's' + i);
+  l.transfer('bank:p0', 'bank:p1', 1, 'chips', 'x', 'x1'); eq(l.checkpoint().ok, true); l.close(); return f;
+}
+const refused = (f, re, why) => { const r = OPEN(f); eq(r.stats().ckpt.used, false, why); eq(ignored(r).length, 1, why); ok(re.test(ignored(r)[0]), why + ': ' + ignored(r)[0]); eq(snap(r), fullOf(f), why); r.close(); };
+t('E13 N1: a sidecar line after its end line is refused', () => {
+  const f = mkCk(); let r = OPEN(f); eq(r.stats().ckpt.used, true, 'the untouched sidecar is believed'); r.close();
+  const ls = lines(f); eq(JSON.parse(ls[ls.length - 1])[0], 'end'); writeCk(f, [...ls, '["r",[]]']); refused(f, /wrong shape/, 'a line after the end line');
+});
+t('E13 N2: header counts are checked (balances of each currency, quarantined)', () => {
+  for (const key of ['nbc', 'nbp', 'nq']) {
+    const f = mkCk(); const ls = lines(f), h = JSON.parse(ls[0]); h[key] += 1; writeCk(f, [JSON.stringify(h), ...ls.slice(1)]); refused(f, /wrong shape \(counts\)/, key);
+  }
+});
+t('E13 N13: over 5,000 accounts the balances take two blocks: the sidecar is believed whole, and refused when the full block is missing', () => {
+  const f = mkCk(5001); const ls = lines(f);
+  const bc = ls.map((x, i) => [x, i]).filter(([x]) => x.startsWith('["bc"'));
+  eq(bc.length, 2, 'two balance blocks'); eq(JSON.parse(bc[0][0])[1].length, 10000, 'the first block is full (5000 pairs)');
+  let r = OPEN(f); eq(r.stats().ckpt.used, true, 'whole'); eq(snap(r), fullOf(f)); r.close();
+  writeCk(f, ls.filter((x, i) => i !== bc[0][1])); refused(f, /wrong shape \(counts\)/, 'the full block missing');
+});
+
 fs.rmSync(root, { recursive: true, force: true });
 run.done();
