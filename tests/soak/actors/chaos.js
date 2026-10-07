@@ -37,7 +37,7 @@ async function step(W, kind, sig) {
   if (kind === 'settle') {
     // a hand settles and the server dies before any client hears it: the clients' showdown_result is dropped on our side, then we kill the moment the line is in the ledger
     note = (await untilLive(W, 8000)) ? 'hand live' : 'no hand live';
-    await W.settlePoll();
+    await W.drain();
     W.checker.markKill();
     W.mute.showdown = true;
     const n0 = W.checker.lines.length, end = Date.now() + 10000;
@@ -53,7 +53,7 @@ async function step(W, kind, sig) {
   }
   if (kind === 'spinlost') {
     const bot = W.rng.pick(W.connectedBots()), mode = W.rng.chance(0.5) ? 'play' : 'chips', bet = W.rng.pick([1, 2, 10, 20, 50, 100]);
-    await W.settlePoll();
+    await W.drain();
     W.checker.markKill();
     W.mute.bender = true; W.mute.achv = true;
     W.inflightSpins.push({ key: bot.key, mode, bet, buy: null, cost: bet });
@@ -117,7 +117,7 @@ async function step(W, kind, sig) {
     const mode = W.rng.chance(0.5) ? 'play' : 'chips', buy = W.rng.chance(0.5) ? W.rng.pick(['bonus1', 'bonus2', 'call']) : null;
     const bet = slot.ops.pickBetFor(W, bot, mode, buy);
     if (!bet) return finish(W, kind, sig, 'nobody can afford a spin');
-    await W.settlePoll();
+    await W.drain();
     W.checker.markKill();
     W.mute.slot = true;
     W.slot.inflight.set(`${bot.key}|${mode}`, [{ key: bot.key, mode, bet, buy, force: null, cost: buy ? W.slot.buyPrice[bet][buy] : bet }]);
@@ -141,6 +141,7 @@ async function step(W, kind, sig) {
 }
 
 async function finish(W, kind, sig, note) {
+  W.log({ actor: 'chaos', what: 'kill-kind', kind, sig, note });
   try { await W.killAndRestart(sig, { marked: true }); } finally { W.mute.showdown = W.mute.bender = W.mute.achv = W.mute.slot = false; }
   return { actor: 'chaos', what: 'kill', kind, sig, note };
 }

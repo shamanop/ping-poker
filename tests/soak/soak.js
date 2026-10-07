@@ -236,6 +236,26 @@ async function main() {
 
   // ---------------- kill + restart + reconcile (the "unacked" rules) ----------------
   W.settlePoll = pollSettled;
+  // Wait until every result the ledger already holds has reached the model (a hand somebody was listening to, a Bender spin, an achievement, a slot round): a chaos kind that MUTES a result type for the
+  // moment of the kill must not mute the late arrival of a result whose line was written BEFORE the kill mark, or the line is neither acked nor "racing". Gives up after ms.
+  W._drainFrom = 0;
+  W.drain = async (ms = 600) => {
+    const end = Date.now() + ms;
+    for (;;) {
+      await pollSettled();
+      const C = W.checker, M = W.model;
+      let i = W._drainFrom, open = null;
+      for (; i < C.lines.length; i++) {
+        const L = C.lines[i], ref = L.ref || '';
+        if (L.hand) { if (L.listeners !== 0 && !M.hasHand(L.hand.tableId, L.hand.handNo)) { open = ref; break; } }
+        else if (ref.startsWith('bender:')) { if (!M.spins.has(ref)) { open = ref; break; } }
+        else if (L.slot && L.slot.suffix !== 'open') { const id = `${L.slot.key}:${L.slot.rid}`; if (!M.slot.rounds.has(id) && !M.slot.open.has(id)) { open = ref; break; } }
+      }
+      W._drainFrom = i;
+      if (!open || Date.now() > end) return !open;
+      await sleep(10);
+    }
+  };
   W.noteLiveHands = () => {
     W.killLive = new Map();
     for (const b of W.connectedBots()) if (b.tableId && b.gs && b.gs.status === 'playing') W.killLive.set(b.tableId, b.gs.handNum);
@@ -245,6 +265,7 @@ async function main() {
     W.noteLiveHands();
     if (!opts.marked || !W.checker.killMark) { await pollSettled(); W.checker.markKill(); }      // a chaos kind that bailed out early never marked: mark here, or nothing across the kill is classified
     W.counters.kills++; if (sig === 'SIGTERM') W.counters.sigterm++;
+    W.log({ actor: 'chaos', what: 'kill-start', sig, markedAt: W.checker.killMark.lines, ledgerLines: W.checker.lines.length, live: [...W.killLive.entries()].map(([t, n]) => `${t}:${n}`).join(',') });
     await W.ctl.kill(sig);
     await sleep(150);                                    // answers already on the wire still reach the clients (and the model)
     const sentSpins = W.inflightSpins.slice();           // spins sent whose answer never came
