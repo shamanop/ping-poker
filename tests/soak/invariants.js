@@ -174,6 +174,12 @@ class Checker {
 
   // ---------- derived ----------
   balance(cur, account) { return this.bal[cur].get(account) || 0; }
+  // what an account held just before ledger line idx (replayed from the file: only used on a rare path)
+  balanceBefore(cur, account, idx) {
+    let n = 0;
+    for (let i = 0; i < idx && i < this.lines.length; i++) for (const it of this.lines[i].items) if (it.cur === cur) { if (it.to === account) n += it.amount; if (it.from === account) n -= it.amount; }
+    return n;
+  }
   fundOfSeat(seatAcct, seatCur) { return this.buyFund.get(seatAcct) || seatCur; }
   opsOf(kind, tableId, key) { return this.opLines.get(`${kind}:${tableId}:${key}`) || []; }
   lineByRef(ref) { return this.refs.get(ref) || null; }
