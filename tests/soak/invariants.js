@@ -324,7 +324,7 @@ class Checker {
       const e = this.slotRounds.get(id) || {};
       const closeL = r.escrowed || r.callback ? e.close : e.instant;
       const wrongKind = r.escrowed || r.callback ? e.instant : (e.open || e.close);
-      if (wrongKind) { out.push({ id: 'I7', message: `round ${id} was told as ${r.escrowed || r.callback ? 'an escrowed / free round' : 'an instant round'} but the ledger has it the other way`, accounts: { ref: wrongKind.ref }, expected: r.escrowed ? 'open + close' : 'one batch', got: wrongKind.ref }); continue; }
+      if (wrongKind) { out.push({ id: 'I7', message: `round ${id} was told as ${r.escrowed || r.callback ? 'an escrowed / free round' : 'an instant round'} but the ledger has it the other way`, accounts: { ref: wrongKind.ref }, expected: r.escrowed ? 'open + close' : 'one batch', got: wrongKind.ref + ` (told: escrowed ${r.escrowed} callback ${r.callback} cost ${r.cost} via ${r.via} buy ${r.buy})` }); continue; }
       if (r.void) {
         if (r.cost > 0 && r.escrowed) {
           const s = closeL && closeL.slot;

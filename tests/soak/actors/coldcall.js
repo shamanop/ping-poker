@@ -12,7 +12,7 @@ const BUYS = ['call', 'bonus1', 'bonus2', 'hunt'];
 const FORCES = ['bonus1', 'bonus2', 'bonus3', 'phone', 'close', 'big', 'tease'];
 const ADMIN_TOKEN = 'soak-admin-token';
 // the live config the soak plays on: a Callback after a handful of spins, a pot that is fed 1.5% and hit often (the validator caps a hit at capCents x 3 <= oneInPerDollar x 5), decisions that default after 3 s, ONE MORE CALL offered from a 1x bonus up
-const SETUP_CFG = { pull: { list: 4, pot: { feedBps: 150, oneInPerDollar: 30, minBal: 20, capCents: 50 }, decision: { timeoutMs: 3000 }, more: { minTenths: 10 } } };
+const SETUP_CFG = { pull: { list: 2, pot: { feedBps: 150, oneInPerDollar: 30, minBal: 20, capCents: 50 }, decision: { timeoutMs: 3000 }, more: { minTenths: 10 } } };
 const k2 = (key, cur) => `${key}|${cur}`;
 const acct = (key, cur) => (cur === 'chips' ? 'bank:' : 'play:') + key;
 
@@ -111,7 +111,7 @@ function adoptClose(W, o, L, via) {
     W.model.applySlot({ key: o.key, cur: o.cur, rid: o.rid, cost: o.cost, win: 0, prize: 0, buy: o.buy, callback: o.callback, plain: false, escrowed: o.cost > 0, via, void: true, epoch: o.epoch });
   } else {
     if (s.spend !== o.cost) return `round ${id} was open with a stake of ${o.cost} and settled with a stake of ${s.spend}`;
-    W.model.applySlot({ key: o.key, cur: o.cur, rid: o.rid, cost: o.cost, win: s.credit, prize: s.prize, buy: o.buy, callback: o.callback, plain: o.plain, escrowed: o.cost > 0, via, void: false, epoch: o.epoch });
+    W.model.applySlot({ key: o.key, cur: o.cur, rid: o.rid, cost: o.cost, win: s.credit, prize: s.prize, buy: o.buy, callback: o.callback, plain: o.plain, escrowed: o.cost > 0 && s.suffix === 'close', via, void: false, epoch: o.epoch });
   }
   W.slot.c.unacked++;
   return null;
@@ -333,7 +333,7 @@ module.exports = {
     const S = W.slot, B = W.model.slot;
     const bots = W.connectedBots();
     if (!bots.length) return null;
-    const kind = W.rng.weighted([[36, 'plain'], [11, 'buy'], [8, 'forced'], [14, 'decide'], [5, 'ready'], [6, 'unaffordable'], [4, 'double'], [2, 'probe'], [3, 'cfg'], [4, 'poolrace'], [2, 'drop']]);
+    const kind = W.rng.weighted([[34, 'plain'], [16, 'buy'], [7, 'forced'], [14, 'decide'], [7, 'ready'], [5, 'unaffordable'], [4, 'double'], [2, 'probe'], [3, 'cfg'], [4, 'poolrace'], [3, 'drop']]);
     const mode = W.rng.chance(0.5) ? 'play' : 'chips';
     const open = [...B.open.values()].filter(o => bots.some(b => b.key === o.key));
     if (kind === 'decide' || kind === 'ready') {
@@ -396,7 +396,7 @@ module.exports = {
       for (const g of got) if (g.error) { S.c.errors++; if (g.error.code !== 'rate' && g.error.code !== 'funds' && g.error.code !== 'decision_open') W.warn('slot_error_' + g.error.code, g.error.message); else if (g.error.code === 'rate') S.c.rate++; else if (g.error.code === 'decision_open') S.c.busy++; }
       return { actor: 'coldcall', what: 'spin2', who: bot.key, mode, bet, answers: got.map(g => (g.error ? g.error.code : g.data.status)) };
     }
-    const buy = kind === 'buy' ? W.rng.pick(BUYS) : null;
+    const buy = kind === 'buy' ? W.rng.pick(['bonus1', 'bonus1', 'bonus1', 'bonus2', 'bonus2', 'call', 'hunt']) : null;
     const force = kind === 'forced' ? W.rng.pick(FORCES) : null;
     const bet = pickBet(W, bot, mode, buy);
     if (!bet) return null;
