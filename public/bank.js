@@ -13,6 +13,8 @@
   const startRef = () => (state.gameState && state.gameState.startChips) || 0;
 
   const $ = id => document.getElementById(id);
+  // one id per confirmed click: a resend of the same click carries the same id and the server writes nothing twice (admin_adjust / admin_set_play opId)
+  const newOpId = () => (window.crypto && crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + '.' + Math.random().toString(36).slice(2, 12));
   // Mode is per view: the Play $ view reads cents, the Chips view reads chips; pref decides $ vs chips for 'auto'.
   const bankMode = () => Money.modeFor(Money.pref, isPlay() ? 'cents' : 'chips');
   const fmt = n => Money.format(n, bankMode());
@@ -216,7 +218,7 @@
         if (amount === null) { field.submit(); return; } // stays open with the message; nothing is sent
         const shown = Number(b.dataset.bank) || 0, delta = amount - shown;
         if (state.socket && delta !== 0) {
-          state.socket.emit('admin_adjust', { key: name, delta, cur: 'chips', reason: 'bank panel edit' });
+          state.socket.emit('admin_adjust', { key: name, delta, cur: 'chips', reason: 'bank panel edit', opId: newOpId() });
           const row = data && data.players.find(p => p.name.toLowerCase() === name.toLowerCase());
           if (row) row.bank = amount;
         }

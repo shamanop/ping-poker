@@ -5,6 +5,8 @@
   const CORNERS = ['bl', 'br', 'tl', 'tr'];
   let fab = null, veil = null, tab = 'bank', overview = null, pollT = null, editing = null, tf = null, pendingBlinds = null;
   const $ = id => document.getElementById(id);
+  // one id per confirmed click: a resend of the same click carries the same id and the server writes nothing twice (admin_adjust / admin_set_play opId)
+  const newOpId = () => (window.crypto && crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + '.' + Math.random().toString(36).slice(2, 12));
   const sock = () => window.PingSocket || null;
   const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const isAdmin = () => { try { const u = window.Lobby && Lobby.user && Lobby.user(); return !!(u && u.isAdmin); } catch (e) { return false; } };
@@ -185,7 +187,7 @@
       editing = null; status('Saving');
       const delta = total - bankOf(a); // admin_adjust is a delta against the BANK balance shown in this row
       if (delta === 0) { status('No change', 'ok'); return; }
-      s.emit('admin_adjust', { key, delta, cur: 'chips', reason: 'admin console' });
+      s.emit('admin_adjust', { key, delta, cur: 'chips', reason: 'admin console', opId: newOpId() });
       pendingBal = { key, total };
       setTimeout(refresh, 350);
     } else if (act === 'play-ok') {
@@ -193,7 +195,7 @@
       if (cents === null) { editing.field.submit(); status('Enter Play $ from 0 to ' + Money.format(MAX_PLAY, editing.field.mode()), 'err'); return; }
       if (!window.confirm('Set ' + a.display + "'s Play $ to " + Money.format(cents, editing.field.mode()) + '?')) return;
       editing = null; status('Saving');
-      s.emit('admin_set_play', { key, cents });
+      s.emit('admin_set_play', { key, cents, opId: newOpId() });
       setTimeout(refresh, 350);
     } else if (act === 'pin-ok') {
       const pin = $('adm-edit').value;
