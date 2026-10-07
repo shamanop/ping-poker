@@ -318,11 +318,10 @@ function settle(rec, r, autoWhy, extraSocket) {
   if (wasOpen) dropOpen(rec);
   let potWon = null, flushErr = null;
   try {
-    if (plain && !closed) {                        // `rem` and `last` are game state; `fed` / `paid` are statistics and count only a batch this call wrote (never a dup)
-      const pot = store.pot(mode);
-      pot.rem = slice.rem;
-      if (!dup) pot.fed += slice.slice;
-      if (prize != null) { if (!dup) pot.paid += prize; pot.last = { who: rec.who, amount: prize, at: wonAt }; }
+    if (plain) {                                   // C3: the record and the pot's numbers leave the disk in ONE write, so a record that is still here (a dup, a round_closed) means the batch the ledger already holds was never counted:
+      const pot = store.pot(mode);                 // `rem` and the feed are the same for every batch of this round (same stored config, same rem), so they count on a dup AND on a round_closed;
+      pot.rem = slice.rem; pot.fed += slice.slice; // a prize is known only for a batch this call wrote or an identical one (dup): on a round_closed the roll may differ from the one that paid, so `paid` / `last` are not touched
+      if (prize != null && !closed) { pot.paid += prize; pot.last = { who: rec.who, amount: prize, at: wonAt }; }
       store.potChanged();
     }
     if (plain && prize != null && !closed) potWon = { won: true, amount: prize, who: rec.who };

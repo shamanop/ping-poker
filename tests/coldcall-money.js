@@ -508,6 +508,30 @@ function auditMatches(s) {
     assert.strictEqual(s.bal('ann', 'play'), before - cost + done[0].totalWin); assert.deepStrictEqual(s.escrows(), []); assert.ok(!diskHas(s), 'the record is dropped with the state');
   });
 
+  // C3: killed after the ledger call of a plain paid round, before the flush: the pot's numbers and the player's state after boot match what the ledger paid
+  const sc3 = (finalTake, firstRoll, bootRoll, poolSize = 7000) => {
+    const { seed } = toKind({ buy: null, bet: R1_BET, auto: false }, 'more'); let seq = [];
+    const s = setup({ rng: E.rngFrom(seed), roundRng: E.rngFrom(5), potRng: () => (seq.length ? seq.shift() : 1) }); const a = s.sock('ann'); s.seedPool('play', poolSize); E.CFG.pull.pot.capCents = 5000;
+    const r = answerTo(s, a, spin(s, a, { bet: R1_BET, mode: 'play' }), 'more'); assert.strictEqual(r.pending.k, 'more'); const id = r.roundId, pool0 = s.pool('play'), pot0 = clone(s.potOf('play')), st0 = clone(s.disk().players.ann ? s.disk().players.ann.play : E.newState());
+    s.hooks.after.settle = () => { throw new H.Crash(); }; seq = [firstRoll];
+    a.send('g:coldcall:decide', { roundId: id, k: 'more', take: finalTake });
+    const L = closeLines(s, id), feed = sum(L, 'coldcall:feed'), prize = sum(L, 'coldcall:prize'), win = sum(L, 'coldcall:credit'), bal = s.bal('ann', 'play'), id0 = s.lastId();
+    seq = [bootRoll]; s.reboot();
+    return { s, id, L, feed, prize, win, bal, id0, pool0, pot0, st0, pot: s.potOf('play'), st: s.store().player('ann', 'play') };
+  };
+  for (const [label, take, first, boot, kind, poolSize] of [['bank, the first roll hit, the boot roll hits too, and the pool is big enough that the capped prize is the same (dup)', false, 0, 0, 'dup', 20000], ['bank, the first roll hit, the boot roll hits too: the pool is drained, so its prize differs (round_closed)', false, 0, 0, 'closed'], ['bank, no prize either time (dup)', false, 1, 1, 'dup'], ['take, the first roll hit, the boot roll misses (round_closed)', true, 0, 1, 'closed'], ['bank, the first roll missed, the boot roll hits (round_closed, a prize that was never paid stays unpaid)', false, 1, 0, 'closed']]) {
+    await test(`C3: killed after the settle of a plain paid round (${label}): the ledger is paid once and not again, the pool is the ledger's, the pot's rem and fed count the batch${kind === 'dup' ? ', paid and last too (fed = paid + bal)' : ' (paid and last are left: the roll that paid is not known)'}, the player state advanced, no Callback, record gone`, async () => {
+      const x = sc3(take, first, boot, poolSize), { s, id, pot, st } = x;
+      assert.strictEqual(s.lastId(), x.id0, 'boot wrote no ledger line'); assert.strictEqual(new Set(closeLines(s, id).map((e) => e.id)).size, 1, 'one :close batch'); assert.strictEqual(s.bal('ann', 'play'), x.bal, 'the balance is what the first call made it');
+      assert.strictEqual(s.pool('play'), x.pool0 + x.feed - x.prize, 'the pool is the ledger\'s'); assert.strictEqual(pot.bal, s.pool('play'), 'the mirror follows it'); assert.ok(x.feed > 0, 'the batch fed the pot');
+      assert.strictEqual(pot.fed, x.pot0.fed + x.feed, 'fed counts the batch the ledger holds'); assert.strictEqual(pot.rem, E.potSlice(E.CFG.pull.pot.feedBps, R1_BET, x.pot0.rem).rem, 'rem advanced by this round');
+      if (kind === 'dup') { assert.strictEqual(pot.paid, x.pot0.paid + x.prize, 'paid counts the prize of the batch'); assert.strictEqual(pot.fed, pot.paid + pot.bal, 'fed = paid + bal'); if (first === 0) { assert.ok(x.prize > 0, 'the batch paid a prize'); assert.strictEqual(pot.last && pot.last.amount, x.prize, 'last is the prize the ledger paid'); } }
+      else assert.strictEqual(pot.paid, x.pot0.paid, 'paid is not touched on a round_closed');
+      assert.ok(st.rounds > (x.st0.rounds || 0), 'the player state advanced from the replay'); assert.strictEqual(s.store().allOpen().length, 0); assert.ok(!diskHas(s));
+      const id2 = s.lastId(); s.reboot(); assert.strictEqual(s.lastId(), id2, 'a second boot writes nothing'); assert.deepStrictEqual(s.potOf('play'), pot, 'and the pot does not move again');
+    });
+  }
+
 
   // ---------------------------------------------------------------- no wallet
   await test('NO WALLET: the slot\'s ctx has no wallet, and games/coldcall.js makes no wallet call and no direct ledger / service call', async () => {
