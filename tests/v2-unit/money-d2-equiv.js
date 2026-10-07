@@ -29,7 +29,7 @@ function runSeed(seed) {
   const window = rng.pick(WINDOWS), every = rng.pick(EVERY), verify = rng.chance(0.3);
   const nlog = L.logger();
   const now = () => 1000;
-  const optsN = { now, fsync: 'none', log: nlog, window, ckptEvery: every, ckptVerify: verify };
+  const optsN = { now, fsync: 'none', log: nlog, window, ckpt: true, ckptEvery: every, ckptVerify: verify };
   let R = Ref.open(fr, { now, fsync: 'none', log: () => {} }), N = New.open(fn, optsN);
   const tried = new Set();
   const history = [];                     // calls made so far (for dup / conflict re-issues)
@@ -100,7 +100,7 @@ function runSeed(seed) {
     const q = (f) => { try { return fs.readFileSync(f + '.quarantine', 'utf8'); } catch { return null; } };
     eq(q(fn), q(fr), at + ' quarantine file');
     const st = N.stats();
-    eq(st.lines, [...R.entries()].length === 0 ? 0 : st.lines, at + ' stats lines');
+    eq(st.lines, new Set([...R.entries()].map(e => e.id)).size, at + ' stats lines (applied lines of the frozen ledger)');
     ok(window === 0 || st.inMemory <= 2 * window, at + ` inMemory ${st.inMemory} > 2x${window}`);
     ok(window === 0 || st.inMemory >= Math.min(window, st.lines), at + ` inMemory ${st.inMemory} < window`);
   }

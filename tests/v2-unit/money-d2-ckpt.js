@@ -9,7 +9,7 @@ const root = L.mkdir('money-d2-ckpt-');
 let n = 0;
 const now = () => 1000;
 const mkDir = () => { const d = path.join(root, 'c' + (++n)); fs.mkdirSync(d); return d; };
-const OPEN = (f, o = {}) => { const log = L.logger(); const led = New.open(f, { now, fsync: 'none', log, window: 5, ckptEvery: 0, ckptVerify: false, ...o }); led.logs = log.lines; return led; };
+const OPEN = (f, o = {}) => { const log = L.logger(); const led = New.open(f, { now, fsync: 'none', log, window: 5, ckpt: true, ckptEvery: 0, ckptVerify: false, ...o }); led.logs = log.lines; return led; };
 
 // n lines of mixed transfers and batches (and a few refused calls), refs `${tag}<i>`
 function fill(led, from, to, tag = 'r') {
@@ -216,11 +216,12 @@ t('ckpt off (option and LEDGER_CKPT=0): nothing written, nothing read', () => {
   const keep = fs.readFileSync(f + '.ckpt');
   const l2 = openEqual(f, { ckpt: false }); eq(l2.stats().ckpt.used, false); eq(l2.checkpoint().ok, false); fill(l2, 40, 50, 'q'); l2.close();
   ok(fs.readFileSync(f + '.ckpt').equals(keep), 'the checkpoint file was touched'); ok(!fs.existsSync(f + '.ckpt.bad'));
-  process.env.LEDGER_CKPT = '0';
+  const keepEnv = process.env.LEDGER_CKPT; process.env.LEDGER_CKPT = '0';
   try {
-    const x = build(30); eq(x.led.checkpoint().ok, false); x.led.close(); ok(!fs.existsSync(x.f + '.ckpt'));
-    const y = OPEN(f, { ckptEvery: 1 }); fill(y, 50, 60, 'e'); y.close(); ok(fs.readFileSync(f + '.ckpt').equals(keep));
-  } finally { delete process.env.LEDGER_CKPT; }
+    const x = build(30, { ckpt: undefined }); eq(x.led.checkpoint().ok, false); x.led.close(); ok(!fs.existsSync(x.f + '.ckpt'));
+    const y = OPEN(f, { ckpt: undefined, ckptEvery: 1 }); fill(y, 50, 60, 'e'); y.close(); ok(fs.readFileSync(f + '.ckpt').equals(keep));
+    for (const off of ['false', 'off', 'no', 'OFF']) { process.env.LEDGER_CKPT = off; const z = OPEN(f, { ckpt: undefined }); eq(z.stats().ckpt.enabled, false, 'LEDGER_CKPT=' + off); z.close(); }   // E7
+  } finally { if (keepEnv == null) delete process.env.LEDGER_CKPT; else process.env.LEDGER_CKPT = keepEnv; }
 });
 
 t('ckptEvery: a checkpoint after every N appended lines, none by itself when 0', () => {

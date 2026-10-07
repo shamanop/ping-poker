@@ -4,7 +4,7 @@
 const { spawnSync } = require('child_process');
 const path = require('path');
 
-const FILES = ['money-ledger.js', 'money-service.js', 'money-rounds.js', 'migrate.js', 'money-d2-equiv.js', 'money-d2-ckpt.js', 'money-d2-misc.js', 'money-d2-callsites.js'];
+const FILES = ['money-ledger.js', 'money-service.js', 'money-rounds.js', 'migrate.js', 'money-d2-equiv.js', 'money-d2-ckpt.js', 'money-d2-misc.js', 'money-d2-callsites.js', 'money-d2-fix1.js'];
 let failed = 0, passed = 0, total = 0;
 for (const f of FILES) {
   const r = spawnSync(process.execPath, [path.join(__dirname, f)], { encoding: 'utf8' });
