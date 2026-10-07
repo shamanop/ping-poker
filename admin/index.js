@@ -29,15 +29,20 @@ function createAdmin({ service, ledger, accounts, registry, views, onlineKeys })
     catch (e) { if (e && e.name === 'MoneyError') return { ok: false, code: e.code === 'insufficient' ? 'insufficient' : e.code }; throw e; }
   }
 
-  // "Set wallet to X": one wallet delta, never table money. With an op id that the ledger already holds the answer is the first one (ok, dup) whatever the balance is now.
+  // "Set wallet to X": one wallet delta, never table money. The ledger reason carries the target, so the request is in the line: with an op id the ledger already
+  // holds, the same request (same target) is the first answer (ok, dup) whatever the balance is now; any other edit under that op id (another kind, another target) is ref_conflict.
   function setPlay(key, cents, opId) {
     if (!key || !accounts.get(key)) return { ok: false, code: 'unknown_player' };
     if (!isInt(cents) || cents < 0 || cents > MAX_PLAY) return { ok: false, code: 'range' };
     if (!validOp(opId)) return { ok: false, code: 'bad_op' };
-    if (opId != null && ledger.has(refOf(key, opId))) return { ok: true, dup: true };
+    const reason = `admin set play to ${cents}`;
+    if (opId != null && ledger.has(refOf(key, opId))) {
+      const held = ledger.entries((e) => e.ref === refOf(key, opId)).next().value;
+      return held && held.cur === 'play' && held.reason === 'admin:' + reason ? { ok: true, dup: true } : { ok: false, code: 'ref_conflict' };
+    }
     const delta = cents - playOf(key);
     if (delta === 0) return { ok: true, noop: true };
-    return adjust(key, delta, 'play', 'admin set play', opId);
+    return adjust(key, delta, 'play', reason, opId);
   }
 
   function overview() {

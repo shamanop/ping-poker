@@ -23,8 +23,8 @@ let n = 0;
 function env() {
   const ledger = open(path.join(dir, 'm' + (++n) + '.jsonl'), { fsync: 'none', log: () => {} });
   const service = createService(ledger);
-  service.ensureAccount('ann');
-  const accounts = { get: (k) => (k === 'ann' ? { key: 'ann' } : null), keyOf: (s) => String(s).toLowerCase().trim(), displayOf: (k) => k, all: () => ({}) };
+  service.ensureAccount('ann'); service.ensureAccount('bob');
+  const accounts = { get: (k) => (k === 'ann' || k === 'bob' ? { key: k } : null), keyOf: (s) => String(s).toLowerCase().trim(), displayOf: (k) => k, all: () => ({}) };
   const adm = createAdmin({ service, ledger, accounts, registry: { tables: new Map() }, views: {}, onlineKeys: () => new Set() });
   const hand = [], touched = [], handlers = {}, sent = [];
   const socket = { emit: (ev, p) => sent.push([ev, p]) };
@@ -102,6 +102,38 @@ t('A4: admin_set_play without an op id works as before', () => {
   const a = e.send('admin_set_play', { key: 'ann', cents: 4321 });
   eq(a, { op: 'set_play', key: 'ann', ok: true, message: 'Play set' }); eq(e.play(), 4321);
   e.send('admin_set_play', { key: 'ann', cents: 4321 }); eq(e.adjLines().length, 1, 'setting the same value again is a noop, as before');
+});
+
+// ---- P6 W3b fix round 2 ----
+t('D7: admin_set_play with an op id the ledger holds for ANOTHER edit is refused (ref_conflict), never answered "Play set": a chips adjust, another target, and the other order', () => {
+  const e = env(); const p0 = e.play();
+  e.send('admin_adjust', { key: 'ann', delta: 500, cur: 'chips', reason: 'admin console', opId: 'X1' });
+  const a = e.send('admin_set_play', { key: 'ann', cents: 5, opId: 'X1' });
+  eq([a.ok, a.code], [false, 'ref_conflict'], 'a chips edit under that op id'); eq(e.play(), p0, 'nothing set'); eq(e.adjLines().length, 1);
+  const f = env();
+  eq(f.send('admin_set_play', { key: 'ann', cents: 500, opId: 'X2' }).ok, true);
+  const b = f.send('admin_set_play', { key: 'ann', cents: 900, opId: 'X2' });
+  eq([b.ok, b.code], [false, 'ref_conflict'], 'another target'); eq(f.play(), 500, 'still the first target'); eq(f.adjLines().length, 1);
+  const h = env(); h.send('admin_set_play', { key: 'ann', cents: 500, opId: 'X4' });
+  const d = h.send('admin_adjust', { key: 'ann', delta: 700, cur: 'chips', reason: 'admin console', opId: 'X4' });
+  eq([d.ok, d.code], [false, 'ref_conflict'], 'the other order'); eq(h.adjLines().length, 1);
+});
+
+t('D7: the same op id with the SAME request is still an ok dup (even when the balance moved), the target is what makes it the same request', () => {
+  const e = env(); const a = e.send('admin_set_play', { key: 'ann', cents: 500, opId: 'Y1' }); eq(a.ok, true);
+  e.service.adminAdjust('ann', 250, 'play', 'won something', 'test:other');
+  const b = e.send('admin_set_play', { key: 'ann', cents: 500, opId: 'Y1' });
+  eq(b, a, 'same answer'); eq(e.play(), 750, 'not set again'); eq(e.adjLines().length, 2);
+});
+
+t('D5: the op id names the edit of ONE player: the same op id on two players writes both (refs carry the key)', () => {
+  const e = env(); const b0 = e.ledger.balance('bank:bob', 'chips');
+  const a = e.send('admin_adjust', { key: 'ann', delta: 500, cur: 'chips', reason: 'admin console', opId: 'X4' });
+  const b = e.send('admin_adjust', { key: 'bob', delta: 500, cur: 'chips', reason: 'admin console', opId: 'X4' });
+  eq([a.ok, a.dup, b.ok, b.dup], [true, undefined, true, undefined]); eq(e.ledger.balance('bank:bob', 'chips'), b0 + 500, 'bob moved');
+  eq(e.adjLines().map((x) => x.ref), ['adj:ann:c.X4', 'adj:bob:c.X4']);
+  const c = e.send('admin_set_play', { key: 'bob', cents: 123, opId: 'X5' }), d = e.send('admin_set_play', { key: 'ann', cents: 123, opId: 'X5' });
+  eq([c.ok, d.ok], [true, true]); eq([e.ledger.balance('play:bob', 'play'), e.play()], [123, 123]);
 });
 
 console.log(`${pass} passed, ${fail} failed`);
