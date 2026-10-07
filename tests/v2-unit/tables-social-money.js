@@ -96,6 +96,66 @@ t('A2: a normal claim still pays once, answers ok, and a second claim the same d
   eq(w.mints('bonus').length, 1); eq(w.accounts.social(key).bonus, { last: w.today(), streak: 1 });
 });
 
+// ---- P6 W3b fix round 2: D1 / D2, a crash between the bonus mint and the account record leaves the player what an uncrashed claim gives ----
+const DAY = 86400000;
+const day7 = (w, key) => ((w.accounts.social(key).achv || {}).c || {}).day7 || 0;
+const fullWeek = (w, key) => w.social.achvView(key).list.find((x) => x.id === 'day7').done;
+// claims on days 1..n (one a day). crashOn = the day whose claim dies after the mint (the mint is written, the record is not), then boot. Returns the world and the socket.
+function claimsTo(n, crashOn) {
+  const w = world(), key = w.signup('Ann'); let s = w.sock(key);
+  for (let d = 1; d <= n; d++) {
+    if (d === crashOn) { w.accounts.flush(); const i = w.social.bonusInfo(key); w.service.mint('bonus', key, i.amountCents, 'play', `bonus:${key}:${w.today()}`); w.boot(); s = w.sock(key); }
+    else s.fire('bonus:claim');
+    if (d < n) w.clock += DAY;
+  }
+  return { w, key, s };
+}
+const state = (w, key) => ({ bal: w.play(key), bonus: w.accounts.social(key).bonus, day7: day7(w, key), full: fullWeek(w, key), bonusMints: w.mints('bonus').length, achvMints: w.mints('achv').filter((e) => e.ref === `achv:${key}:day7`).length });
+
+t('D1: the day-7 claim dies after the mint (record unwritten), restart, the player asks: claimed, no second payment, and the day7 counter, Full Week and its reward are exactly what an uncrashed day 7 gives', () => {
+  const c = claimsTo(7), ctl = state(c.w, c.key);
+  eq([ctl.day7, ctl.full, ctl.achvMints], [1, true, 1], 'the control unlocked Full Week');
+  const x = claimsTo(7, 7); x.s.fire('bonus:status'); x.s.fire('bonus:claim');
+  eq(x.s.last('bonus:claimed'), { ok: false, code: 'claimed' }, 'claimed, nothing paid again');
+  eq(state(x.w, x.key), ctl, 'the player holds what an uncrashed claim gives');
+  eq(x.s.all('achv:unlocked').filter((a) => a.id === 'day7').length, 1, 'Full Week is announced');
+  x.w.boot(); const s2 = x.w.sock(x.key); s2.fire('bonus:claim'); x.w.social.checkAchv(x.key); eq(state(x.w, x.key), ctl, 'a second restart and claim change nothing');
+});
+
+t('D1: the claim\'s record write carries the day7 counter in the SAME write (a crash cannot leave the day recorded and the counter not)', () => {
+  const w = world(), key = w.signup('Ann'); const s = w.sock(key);
+  for (let d = 1; d <= 6; d++) { s.fire('bonus:claim'); w.clock += DAY; }
+  const real = w.accounts.social, writes = [];
+  w.accounts.social = (k, fn) => { if (fn) { const probe = { achv: { u: {}, c: { day7: 0 } } }; fn(probe); if (probe.bonus) writes.push([probe.bonus.streak, probe.achv.c.day7]); } return real(k, fn); };
+  s.fire('bonus:claim');
+  eq(writes, [[7, 1]], 'one write: streak 7 and day7 counter 1 together');
+});
+
+for (const [n, label] of [[3, 'a day-3 claim'], [6, 'a day-6 claim']]) {
+  t(`D2: ${label} dies after the mint (record unwritten) and nobody asks for the status that day: the next day the streak is carried on (day ${n + 1}), as an uncrashed claim, and the next claim pays once`, () => {
+    const c = claimsTo(n); c.w.clock += DAY; c.s.fire('bonus:status'); const ctl = c.s.last('bonus:status'); c.s.fire('bonus:claim');
+    const ctlState = state(c.w, c.key);
+    const x = claimsTo(n, n); x.w.clock += DAY;                                    // the player comes back the next day only
+    x.s.fire('bonus:status'); const st = x.s.last('bonus:status');
+    eq([st.available, st.streak, st.day, st.amountCents], [ctl.available, n + 1, n + 1, ctl.amountCents], 'the status continues the streak');
+    x.s.fire('bonus:claim'); eq(x.s.last('bonus:claimed').amountCents, c.s.last('bonus:claimed').amountCents);
+    eq(state(x.w, x.key), ctlState, 'balance, record, counter and mints equal the uncrashed run'); eq(state(x.w, x.key).bonusMints, n + 1);
+    x.s.fire('bonus:claim'); eq(x.s.last('bonus:claimed'), { ok: false, code: 'claimed' }); eq(state(x.w, x.key), ctlState, 'no second payment');
+  });
+}
+
+t('D2: the same crash and the player comes back two days later (the streak broke in both runs): day 1 again, equal to the uncrashed run, the lost mint is recorded, nothing paid twice', () => {
+  const c = claimsTo(3); c.w.clock += 2 * DAY; c.s.fire('bonus:claim'); const ctl = state(c.w, c.key);
+  const x = claimsTo(3, 3); x.w.clock += 2 * DAY; x.s.fire('bonus:claim');
+  eq(x.s.last('bonus:claimed').streak, 1); eq(state(x.w, x.key), ctl);
+});
+
+t('D2: the crash on day 6, the player comes back on day 7 and is asked nothing before: Full Week is paid at day 7 as in the uncrashed run (100000 for the claim, the achievement once)', () => {
+  const c = claimsTo(6); c.w.clock += DAY; c.s.fire('bonus:claim'); const ctl = state(c.w, c.key);
+  const x = claimsTo(6, 6); x.w.clock += DAY; x.s.fire('bonus:claim');
+  eq(x.s.last('bonus:claimed').amountCents, 100000); eq(state(x.w, x.key), ctl); eq([ctl.day7, ctl.full, ctl.achvMints], [1, true, 1]);
+});
+
 // ---- A3: achievements ----
 t('A3: the reward mint is in the ledger but the account has no flag (crash): no second achv:unlocked, no second mint, the view shows it unlocked', () => {
   const w = world(); const key = w.signup('Dee');

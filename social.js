@@ -227,20 +227,36 @@ function createSocial({ io, accounts, now = Date.now, file = null } = {}) {
   }
 
   const dayInCycle = (streak) => ((Math.max(1, streak) - 1) % BONUS_DAYS.length) + 1;
+  const dayStr = (n) => new Date(n * 86400000).toISOString().slice(0, 10);
+  const MEND_DAYS = 400;
+  // The account record of ONE claim, one write: the claim (last day + streak) and, on day 7 of the cycle, the day7 counter of the Full Week achievement.
+  // Both land in the same file write, so no crash can leave the claim recorded and the counter not.
+  const claimRecord = (day, streak) => (rec) => {
+    rec.bonus = { last: day, streak };
+    if (dayInCycle(streak) === 7) { const x = counters(rec); x.c.day7 = (x.c.day7 || 0) + 1; }
+  };
   function bonusInfo(key) {
     const rec = accounts.social(key) || {};
-    const b = rec.bonus || { last: null, streak: 0 };
+    let b = rec.bonus || { last: null, streak: 0 };
     const today = dayOf(now());
-    const gap = b.last ? dayNum(today) - dayNum(b.last) : Infinity;
+    const todayN = dayNum(today);
+    // A mint (bonus:<key>:<day>) in the ledger that the account record lacks (a crash between the two writes) is a claim that happened: the ledger is the truth.
+    // Look for the LATEST such day after the recorded one (not only today: the player may come back on a later day), count it exactly as the claim would have
+    // (streak carried from the record, day 7 counter), and write the record. A claim always runs this first, so at most one mint is ever unrecorded.
+    const from = b.last ? dayNum(b.last) + 1 : todayN - 1;
+    for (let n = todayN; n >= Math.max(from, todayN - MEND_DAYS); n--) {
+      const d = dayStr(n);
+      if (!paid('bonus', key, d)) continue;
+      const streak = b.last && n - dayNum(b.last) === 1 ? b.streak + 1 : 1;
+      accounts.social(key, claimRecord(d, streak));
+      b = { last: d, streak };
+      checkAchv(key);
+      break;
+    }
+    const gap = b.last ? todayN - dayNum(b.last) : Infinity;
     const available = gap >= 1;
     const streak = available ? (gap === 1 ? b.streak + 1 : 1) : b.streak;
     const day = dayInCycle(streak);
-    if (available && paid('bonus', key, today)) {
-      // Today's mint (bonus:<key>:<day>) is in the ledger but accounts.json is one write behind (a crash between the two): the ledger says claimed.
-      // `streak` above is what that claim counted (the stale record is the pre-claim one), so mend the record with it and count nothing twice.
-      accounts.social(key, (rec) => { rec.bonus = { last: today, streak }; });
-      return { available: false, streak, day, amountCents: BONUS_DAYS[day - 1], today };
-    }
     return { available, streak, day, amountCents: BONUS_DAYS[day - 1], today };
   }
   const bonusView = (i) => ({ available: i.available, amountCents: i.amountCents, streak: i.streak, day: i.day, schedule: BONUS_DAYS });
@@ -248,11 +264,11 @@ function createSocial({ io, accounts, now = Date.now, file = null } = {}) {
   function claimBonus(key) {
     const info = bonusInfo(key);
     if (!info.available) return { ok: false, code: 'claimed', ...info };
-    // Ledger first: the mint (ref bonus:<key>:<day>) pays once and is what bonusInfo reads; the account record follows. A credit that throws wrote nothing, so there is nothing to undo.
+    // Ledger first: the mint (ref bonus:<key>:<day>) pays once and is what bonusInfo reads; the account record follows (claim and day 7 counter in one write). A credit that throws wrote nothing, so there is nothing to undo.
     wallet.credit(key, 'play', info.amountCents, { game: 'bonus', round: info.today });
-    accounts.social(key, (rec) => { rec.bonus = { last: info.today, streak: info.streak }; });
+    accounts.social(key, claimRecord(info.today, info.streak));
     pushFeed('bonus', key, { day: info.day, streak: info.streak });
-    if (info.day === 7) bump(key, 'day7'); else checkAchv(key);
+    checkAchv(key);
     return { ok: true, available: false, streak: info.streak, day: info.day, amountCents: info.amountCents };
   }
 
