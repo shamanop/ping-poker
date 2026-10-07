@@ -1,0 +1,1480 @@
+{
+ "started": "2026-10-07T06:13:50.992Z",
+ "extras": {
+  "1": {
+   "id": "1",
+   "status": "done: pass",
+   "checks": [
+    {
+     "name": "exactly one close line group for that round id (refs coldcall:w3bxxpp8f499:66d9e313dc0b:close)",
+     "pass": true,
+     "got": [
+      "coldcall:w3bxxpp8f499:66d9e313dc0b:close"
+     ]
+    },
+    {
+     "name": "balance = before 1010000 - spent 964 + credited 368",
+     "pass": true,
+     "got": {
+      "after": 1009404,
+      "before": 1010000,
+      "spent": 964,
+      "credits": 368
+     }
+    },
+    {
+     "name": "no escrow account non-zero",
+     "pass": true,
+     "got": []
+    },
+    {
+     "name": "board free after reload (not busy, no prompt, no scrim)",
+     "pass": true,
+     "got": {
+      "live": true,
+      "kind": "bridge",
+      "mode": "play",
+      "busy": false,
+      "bal": "$10,094.04",
+      "spinLabel": "SPIN",
+      "rounds": 0,
+      "prompt": null,
+      "scrims": 0,
+      "mismatch": [],
+      "aborted": 0,
+      "error": null,
+      "bet": 100,
+      "bets": [
+       1,
+       2,
+       5,
+       10,
+       20,
+       50,
+       100,
+       200,
+       500,
+       1000,
+       2500
+      ]
+     }
+    },
+    {
+     "name": "meter on screen = ledger balance",
+     "pass": true,
+     "got": {
+      "meter": "$10,094.04",
+      "ledger": 1009404
+     }
+    },
+    {
+     "name": "the next SPIN plays (one more ledger round)",
+     "pass": true,
+     "got": [
+      "66d9e313dc0b",
+      "3c222a74b58d"
+     ]
+    }
+   ],
+   "notes": [
+    "decision up: pick for round 66d9e313dc0b, ledger lines so far [\"coldcall:open:964\"]",
+    "server pid killed (SIGKILL) while the pick prompt was up",
+    "boot: game recovery: bender 0 open/0 by game/0 kept, coldcall 1 open/1 by game/0 kept, 0 escrows voided",
+    "ledger lines for the round: [[\"coldcall:w3bxxpp8f499:66d9e313dc0b:open\",\"coldcall:open\",\"play:w3bxxpp8f499\",\"escrow:coldcall:w3bxxpp8f499:66d9e313dc0b\",964],[\"coldcall:w3bxxpp8f499:66d9e313dc0b:close\",\"coldcall:spend\",\"escrow:coldcall:w3bxxpp8f499:66d9e313dc0b\",\"house:coldcall\",964],[\"coldcall:w3bxxpp8f499:66d9e313dc0b:close\",\"coldcall:credit\",\"house:coldcall\",\"play:w3bxxpp8f499\",368]]"
+   ]
+  },
+  "2": {
+   "id": "2",
+   "status": "done: pass",
+   "checks": [
+    {
+     "name": "balance is now below the cost of a $25 spin",
+     "pass": true,
+     "got": 1750
+    },
+    {
+     "name": "(a) client refuses: a funds toast, no spin sent to the server",
+     "pass": true,
+     "got": {
+      "tp": [
+       "Not enough funds. Lower your bet."
+      ],
+      "em": 0
+     }
+    },
+    {
+     "name": "(b) server refuses with code funds",
+     "pass": true,
+     "got": [
+      {
+       "message": "Not enough Play $",
+       "code": "funds",
+       "game": "coldcall"
+      }
+     ]
+    },
+    {
+     "name": "nothing in the ledger (no new line, no new round), balance unchanged",
+     "pass": true,
+     "got": {
+      "lines": 0,
+      "bal": 1750,
+      "before": 1750
+     }
+    },
+    {
+     "name": "board free (not busy, no prompt, no scrim, SPIN clickable)",
+     "pass": true,
+     "got": {
+      "live": true,
+      "kind": "bridge",
+      "mode": "play",
+      "busy": false,
+      "bal": "$17.50",
+      "spinLabel": "SPIN",
+      "rounds": 0,
+      "prompt": null,
+      "scrims": 0,
+      "mismatch": [],
+      "aborted": 0,
+      "error": null,
+      "bet": 2500,
+      "bets": [
+       1,
+       2,
+       5,
+       10,
+       20,
+       50,
+       100,
+       200,
+       500,
+       1000,
+       2500
+      ]
+     }
+    },
+    {
+     "name": "a $0.01 spin still plays after the refusal",
+     "pass": true,
+     "got": 177
+    }
+   ],
+   "notes": [
+    "drained by 176 direct spins at $25 (buys while rich) to 1750 cents",
+    "(a) real click, bet $25 above balance: toasts [\"Not enough funds. Lower your bet.\"], spin emits 0",
+    "(b) server answer: [{\"code\":\"funds\",\"message\":\"Not enough Play $\"}]"
+   ]
+  },
+  "3": {
+   "id": "3",
+   "status": "done: pass",
+   "checks": [
+    {
+     "name": "no second open round, no second spend: ledger rounds 1 (before 1)",
+     "pass": true,
+     "got": {
+      "ids": 1,
+      "lines": 0
+     }
+    },
+    {
+     "name": "stale decide: server answers round_closed or no_round (answer recorded in staleDecideErrors), no ledger line, balance unchanged",
+     "pass": true,
+     "got": {
+      "es": [
+       "no_round"
+      ],
+      "lines": 0
+     }
+    },
+    {
+     "name": "stale decide: tab 1 stays unlocked and shows the ledger balance",
+     "pass": true,
+     "got": {
+      "busy": false,
+      "prompt": null,
+      "bal": "$10,103.09",
+      "ledger": 1010309
+     }
+    },
+    {
+     "name": "one close for the round (refs coldcall:w3bxxprrzj76:ea564f1d20b8:close)",
+     "pass": true,
+     "got": [
+      "coldcall:w3bxxprrzj76:ea564f1d20b8:close"
+     ]
+    },
+    {
+     "name": "no double pay: balance 1010309 = before 1010000 - spent 964 + credited 1273",
+     "pass": true,
+     "got": {
+      "after": 1010309,
+      "before": 1010000,
+      "spent": 964,
+      "credits": 1273
+     }
+    },
+    {
+     "name": "tab 1 unlocked and its meter = ledger",
+     "pass": true,
+     "got": {
+      "f1": [
+       false,
+       null,
+       0,
+       "$10,103.09"
+      ],
+      "after": 1010309
+     }
+    },
+    {
+     "name": "tab 2 unlocked and its meter = ledger within 25 s of the round closing (it was opened while the decision was open in tab 1)",
+     "pass": true,
+     "got": {
+      "busy": false,
+      "prompt": null,
+      "bal": "$10,103.09",
+      "ledger": 1010309,
+      "spinLabel": "SPIN",
+      "error": null,
+      "rounds": 1,
+      "shellPlate": "$10,103.09"
+     }
+    },
+    {
+     "name": "no escrow non-zero",
+     "pass": true,
+     "got": []
+    }
+   ],
+   "notes": [
+    "tab 1: pick open, round ea564f1d20b8, spent 964",
+    "tab 2 after opening the slot: {\"prompt\":null,\"busy\":true,\"bal\":\"$10,090.36\",\"rounds\":1}",
+    "tab 2 SPIN while tab 1 has a decision open: toasts [] errors []",
+    "round decided by direct socket on the account (tab 2 shows no prompt)",
+    "tab 1 after the other screen decided: {\"prompt\":null,\"busy\":true,\"bal\":\"$10,090.36\"}",
+    "tab 1 late decision clicked: false; errors []",
+    "stale decide emitted from tab 1 (socket, not a click): errors [\"no_round\"], tab 1 state {\"busy\":false,\"prompt\":null,\"bal\":\"$10,103.09\"}"
+   ],
+   "staleDecideErrors": [
+    "no_round"
+   ],
+   "tab2": {
+    "busy": false,
+    "prompt": null,
+    "bal": "$10,103.09",
+    "ledger": 1010309,
+    "spinLabel": "SPIN",
+    "error": null,
+    "rounds": 1,
+    "shellPlate": "$10,103.09"
+   }
+  },
+  "4": {
+   "id": "4",
+   "status": "done: pass",
+   "checks": [
+    {
+     "name": "AUTO is on after the click",
+     "pass": true,
+     "got": true
+    },
+    {
+     "name": "at least 10 rounds ran and AUTO stopped (not busy, auto off)",
+     "pass": true,
+     "got": {
+      "rounds": 10
+     }
+    },
+    {
+     "name": "server rounds = screen rounds",
+     "pass": true,
+     "got": {
+      "server": 10,
+      "screen": 10
+     }
+    },
+    {
+     "name": "money equation per round from the ledger (net of ledger lines = win - cost), all 10 rounds",
+     "pass": true,
+     "got": []
+    },
+    {
+     "name": "balance before 1010000 + sum of round nets = after 1010078",
+     "pass": true,
+     "got": {
+      "run_": 1010078,
+      "after": 1010078
+     }
+    },
+    {
+     "name": "meter = ledger",
+     "pass": true,
+     "got": {
+      "meter": "$10,100.78",
+      "after": 1010078
+     }
+    },
+    {
+     "name": "no escrow non-zero",
+     "pass": true,
+     "got": []
+    }
+   ],
+   "notes": [
+    "autoplay: screen rounds 10, server done rounds 10, cost 100, win 178, pot 0"
+   ],
+   "perRound": [
+    {
+     "id": "05928d29cccf",
+     "cost": 10,
+     "win": 0,
+     "net": -10,
+     "want": -10,
+     "auto": null
+    },
+    {
+     "id": "ca116820c9c5",
+     "cost": 10,
+     "win": 0,
+     "net": -10,
+     "want": -10,
+     "auto": null
+    },
+    {
+     "id": "1461605e5694",
+     "cost": 10,
+     "win": 0,
+     "net": -10,
+     "want": -10,
+     "auto": null
+    },
+    {
+     "id": "6e9fbb8239f2",
+     "cost": 10,
+     "win": 10,
+     "net": 0,
+     "want": 0,
+     "auto": null
+    },
+    {
+     "id": "3511f1254c0f",
+     "cost": 10,
+     "win": 13,
+     "net": 3,
+     "want": 3,
+     "auto": null
+    },
+    {
+     "id": "08c12d89f030",
+     "cost": 10,
+     "win": 0,
+     "net": -10,
+     "want": -10,
+     "auto": null
+    },
+    {
+     "id": "c7f599c6d8a5",
+     "cost": 10,
+     "win": 0,
+     "net": -10,
+     "want": -10,
+     "auto": null
+    },
+    {
+     "id": "9fac0a8df291",
+     "cost": 10,
+     "win": 3,
+     "net": -7,
+     "want": -7,
+     "auto": null
+    },
+    {
+     "id": "2f136db46be8",
+     "cost": 10,
+     "win": 152,
+     "net": 142,
+     "want": 142,
+     "auto": null
+    },
+    {
+     "id": "8e569744204d",
+     "cost": 10,
+     "win": 0,
+     "net": -10,
+     "want": -10,
+     "auto": null
+    }
+   ]
+  },
+  "5": {
+   "id": "5",
+   "status": "done: pass",
+   "checks": [
+    {
+     "name": "office pot win in the browser: not reached",
+     "pass": true
+    }
+   ],
+   "notes": [
+    "not reached: no force or small config reaches the office pot in under 5 minutes. Engine pot config: null"
+   ],
+   "reached": false
+  },
+  "u17": {
+   "id": "u17",
+   "status": "done: pass",
+   "checks": [
+    {
+     "name": "U17: at least one lost ONE MORE CALL was reached",
+     "pass": true,
+     "got": 7
+    }
+   ],
+   "notes": [
+    "U17 verdict: real, visible (see sightings) over 7 ONE MORE CALL attempts; lost-flag shape of pull.more: {\"W\":3671,\"mult\":2,\"pWin\":0.5,\"take\":true,\"won\":true,\"auto\":false}",
+    "U17 sightings: {\"total\":32,\"inWarm\":7,\"notInWarm\":25,\"afterTakeOnLost\":0,\"lostAttempts\":2}"
+   ],
+   "attempts": [
+    {
+     "a": 0,
+     "sightings": [
+      {
+       "t": 370,
+       "inWarm": true,
+       "display": "grid",
+       "visibility": "visible",
+       "opacity": 0.02,
+       "box": [
+        0,
+        0,
+        540,
+        960
+       ],
+       "chain": "tier<ccwarm<BODY<HTML",
+       "ariaHidden": true
+      },
+      {
+       "t": 36840,
+       "inWarm": false,
+       "display": "grid",
+       "visibility": "visible",
+       "opacity": 1,
+       "box": [
+        54,
+        0,
+        430,
+        764
+       ],
+       "chain": "tier<ov<stage<app<BODY",
+       "ariaHidden": false
+      }
+     ],
+     "takeAtMs": 33108,
+     "sightingsAfterTake": [
+      {
+       "t": 36840,
+       "inWarm": false,
+       "display": "grid",
+       "visibility": "visible",
+       "opacity": 1,
+       "box": [
+        54,
+        0,
+        430,
+        764
+       ],
+       "chain": "tier<ov<stage<app<BODY",
+       "ariaHidden": false
+      }
+     ],
+     "buy": "bonus1",
+     "tookMore": true,
+     "tier": "legend",
+     "totalWin": 3670,
+     "more": {
+      "W": 3671,
+      "mult": 2,
+      "pWin": 0.5,
+      "take": true,
+      "won": true,
+      "auto": false
+     },
+     "winTxt": "$36.70",
+     "tierElementsAtEnd": {
+      "n": 0,
+      "vis": 0
+     },
+     "samples": 76,
+     "anyVisible": true,
+     "firstSample": {
+      "t": 15374,
+      "els": [
+       {
+        "id": "tierbg",
+        "parent": "ov",
+        "display": "block",
+        "visibility": "visible",
+        "opacity": 0.108,
+        "box": [
+         54,
+         0,
+         430,
+         764
+        ],
+        "visible": true,
+        "centreElement": "name"
+       },
+       {
+        "id": "tier",
+        "parent": "ov",
+        "display": "grid",
+        "visibility": "visible",
+        "opacity": 1,
+        "box": [
+         54,
+         0,
+         430,
+         764
+        ],
+        "visible": true,
+        "centreElement": "name"
+       }
+      ]
+     }
+    },
+    {
+     "a": 1,
+     "sightings": [
+      {
+       "t": 370,
+       "inWarm": true,
+       "display": "grid",
+       "visibility": "visible",
+       "opacity": 0.02,
+       "box": [
+        0,
+        0,
+        540,
+        960
+       ],
+       "chain": "tier<ccwarm<BODY<HTML",
+       "ariaHidden": true
+      },
+      {
+       "t": 36840,
+       "inWarm": false,
+       "display": "grid",
+       "visibility": "visible",
+       "opacity": 1,
+       "box": [
+        54,
+        0,
+        430,
+        764
+       ],
+       "chain": "tier<ov<stage<app<BODY",
+       "ariaHidden": false
+      },
+      {
+       "t": 70120,
+       "inWarm": false,
+       "display": "grid",
+       "visibility": "visible",
+       "opacity": 1,
+       "box": [
+        54,
+        0,
+        430,
+        764
+       ],
+       "chain": "tier<ov<stage<app<BODY",
+       "ariaHidden": false
+      }
+     ],
+     "takeAtMs": 66439,
+     "sightingsAfterTake": [
+      {
+       "t": 70120,
+       "inWarm": false,
+       "display": "grid",
+       "visibility": "visible",
+       "opacity": 1,
+       "box": [
+        54,
+        0,
+        430,
+        764
+       ],
+       "chain": "tier<ov<stage<app<BODY",
+       "ariaHidden": false
+      }
+     ],
+     "buy": "bonus1",
+     "tookMore": true,
+     "tier": "mega",
+     "totalWin": 256,
+     "more": {
+      "W": 255,
+      "mult": 2,
+      "pWin": 0.5,
+      "take": true,
+      "won": true,
+      "auto": false
+     },
+     "winTxt": "$2.56",
+     "tierElementsAtEnd": {
+      "n": 0,
+      "vis": 0
+     },
+     "samples": 66,
+     "anyVisible": true,
+     "firstSample": {
+      "t": 10994,
+      "els": [
+       {
+        "id": "tierbg",
+        "parent": "ov",
+        "display": "block",
+        "visibility": "visible",
+        "opacity": 0.109,
+        "box": [
+         54,
+         0,
+         430,
+         764
+        ],
+        "visible": true,
+        "centreElement": "name"
+       },
+       {
+        "id": "tier",
+        "parent": "ov",
+        "display": "grid",
+        "visibility": "visible",
+        "opacity": 1,
+        "box": [
+         54,
+         0,
+         430,
+         764
+        ],
+        "visible": true,
+        "centreElement": "name"
+       }
+      ]
+     }
+    },
+    {
+     "a": 2,
+     "sightings": [
+      {
+       "t": 370,
+       "inWarm": true,
+       "display": "grid",
+       "visibility": "visible",
+       "opacity": 0.02,
+       "box": [
+        0,
+        0,
+        540,
+        960
+       ],
+       "chain": "tier<ccwarm<BODY<HTML",
+       "ariaHidden": true
+      },
+      {
+       "t": 36840,
+       "inWarm": false,
+       "display": "grid",
+       "visibility": "visible",
+       "opacity": 1,
+       "box": [
+        54,
+        0,
+        430,
+        764
+       ],
+       "chain": "tier<ov<stage<app<BODY",
+       "ariaHidden": false
+      },
+      {
+       "t": 70120,
+       "inWarm": false,
+       "display": "grid",
+       "visibility": "visible",
+       "opacity": 1,
+       "box": [
+        54,
+        0,
+        430,
+        764
+       ],
+       "chain": "tier<ov<stage<app<BODY",
+       "ariaHidden": false
+      },
+      {
+       "t": 145240,
+       "inWarm": false,
+       "display": "grid",
+       "visibility": "visible",
+       "opacity": 1,
+       "box": [
+        54,
+        0,
+        430,
+        764
+       ],
+       "chain": "tier<ov<stage<app<BODY",
+       "ariaHidden": false
+      }
+     ],
+     "takeAtMs": 141839,
+     "sightingsAfterTake": [
+      {
+       "t": 145240,
+       "inWarm": false,
+       "display": "grid",
+       "visibility": "visible",
+       "opacity": 1,
+       "box": [
+        54,
+        0,
+        430,
+        764
+       ],
+       "chain": "tier<ov<stage<app<BODY",
+       "ariaHidden": false
+      }
+     ],
+     "buy": "bonus2",
+     "tookMore": true,
+     "tier": "legend",
+     "totalWin": 5374,
+     "more": {
+      "W": 5375,
+      "mult": 2,
+      "pWin": 0.5,
+      "take": true,
+      "won": true,
+      "auto": false
+     },
+     "winTxt": "$53.74",
+     "tierElementsAtEnd": {
+      "n": 0,
+      "vis": 0
+     },
+     "samples": 72,
+     "anyVisible": true,
+     "firstSample": {
+      "t": 54227,
+      "els": [
+       {
+        "id": "tierbg",
+        "parent": "ov",
+        "display": "block",
+        "visibility": "visible",
+        "opacity": 0,
+        "box": [
+         54,
+         0,
+         430,
+         764
+        ],
+        "visible": false,
+        "centreElement": "name"
+       },
+       {
+        "id": "tier",
+        "parent": "ov",
+        "display": "grid",
+        "visibility": "visible",
+        "opacity": 1,
+        "box": [
+         54,
+         0,
+         430,
+         764
+        ],
+        "visible": true,
+        "centreElement": "name"
+       }
+      ]
+     }
+    },
+    {
+     "a": 3,
+     "sightings": [
+      {
+       "t": 370,
+       "inWarm": true,
+       "display": "grid",
+       "visibility": "visible",
+       "opacity": 0.02,
+       "box": [
+        0,
+        0,
+        540,
+        960
+       ],
+       "chain": "tier<ccwarm<BODY<HTML",
+       "ariaHidden": true
+      },
+      {
+       "t": 36840,
+       "inWarm": false,
+       "display": "grid",
+       "visibility": "visible",
+       "opacity": 1,
+       "box": [
+        54,
+        0,
+        430,
+        764
+       ],
+       "chain": "tier<ov<stage<app<BODY",
+       "ariaHidden": false
+      },
+      {
+       "t": 70120,
+       "inWarm": false,
+       "display": "grid",
+       "visibility": "visible",
+       "opacity": 1,
+       "box": [
+        54,
+        0,
+        430,
+        764
+       ],
+       "chain": "tier<ov<stage<app<BODY",
+       "ariaHidden": false
+      },
+      {
+       "t": 145240,
+       "inWarm": false,
+       "display": "grid",
+       "visibility": "visible",
+       "opacity": 1,
+       "box": [
+        54,
+        0,
+        430,
+        764
+       ],
+       "chain": "tier<ov<stage<app<BODY",
+       "ariaHidden": false
+      },
+      {
+       "t": 187921,
+       "inWarm": false,
+       "display": "grid",
+       "visibility": "visible",
+       "opacity": 1,
+       "box": [
+        54,
+        0,
+        430,
+        764
+       ],
+       "chain": "tier<ov<stage<app<BODY",
+       "ariaHidden": false
+      }
+     ],
+     "takeAtMs": 184508,
+     "sightingsAfterTake": [
+      {
+       "t": 187921,
+       "inWarm": false,
+       "display": "grid",
+       "visibility": "visible",
+       "opacity": 1,
+       "box": [
+        54,
+        0,
+        430,
+        764
+       ],
+       "chain": "tier<ov<stage<app<BODY",
+       "ariaHidden": false
+      }
+     ],
+     "buy": "bonus1",
+     "tookMore": true,
+     "tier": "legend",
+     "totalWin": 1072,
+     "more": {
+      "W": 1073,
+      "mult": 2,
+      "pWin": 0.5,
+      "take": true,
+      "won": true,
+      "auto": false
+     },
+     "winTxt": "$10.72",
+     "tierElementsAtEnd": {
+      "n": 0,
+      "vis": 0
+     },
+     "samples": 77,
+     "anyVisible": true,
+     "firstSample": {
+      "t": 19718,
+      "els": [
+       {
+        "id": "tierbg",
+        "parent": "ov",
+        "display": "block",
+        "visibility": "visible",
+        "opacity": 0.109,
+        "box": [
+         54,
+         0,
+         430,
+         764
+        ],
+        "visible": true,
+        "centreElement": "name"
+       },
+       {
+        "id": "tier",
+        "parent": "ov",
+        "display": "grid",
+        "visibility": "visible",
+        "opacity": 1,
+        "box": [
+         54,
+         0,
+         430,
+         764
+        ],
+        "visible": true,
+        "centreElement": "name"
+       }
+      ]
+     }
+    },
+    {
+     "a": 4,
+     "sightings": [
+      {
+       "t": 370,
+       "inWarm": true,
+       "display": "grid",
+       "visibility": "visible",
+       "opacity": 0.02,
+       "box": [
+        0,
+        0,
+        540,
+        960
+       ],
+       "chain": "tier<ccwarm<BODY<HTML",
+       "ariaHidden": true
+      },
+      {
+       "t": 36840,
+       "inWarm": false,
+       "display": "grid",
+       "visibility": "visible",
+       "opacity": 1,
+       "box": [
+        54,
+        0,
+        430,
+        764
+       ],
+       "chain": "tier<ov<stage<app<BODY",
+       "ariaHidden": false
+      },
+      {
+       "t": 70120,
+       "inWarm": false,
+       "display": "grid",
+       "visibility": "visible",
+       "opacity": 1,
+       "box": [
+        54,
+        0,
+        430,
+        764
+       ],
+       "chain": "tier<ov<stage<app<BODY",
+       "ariaHidden": false
+      },
+      {
+       "t": 145240,
+       "inWarm": false,
+       "display": "grid",
+       "visibility": "visible",
+       "opacity": 1,
+       "box": [
+        54,
+        0,
+        430,
+        764
+       ],
+       "chain": "tier<ov<stage<app<BODY",
+       "ariaHidden": false
+      },
+      {
+       "t": 187921,
+       "inWarm": false,
+       "display": "grid",
+       "visibility": "visible",
+       "opacity": 1,
+       "box": [
+        54,
+        0,
+        430,
+        764
+       ],
+       "chain": "tier<ov<stage<app<BODY",
+       "ariaHidden": false
+      },
+      {
+       "t": 224202,
+       "inWarm": false,
+       "display": "grid",
+       "visibility": "visible",
+       "opacity": 1,
+       "box": [
+        54,
+        0,
+        430,
+        764
+       ],
+       "chain": "tier<ov<stage<app<BODY",
+       "ariaHidden": false
+      }
+     ],
+     "takeAtMs": 220596,
+     "sightingsAfterTake": [
+      {
+       "t": 224202,
+       "inWarm": false,
+       "display": "grid",
+       "visibility": "visible",
+       "opacity": 1,
+       "box": [
+        54,
+        0,
+        430,
+        764
+       ],
+       "chain": "tier<ov<stage<app<BODY",
+       "ariaHidden": false
+      }
+     ],
+     "buy": "bonus1",
+     "tookMore": true,
+     "tier": "big",
+     "totalWin": 94,
+     "more": {
+      "W": 94,
+      "mult": 2,
+      "pWin": 0.5,
+      "take": true,
+      "won": true,
+      "auto": false
+     },
+     "winTxt": "$0.94",
+     "tierElementsAtEnd": {
+      "n": 0,
+      "vis": 0
+     },
+     "samples": 44,
+     "anyVisible": true,
+     "firstSample": {
+      "t": 13635,
+      "els": [
+       {
+        "id": "tierbg",
+        "parent": "ov",
+        "display": "block",
+        "visibility": "visible",
+        "opacity": 0,
+        "box": [
+         54,
+         0,
+         430,
+         764
+        ],
+        "visible": false,
+        "centreElement": "name"
+       },
+       {
+        "id": "tier",
+        "parent": "ov",
+        "display": "grid",
+        "visibility": "visible",
+        "opacity": 1,
+        "box": [
+         54,
+         0,
+         430,
+         764
+        ],
+        "visible": true,
+        "centreElement": "name"
+       }
+      ]
+     }
+    },
+    {
+     "a": 5,
+     "sightings": [
+      {
+       "t": 370,
+       "inWarm": true,
+       "display": "grid",
+       "visibility": "visible",
+       "opacity": 0.02,
+       "box": [
+        0,
+        0,
+        540,
+        960
+       ],
+       "chain": "tier<ccwarm<BODY<HTML",
+       "ariaHidden": true
+      },
+      {
+       "t": 36840,
+       "inWarm": false,
+       "display": "grid",
+       "visibility": "visible",
+       "opacity": 1,
+       "box": [
+        54,
+        0,
+        430,
+        764
+       ],
+       "chain": "tier<ov<stage<app<BODY",
+       "ariaHidden": false
+      },
+      {
+       "t": 70120,
+       "inWarm": false,
+       "display": "grid",
+       "visibility": "visible",
+       "opacity": 1,
+       "box": [
+        54,
+        0,
+        430,
+        764
+       ],
+       "chain": "tier<ov<stage<app<BODY",
+       "ariaHidden": false
+      },
+      {
+       "t": 145240,
+       "inWarm": false,
+       "display": "grid",
+       "visibility": "visible",
+       "opacity": 1,
+       "box": [
+        54,
+        0,
+        430,
+        764
+       ],
+       "chain": "tier<ov<stage<app<BODY",
+       "ariaHidden": false
+      },
+      {
+       "t": 187921,
+       "inWarm": false,
+       "display": "grid",
+       "visibility": "visible",
+       "opacity": 1,
+       "box": [
+        54,
+        0,
+        430,
+        764
+       ],
+       "chain": "tier<ov<stage<app<BODY",
+       "ariaHidden": false
+      },
+      {
+       "t": 224202,
+       "inWarm": false,
+       "display": "grid",
+       "visibility": "visible",
+       "opacity": 1,
+       "box": [
+        54,
+        0,
+        430,
+        764
+       ],
+       "chain": "tier<ov<stage<app<BODY",
+       "ariaHidden": false
+      }
+     ],
+     "takeAtMs": 311013,
+     "sightingsAfterTake": [],
+     "buy": "bonus2",
+     "tookMore": true,
+     "tier": "none",
+     "totalWin": 0,
+     "more": {
+      "W": 5212,
+      "mult": 2,
+      "pWin": 0.5,
+      "take": true,
+      "won": false,
+      "auto": false
+     },
+     "winTxt": "$0.00",
+     "tierElementsAtEnd": {
+      "n": 0,
+      "vis": 0
+     },
+     "samples": 0,
+     "anyVisible": false,
+     "firstSample": null
+    },
+    {
+     "a": 6,
+     "sightings": [
+      {
+       "t": 370,
+       "inWarm": true,
+       "display": "grid",
+       "visibility": "visible",
+       "opacity": 0.02,
+       "box": [
+        0,
+        0,
+        540,
+        960
+       ],
+       "chain": "tier<ccwarm<BODY<HTML",
+       "ariaHidden": true
+      },
+      {
+       "t": 36840,
+       "inWarm": false,
+       "display": "grid",
+       "visibility": "visible",
+       "opacity": 1,
+       "box": [
+        54,
+        0,
+        430,
+        764
+       ],
+       "chain": "tier<ov<stage<app<BODY",
+       "ariaHidden": false
+      },
+      {
+       "t": 70120,
+       "inWarm": false,
+       "display": "grid",
+       "visibility": "visible",
+       "opacity": 1,
+       "box": [
+        54,
+        0,
+        430,
+        764
+       ],
+       "chain": "tier<ov<stage<app<BODY",
+       "ariaHidden": false
+      },
+      {
+       "t": 145240,
+       "inWarm": false,
+       "display": "grid",
+       "visibility": "visible",
+       "opacity": 1,
+       "box": [
+        54,
+        0,
+        430,
+        764
+       ],
+       "chain": "tier<ov<stage<app<BODY",
+       "ariaHidden": false
+      },
+      {
+       "t": 187921,
+       "inWarm": false,
+       "display": "grid",
+       "visibility": "visible",
+       "opacity": 1,
+       "box": [
+        54,
+        0,
+        430,
+        764
+       ],
+       "chain": "tier<ov<stage<app<BODY",
+       "ariaHidden": false
+      },
+      {
+       "t": 224202,
+       "inWarm": false,
+       "display": "grid",
+       "visibility": "visible",
+       "opacity": 1,
+       "box": [
+        54,
+        0,
+        430,
+        764
+       ],
+       "chain": "tier<ov<stage<app<BODY",
+       "ariaHidden": false
+      }
+     ],
+     "takeAtMs": 354299,
+     "sightingsAfterTake": [],
+     "buy": "bonus1",
+     "tookMore": true,
+     "tier": "none",
+     "totalWin": 0,
+     "more": {
+      "W": 523,
+      "mult": 2,
+      "pWin": 0.5,
+      "take": true,
+      "won": false,
+      "auto": false
+     },
+     "winTxt": "$0.00",
+     "tierElementsAtEnd": {
+      "n": 0,
+      "vis": 0
+     },
+     "samples": 0,
+     "anyVisible": false,
+     "firstSample": null
+    }
+   ],
+   "lostSeen": 2,
+   "sightingSummary": {
+    "total": 32,
+    "inWarm": 7,
+    "notInWarm": 25,
+    "afterTakeOnLost": 0,
+    "lostAttempts": 2
+   },
+   "verdict": "detector artefact, nothing visible",
+   "driverVerdictText": "real, visible (see sightings)",
+   "evidence": {
+    "lostOneMoreCall": [
+     {
+      "attempt": 5,
+      "W": 5212,
+      "winMeter": "$0.00",
+      "tierOfRound": "none",
+      "tierSightingsAfterTake": 0,
+      "tierElementsAtEnd": {
+       "n": 0,
+       "vis": 0
+      },
+      "probeVisible": false
+     },
+     {
+      "attempt": 6,
+      "W": 523,
+      "winMeter": "$0.00",
+      "tierOfRound": "none",
+      "tierSightingsAfterTake": 0,
+      "tierElementsAtEnd": {
+       "n": 0,
+       "vis": 0
+      },
+      "probeVisible": false
+     }
+    ],
+    "wonOneMoreCall_realBigWinCardIsLegit": [
+     {
+      "attempt": 0,
+      "tier": "legend",
+      "totalWin": 3670,
+      "sightingAfterTake": [
+       [
+        36840,
+        1,
+        "tier<ov<stage<app<BODY"
+       ]
+      ]
+     },
+     {
+      "attempt": 1,
+      "tier": "mega",
+      "totalWin": 256,
+      "sightingAfterTake": [
+       [
+        70120,
+        1,
+        "tier<ov<stage<app<BODY"
+       ]
+      ]
+     },
+     {
+      "attempt": 2,
+      "tier": "legend",
+      "totalWin": 5374,
+      "sightingAfterTake": [
+       [
+        145240,
+        1,
+        "tier<ov<stage<app<BODY"
+       ]
+      ]
+     },
+     {
+      "attempt": 3,
+      "tier": "legend",
+      "totalWin": 1072,
+      "sightingAfterTake": [
+       [
+        187921,
+        1,
+        "tier<ov<stage<app<BODY"
+       ]
+      ]
+     },
+     {
+      "attempt": 4,
+      "tier": "big",
+      "totalWin": 94,
+      "sightingAfterTake": [
+       [
+        224202,
+        1,
+        "tier<ov<stage<app<BODY"
+       ]
+      ]
+     }
+    ],
+    "warmLayerSighting": {
+     "t": 370,
+     "inWarm": true,
+     "display": "grid",
+     "visibility": "visible",
+     "opacity": 0.02,
+     "box": [
+      0,
+      0,
+      540,
+      960
+     ],
+     "chain": "tier<ccwarm<BODY<HTML",
+     "ariaHidden": true
+    }
+   }
+  }
+ },
+ "serverBoot": "game recovery: bender 0 open/0 by game/0 kept, coldcall 0 open/0 by game/0 kept, 0 escrows voided",
+ "restartBoot": "game recovery: bender 0 open/0 by game/0 kept, coldcall 1 open/1 by game/0 kept, 0 escrows voided",
+ "finished": "2026-10-07T06:24:22.564Z"
+}

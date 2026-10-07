@@ -1,0 +1,6 @@
+'use strict';
+// document-start script for the U17 probe: logs every moment a #tier element exists (same idea as the MutationObserver in qa/coldcall-v2/capture/f1_u17.js, but from the first document)
+module.exports = () => { if (window === window.top || window.__tsight) return; window.__tsight = []; const t0 = performance.now(); let was = false;
+  const probe = () => { const e = document.getElementById('tier'); if (!e) { was = false; return; } if (was) return; was = true; const cs = getComputedStyle(e), r = e.getBoundingClientRect(); let o = 1, n = e, chain = []; while (n && n.nodeType === 1) { o *= parseFloat(getComputedStyle(n).opacity); chain.push(n.id || n.className || n.tagName); n = n.parentElement; }
+    window.__tsight.push({ t: Math.round(performance.now() - t0), inWarm: !!e.closest('#ccwarm'), display: cs.display, visibility: cs.visibility, opacity: +o.toFixed(3), box: [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)], chain: chain.slice(0, 5).join('<'), ariaHidden: !!e.closest('[aria-hidden=true]') }); };
+  try { new MutationObserver(probe).observe(document, { childList: true, subtree: true }); } catch (e) { /* no document yet */ } setInterval(probe, 40); window.__tnow = () => Math.round(performance.now() - t0); };

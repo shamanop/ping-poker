@@ -1,0 +1,523 @@
+{
+ "leg": "q1-360-play",
+ "viewport": "360x740",
+ "mode": "play",
+ "docked": true,
+ "started": "2026-10-07T04:22:05.312Z",
+ "rounds": [
+  {
+   "i": 1,
+   "kind": "spin",
+   "label": null,
+   "force": null,
+   "mode": "play",
+   "burst": 1,
+   "bet": 1,
+   "before": 1010000,
+   "screenBefore": 1010000,
+   "did": {
+    "pick": 0,
+    "take": 0,
+    "hang": 0,
+    "timeout": 0,
+    "dial": 0
+   },
+   "cost": 1,
+   "win": 0,
+   "pot": 0,
+   "after": 1009999,
+   "ledgerExpected": 1009999,
+   "meter": 1009999,
+   "screenWinTxt": "$0.00",
+   "serverRounds": 1,
+   "screenRounds": 1,
+   "ledgerRounds": 1,
+   "forceUsed": null,
+   "toasts": [],
+   "errs": [],
+   "tier": "none",
+   "wallet": 1009999,
+   "forcedEcho": null,
+   "pullMore": null,
+   "buyBonus": null,
+   "callback": false,
+   "ledgerLines": 1,
+   "roundId": "9676bd9df52c",
+   "checks": {
+    "arith": true,
+    "meterEqLedger": true,
+    "walletEqLedger": true,
+    "rounds": true,
+    "noEscrow": true,
+    "noMismatch": true,
+    "unlocked": true,
+    "noToast": true
+   },
+   "ms": 1838
+  },
+  {
+   "i": 2,
+   "kind": "spin",
+   "label": null,
+   "force": "big",
+   "mode": "play",
+   "burst": 1,
+   "bet": 5,
+   "before": 1009999,
+   "screenBefore": 1009999,
+   "did": {
+    "pick": 0,
+    "take": 0,
+    "hang": 0,
+    "timeout": 0,
+    "dial": 0
+   },
+   "cost": 5,
+   "win": 650,
+   "pot": 0,
+   "after": 1010644,
+   "ledgerExpected": 1010644,
+   "meter": 1010644,
+   "screenWinTxt": "$6.50",
+   "serverRounds": 1,
+   "screenRounds": 1,
+   "ledgerRounds": 1,
+   "forceUsed": "big",
+   "toasts": [],
+   "errs": [],
+   "tier": "legend",
+   "wallet": 1010644,
+   "forcedEcho": "big",
+   "pullMore": null,
+   "buyBonus": null,
+   "callback": false,
+   "ledgerLines": 2,
+   "roundId": "682b9da72ce2",
+   "checks": {
+    "arith": true,
+    "meterEqLedger": true,
+    "walletEqLedger": true,
+    "rounds": true,
+    "noEscrow": true,
+    "noMismatch": true,
+    "unlocked": true,
+    "noToast": true,
+    "forceTaken": true
+   },
+   "ms": 7989
+  },
+  {
+   "i": 3,
+   "kind": "buy:hunt",
+   "label": null,
+   "force": null,
+   "mode": "play",
+   "burst": 1,
+   "bet": 5,
+   "before": 1010644,
+   "screenBefore": 1010644,
+   "did": {
+    "pick": 0,
+    "take": 0,
+    "hang": 0,
+    "timeout": 0,
+    "dial": 0
+   },
+   "cost": 10,
+   "win": 0,
+   "pot": 0,
+   "after": 1010634,
+   "ledgerExpected": 1010634,
+   "meter": 1010634,
+   "screenWinTxt": "$0.00",
+   "serverRounds": 1,
+   "screenRounds": 1,
+   "ledgerRounds": 1,
+   "forceUsed": "big",
+   "toasts": [],
+   "errs": [],
+   "tier": "none",
+   "wallet": 1010634,
+   "forcedEcho": null,
+   "pullMore": null,
+   "buyBonus": "hunt",
+   "callback": false,
+   "ledgerLines": 1,
+   "roundId": "dce7b58dfba0",
+   "checks": {
+    "arith": true,
+    "meterEqLedger": true,
+    "walletEqLedger": true,
+    "rounds": true,
+    "noEscrow": true,
+    "noMismatch": true,
+    "unlocked": true,
+    "noToast": true
+   },
+   "ms": 1567
+  },
+  {
+   "i": 4,
+   "kind": "spin",
+   "label": "fast: double click on SPIN",
+   "force": null,
+   "mode": "play",
+   "burst": 2,
+   "bet": 10,
+   "before": 1010634,
+   "screenBefore": 1010634,
+   "did": {
+    "pick": 0,
+    "take": 0,
+    "hang": 0,
+    "timeout": 0,
+    "dial": 0
+   },
+   "cost": 10,
+   "win": 0,
+   "pot": 0,
+   "after": 1010624,
+   "ledgerExpected": 1010624,
+   "meter": 1010624,
+   "screenWinTxt": "$0.00",
+   "serverRounds": 1,
+   "screenRounds": 1,
+   "ledgerRounds": 1,
+   "forceUsed": "big",
+   "toasts": [],
+   "errs": [],
+   "tier": "none",
+   "wallet": 1010624,
+   "forcedEcho": null,
+   "pullMore": null,
+   "buyBonus": null,
+   "callback": false,
+   "ledgerLines": 1,
+   "roundId": "f1e6dd55bee6",
+   "checks": {
+    "arith": true,
+    "meterEqLedger": true,
+    "walletEqLedger": true,
+    "rounds": true,
+    "noEscrow": true,
+    "noMismatch": true,
+    "unlocked": true,
+    "noToast": true
+   },
+   "ms": 1223
+  },
+  {
+   "i": 5,
+   "kind": "spin",
+   "label": "fast: triple click on SPIN",
+   "force": null,
+   "mode": "play",
+   "burst": 3,
+   "bet": 10,
+   "before": 1010624,
+   "screenBefore": 1010624,
+   "did": {
+    "pick": 0,
+    "take": 0,
+    "hang": 0,
+    "timeout": 0,
+    "dial": 0
+   },
+   "cost": 10,
+   "win": 0,
+   "pot": 0,
+   "after": 1010614,
+   "ledgerExpected": 1010614,
+   "meter": 1010614,
+   "screenWinTxt": "$0.00",
+   "serverRounds": 1,
+   "screenRounds": 1,
+   "ledgerRounds": 1,
+   "forceUsed": "big",
+   "toasts": [],
+   "errs": [],
+   "tier": "none",
+   "wallet": 1010614,
+   "forcedEcho": null,
+   "pullMore": null,
+   "buyBonus": null,
+   "callback": false,
+   "ledgerLines": 1,
+   "roundId": "5cbe60c5d361",
+   "checks": {
+    "arith": true,
+    "meterEqLedger": true,
+    "walletEqLedger": true,
+    "rounds": true,
+    "noEscrow": true,
+    "noMismatch": true,
+    "unlocked": true,
+    "noToast": true
+   },
+   "ms": 1314
+  },
+  {
+   "i": 6,
+   "kind": "buy:bonus1",
+   "label": "fast: click on SPIN while a decision is open",
+   "force": null,
+   "mode": "play",
+   "burst": 1,
+   "bet": 10,
+   "before": 1010614,
+   "screenBefore": 1010614,
+   "did": {
+    "pick": 1,
+    "take": 0,
+    "hang": 1,
+    "timeout": 0,
+    "dial": 1
+   },
+   "cost": 964,
+   "win": 3234,
+   "pot": 0,
+   "after": 1012884,
+   "ledgerExpected": 1012884,
+   "meter": 1012884,
+   "screenWinTxt": "$32.34",
+   "serverRounds": 1,
+   "screenRounds": 1,
+   "ledgerRounds": 1,
+   "forceUsed": "big",
+   "toasts": [],
+   "errs": [],
+   "tier": "legend",
+   "wallet": 1012884,
+   "forcedEcho": null,
+   "pullMore": {
+    "W": 3234,
+    "mult": 2,
+    "pWin": 0.5,
+    "take": false,
+    "won": null,
+    "auto": false
+   },
+   "buyBonus": "bonus1",
+   "callback": false,
+   "ledgerLines": 3,
+   "roundId": "eb1851ed37b1",
+   "checks": {
+    "arith": true,
+    "meterEqLedger": true,
+    "walletEqLedger": true,
+    "rounds": true,
+    "noEscrow": true,
+    "noMismatch": true,
+    "unlocked": true,
+    "noToast": true
+   },
+   "ms": 19745
+  },
+  {
+   "i": 7,
+   "kind": "buy:hunt",
+   "label": "fast: double click on a buy button",
+   "force": null,
+   "mode": "play",
+   "burst": 1,
+   "bet": 10,
+   "before": 1012884,
+   "screenBefore": 1012884,
+   "did": {},
+   "cost": 0,
+   "win": 0,
+   "pot": 0,
+   "after": 1012884,
+   "ledgerExpected": 1012884,
+   "meter": 1012884,
+   "screenWinTxt": "$32.34",
+   "serverRounds": 0,
+   "screenRounds": 0,
+   "ledgerRounds": 0,
+   "forceUsed": "big",
+   "toasts": [],
+   "errs": [],
+   "ledgerLines": 0,
+   "checks": {
+    "arith": true,
+    "meterEqLedger": true,
+    "walletEqLedger": true,
+    "rounds": true,
+    "noEscrow": true,
+    "noMismatch": true,
+    "unlocked": true,
+    "noToast": true
+   },
+   "ms": 76440
+  }
+ ],
+ "fails": [],
+ "notes": [
+  "account w3bdp360pi18 (key w3bdp360pi18); daily bonus claimed by a real click: true; funding = sign-up grant + daily bonus",
+  "page seated at POKERPING table URFFZP with 2000 chips",
+  "slot window after opening from the dock button at 360x740: {\"cls\":\"sh-win panel panel--flush open docked focused\",\"rect\":[0,0,360,684],\"frame\":[358,648],\"spinInViewport\":true,\"vw\":360,\"vh\":740}",
+  "buy menu at bet 5: [{\"id\":\"call\",\"disabled\":false},{\"id\":\"bonus1\",\"disabled\":false},{\"id\":\"bonus2\",\"disabled\":false},{\"id\":\"hunt\",\"disabled\":false}]",
+  "double click on buy: {\"buy\":\"hunt\",\"trace\":[\"after double click on the option: confirm card not up (menu closed or dismissed)\"],\"rounds\":0,\"ledger\":0,\"outcome\":\"zero rounds (refused / dismissed)\",\"ok\":true}"
+ ],
+ "cases": {
+  "dbl": {
+   "rounds": 1,
+   "ledger": 1,
+   "ok": true
+  },
+  "triple": {
+   "rounds": 1,
+   "ledger": 1,
+   "ok": true
+  },
+  "spinWhileDecision": {
+   "clicked": 2,
+   "rounds": 1,
+   "ledger": 1,
+   "decisions": {
+    "pick": 1,
+    "take": 0,
+    "hang": 1,
+    "timeout": 0,
+    "dial": 1
+   },
+   "elementUnderSpinCentre": "spin",
+   "ok": true
+  },
+  "dblBuy": {
+   "buy": "hunt",
+   "trace": [
+    "after double click on the option: confirm card not up (menu closed or dismissed)"
+   ],
+   "rounds": 0,
+   "ledger": 0,
+   "outcome": "zero rounds (refused / dismissed)",
+   "ok": true
+  }
+ },
+ "forced": {
+  "big": {
+   "n": 1,
+   "decisions": [
+    {
+     "pick": 0,
+     "take": 0,
+     "hang": 0,
+     "timeout": 0,
+     "dial": 0
+    }
+   ],
+   "tiers": [
+    "legend"
+   ]
+  }
+ },
+ "decisions": {
+  "pick": 1,
+  "take": 0,
+  "hang": 1,
+  "timeout": 0
+ },
+ "buys": [
+  {
+   "id": "hunt",
+   "cost": 10,
+   "win": 0,
+   "ok": true
+  }
+ ],
+ "big": {
+  "tier": "legend",
+  "win": 650,
+  "cost": 5,
+  "bet": 5
+ },
+ "finished": "2026-10-07T04:24:15.656Z",
+ "seat": {
+  "table": "URFFZP",
+  "seatedStack": 2000
+ },
+ "dockInfo": {
+  "cls": "sh-win panel panel--flush open docked focused",
+  "rect": [
+   0,
+   0,
+   360,
+   684
+  ],
+  "frame": [
+   358,
+   648
+  ],
+  "spinInViewport": true,
+  "vw": 360,
+  "vh": 740
+ },
+ "bets": [
+  1,
+  2,
+  5,
+  10,
+  20,
+  50,
+  100,
+  200,
+  500,
+  1000,
+  2500
+ ],
+ "startBalance": {
+  "ledger": 1010000,
+  "screen": 1010000
+ },
+ "engineForces": [
+  "bonus1",
+  "bonus2",
+  "bonus3",
+  "phone",
+  "close",
+  "big",
+  "tease"
+ ],
+ "buyMenu": [
+  {
+   "id": "call",
+   "disabled": false
+  },
+  {
+   "id": "bonus1",
+   "disabled": false
+  },
+  {
+   "id": "bonus2",
+   "disabled": false
+  },
+  {
+   "id": "hunt",
+   "disabled": false
+  }
+ ],
+ "end": {
+  "sumByCurrency": {
+   "chips": 0,
+   "play": 0
+  },
+  "escrowsNonZero": [],
+  "pool": [],
+  "screen": 1012884,
+  "wallet_get": 1012884,
+  "ledger": 1012884,
+  "plate": 1012884,
+  "plateWant": 1012884,
+  "startBalance": 1010000
+ },
+ "consoleErrors": [],
+ "badResponses": [],
+ "counts": {
+  "rounds": 6,
+  "actions": 7,
+  "fails": 0
+ },
+ "pass": false,
+ "quick": true
+}
