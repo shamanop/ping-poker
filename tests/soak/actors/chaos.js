@@ -3,6 +3,7 @@
 // The kill is the only place the harness accepts money it was not told about, and only the two shapes the brief allows (soak.js reconcile()).
 const { sleep } = require('../lib/bot');
 const poker = require('./poker');
+const slot = require('./coldcall');
 
 async function untilLive(W, ms) {            // let the table run until a hand with chips in the pot is live, acting for whoever is on turn
   const end = Date.now() + ms;
@@ -72,6 +73,60 @@ async function step(W, kind, sig) {
     await sleep(W.rng.int(3));
     return finish(W, kind, sig, `spin ${mode} ${bet} by ${bot.key}`, true);
   }
+  if (kind === 'slotopen') {
+    // a Cold Call decision is open (the stake sits in escrow, the player has not answered) when the server dies: boot replays it with the default choices and settles it ONCE
+    const bots = W.connectedBots().filter(b => !W.model.slot.hasOpen(b.key));
+    let got = null;
+    for (const bot of bots.slice().sort(() => W.rng() - 0.5).slice(0, 3)) {
+      got = await slot.ops.openDecision(W, bot, W.rng.chance(0.5) ? 'play' : 'chips', 6);
+      if (got) break;
+    }
+    if (W.rng.chance(0.4) && got) { const o = W.rng.pick([...W.model.slot.open.values()]); const b = W.bots.get(o.key); if (b && b.connected()) b.emit('g:coldcall:ready', { roundId: o.rid }); }
+    note = got ? `a ${got.pending && got.pending.k} decision of ${got.key} (stake ${got.cost}) is open` : 'no decision could be opened';
+    await W.settlePoll();
+    W.checker.markKill();
+    return finish(W, kind, sig, note);
+  }
+  if (kind === 'slotcb') {
+    // a Callback is armed and then played; its ONE MORE CALL / PICK prompt is open when the server dies (a free round: the record is on disk before anything else, nothing in escrow)
+    let got = null, spins = 0, armedOnly = false;
+    for (const bot of W.connectedBots().slice().sort(() => W.rng() - 0.5).slice(0, 3)) {
+      const mode = W.rng.chance(0.5) ? 'play' : 'chips', k = `${bot.key}|${mode}`;
+      if (W.model.slot.openOf(bot.key, mode)) continue;
+      for (let i = 0; i < 40 && !got; i++) {
+        const bet = [1, 2, 5, 10].find(b => b <= W.checker.balance(mode, mode === 'chips' ? 'bank:' + bot.key : 'play:' + bot.key));
+        if (!bet) break;
+        const armed = W.model.slot.armed.has(k) && !W.model.slot.unsure.has(k);
+        if (armed && W.rng.chance(0.15)) { armedOnly = true; break; }                // leave it armed across the kill (that is a case too)
+        await slot.ops.spinOnce(W, bot, { mode, bet }); spins++;
+        const o = W.model.slot.openOf(bot.key, mode);
+        if (o && o.callback) got = o;
+        else if (o) { await slot.ops.decideAny(W, bot, o); }                         // a paid round's decision: answer it and go on
+      }
+      if (got || armedOnly) break;
+    }
+    note = got ? `Callback of ${got.key} open (${got.pending && got.pending.k}) after ${spins} spins` : armedOnly ? `a Callback is armed, not played (${spins} spins)` : `no Callback open after ${spins} spins`;
+    await W.settlePoll();
+    W.checker.markKill();
+    return finish(W, kind, sig, note);
+  }
+  if (kind === 'slotlost') {
+    // a slot spin is sent and the server dies before the client hears anything: the answer is dropped on our side; the ledger may hold the round, its open, or nothing
+    const bot = W.rng.pick(W.connectedBots().filter(b => !W.model.slot.hasOpen(b.key)));
+    if (!bot) return finish(W, kind, sig, 'no free bot');
+    const mode = W.rng.chance(0.5) ? 'play' : 'chips', buy = W.rng.chance(0.5) ? W.rng.pick(['bonus1', 'bonus2', 'call']) : null;
+    const bet = slot.ops.pickBetFor(W, bot, mode, buy);
+    if (!bet) return finish(W, kind, sig, 'nobody can afford a spin');
+    await W.settlePoll();
+    W.checker.markKill();
+    W.mute.slot = true;
+    W.slot.inflight.set(`${bot.key}|${mode}`, [{ key: bot.key, mode, bet, buy, force: null, cost: buy ? W.slot.buyPrice[bet][buy] : bet }]);
+    const n0 = W.checker.lines.length;
+    bot.emit('g:coldcall:spin', { bet, mode, buyBonus: buy });
+    const end = Date.now() + 2000;
+    while (Date.now() < end) { W.checker.poll(); if (W.checker.lines.length > n0) break; await sleep(1); }
+    return finish(W, kind, sig, `slot spin ${mode} ${bet} ${buy || 'plain'} by ${bot.key}, answer dropped`);
+  }
   if (kind === 'buyins') {
     const tables = [...W.tables.values()].filter(t => !t.ended && !t.gone);
     const cand = W.connectedBots().filter(b => !b.tableId);
@@ -86,7 +141,7 @@ async function step(W, kind, sig) {
 }
 
 async function finish(W, kind, sig, note) {
-  try { await W.killAndRestart(sig, { marked: true }); } finally { W.mute.showdown = W.mute.bender = W.mute.achv = false; }
+  try { await W.killAndRestart(sig, { marked: true }); } finally { W.mute.showdown = W.mute.bender = W.mute.achv = W.mute.slot = false; }
   return { actor: 'chaos', what: 'kill', kind, sig, note };
 }
 

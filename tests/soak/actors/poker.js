@@ -173,7 +173,7 @@ const ops = {
 
   // drop the socket (also mid-hand), wait a little while the table carries on, then sign in again and take the seat back
   async reconnect(W) {
-    const cand = W.connectedBots().filter(b => b.tableId);
+    const cand = W.connectedBots().filter(b => b.tableId && !(W.slot && W.model.slot.hasOpen(b.key)));     // a slot round with a decision open is the slot actor's to drop (its 'drop' step)
     if (!cand.length) return null;
     const bot = W.rng.pick(cand), tableId = bot.tableId, live = !!(bot.gs && bot.gs.status === 'playing');
     bot.close();

@@ -17,7 +17,8 @@ const argv = process.argv.slice(2);
 const arg = (name, dflt) => { const i = argv.indexOf('--' + name); return i >= 0 && i + 1 < argv.length ? argv[i + 1] : dflt; };
 const has = name => argv.includes('--' + name);
 
-const ACTORS = ['poker', 'bank', 'bender'].map(n => require('./actors/' + n));
+const ACTORS = ['poker', 'bank', 'bender', 'coldcall'].map(n => require('./actors/' + n));
+const slot = require('./actors/coldcall');
 const chaos = require('./actors/chaos');
 
 class HarnessError extends Error {}
@@ -44,16 +45,17 @@ async function main() {
 
   const W = {
     seed, rng: mulberry32(seed), dataDir, serverDir, port, nPlayers, bug,
-    ctl: new ServerCtl({ port, dir: dataDir, serverDir, bug, injectPath: path.join(__dirname, 'bugs', 'inject.js') }),
+    ctl: new ServerCtl({ port, dir: dataDir, serverDir, bug, injectPath: path.join(__dirname, 'bugs', 'inject.js'), env: { COLDCALL_TEST: '1', NODE_ENV: 'test', BENDER_ADMIN_TOKEN: slot.ADMIN_TOKEN } }),
     model: new Model(), checker: new Checker(path.join(dataDir, 'money.jsonl')),
     bots: new Map(), tables: new Map(), admin: null, auditSock: null,
     inflightSpins: [], cfg: { betLevels: [1, 2, 10, 20, 50, 100, 200, 500, 1000, 2500], buyCostX: { election: 10.91, landslide: 77.21 } },
     achvReward: new Map(), bonusSchedule: [],
     stepNo: 0, recent: [], fatal: [], lastSignupAt: 0,
     counters: { checks: 0, kills: 0, restarts: 0, sigterm: 0, buyIns: 0, cashOuts: 0, spinsRefused: 0, spinsUnacked: 0, handsVoidedByKill: 0, warnings: {} },
-    killLive: new Map(), mute: { showdown: false, bender: false, achv: false },
+    killLive: new Map(), mute: { showdown: false, bender: false, achv: false, slot: false },
     sleep, chicagoDay,
   };
+  slot.attach(W);
   W.warn = (k, detail) => { W.counters.warnings[k] = (W.counters.warnings[k] || 0) + 1; if (detail && W.counters.warnings[k] <= 3) console.error(`[soak] warning ${k}: ${detail}`); };
   W.violate = (id, message, accounts, expected, got) => { W.fatal.push({ id, step: W.stepNo, message, accounts: accounts || {}, expected, got }); };
   W.now = () => Date.now();
@@ -86,6 +88,7 @@ async function main() {
       W.model.applySpin({ key: bot.key, cur: d.mode, cost: d.cost, win: d.totalWin, roundId: d.roundId });
     });
     bot.on('showdown_result', d => { if (!W.mute.showdown) W.onShowdown(bot, d); });
+    slot.listen(W, bot);
     bot.on('bonus:claimed', d => { if (d && d.ok) { if (!W.model.applyMint('bonus', bot.key, d.amountCents, `bonus:${bot.key}:${chicagoDay(Date.now())}`)) W.warn('bonus_ok_again', `${bot.key} was told ok for a bonus already counted today`); } });
     bot.on('achv:unlocked', d => { if (W.mute.achv) return;
       if (d && d.id) W.model.applyMint('achv', bot.key, d.rewardCents, `achv:${bot.key}:${d.id}`); });
@@ -187,6 +190,7 @@ async function main() {
     out.push(...C.checkModel(M));
     out.push(...C.checkSpins(M));
     out.push(...C.checkHands(M));
+    out.push(...C.checkSlot(M, snap.audit, { feedBps: W.slot.feedBps, epochs: W.slot.epochEnds }));
     out.push(...C.checkMemory(snap.audit));
     if (snap.consistent) {
       out.push(...C.checkStranded(snap.audit, { afterRestart: !!opts.afterRestart }));
@@ -220,6 +224,7 @@ async function main() {
       if (hard.length) throw new Violations(hard.map(v => ({ step: W.stepNo, ...v })));
       if (W.fatal.length) throw new Violations(W.fatal.splice(0));
       adoptUnheardHands();
+      slot.adoptUnheard(W);
       last = W.evaluate(snap, opts);
       if (!last.length) return snap;
       if (Date.now() - t0 > STAB_MS) throw new Violations(last);
@@ -241,12 +246,15 @@ async function main() {
     await W.ctl.kill(sig);
     await sleep(150);                                    // answers already on the wire still reach the clients (and the model)
     const sentSpins = W.inflightSpins.slice();           // spins sent whose answer never came
+    const sentSlot = slot.inflightList(W);
     for (const b of W.botList()) b.close();
+    await pollSettled();                                 // the process is gone: whatever it wrote is in the file now
+    W.checker.markDead();
     await W.ctl.start();
     W.counters.restarts++;
     await openAuditSock();
     await bringUpBots(false);
-    await reconcile(sentSpins);
+    await reconcile(sentSpins, sentSlot);
     W.inflightSpins = [];
     for (const b of W.botList()) { b.spinsInFlight = 0; }
     W.fundAt = new Map();
@@ -254,7 +262,7 @@ async function main() {
     await W.check({ afterRestart: true });
     W.checker.killMark = null;
   };
-  async function reconcile(sentSpins) {
+  async function reconcile(sentSpins, sentSlot) {
     const C = W.checker, M = W.model;
     await pollSettled();
     const cls = C.classifyRestart();
@@ -300,6 +308,7 @@ async function main() {
         if (!M.hasPlayer(key)) bad.push({ step: W.stepNo, id: 'I7', message: `signup line for ${key} that the harness did not create`, accounts: { ref }, expected: 'known player', got: key });
       }
     }
+    bad.push(...slot.reconcile(W, cls, sentSlot));
     for (const [t, n] of W.killLive) if (!C.lineByRef(`hand:${t}:${n}`)) W.counters.handsVoidedByKill++;
     if (bad.length) throw new Violations(bad);
   }
@@ -337,7 +346,7 @@ async function main() {
     killTimes.push((f + jitter) * (minutes || 0) * 60000);
   }
   let killsDone = 0, result = null, failure = null;
-  const kinds = ['midhand', 'spin', 'showdown', 'buyins', 'settle', 'spinlost', 'settle', 'spinlost'];
+  const kinds = ['midhand', 'spin', 'showdown', 'buyins', 'settle', 'spinlost', 'slotopen', 'slotcb', 'slotlost', 'slotopen', 'settle', 'spinlost', 'slotcb', 'slotlost'];
   try {
     await setup();
     await W.check();
@@ -371,6 +380,7 @@ async function main() {
     handsSettled: M.count.hands, handsSettledUnacked: M.count.handsUnacked, handsVoidedByKill: W.counters.handsVoidedByKill,
     spins: M.count.spins, spinsUnacked: W.counters.spinsUnacked, spinsRefused: W.counters.spinsRefused, buyIns: W.counters.buyIns, cashOuts: W.counters.cashOuts,
     mints: { signup: M.count.signups, bonus: M.count.bonus, achv: M.count.achv, topup: M.count.topup }, adminAdjusts: M.count.adminAdjust, adminRefused: M.count.adminRefused,
+    slot: { rounds: M.count.slotRounds || 0, unacked: M.count.slotRoundsUnacked || 0, voids: M.count.slotVoids || 0, net: M.slot.net, byKind: { plain: W.slot.c.plain, buy: W.slot.c.buy, forced: W.slot.c.forced, callback: W.slot.c.callbacks, decisionsOpened: W.slot.c.pending, decisionsAnswered: W.slot.c.decided, readyLeftToTimer: W.slot.c.readyLeft, potWins: W.slot.c.potWon, refusedFunds: W.slot.c.funds, refusedRate: W.slot.c.rate, refusedBusy: W.slot.c.busy, socketDrops: W.slot.c.drops, configSwaps: W.slot.c.cfg, voidedEvents: W.slot.c.voided } },
     ledgerLines: files.ledgerLines, checks: W.counters.checks, warnings: W.counters.warnings,
     violations: failure instanceof Violations ? failure.list : [], harnessError: failure && !(failure instanceof Violations) ? String(failure && failure.stack || failure) : null, dataDir,
   };
@@ -379,7 +389,7 @@ async function main() {
   for (const b of W.botList()) b.close();
   if (W.auditSock) try { W.auditSock.close(); } catch {}
 
-  if (!failure) { console.log(`CLEAN seed=${seed} steps=${result.steps} hands=${result.handsSettled}+${result.handsSettledUnacked}unacked spins=${result.spins} kills=${result.kills} lines=${result.ledgerLines} checks=${result.checks} min=${result.minutes} data=${dataDir}`); return 0; }
+  if (!failure) { console.log(`CLEAN seed=${seed} steps=${result.steps} hands=${result.handsSettled}+${result.handsSettledUnacked}unacked spins=${result.spins} slot=${result.slot.rounds}+${result.slot.unacked}unacked(cb ${result.slot.byKind.callback}, decisions ${result.slot.byKind.decisionsOpened}, pot ${result.slot.byKind.potWins}) kills=${result.kills} lines=${result.ledgerLines} checks=${result.checks} min=${result.minutes} data=${dataDir}`); return 0; }
   if (failure instanceof Violations) {
     const v = failure.list[0];
     console.log(`VIOLATION ${v.id} at step ${v.step}: ${v.message}`);
