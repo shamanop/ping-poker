@@ -5,60 +5,16 @@ This file is the status line: Isabelle reads it on GitHub. Newest milestone at t
 
 ## Status (updated 2026-10-06 19:54)
 
-> **HAND-OFF TO ISABELLE, 2026-10-06 19:54 (from Frank). Chris, 19:43: "send a message to isabelle that gives her these
-> improvements so she can push them".** The hold on Cold Call is lifted by that message. Master is still yours, and so is
-> the order against `v2-core`.
->
-> **What you get:** branch `coldcall` at this commit (code = `coldcall-fb1` `7a57245`). It is the whole slot:
-> skin 3, THE PULL waves 1 + 2 (lead list + Callback, warm squares, "would have closed", one decision per bonus, office
-> pot, daily appointment), 1c / 2c / 5c bets, live config + RTP presets 98 / 96 / 94 (shipped math = 98), FIX M1 (a bonus
-> buy never feeds, rolls or wins the office pot), and Chris's play notes of today:
-> - SPIN takes a click the moment the board settles; it no longer waits for the leads update (in-page, 30 spins: median
->   720 ms before, 4 ms now, max 14 ms; lead's run, not a real-finger test).
-> - The leads strip is one slim row (62 px -> 30 px at 540 wide) and covers no symbol.
-> - The boost's rotary dial is replaced by a phone keypad: one click. The number is set by the server before the press,
->   as it was with the dial, and the info screen says so.
-> - Painted art (GPT sheets) for the status bars, leads strip, every button, keypad, speech bubble, win / pot plates, buy
->   menu and info panel. Numbers and labels stay live text.
-> - First-use GPU warm-up for the one-off hitches on the first spin / bonus / big win (`49859c2`).
->
-> **How it sits against your branches (checked 19:47 after a fetch):**
-> - `origin/master` `9440541` is an ancestor: 0 commits missing, `git merge-tree` reports no conflict. A fast-forward
->   works. It runs on the CURRENT money system (wallet), the way Bender does on master. It is NOT on the v2 ledger.
-> - `origin/v2-core` `f34da22`: does NOT merge clean (`.gitignore`, `public/shell.js`, `server.js`). The slot on the
->   ledger is P6 W2-c on `v2-all` (running now, from `coldcall-pull` `4713970`, which has the same `games/`, `server.js`
->   and `tests/` as this commit). Today's client improvements are merged into `v2-all` after that port; not done yet.
-> - New on deploy: data files `coldcall-pull.json` (per-player leads + the pot; `COLDCALL_PULL_FILE`, default beside the
->   wallet file) and the live-config file (`COLDCALL_CFG_FILE`); the admin config API uses `BENDER_ADMIN_TOKEN`.
->
-> **Tests. My own run, 19:48, clean export of `coldcall-fb1` `7abdd9d` (this commit differs from it in this file only):**
-> `tests/coldcall.js` 47, `coldcall-pull-engine.js` 57, `coldcall-pull-server.js` 61, `bender.js` 19,
-> `coldcall-livecfg.js` 27, `coldcall-presets.js` 20, `bender-livecfg.js` 5, all exit 0; engine copies byte-identical;
-> no diff in `games/`, `server.js`, `tests/` against `coldcall-pull` `4713970`, the commit the Opus money re-check
-> passed as SHIP (`cold-call/PULL-CRITIC-M1FIX-OPUS.md`). Payback of the shipped math: 97.96% +-0.14 on paid spins;
-> hunt buy 98.14% pooled over 3 x 200M.
-> **The lead's runs, not repeated by me:** 99 captures at 540 / 360 / 1440 in Play $ and Chips with 0 page errors;
-> `paint_shift.js` 42 pairs, 0 boxes moved; browser regression drivers for the wave 2 critic items: 27 pass, 2 fail.
->
-> **Known wrong or not done in this commit:**
-> 1. Driver U17 fails in Play $ and Chips: the BIG WIN overlay element appears after a LOST "one more call". Money is
->    right (WIN = the round total, no mismatch). Cause not read yet; the new warm-up may be what the detector sees.
-> 2. Small phones (360 wide): text fit failed two Opus critic rounds. A CSS fix (`e222f6a`) came after and no critic has
->    judged it. My own look at the 360 sheets: everything readable, nothing covers a money number; the small print on
->    the ONE MORE CALL key is tiny and one speech bubble repeats its line.
-> 3. The lag fix has no valid after-measurement (the after-run hit a dead port). Steady state was already 60 Hz on
->    shaman before it.
-> 4. Not run on this build: your three-size functional chain (last full run was skin 3, before THE PULL: 6 legs x 33
->    rounds, 0 fails), any iOS / touch device, sounds by ear.
-> 5. Open from the Opus re-check, tests only: T1 (an open round's pot feed from its own snapshot is not pinned), T2 (memo
->    key replacer).
-> 6. Not in it: "watch a friend's bonus" (`coldcall-w3`, fix round done, merge in progress) and the ledger port.
->
-> **Two ways to push; your call.** (A) Fast-forward master to this commit: the slot is live on the wallet now, `v2-core`
-> stops being a fast-forward from master, and the live pot + leads file has to be carried when the slot moves to the
-> ledger. (B) Push `v2-core` first, as handed over earlier tonight, and take the slot from `v2-all` once the port and these
-> improvements are in it (my estimate: tomorrow evening). I would do B unless Chris wants the slot live before the
-> rewrite; I have told him both.
+> **SUPERSEDED, 2026-10-06 20:25 (Frank): do NOT push this branch.** The hand-off note that stood here from 19:55 said
+> `coldcall` fast-forwards master. That stopped being true at 19:49, when master moved to `f34da22` (the v2 rewrite): this
+> branch is the slot on the OLD wallet and now conflicts with master in `.gitignore`, `public/shell.js` and `server.js`.
+> Isabelle, 19:57: "Option A for coldcall is gone, so it's B." The slot, with Chris's play notes of today (SPIN no longer
+> waits for the leads update, slim leads strip, keypad instead of the rotary dial, painted UI, GPU warm-up), ships from
+> **`v2-all`**: master + the slot on the ledger + this branch's client, on origin at `e596336` since 20:14. Read
+> `PROGRESS-V2.md` on `v2-all` for its state; the hand-off for master comes from there (estimate Wed Oct 7, about 12:00 CDT).
+> What still holds from the old note: my 19:48 run on this branch's code (`tests/coldcall.js` 47, pull-engine 57,
+> pull-server 61, bender 19, livecfg 27, presets 20, bender-livecfg 5, all exit 0) and the known client items (driver U17,
+> text fit at 360 wide, no valid after-measurement for the lag fix, no iOS / touch run).
 > The 14:55 key-cap ask below is WITHDRAWN: Chris topped up my own OpenRouter account at 14:42.
 
 > **ASK FOR ISABELLE, 2026-10-06 14:55 (from Frank; I have no line out to you, so it sits here until you call in):**
