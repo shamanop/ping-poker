@@ -815,7 +815,7 @@ function replayRound(s, cfg) {
 
   console.log(pass + ' passed' + (process.exitCode ? ', with failures' : ''));
   fs.rmSync(tmp, { recursive: true, force: true });
-  for (const f of ['coldcall-pull-engine.js', 'coldcall-pull-server.js', 'coldcall-livecfg.js', 'coldcall-presets.js']) {   // THE PULL + LIVECFG: separate processes (own module state, pull.on = true)
+  for (const f of ['coldcall-pull-engine.js', 'coldcall-pull-server.js', 'coldcall-livecfg.js', 'coldcall-presets.js', 'coldcall-money.js']) {   // THE PULL + LIVECFG: separate processes (own module state, pull.on = true)
     const r = require('child_process').spawnSync(process.execPath, [path.join(__dirname, f)], { encoding: 'utf8', env: process.env });
     const m = /(\d+) passed/.exec(r.stdout || '');
     console.log(f + ': ' + (m ? m[1] + ' passed' : 'NO RESULT') + (r.status ? ', FAILED (exit ' + r.status + ')' : ''));

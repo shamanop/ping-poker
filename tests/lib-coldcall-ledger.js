@@ -159,4 +159,37 @@ function world(opts = {}) {
   return w;
 }
 
-module.exports = { world, last, all, Crash, SRV };
+// ---- the client side of a round, for the tests that only need to play ----
+const assert = require('assert');
+function spin(w, sock, payload) {            // 200 ms after the last thing; the newest result (or error) this send produced
+  w.clock.advance(200);
+  const n = all(sock, 'g:coldcall:result').length, e = all(sock, 'error').length;
+  sock.send('g:coldcall:spin', payload);
+  const rs = all(sock, 'g:coldcall:result');
+  if (rs.length > n) return rs[rs.length - 1];
+  const es = all(sock, 'error'); assert.ok(es.length > e, 'a spin gives a result or an error');
+  return { error: es[es.length - 1] };
+}
+const policy = (i, pend) => (pend.k === 'pick' ? { k: 'pick', p: pend.choices[i % 2 ? pend.choices.length - 1 : 0] } : { k: 'more', take: i % 3 !== 0 });
+function decide(w, sock, res, d) {
+  const n = all(sock, 'g:coldcall:result').length;
+  sock.send('g:coldcall:decide', { roundId: res.roundId, ...d });
+  const rs = all(sock, 'g:coldcall:result'); assert.ok(rs.length > n, 'a decision gives a result: ' + JSON.stringify(last(sock, 'error')));
+  return rs[rs.length - 1];
+}
+function play(w, sock, payload, i = 0) {      // spin, then answer every decision with the policy until the round is done
+  let r = spin(w, sock, payload), n = 0;
+  while (r.status === 'pending') r = decide(w, sock, r, policy(i + n++, r.pending));
+  return r;
+}
+function toPending(w, sock, kind, mode = 'play', bet = 10) {   // buy bonuses until one stops at a decision of the wanted kind
+  for (let i = 0; i < 600; i++) {
+    let r = spin(w, sock, { bet, mode, buyBonus: i % 3 === 2 ? 'bonus2' : 'bonus1' });
+    if (r.error) throw new Error('toPending: ' + JSON.stringify(r.error));
+    let n = 0;
+    while (r.status === 'pending') { if (r.pending.k === kind) return r; r = decide(w, sock, r, policy(i + n++, r.pending)); }
+  }
+  throw new Error('no ' + kind + ' decision in 600 buys');
+}
+
+module.exports = { world, last, all, Crash, SRV, spin, decide, play, toPending, policy };
