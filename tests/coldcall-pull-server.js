@@ -127,7 +127,7 @@ const potOk = (p, s, mode) => { assert.strictEqual(p.fed, p.paid + p.bal, 'pot s
         if (r.pull && r.pull.more && r.pull.more.take) takes++; if (r.pull && r.pull.pick) picks++; if (r.pull && r.pull.more) mores++;
         const p = s.potOf(mode); potOk(p, s, mode);
         assert.strictEqual(p.fed * 10000 + p.rem, sumCost * E.CFG.pull.pot.feedBps, 'the slice is exact: fed + rem = cost x bps / 10000');
-        assert.ok(p.bal >= 0);
+        assert.strictEqual(p.bal, s.pool(mode), 'the mirror is the ledger pool, to the cent');
         const ow = s.potOf(other); assert.strictEqual(ow.fed, 0, 'the other currency pot is untouched');
       }
       assert.ok(prizes >= 1, 'the pot paid at least once: ' + prizes); assert.ok(wins > 40 && takes >= 3 && picks >= 1 && mores >= 10, [wins, takes, picks, mores].join());
@@ -274,8 +274,8 @@ const potOk = (p, s, mode) => { assert.strictEqual(p.fed, p.paid + p.bal, 'pot s
     assert.strictEqual(f.wallet.play, mid + f.totalWin + (f.pot ? f.pot.amount : 0)); assert.strictEqual(s.open.size, 0); assert.strictEqual(s.store().allOpen().length, 0);
     await sleep(150); assert.strictEqual(all(a, 'g:coldcall:result').length, n + 1, 'no second settlement'); assert.strictEqual(s.bal('ann', 'play'), f.wallet.play);
     // a disconnect with nothing open is harmless, another socket of the account is not defaulted
-    const b = s.sock('ann'), c = s.sock('ann'); const r2 = spin(s, b, { bet: 10, mode: 'play', buyBonus: 'bonus1' });
-    c.send('disconnect'); if (r2.status === 'pending') assert.strictEqual(s.open.size, 1);
+    const b = s.sock('ann'), c = s.sock('ann'); const r2 = toPending(s, b, 'pick'); assert.strictEqual(r2.status, 'pending'); assert.strictEqual(s.open.size, 1);
+    c.send('disconnect'); assert.strictEqual(s.open.size, 1, 'the round of the other socket is not defaulted'); assert.strictEqual(all(b, 'g:coldcall:result').filter((x) => x.status === 'done' && x.roundId === r2.roundId).length, 0);
   });
 
   await test('autoplay: auto true never stops at a decision, defaults every one (first square, bank), marks autoplay, and settles', async () => {
@@ -377,7 +377,7 @@ const potOk = (p, s, mode) => { assert.strictEqual(p.fed, p.paid + p.bal, 'pot s
         const r = play(s, a, { bet, mode, buyBonus: buy }, i);
         const prize = r.pot ? r.pot.amount : 0; bal += -r.cost + r.totalWin + prize;
         assert.strictEqual(r.wallet[mode], bal, mode + ' round ' + i);
-        potOk(pot, s, mode); assert.ok(pot.bal >= 0);
+        potOk(pot, s, mode); assert.strictEqual(pot.bal, s.pool(mode), 'the mirror is the ledger pool, to the cent');
         if (buy || r.callback) { assert.strictEqual(prize, 0, 'no prize on a buy or a Callback'); assert.deepStrictEqual(clone(pot), before, 'the pot did not move on round ' + i); if (buy) buysDone++; }
         else { plainCost += r.cost; if (prize) hitsPlain++; }
         assert.strictEqual(pot.fed * 10000 + pot.rem, plainCost * E.CFG.pull.pot.feedBps, 'the slice is exact on plain spins only');
@@ -440,8 +440,8 @@ const potOk = (p, s, mode) => { assert.strictEqual(p.fed, p.paid + p.bal, 'pot s
     };
     for (const bet of [10, 100, 2500]) { const { r, pot } = hit(bet, 4000, 3000); assert.ok(r.pot, 'hit at ' + bet); assert.strictEqual(r.pot.amount, 3000, 'bet ' + bet + ': prize = capCents, not a multiple of the bet'); assert.strictEqual(pot.paid, 3000); }
     { const { r, pot } = hit(10, 4000, 5000, 'chips'); assert.strictEqual(r.pot.amount, 4000, 'below the cap the whole balance is paid (chips pot too)'); assert.ok(pot.bal < 5, 'the pot is empty but for a fresh slice'); }
-    { const { r, pot } = hit(100, 700, 5000); assert.strictEqual(r.pot.amount, 700, 'never more than the balance'); assert.ok(pot.bal >= 0 && pot.bal < 5); }
-    for (const bad of [NaN, undefined, -1, 'x', Infinity]) { const { r, pot } = hit(10, 1e7, bad); assert.ok(r.pot && !r.error, 'damaged knob ' + String(bad) + ' still settles'); assert.strictEqual(r.pot.amount, E.potPrize({ pot: {} }, 1e9), 'damaged ' + String(bad) + ' pays the default cap'); assert.ok(pot.bal >= 0); }
+    { const { r, pot } = hit(100, 700, 5000); assert.strictEqual(r.pot.amount, 700, 'never more than the balance'); assert.ok(pot.bal < 5, 'the pot is empty but for a fresh slice'); }
+    for (const bad of [NaN, undefined, -1, 'x', Infinity]) { const { r, pot } = hit(10, 1e7, bad); assert.ok(r.pot && !r.error, 'damaged knob ' + String(bad) + ' still settles'); assert.strictEqual(r.pot.amount, E.potPrize({ pot: {} }, 1e9), 'damaged ' + String(bad) + ' pays the default cap'); assert.strictEqual(pot.bal, 1e7 + E.potSlice(E.CFG.pull.pot.feedBps, 10, 0).slice - r.pot.amount, 'the prize left the pool and a fresh slice came in'); }
     // 4k scripted spins at mixed bets through the server (each is a wallet + store round trip, 200k take minutes; the 200k loop is in coldcall-pull-engine.js): the hit roll is scripted (a hit about every 30 spins), the pot pays by the cap, fed + seeded = paid + bal at every step that matters and at the end
     const rolls = E.rngFrom(93); let s = setup({ rng: E.rngFrom(92), potRng: () => (rolls() < 1 / 30 ? 0 : 1) }); const a = s.sock('ann'); rich(s, 'ann'); E.CFG.pull.pot.seed = 0; E.CFG.pull.pot.minBal = 1000; E.CFG.pull.pot.capCents = 3000; E.CFG.pull.pot.feedBps = 10000;   // feed 100%: the pot fills fast so the cap binds
     const bets = [10, 20, 50, 100, 200, 500, 1000, 2500], pot = s.potOf('play'); let hits = 0, big = 0, paid0 = 0;
@@ -543,7 +543,7 @@ const potOk = (p, s, mode) => { assert.strictEqual(p.fed, p.paid + p.bal, 'pot s
     assert.deepStrictEqual(r4.pull.daily && r4.pull.daily.streak, 2, 'next Chicago day, consecutive');
     s.clock.advance(3 * 86400000); const r5 = spin(s, a, { bet: 10, mode: 'play', auto: true }); assert.strictEqual(r5.pull.daily.streak, 1, 'a gap resets the streak');
     // the cold clock: lead list leaks after idle time and the state event shows when
-    const st0 = s.store().player('ann', 'play'); const lt0 = st0.lt; assert.ok(lt0 > 10 * 10 || true);
+    const st0 = s.store().player('ann', 'play'); const lt0 = st0.lt; assert.ok(lt0 > 10 * 10, 'more than 10 leads on the list before the idle time is measured: ' + lt0);
     s.clock.advance(5 * 86400000); a.send('g:coldcall:state'); const v = last(a, 'g:coldcall:state').pull.play;
     assert.ok(v.lt <= lt0); assert.ok(v.cold === null || (v.cold.inMs >= 0 && v.cold.leads >= 0));
   });
@@ -670,8 +670,7 @@ const potOk = (p, s, mode) => { assert.strictEqual(p.fed, p.paid + p.bal, 'pot s
       s.clock.advance(200); a.send('g:coldcall:spin', { bet: 2500, mode: 'play' });
       const bal = s.bal('ann', 'play'), voids = all(a, 'g:coldcall:voided'), done = all(a, 'g:coldcall:result').slice(n).filter((r) => r.status === 'done');
       assert.ok(!all(a, 'error').some((e) => e.code === 'internal'), knob + ': no router "Server error"');
-      if (voids.length) { assert.strictEqual(voids.length, 1); assert.strictEqual(bal, start, knob + ': refunded exactly once'); assert.strictEqual(voids[0].refund, 0, 'P6 W3b: this instant round never reached the ledger, so the ledger returned nothing (it said 2500 before)'); assert.strictEqual(all(a2, 'g:coldcall:voided').length, 1, 'the other tab hears it'); }
-      else { assert.strictEqual(done.length, 1); assert.strictEqual(bal, start - 2500 + done[0].totalWin + (done[0].pot ? done[0].pot.amount : 0)); }
+      assert.strictEqual(voids.length, 1, knob + ': the round is voided (every knob block that is missing ends in a void)'); assert.strictEqual(bal, start, knob + ': refunded exactly once'); assert.strictEqual(voids[0].refund, 0, 'P6 W3b: this instant round never reached the ledger, so the ledger returned nothing (it said 2500 before)'); assert.strictEqual(all(a2, 'g:coldcall:voided').length, 1, 'the other tab hears it'); assert.strictEqual(done.length, 0, knob + ': and no result was told');
       assert.strictEqual(s.open.size, 0); assert.strictEqual(s.store().allOpen().length, 0);
     }
   });
@@ -1065,7 +1064,7 @@ const potOk = (p, s, mode) => { assert.strictEqual(p.fed, p.paid + p.bal, 'pot s
         assert.strictEqual(s.bal('ann', mode), bal);
         if (!buy) sumCost += cost; if (buy) assert.strictEqual(prize, 0, 'a buy wins no pot (FIX M1)'); if (prize) prizes++; if (r.callback) callbacks++; else { paid += r.totalWin; exact += ex; sq += (r.totalWin - ex) * (r.totalWin - ex); }
         if (r.pull && r.pull.more && r.pull.more.take) takes++; if (r.pull && r.pull.pick) picks++; rounds++;
-        const p = s.potOf(mode); potOk(p, s, mode); assert.strictEqual(p.fed * 10000 + p.rem, sumCost * E.CFG.pull.pot.feedBps, 'the slice is exact: fed + rem = cost x bps / 10000 (remainders carried)'); assert.ok(p.bal >= 0);
+        const p = s.potOf(mode); potOk(p, s, mode); assert.strictEqual(p.fed * 10000 + p.rem, sumCost * E.CFG.pull.pot.feedBps, 'the slice is exact: fed + rem = cost x bps / 10000 (remainders carried)'); assert.strictEqual(p.bal, s.pool(mode), 'the mirror is the ledger pool, to the cent');
         assert.strictEqual(s.potOf(other).fed, 0);
       }
       assert.strictEqual(s.open.size, 0, 'nothing left open');

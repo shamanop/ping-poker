@@ -465,19 +465,24 @@ function replayRound(s, cfg) {
     const rng = E.rngFrom(77);
     for (let i = 0; i < 100000; i++) { const r = eng.round(rng, i % 7 === 0 ? 'bonus2' : i % 11 === 0 ? 'bonus1' : null); assert.ok(r.winTenths >= 0 && r.winTenths <= MAXT); }
     for (let s = 1; s <= 60; s++) { const r = E.resolveRound(E.rngFrom(s), null, { force: 'bonus3' }); assert.ok(r.winTenths <= MAXT); assert.strictEqual(r.capped, r.winTenths === MAXT); assert.strictEqual(r.script.capped, r.capped); }
-    const low = E.createEngine(cfgWith({ maxWinTenths: 300 })), r2 = E.rngFrom(5); const capped = {};
+    const lowCfg = cfgWith({ maxWinTenths: 300 }), low = E.createEngine(lowCfg), r2 = E.rngFrom(5); const capped = {}, cappedScripts = [], cappedStepScripts = [];
     for (let i = 0; i < 30000; i++) for (const buy of [null, 'call', 'bonus1', 'bonus2']) {
       const r = low.round(r2, buy, { script: true });
       assert.ok(r.winTenths <= 300, buy + ' ' + r.winTenths);
       assert.strictEqual(r.script.winTenths, r.winTenths);
-      if (r.winTenths === 300) { assert.strictEqual(r.capped, true); assert.strictEqual(r.script.capped, true); capped[buy] = (capped[buy] || 0) + 1; }
+      if (r.winTenths === 300) { assert.strictEqual(r.capped, true); assert.strictEqual(r.script.capped, true); capped[buy] = (capped[buy] || 0) + 1; if (capped[buy] <= 3) cappedScripts.push(r.script); }
       else assert.strictEqual(r.capped, false);
+      const stepCapped = (sp) => !!sp && sp.steps.some((x) => x.capped); if (cappedStepScripts.length < 6 && (stepCapped(r.script.spin) || (r.script.bonus && r.script.bonus.spins.some(stepCapped)))) cappedStepScripts.push(r.script);
       const parts = r.clusterTenths + r.phoneTenths + r.bonusTenths; assert.strictEqual(r.winTenths, Math.min(parts, 300));
     }
     assert.ok(capped.null > 0 && capped.call > 0 && capped.bonus1 > 0 && capped.bonus2 > 0, JSON.stringify(capped));
     // a capped bonus stops: the last spin is flagged and no spin follows it
-    const rr = E.createEngine(cfgWith({ maxWinTenths: 300 })).round(E.rngFrom(9), 'bonus2', { script: true });
-    const sp = rr.script.bonus.spins; if (rr.script.bonus.capped) assert.ok(sp[sp.length - 1].capped);
+    let rr = null; for (let sd = 1; sd <= 400 && !(rr && rr.script.bonus.capped); sd++) rr = low.round(E.rngFrom(sd), 'bonus2', { script: true });
+    assert.ok(rr && rr.script.bonus.capped, 'a capped bonus2 round exists at maxWin 30x');
+    const sp = rr.script.bonus.spins; assert.ok(sp[sp.length - 1].capped, 'the last spin is flagged'); assert.ok(sp.slice(0, -1).every((x) => !x.capped), 'and no spin follows it');
+    // the scripts of capped rounds replay on the same low cap: the replay verifier follows the cap through cascades and the phone feature
+    assert.ok(cappedScripts.length >= 4, 'capped scripts were collected: ' + cappedScripts.length); for (const sc of cappedScripts) assert.strictEqual(replayRound(sc, lowCfg).win, 300, 'a capped script replays to the cap');
+    assert.ok(cappedStepScripts.length >= 1, 'a cascade step hit the cap in the corpus'); for (const sc of cappedStepScripts) assert.strictEqual(replayRound(sc, lowCfg).win, sc.winTenths, 'a script whose cascade stopped on the cap replays to its win');
   });
 
   await test('hard caps: constant and adversarial rng streams terminate (cascades, reveal loop, free spins)', () => {
@@ -637,8 +642,8 @@ function replayRound(s, cfg) {
     assert.strictEqual(last(a, 'error').code, 'funds'); assert.strictEqual(all(a, 'g:coldcall:result').length, 0);
     assert.strictEqual(s.bal('ann', 'play'), 1000);
     s.clock.advance(200); a.send('g:coldcall:spin', { bet: 1000, mode: 'play' });   // exactly the balance: allowed
-    assert.strictEqual(all(a, 'g:coldcall:result').length, 1);
-    assert.ok(s.bal('ann', 'play') >= 0);
+    assert.strictEqual(all(a, 'g:coldcall:result').length, 1); const r1 = last(a, 'g:coldcall:result'); assert.strictEqual(r1.cost, 1000, 'it cost exactly what was left');
+    assert.strictEqual(s.bal('ann', 'play'), 1000 - r1.cost + r1.totalWin, 'the ledger holds the balance minus the cost plus the win, to the cent');
   });
 
   await test('coldcall: an empty chips bank stops spins, no negative play, balances never go below zero', async () => {
@@ -647,7 +652,8 @@ function replayRound(s, cfg) {
     for (let i = 0; i < 40; i++) { s.clock.advance(200); a.send('g:coldcall:spin', { bet: 1000, mode: 'chips' }); }
     const e = all(a, 'error').find((x) => x.code === 'funds');
     assert.ok(e && /chips/.test(e.message));
-    assert.ok(s.bal('ann', 'chips') >= 0);
+    assert.strictEqual(all(a, 'error').filter((x) => x.code === 'funds').length, 40, 'every one of the 40 spins was refused for funds'); assert.strictEqual(all(a, 'g:coldcall:result').length, 0, 'none was played');
+    assert.strictEqual(s.bal('ann', 'chips'), 100, 'the bank is exactly what it was');
     const b = s.sock('bo'); s.setBal('bo', 'play', 100);
     s.clock.advance(200); b.send('g:coldcall:spin', { bet: 500, mode: 'play' });
     assert.strictEqual(last(b, 'error').code, 'funds'); assert.strictEqual(s.bal('bo', 'play'), 100);

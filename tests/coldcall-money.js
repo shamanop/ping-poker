@@ -100,11 +100,11 @@ function auditMatches(s) {
       if (W === 0) { assert.strictEqual(s.bal('ann', 'play'), before); assert.strictEqual(closeLines(s, id).length, 0, 'a free round that paid 0 leaves no ledger line'); }
       else { assert.strictEqual(paid, W, 'W paid exactly once'); assert.strictEqual(new Set(closeLines(s, id).map((e) => e.id)).size, 1, 'one :close batch'); assert.strictEqual(s.bal('ann', 'play'), before + W); }
       const n = spin(s, s.sock('ann'), { bet: 100, mode: 'play', auto: true }); assert.strictEqual(n.callback, false, 'the next spin is a paid spin'); assert.strictEqual(n.cost, 100);
-      const id2 = s.lastId(); s.reboot(); assert.strictEqual(s.lastId(), id2, 'a second reboot writes nothing'); assert.strictEqual(rng.draws, rng.draws);
+      const id2 = s.lastId(), drawsBefore = rng.draws; s.reboot(); assert.strictEqual(s.lastId(), id2, 'a second reboot writes nothing'); assert.strictEqual(rng.draws, drawsBefore, 'and the second reboot draws nothing from the module rng (the Callback record is gone from the disk, not replayed again)'); assert.strictEqual(s.store().allOpen().length, 0); assert.ok(!diskHas(s), 'the record is off the disk too');
     });
   }
 
-  await test('RULE 2: record and state lost but the ledger paid (the record deleted, the old state restored): the replay answers round_closed (or dup), pays nothing, consumes the Callback', async () => {
+  for (const answer of ['round_closed', 'dup']) await test(`RULE 2: record and state lost but the ledger paid (the record deleted, the old state restored): ${answer === 'round_closed' ? 'a replay that rolls NEW numbers answers round_closed' : 'a replay that rolls the SAME numbers is a dup and shows the same result'}, pays nothing, consumes the Callback`, async () => {
     const { seed, r: mirror } = findSeed({ buy: null, bet: 100, state: CB(100), auto: true }, (r) => r.status === 'done' && r.pay.win > 0), W = mirror.pay.win;
     const rng = countingRng(seed);
     const s = setup({ rng, roundRng: E.rngFrom(5) }); const a = s.sock('ann');
@@ -117,10 +117,11 @@ function auditMatches(s) {
     s.crash();
     delete disk.open['ann|play']; disk.players.ann.play = { ...CB(100), cb: { bet: 100, id } };      // the record and the new state never reached the disk: the old state, with the Callback armed under the same id
     fs.writeFileSync(s.files.pull, JSON.stringify(disk));
-    s.boot();
+    s.boot(); if (answer === 'dup') { SRV.rng = E.rngFrom(seed); SRV.roundRng = E.rngFrom(5); }     // the same streams again: the replay rolls what the first call rolled
     assert.strictEqual(s.store().player('ann', 'play').cb.id, id, 'the Callback is armed again, same id');
     const b = s.sock('ann'), r = spin(s, b, { bet: 100, mode: 'play', auto: true });
-    if (r.error) assert.strictEqual(r.error.code, 'round_closed'); else assert.strictEqual(r.totalWin, W, 'an identical roll is a dup: the same result');
+    if (answer === 'round_closed') { assert.ok(r.error && r.error.code === 'round_closed', 'other numbers on a closed round: ' + JSON.stringify(r.error || r.totalWin)); assert.strictEqual(all(b, 'g:coldcall:result').length, 0, 'no result is shown for numbers the ledger did not pay'); }
+    else { assert.ok(!r.error, 'an identical roll is a dup: ' + JSON.stringify(r.error)); assert.strictEqual(r.totalWin, W, 'the same result'); }
     assert.strictEqual(s.bal('ann', 'play'), before + W, 'nothing was paid a second time'); assert.strictEqual(sum(closeLines(s, id), 'coldcall:credit'), W); assert.strictEqual(new Set(closeLines(s, id).map((e) => e.id)).size, 1);
     assert.strictEqual(s.store().player('ann', 'play').cb, null, 'the Callback is consumed'); assert.strictEqual(s.store().allOpen().length, 0);
     const n = spin(s, b, { bet: 100, mode: 'play', auto: true }); assert.strictEqual(n.callback, false, 'and the next spin is a paid spin');
@@ -145,9 +146,7 @@ function auditMatches(s) {
 
   // ---------------------------------------------------------------- CRASH WALK on a paid round with a decision open
   const PEND = findSeed({ buy: 'bonus1', bet: 100, auto: false }, (r) => r.status === 'pending');
-  const wantWin = findSeed({ buy: 'bonus1', bet: 100, auto: true }, () => true, PEND.seed);   // the default-settle of the same seed: the numbers a timeout pays
   const defaultWin = E.playRound(E.rngFrom(PEND.seed), { buy: 'bonus1', bet: 100, state: E.newState(), now: 1000200, day: '1970-01-01', script: false, auto: true, rnd: E.rngFrom(5) }, []).pay.win;
-  void wantWin;
   const afterEach = (s, tag, before, cost, win) => {
     assert.deepStrictEqual(s.escrows(), [], tag + ': every escrow of the game is 0'); auditMatches(s);
     assert.strictEqual(s.bal('ann', 'play'), before - cost + win, tag + ': balance'); assert.strictEqual(s.store().allOpen().length, 0, tag + ': no record left');
@@ -300,8 +299,8 @@ function auditMatches(s) {
     s.clock.advance(200); a.send('g:coldcall:spin', { bet: 100, mode: 'play', buyBonus: 'bonus1' }); let r;
     assert.strictEqual(all(a, 'g:coldcall:result').length, 0, 'no pending result without a record on disk'); const v = last(a, 'g:coldcall:voided'); assert.ok(v && v.reason === 'open_error', 'voided: ' + JSON.stringify(v));
     assert.strictEqual(s.bal('ann', 'play'), before, 'the stake is back'); assert.deepStrictEqual(s.escrows(), []); assert.strictEqual(s.open.size, 0);
-    const id = s.lastId(), draws = []; r = spin(s, a, { bet: 100, mode: 'chips', auto: true });
-    assert.ok(r.error, 'the Callback is not played when its record cannot be written'); assert.strictEqual(all(a, 'g:coldcall:result').length, 0); assert.strictEqual(s.lastId(), id, 'and no ledger line was written'); assert.ok(s.store().player('ann', 'chips').cb, 'the entitlement is still armed'); assert.strictEqual(s.store().allOpen().length, 0); void draws;
+    const id = s.lastId(); r = spin(s, a, { bet: 100, mode: 'chips', auto: true });
+    assert.ok(r.error, 'the Callback is not played when its record cannot be written'); assert.strictEqual(all(a, 'g:coldcall:result').length, 0); assert.strictEqual(s.lastId(), id, 'and no ledger line was written'); assert.ok(s.store().player('ann', 'chips').cb, 'the entitlement is still armed'); assert.strictEqual(s.store().allOpen().length, 0);
     fs.rmdirSync(s.files.pull + '.tmp');
     const ok = spin(s, a, { bet: 100, mode: 'chips', auto: true }); assert.strictEqual(ok.status, 'done'); assert.strictEqual(ok.callback, true, 'once the disk works the Callback plays'); assert.strictEqual(ok.roundId, 'cbtest1');
   });
@@ -328,7 +327,7 @@ function auditMatches(s) {
         assert.ok(!r.error, `spin ${i} ${mode}: ${JSON.stringify(r.error)} (pool ${pool0}, knobs ${JSON.stringify(P)})`); assert.strictEqual(r.status, 'done'); spins++;
         const lines = s.lines((e) => e.ref === `coldcall:ann:${r.roundId}`); assert.strictEqual(new Set(lines.map((e) => e.id)).size, lines.length ? 1 : 0, 'one batch');
         const feed = sum(lines, 'coldcall:feed'), prize = sum(lines, 'coldcall:prize');
-        assert.ok(prize <= pool0 + feed, 'the prize ' + prize + ' is within the pool ' + pool0 + ' after this batch\'s own feed ' + feed); assert.strictEqual(s.pool(mode), pool0 + feed - prize); assert.ok(s.pool(mode) >= 0);
+        assert.ok(prize <= pool0 + feed, 'the prize ' + prize + ' is within the pool ' + pool0 + ' after this batch\'s own feed ' + feed); assert.strictEqual(s.pool(mode), pool0 + feed - prize); assert.strictEqual(s.potOf(mode).bal, s.pool(mode), 'the mirror follows the ledger pool');
         if (prize) { hits++; assert.strictEqual(r.pot.amount, prize); assert.ok(lines.find((e) => e.reason === 'coldcall:prize').from === 'pool:coldcall:office'); assert.strictEqual(sum(lines, 'coldcall:spend'), r.cost, 'the stake is in the same batch'); }
         if (pool0 === 0) empty++;
         assert.strictEqual(s.potOf(mode).bal, s.pool(mode), 'the mirror follows the ledger');
@@ -360,7 +359,7 @@ function auditMatches(s) {
         continue;
       }
       r = spin(s, sock, { bet, mode, buyBonus: kind % 4 === 1 ? 'bonus1' : kind === 6 ? 'bonus2' : undefined });
-      if (r.error) { assert.ok(['rate', 'funds', 'decision_open'].includes(r.error.code), JSON.stringify(r.error)); continue; }
+      assert.ok(!r.error, 'step ' + i + ': no spin of this run is refused: ' + JSON.stringify(r.error));
       if (r.callback) callbacks++;
       const n = all(sock, 'g:coldcall:voided').length;
       if (r.status === 'pending') {
@@ -634,7 +633,6 @@ function auditMatches(s) {
     const v = last(a, 'g:coldcall:voided'); assert.ok(v && v.roundId === 'cbvoid2'); assert.strictEqual(s.lastId(), id);
     assert.deepStrictEqual(s.disk().players.ann.chips.cb, { bet: 100, id: 'cbvoid2' }, 'still armed on the disk'); assert.ok(!diskHas(s, 'ann|chips'), 'the record is gone');
   });
-
 
   // ---------------------------------------------------------------- no wallet
   await test('NO WALLET: the slot\'s ctx has no wallet, and games/coldcall.js makes no wallet call and no direct ledger / service call', async () => {
