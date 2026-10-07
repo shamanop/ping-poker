@@ -84,6 +84,7 @@ function onResult(W, bot, d) {
   W.model.applySlot(r);
   if (prize > 0) S.c.potWon++;
   if (callback) { S.c.callbacks++; B.armed.delete(ak); B.unsure.delete(ak); }
+  if (!callback && !buy && !d.forced) B.unsure.delete(ak);      // a plain round that did not play a Callback: nobody was waiting; what it armed is in pull.armed
   if (d.pull && d.pull.armed) { B.armed.add(ak); B.unsure.delete(ak); }
   if (!callback && !buy) S.c.plain++; else if (buy) S.c.buy++;
   if (d.forced) S.c.forced++;
@@ -115,6 +116,7 @@ function adoptClose(W, o, L, via) {
   }
   W.slot.c.unacked++;
   if (o.callback) { B.armed.delete(k2(o.key, o.cur)); B.unsure.delete(k2(o.key, o.cur)); }       // the Callback is spent, whoever heard it
+  else if (!o.buy) B.unsure.add(k2(o.key, o.cur));        // a paid round nobody heard the end of may have armed a Callback (the ledger does not say)
   return null;
 }
 // each check pass: a round whose client has since lost its socket (or a kill came) and that the ledger closed. A round with a client that WAS listening must be told (checkSlot flags it).
