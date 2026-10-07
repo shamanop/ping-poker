@@ -114,6 +114,30 @@ function breakLedger(w) {
     eq(evs(s, 'g:bender:result').length, 0); eq(w.ledger.lastId, idBefore);
   });
 
+  // P6 W3b fix round 2
+  await t('D6: a ledger refusal that happens ONCE loses nothing: error, no result, no stake taken, no line (the round is one ledger call, not a spend and a credit)', async () => {
+    const w = world(rng); const s = w.sock('ann');
+    const before = w.ledger.balance('play:ann', 'play'), idBefore = w.ledger.lastId;
+    const real = w.service.houseRound; let fails = 1;
+    w.service.houseRound = (...a) => { if (fails-- > 0) throw new MoneyError('io_error', { why: 'disk' }); return real(...a); };
+    w.spin(s, { bet: 100, mode: 'play' }); await tick(); await tick();
+    eq(evs(s, 'g:bender:result').length, 0, 'no result'); eq(evs(s, 'error').map((x) => [x.code, x.message]), [['bad_request', 'Could not place that bet']]);
+    eq(w.ledger.balance('play:ann', 'play'), before, 'no stake taken'); eq(w.ledger.lastId, idBefore, 'no line'); eq(roundLines(w, 'ann').length, 0);
+    eq(w.wallet.pendingCount(), 0); s.send('g:bender:history'); eq(evs(s, 'g:bender:history').pop().rounds, []);
+  });
+
+  await t('D8: a round whose cost rounds to 0 (a bonus priced below half a cent at the lowest bet) is refused before any write: bad_request, no result, no line, no history', async () => {
+    const Eng = require('../../games/bender-engine.js');
+    const w = world(rng); const s = w.sock('ann'); const keep = Eng.CFG.buyCost.election; Eng.CFG.buyCost.election = 0.4;
+    try {
+      const bet = bender.betLevels[0], before = w.ledger.balance('play:ann', 'play'), idBefore = w.ledger.lastId;
+      for (const mode of ['play', 'chips']) { w.spin(s, { bet, mode, buyBonus: 'election' }); await tick(); await tick(); }
+      eq(evs(s, 'g:bender:result').length, 0, 'no result'); eq(evs(s, 'error').map((x) => [x.code, x.message]), [['bad_request', 'Could not place that bet'], ['bad_request', 'Could not place that bet']]);
+      eq(w.ledger.lastId, idBefore, 'nothing written'); eq(w.ledger.balance('play:ann', 'play'), before);
+      s.send('g:bender:history'); eq(evs(s, 'g:bender:history').pop().rounds, [], 'no history entry');
+    } finally { Eng.CFG.buyCost.election = keep; }
+  });
+
   console.log(`${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();

@@ -85,6 +85,8 @@ module.exports = {
       // Floor + random extra cent with probability = the fraction keeps the long-run return exact at every bet size.
       const exact = r.totalWinMult * p.bet, floor = Math.floor(exact + 1e-9);
       const totalWin = floor + (exact - floor > 1e-9 && rng() < exact - floor ? 1 : 0);
+      // A round that costs nothing is not a round (the wallet refused an amount of 0 before the one-call path): refuse it before any write, nothing is told but the error.
+      if (!(cost > 0)) return err(socket, 'bad_request', 'Could not place that bet');
       const ref = { game: 'bender', round: roundId };
       // Ledger first (ADD-A-GAME.md rule 4): a money error is an error to the client, never a result. With ctx.money the whole round is ONE
       // ledger write (ref bender:<key>:<roundId>, the same ref and numbers the wallet adapter's spend + credit pair wrote), so the ledger
