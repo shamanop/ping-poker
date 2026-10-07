@@ -58,7 +58,7 @@ function createService(ledger, opts = {}) {
         if (a.startsWith('bank:')) (known1 || (known1 = [])).push(a.slice(5));
         else if (a.startsWith('play:')) (known2 || (known2 = [])).push(a.slice(5));
       }
-      if (e.reason === 'topup' && e.to.startsWith('play:')) top = [e.to.slice(5), e.ts];
+      if (e.reason === 'topup' && e.to.startsWith('play:')) (top || (top = [])).push([e.to.slice(5), e.ts]);     // one time per leg, as before D2
       const to = seatParts(e.to), from = seatParts(e.from);
       if (to && e.reason.startsWith('buyin:')) {
         ev.push([to[1], { id: e.id, key: to[2], amount: e.amount, out: false }]);
@@ -75,7 +75,7 @@ function createService(ledger, opts = {}) {
     }
     if (known1) for (const k of known1) known.chips.add(k);
     if (known2) for (const k of known2) known.play.add(k);
-    if (top) lastTopUp.set(top[0], top[1]);
+    if (top) for (const [k, ts] of top) lastTopUp.set(k, ts);
     for (const [t, x] of ev) { let l = tableEv.get(t); if (!l) tableEv.set(t, l = []); l.push(x); }
     for (const [k, id] of ins) { let l = seatIns.get(k); if (!l) seatIns.set(k, l = []); l.push(id); }
     for (const [k, f] of last) seatLast.set(k, f);
