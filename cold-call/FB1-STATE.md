@@ -1,5 +1,14 @@
 # FB1 state
 
+## FOR FRANK (lead 4, INTERIM 19:15 CDT; final version replaces this block when the drivers and the shaman after-run are in)
+- Branch coldcall-fb1 HEAD = **7a57245** = merge of coldcall-pull 4713970 into e222f6a. Commits since lead 3: 49859c2 (fb1-perf, FB5 r1), 80fe795 (lead 4, leads count fix), e222f6a (fb1-paint, r2 CSS only), 7a57245 (merge; one conflict, pull.js two lines, resolved as the union).
+- **Play copy 4655 serves 7a57245** since 19:05 (8da0c51 from 18:19 to 19:05; it was down 16:07-18:19). It now runs as systemd user unit `cc-play-4655` (own cgroup, Restart=on-failure), NOT a setsid child: the gateway restart is what killed the old one. Data: `_scratch/play-srv` (Chris: chris3929, wallet 960018, 358 rounds, leads 3704, unchanged; byte-identical copy of the original in `_scratch/play-srv-orig-1820`). No test hook. `/tmp/cc-live` removed. Move it again with `_scratch/lead4/play.sh <commit>`; stop with `systemctl --user stop cc-play-4655`.
+- Verified on a slim export of 7a57245 (my runs): suites coldcall 47, pull-engine 57, pull-server 61, bender 19, coldcall-livecfg 27, coldcall-presets 20, bender-livecfg 5, all exit 0 (counts moved with coldcall-pull: 58 -> 61, new livecfg / presets files). No diff vs coldcall-pull 4713970 in games/, server.js, tests/, engine.js, wallet/accounts/ledger, shell.js; engine copy identical. Before the merge, on 8da0c51 and 80fe795: 47 / 57 / 58 / 19, no diff vs 9a02561.
+- Settle-to-spin, in-page, 30 spins on 7a57245: median 4 ms, max 14 ms, 11 of 11 checks (qa/coldcall-fb1/final/fb1_lead4_7a57245.json). On 80fe795: median 7, max 16, 11 of 11.
+- The 1-in-4 "leads supersede" fail is FIXED (80fe795): the count was drawn on the frame ticker, so when frames starved about 270 ms a superseded leadGain's last number stayed up. leadGain now draws its start number at once. Proof `qa/coldcall-fb1/fb1/supersede_starved.js` (frames held back 300 ms): 8da0c51 shows the old number in 2 of 5 runs (38-39 of 88 samples), 80fe795 and 7a57245 0 of 5.
+- paint_shift.js on 7a57245: 42 pairs (540 / 360 / 1440, Play $ and Chips, 8 states), 0 boxes shifted. Captures: 99 shots, 0 page errors, `_scratch/lead4/shots-final/`; the best ten are committed in `qa/coldcall-fb1/final/`.
+- Still running at 19:15: flow.js / f1_*.js on 7a57245 (`_scratch/lead4/legacy-final.log`; on the earlier merge object flow.js Play $ passed 8 of 8 scenarios), fb1-perf's full shaman after-run (`_scratch/fb1perf/res/after1.*`, ends about 19:40) and fb1-perf itself (uncommitted warm.js edit at 19:12). fb1-paint is finished.
+
 ## FOR FRANK (lead 3, 18:10 CDT; wave A close-out is NOT complete, hand-off: I am at my 150K context cap)
 **Done and verified by me. Not done: fb1-perf has not committed; paint fix round r2 is queued, not run; play copy 4655 is down; coldcall-pull not merged in.**
 
@@ -44,3 +53,9 @@ Wave B: FB6 graphics / motion loop, remaining paint (list under "Still CSS"), FB
 - Running children (16:20): fb1-paint (agent:main:dashboard:62f85f19-6069-4fd9-98ce-0011d5027519): verify S1, paint S2 buttons, S3 bubbles, S4 plates, budget $4.50 more; fb1-perf (agent:main:dashboard:1a106317-41eb-432a-964c-2395dc64ac4e): first-encounter hitches, resample oversized images, rig re-run.
 - Uncommitted (fb1-paint owns): paint.css, index.html (paint.css link), assets/symbols.json, assets/img/ui/, cold-call/art/paint/, redesign/paint_*.py, spend.jsonl.
 - Image credit: usable $6.74 at 16:15 (spent 0.19 on S1 this wave).
+
+## FRANK NOTE 18:43 CDT (for lead 4 and the watch)
+- I killed `node qa/coldcall-fb1/shots.js http://127.0.0.1:4651 _scratch/fb1perf/shots-after` (pid 1411039, started by `_scratch/fb1perf/shots.sh`). Its loop had finished (report.json written 18:40:22, all 33 shots `ERR_CONNECTION_REFUSED`: nothing listens on 4651 any more), but it hung holding 33 browsers and the chrome.lock. Box was at 141 MB free RAM with swap full; after the kill 5.2 GB free and the queued flow.js got the lock. No builder session was cancelled.
+- BUG in shots.js: when `page.goto` throws inside `open()`, `b` is never assigned, so `finally { if (b) await b.browser.close(); }` leaks one browser per failed shot. Check the port answers (curl) before any shots.js run, and fix `open()` to close its browser on failure when you next touch it.
+- The perf after-shots therefore do NOT exist; `shots-after/report.json` is 33 failures from a dead port, not a build defect.
+- Disk: 11 GB free after I purged the pip and uv caches (was 6.2 GB). Keep exports slim and delete your own /tmp copies.
