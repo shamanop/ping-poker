@@ -2,7 +2,7 @@
 
 A game = one server module + one client `registerGame` file. This file is the contract every game follows. The money part is not advice: the soak (`tests/soak/`) fails the build when a game breaks it.
 
-**Status (P6 wave 2, 2026-10-06).** The rule and the API below are fixed and the API now exists on `v2-all` (`transport/game-money.js`, `money/service.js`, `games/index.js`). No game uses `open` / `settle` / `void` yet: Bender still plays through `ctx.wallet.spend` then `ctx.wallet.credit` in one handler, and COLD CALL is the first game on `ctx.money`.
+**Status (P6 wave 2, 2026-10-06).** The rule and the API below are fixed and the API now exists on `v2-all` (`transport/game-money.js`, `money/service.js`, `games/index.js`). COLD CALL is on `ctx.money` (branch `p6-w2c`: `round`, `open`, `settle`, `void`, the office pool, `recover` and `audit`; `cold-call/PULL-STATE.md` "P6: money on the ledger"). Bender still plays through `ctx.wallet.spend` then `ctx.wallet.credit` in one handler.
 
 ## 1. The one money rule
 
