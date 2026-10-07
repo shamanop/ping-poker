@@ -73,9 +73,9 @@ Each fires rarely from its own counter (the soak has to find it) and logs `[soak
 | `boot-skip` | `service.bootRecover` leaves every second seat | I4 after a restart |
 | `ghost-mint` | every 4th `ensureAccount` also mints 500 Play $ under a `bonus:` ref nobody asked for | I2 (`mint:bonus`), I7 |
 | `view-lies` | the wallet adapter's `get()` says 100 more Play $ than the ledger | I6 |
-| `stuck-stake` | a Bender stake is parked, its credit refused and the tick flush dropped: the cost stays parked | I8 (and I6) |
+| `stuck-stake` | on every 6th Bender round booked through `ctx.money.round` (one ledger write), the wallet adapter ALSO parks a 1-unit stake through its real `spend` and the tick flush that would settle it is dropped: "some code path took the old park-then-credit road and the flush never ran" | I8 (and I6) |
 | `neg-holder` | a line appended straight to `money.jsonl` behind the ledger's back takes `bank:chris` below zero | I1 / I3 |
-| `stranded-escrow` | now and then a `settleRound` / `voidRound` of the slot is swallowed after `open`: the game forgets the round, the escrow stays | I4 (escrow with no open round) |
+| `stranded-escrow` | now and then a `settleRound` / `voidRound` of the slot is swallowed after `open`: the game forgets the round, the escrow stays; only a close with a stake in escrow is swallowed, a free round has none to strand | I4 (escrow with no open round) |
 | `pool-skim` | the pot feed leg is dropped, or a prize is paid from `house:coldcall` instead of the pool (both sum to zero) | I4 pool (prize leg, feed rate), I2 |
 | `settle-after-void` | a slot round with a win is voided (stake back) and ALSO settled under a fresh ref: the win is paid on a returned stake | I7, I2 |
 
@@ -89,7 +89,7 @@ A bug that is not caught is printed as FAILED PROOF, never hidden.
 - A QA-forced round (`force`) is a stateless paid spin: no decision, no Callback. Decisions come from buys and from natural bonuses; the Callback from the state.
 - The mirror files fold open escrows into the player's row (V2-DESIGN, P6 wave 2), so I5 does too.
 - `fx:chips` + `fx:play` = 0 always; each side alone is not 0 once a cross-funded seat has won or lost (see PROGRESS).
-- Bugs that no longer make sense on today's code: none of the nine was dropped; `stuck-stake` is done through the adapter's `schedule` and a refused credit because a Bender stake is now parked only inside one handler.
+- Bugs that no longer make sense on today's code: none of the twelve was retired. `stuck-stake` changed shape twice. First (wave 2) the adapter's `schedule` and a refused credit, while a Bender stake was parked inside one handler. Since wave 3b fix A5 Bender books a round as ONE ledger write (`ctx.money.round`) and no product path calls the adapter's `spend`, so that hook never fired (0 firings = FAILED PROOF); it now hooks `service.houseRound` for a Bender round and parks a stake of its own through the adapter's real `spend`. I8 still has a proof, but the bug stands for a path the product no longer takes: if the legacy `spend`/`credit` road is deleted from the adapter, retire this bug and say that I8 has no proof.
 
 ## Not covered
 

@@ -69,11 +69,12 @@ const SERVICE = {
     };
   },
   // The slot: a settle or a void is swallowed now and then (the game believes the round is closed; the stake stays in escrow and no round is reported open).
-  'stranded-escrow'(svc) {
+  // Only a close that has a stake in escrow is swallowed: a free round (cost 0) holds no escrow, so swallowing its settle strands nothing and is a different bug (a win never paid).
+  'stranded-escrow'(svc, ledger) {
     const fire = every(4), noop = { id: null, dup: false, noop: true };
     for (const name of ['settleRound', 'voidRound']) {
       const orig = svc[name];
-      svc[name] = function (game, key, cur, roundId) { if (game === 'coldcall' && fire()) { say(`swallowed ${name}`, key, roundId); return noop; } return orig.apply(this, arguments); };
+      svc[name] = function (game, key, cur, roundId) { if (game === 'coldcall' && ledger.balance(`escrow:coldcall:${key}:${roundId}`, cur) > 0 && fire()) { say(`swallowed ${name}`, key, roundId); return noop; } return orig.apply(this, arguments); };
     }
   },
   // The slot: a round with a win is voided (the stake goes back) and ALSO settled under a fresh ref, so the win is paid on a returned stake.
@@ -139,20 +140,22 @@ const ADAPTER = {
     a.get = function () { const v = get.apply(this, arguments); return { ...v, play: v.play + 100 }; };
     return a;
   },
-  // Now and then a Bender stake is parked and its credit refused, and the tick flush that would settle it as a loss never runs: the cost stays parked in memory.
+  // Bender books a round as ONE ledger write (service.houseRound through ctx.money.round) and nothing calls the adapter's spend any more. This stands for
+  // "some code path took the old park-then-credit road and the flush never ran": every 6th Bender round, the adapter ALSO parks a 1-unit stake under a ref of
+  // its own (through its real spend) and the tick flush that would settle it as a loss is dropped. The stake stays in the adapter's memory (I8: walletPending)
+  // and is held against the player's wallet view (I6). The adapter patched is the one server.js hands to ctx.wallet, which the audit's walletPending reads.
   'stuck-stake'(opts, make) {
-    let drop = false; const fire = every(6), stuck = new Set();
-    const sched = opts.schedule || (fn => queueMicrotask(fn));
+    let drop = false, n = 0; const fire = every(6), sched = opts.schedule || (fn => queueMicrotask(fn)), svc = opts.service, orig = svc.houseRound;
     const a = make({ ...opts, schedule: fn => { if (drop) { drop = false; return; } sched(fn); } });
-    const spend = a.spend, credit = a.credit;
-    const refOf = (acct, ref) => `${ref.game}:${String(typeof acct === 'object' ? acct.key : acct).toLowerCase().trim()}:${ref.round}`;
-    a.spend = function (acct, mode, amount, ref) {
-      if (ref && ref.game === 'bender' && fire()) { drop = true; stuck.add(refOf(acct, ref)); say('parked a stake and dropped its flush', ref.round); }
-      try { return spend.apply(this, arguments); } finally { drop = false; }
-    };
-    a.credit = function (acct, mode, amount, ref) {
-      if (ref && stuck.has(refOf(acct, ref))) { const e = new Error('Server error'); e.code = 'internal'; throw e; }
-      return credit.apply(this, arguments);
+    svc.houseRound = function (game, key, cost, win, cur, ref) {
+      const r = orig.apply(this, arguments);
+      if (game === 'bender' && !r.noop && !r.dup && /^bender:[^:]+:[0-9a-f]+$/.test(String(ref)) && fire()) {
+        drop = true;
+        try { a.spend(key, cur === 'chips' ? 'chips' : 'play', 1, { game: 'bender', round: `stuck${++n}` }); say('parked a stake and dropped its flush', ref); }
+        catch (e) { say('could not park a stake', e.code); }
+        finally { drop = false; }
+      }
+      return r;
     };
     return a;
   },

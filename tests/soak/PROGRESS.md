@@ -37,26 +37,31 @@ Worktree wt-all, branch v2-all. Ports 4740-4759. Data under `_scratch/p6/soak/`.
 - A decision timer firing exactly across a restart, a Callback armed by the daily appointment, the slot's cold clock (the clock is real; a run is minutes), live config changes that change `buyCost` (the soak changes `payScale` only), `pull.on` flips.
 - No browser, no tournament, no second server. `tests/v2/run.js` was NOT run (the lead runs it). Nothing was pushed, merged or deployed; master was not touched.
 
-## Proof table (own run on HEAD 3715c95, `node tests/soak/prove.js`, seed 7, 1.5 min and 3 kills per run, 2026-10-07; log `_scratch/p6/w3b/soak/proof-table.txt`)
+## Proof table (own runs on 55ee739 plus the `tests/soak/bugs/inject.js` edit below, `node tests/soak/prove.js`, 1.5 min and 3 kills per run, 2026-10-07; logs `_scratch/p6/w3b/soak/prove-s7.log`, `prove-s8.log`)
 
-| run | exit | invariants that fired | step | sec | firings | verdict |
-|---|---|---|---|---|---|---|
-| clean | 0 | - | - | 91.1 | 0 | PASS |
-| win-dropped | 1 | I2, I7 | 70 | 5.4 | 1 | CAUGHT |
-| paid-twice | 1 | I2, I7 | 61 | 4.9 | 1 | CAUGHT |
-| skim | 1 | I7, I4 | 79 | 5.7 | 1 | CAUGHT |
-| mirror-stale | 1 | I5 | 76 | 6.1 | 1 | CAUGHT |
-| boot-skip | 1 | I4 | 483 | 20.9 | 4 | CAUGHT |
-| ghost-mint | 1 | I2, I7 | 0 | 2.8 | 1 | CAUGHT (fires in setup, step 0) |
-| view-lies | 1 | I6 | 0 | 2.5 | - | CAUGHT |
-| stuck-stake | 1 | I2, I7, I8, I6 | 72 | 5.0 | 2 | CAUGHT |
-| neg-holder | 1 | I3 | 107 | 7.2 | 1 | CAUGHT |
-| stranded-escrow (slot) | 1 | I2, I7, I4 | 251 | 15.1 | 1 | CAUGHT (I2 first; I4 named) |
-| pool-skim (slot) | 1 | I2 | 56 | 3.2 | 1 | CAUGHT (this run: the prize paid from `house:coldcall`, caught by the leg-shape check) |
-| settle-after-void (slot) | 1 | I2, I7 | 103 | 8.6 | 1 | CAUGHT |
+| run | seed 7: exit, invariants, step | seed 8: exit, invariants, step |
+|---|---|---|
+| clean | 0, PASS | 0, PASS |
+| win-dropped | 1, I2 I7, 88 | 1, I2 I7, 48 |
+| paid-twice | 1, I2 I7, 119 | 1, I2 I7, 136 |
+| skim | 1, I7 I4, 96 | 1, I7 I4, 126 |
+| mirror-stale | 1, I5, 76 | 1, I5, 120 |
+| boot-skip | 1, I4, 332 | 1, I4, 364 |
+| ghost-mint | 1, I2 I7, 0 | 1, I2 I7, 0 |
+| view-lies | 1, I6, 0 | 1, I6, 0 |
+| stuck-stake | 1, I8 I6, 29 | 1, I8 I6, 31 |
+| neg-holder | 1, I3, 141 | 1, I3, 133 |
+| stranded-escrow (slot) | 1, I2 I7 I4, 144 | 1, I2 I7 I4, 159 |
+| pool-skim (slot) | 1, I4, 48 | 1, I4, 78 |
+| settle-after-void (slot) | 1, I2 I7, 105 | 1, I2 I7, 132 |
 
-All twelve caught by an expected invariant; the clean soak passed. `pool-skim` has two variants: the earlier proof run (seed 7, before it was split) was caught by the feed-rate bound (I4: "6 plain rounds fed 15, the rate allows 30..31"), and `SOAK_BUG_MODE=feed|prize` runs one alone (seeds 21, 22 feed: I4 at steps 51, 57; seed 23 prize: I2 at step 68).
-None of the nine old bugs was dropped as meaningless on today's code. `stuck-stake` changed shape: a Bender stake is now parked only inside one handler (spend then credit), so the bug parks it, refuses the credit and drops the tick flush through the adapter's `schedule` option.
+Both runs exit 0: the clean soak passed and 12 of 12 seeded bugs were caught by an expected invariant, each with at least 1 firing except `view-lies` (a constant lie).
+`pool-skim` has two variants (`SOAK_BUG_MODE=feed|prize` runs one alone); the table runs both.
+
+### What changed in the bugs on the merged head (wave 3b money fixes the first soak never saw)
+- `stuck-stake` stopped firing (0 firings, FAILED PROOF, lead's run of 55ee739): Bender now books a round as one ledger write (`ctx.money.round`, fix A5) and nothing calls the wallet adapter's `spend`, so the old hook on `a.spend` was dead. New shape: on every 6th Bender round through `service.houseRound` the bug also parks a 1-unit stake through the adapter's real `spend` (the adapter instance is the one server.js hands to `ctx.wallet`, which the audit's `walletPending` reads) and drops that stake's tick flush. Caught by I8 (the adapter holds a parked stake), I6 second. This is a harness stand-in for a path the product no longer takes, not a reproduction of a live one.
+- `stranded-escrow` failed seed 8 on the first full run (I2/I7, no I4): the bug swallowed the settle of a free round (cost 0), which holds no escrow, so nothing was stranded and the player simply was not paid. That is a different bug. The bug now swallows only a close whose escrow account holds a stake. No invariant, bound or the proof rule was changed. First run logs: `prove-s8-first.log`.
+- The other ten injection points were read against the head: each hooks a function the product still calls through the object property (`svc.houseRound`, `ensureAccount`, `bootRecover`, `settleRound`, `voidRound`, `mirror`, `ledger.batch`, `ledger.list`, the adapter's `get`) and the reason / ref strings they match (`coldcall:feed`, `coldcall:prize`, `:close`, `hand:`) are still the ones `money/service.js` writes. Every one fired in both runs (`view-lies` is a constant lie).
 
 ## DEFECTS FOUND
 None on the real code. Every violation the soak raised while I was building it was a harness problem (list above), reproduced from the kept data dir and fixed; nothing was loosened. The three long runs, eight stress runs and every clean short run on HEAD pass with 0 violations.
