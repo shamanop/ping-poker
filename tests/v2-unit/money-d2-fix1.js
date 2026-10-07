@@ -40,6 +40,7 @@ for (const [name, repl] of [
   ['unparseable bytes', (len) => '#'.repeat(len)],
   ['another valid line (a ref the index does not know)', (len) => { const s = JSON.stringify({ id: 11, ts: 1000, from: 'bank:a', to: 'seat:T:zz', amount: 1, cur: 'chips', reason: 'buyin:chips', ref: 'zz' }); return s + ' '.repeat(Math.max(0, len - s.length)); }],
   ['the same ref and id at the right place but cut short', (len, ln) => ln.slice(0, len - 3) + '   '],
+  ['the right ref at the right place but another id', (len, ln) => { const r = ln.replace('"id":11,', '"id":99,'); ok(r !== ln, 'test data'); return r; }],
 ]) {
   t('E3 b: a cold line is overwritten in place (' + name + '): entries and findLast throw, a cold entriesOf of it throws', () => {
     const { l, f } = mk40();
@@ -53,6 +54,14 @@ for (const [name, repl] of [
     l.close();
   });
 }
+t('E3: a cold line blanked out with spaces (looks like a legitimate blank line): entries throws (a line is missing before the window), a cold entriesOf of it throws', () => {
+  const { l, f } = mk40();
+  const lines = fs.readFileSync(f, 'utf8').split('\n'), len = Buffer.byteLength(lines[10]);
+  const fd = fs.openSync(f, 'r+'); fs.writeSync(fd, Buffer.from(' '.repeat(len)), 0, len, lineStart(f, 10)); fs.closeSync(fd);
+  throwsCode(() => [...l.entries()], 'journal_mismatch', 'entries');
+  throwsCode(() => l.entriesOf('r9'), 'journal_mismatch', 'entriesOf');
+  l.close();
+});
 t('E3: lines that were legitimately not applied (blank, quarantined) are still skipped by the cold readers', () => {
   const f = file(); let l = OPEN(f, { window: 2 });
   l.transfer('mint:signup', 'bank:a', 1000, 'chips', 'signup', 's'); l.close();
@@ -66,9 +75,9 @@ t('E3: lines that were legitimately not applied (blank, quarantined) are still s
 // ---- E4: no kept sum or count is changed by a scan that did not finish ----
 t('E4: a scan that throws half-way, then works: buyInCount, nightSummary, seatFund, lastHandNo equal the truth', () => {
   const f = file(), led = OPEN(f, { window: 3 }), ref = REFOPEN(file());
-  let fail = false;
+  let failAfter = null;                                    // null: works; k: the entries stream throws after k entries
   const flaky = new Proxy(led, { get(tg, p) {
-    if (p === 'entries' && fail) return function* (fn, a) { let i = 0; for (const e of tg.entries(fn, a)) { if (i++ >= 2) throw new Error('boom'); yield e; } };
+    if (p === 'entries' && failAfter != null) { const k = failAfter; return function* (fn, a) { let i = 0; for (const e of tg.entries(fn, a)) { if (i++ >= k) throw new Error('boom'); yield e; } }; }
     const v = tg[p]; return typeof v === 'function' ? v.bind(tg) : v;
   } });
   const svc = createService(flaky, { now });
@@ -77,11 +86,12 @@ t('E4: a scan that throws half-way, then works: buyInCount, nightSummary, seatFu
   both(l => l.transfer('mint:signup', 'bank:ann', 1e6, 'chips', 'sign', 'sg'));
   for (let i = 0; i < 6; i++) both(l => l.transfer('bank:ann', 'seat:T:ann', 5 + i, 'chips', 'buyin:chips', 'b' + i));
   eq(port.buyInCount({ id: 'T' }, 'ann', 0), 6);
-  fail = true;
+  failAfter = 0;
   for (let i = 6; i < 12; i++) both(l => l.transfer('bank:ann', 'seat:T:ann', 5 + i, 'chips', 'buyin:chips', 'b' + i));       // the index update fails (the ledger logs it and goes on)
   both(l => l.batch([{ from: 'bank:ann', to: 'bank:bob', amount: 1, cur: 'chips', reason: 'x' }], 'hand:T:9', 'hand'));
-  for (const f2 of [() => port.buyInCount({ id: 'T' }, 'ann', 0), () => svc.nightSummary('T'), () => svc.seatFund('T', 'ann', 'chips'), () => port.lastHandNo('T')]) { try { f2(); } catch {} }
-  fail = false;
+  failAfter = 2;                                           // the backlog is read, and the stream dies half-way through it, on every kind of query
+  for (const f2 of [() => port.buyInCount({ id: 'T' }, 'ann', 0), () => svc.nightSummary('T'), () => svc.seatFund('T', 'ann', 'chips'), () => port.lastHandNo('T'), () => svc.nightSummary('T', { fromId: 3 })]) { let threw = false; try { f2(); } catch { threw = true; } ok(threw, 'the failing scan surfaces'); }
+  failAfter = null;
   let nb = 0; for (const _ of ref.entries(e => e.to === 'seat:T:ann' && e.reason.startsWith('buyin:'))) nb++;
   eq(port.buyInCount({ id: 'T' }, 'ann', 0), nb, 'buyInCount after the failure');
   let bi = 0; for (const e of ref.entries(e => e.to === 'seat:T:ann')) bi += e.amount;
