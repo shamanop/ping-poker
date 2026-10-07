@@ -114,6 +114,7 @@ function adoptClose(W, o, L, via) {
     W.model.applySlot({ key: o.key, cur: o.cur, rid: o.rid, cost: o.cost, win: s.credit, prize: s.prize, buy: o.buy, callback: o.callback, plain: o.plain, escrowed: o.cost > 0 && s.suffix === 'close', via, void: false, epoch: o.epoch });
   }
   W.slot.c.unacked++;
+  if (o.callback) { B.armed.delete(k2(o.key, o.cur)); B.unsure.delete(k2(o.key, o.cur)); }       // the Callback is spent, whoever heard it
   return null;
 }
 // each check pass: a round whose client has since lost its socket (or a kill came) and that the ledger closed. A round with a client that WAS listening must be told (checkSlot flags it).
@@ -132,6 +133,7 @@ function adoptUnheard(W) {
     } else if (o.cost === 0 && now - o.goneAt > 1800) {      // a free round that paid nothing leaves no line: its decision defaulted when the socket went (see games/coldcall.js onDisconnect / recover)
       W.model.applySlot({ key: o.key, cur: o.cur, rid: o.rid, cost: 0, win: 0, prize: 0, buy: null, callback: true, plain: false, escrowed: false, via: 'unacked', void: false, epoch: o.epoch });
       S.c.unacked++;
+      B.armed.delete(k2(o.key, o.cur)); B.unsure.delete(k2(o.key, o.cur));
     }
   }
 }
