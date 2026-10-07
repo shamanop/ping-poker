@@ -34,6 +34,7 @@ async function topup(W) {
   const cand = unseated(W);
   if (!cand.length) return null;
   const b = W.rng.pick(cand), key = b.key;
+  if (W.model.slot.hasOpen(key)) return null;            // an open slot round settles on its own timer and moves the wallet while we compute what the top-up rule must answer
   let note = '';
   W.checker.poll();
   if (W.checker.playHeldRule(key) >= TOPUP_BELOW && W.rng.chance(0.7)) {
@@ -105,6 +106,7 @@ async function admin(W) {
     W.model.applyAdmin(key, cur, delta);
     return { what: 'admin_minus', who: key, cur, amount: delta };
   }
+  if ((op === 'toobig' || op === 'setplay') && W.model.slot.hasOpen(key)) return null;     // see topup: a timer credit between our read and the server's would make a refusal / a delta wrong
   if (op === 'toobig') {
     const cur = W.rng.pick(['chips', 'play']);
     const delta = -(W.model.held(key, cur) + W.rng.range(1, 1000));    // more than everything the player holds (wallet and seats), so more than the wallet

@@ -8,7 +8,8 @@ const CURS = ['chips', 'play'];
 class Model {
   constructor() {
     this.players = new Map();                       // key -> { key, held:{chips,play} }
-    this.src = { signup: { chips: 0, play: 0 }, bonus: 0, achv: 0, topup: 0, admin: { chips: 0, play: 0 }, bender: { chips: 0, play: 0 } };   // what each source account must be -sum of
+    this.src = { signup: { chips: 0, play: 0 }, bonus: 0, achv: 0, topup: 0, admin: { chips: 0, play: 0 }, bender: { chips: 0, play: 0 }, coldcall: { chips: 0, play: 0 } };   // what each source account must be -sum of (coldcall: what the players netted; house + pool = -that)
+    this.slot = new SlotBook();
     this.spins = new Map();                         // ref -> { key, cur, cost, win, checked }
     this.hands = new Map();                         // 'table:handNo' -> { nets, cur, via }
     this.mints = new Map();                         // dedupe key -> { kind, key, amount }
@@ -57,13 +58,38 @@ class Model {
     this._add(key, 'play', amount); this.src[kind] += amount; this.count[kind]++;
     return true;
   }
+  // A Cold Call round the client was told is closed (or the ledger line that closed it where the client could not hear): the player nets win + prize - cost. A void nets 0 (the stake came back).
+  applySlot(r) {
+    const id = `${r.key}:${r.rid}`;
+    if (this.slot.rounds.has(id)) return false;
+    const net = r.void ? 0 : r.win + r.prize - r.cost;
+    this.slot.rounds.set(id, { ...r, net, checked: false });
+    this.slot.open.delete(id);
+    this._add(r.key, r.cur, net); this.src.coldcall[r.cur] += net; this.slot.net[r.cur] += net;
+    this.count[r.void ? 'slotVoids' : r.via === 'client' ? 'slotRounds' : 'slotRoundsUnacked'] = (this.count[r.void ? 'slotVoids' : r.via === 'client' ? 'slotRounds' : 'slotRoundsUnacked'] || 0) + 1;
+    return true;
+  }
   applyAdmin(key, cur, delta) { this._add(key, cur, delta); this.src.admin[cur] += delta; this.count.adminAdjust++; }
   accounts() { return [...this.players.keys()]; }
   expectedSource(cur) {
     return {
-      'mint:signup': -this.src.signup[cur], 'admin:adjust': -this.src.admin[cur], 'house:bender': -this.src.bender[cur], 'house:coldcall': 0, 'mint:migration': 0,
+      'mint:signup': -this.src.signup[cur], 'admin:adjust': -this.src.admin[cur], 'house:bender': -this.src.bender[cur], 'mint:migration': 0,
       'mint:bonus': cur === 'play' ? -this.src.bonus : 0, 'mint:achv': cur === 'play' ? -this.src.achv : 0, 'mint:topup': cur === 'play' ? -this.src.topup : 0,
     };
   }
 }
-module.exports = { Model, START, CURS };
+
+// what the harness knows about the slot (COLD CALL): rounds it was told about (or adopted from the ledger where a kill or a dropped socket kept the client from hearing), the rounds still open
+// (a stake in escrow, or a free Callback with a decision), Callbacks known to be armed. No number is ever copied from the ledger except for those adopted rounds.
+class SlotBook {
+  constructor() {
+    this.rounds = new Map();              // 'key:rid' -> { key, cur, rid, cost, win, prize, buy, callback, plain, via, void, net, checked }
+    this.open = new Map();                // 'key:rid' -> { key, cur, rid, cost, buy, callback, plain, gen, epoch, pending }
+    this.net = { chips: 0, play: 0 };     // sum over closed rounds of win + prize - cost
+    this.armed = new Set();               // 'key|cur': a Callback the client was told is waiting
+    this.unsure = new Set();              // 'key|cur': a kill or an unheard round may have armed / dropped one
+  }
+  hasOpen(key) { for (const o of this.open.values()) if (o.key === key) return true; return false; }
+  openOf(key, cur) { for (const o of this.open.values()) if (o.key === key && o.cur === cur) return o; return null; }
+}
+module.exports = { Model, SlotBook, START, CURS };

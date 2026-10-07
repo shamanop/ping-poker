@@ -85,7 +85,14 @@ const ops = {
     if (!broke) amount = Math.min(amount, have);
     const r = await join(W, bot, t, { fund, amount });
     if (!r.ok && r.code === 'bank' && have >= amount) W.warn('join_refused_affordable', `${bot.key} had ${have}, asked ${amount}`);
-    if (r.ok && broke) W.violate('I7', `${bot.key} bought in for ${amount} holding ${have} ${fundCur}`, { key: bot.key }, 'refused', 'seated');
+    if (r.ok && broke) {
+      // a slot round of this player can settle on its own timer and credit the bank between our read and the join: judge by what the ledger held at the buy-in line itself
+      W.checker.poll();
+      const ops = W.checker.opsOf('buyin', t.id, bot.key), L = ops[ops.length - 1];
+      const before = L ? W.checker.balanceBefore(fundCur, storeOf(fundCur, bot.key), L.idx) : have;
+      if (before < amount) W.violate('I7', `${bot.key} bought in for ${amount} holding ${before} ${fundCur}`, { key: bot.key }, 'refused', 'seated');
+      else W.warn('buyin_after_credit', `${bot.key} held ${have} when asked, ${before} at the buy-in line (a slot round paid in between)`);
+    }
     return { what: 'join', who: bot.key, table: t.id, amount, fund: fund || 'own', result: r.ok ? 'seated' : r.code };
   },
 
@@ -173,7 +180,7 @@ const ops = {
 
   // drop the socket (also mid-hand), wait a little while the table carries on, then sign in again and take the seat back
   async reconnect(W) {
-    const cand = W.connectedBots().filter(b => b.tableId);
+    const cand = W.connectedBots().filter(b => b.tableId && !(W.slot && W.model.slot.hasOpen(b.key)));     // a slot round with a decision open is the slot actor's to drop (its 'drop' step)
     if (!cand.length) return null;
     const bot = W.rng.pick(cand), tableId = bot.tableId, live = !!(bot.gs && bot.gs.status === 'playing');
     bot.close();
