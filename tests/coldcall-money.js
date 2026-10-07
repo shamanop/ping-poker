@@ -221,6 +221,48 @@ function auditMatches(s) {
     assert.strictEqual(s.bal('ann', 'play'), before - cost + done[0].totalWin); assert.deepStrictEqual(s.escrows(), []); assert.strictEqual(s.open.size, 0);
   });
 
+  // ---------------------------------------------------------------- P6 W3b slot (a): a LIVE stake_mismatch is voided once, as boot does
+  // The escrow of an open round is tampered with (a part of it moved back to the player by a line the slot did not write), so settle(stake: cost) answers stake_mismatch. Retrying can never fix that.
+  const tamper = (s, id, n = 5) => s.ledger.transfer(`escrow:coldcall:ann:${id}`, 'play:ann', n, 'play', 'test:tamper', 'tamper:' + id);
+  for (const via of ['timeout', 'decision']) {
+    await test(`W3B (a): a live stake_mismatch on the ${via} voids the round ONCE: the escrow goes back, g:coldcall:voided is sent, no timer is left, no result, and the next spin works`, async () => {
+      const s = setup({ rng: E.rngFrom(PEND.seed), roundRng: E.rngFrom(5) }); const a = s.sock('ann'); const before = s.bal('ann', 'play');
+      E.CFG.pull.decision.timeoutMs = 40;
+      const r = spin(s, a, { bet: 100, mode: 'play', buyBonus: 'bonus1' }); assert.strictEqual(r.status, 'pending'); const cost = r.cost;
+      tamper(s, r.roundId); const kept = s.escrowSum('play'); assert.strictEqual(kept, cost - 5, 'the escrow no longer holds the stake');
+      let settles = 0;
+      s.hooks.before.settle = () => { settles++; };
+      const id0 = s.lastId();
+      if (via === 'timeout') { s.clock.advance(200); a.send('g:coldcall:ready', { roundId: r.roundId }); await sleep(150); }
+      else a.send('g:coldcall:decide', { roundId: r.roundId, ...(r.pending.k === 'pick' ? { k: 'pick', p: r.pending.choices[0] } : { k: 'more', take: false }) });
+      // a decision that keeps the round open (a PICK followed by ONE MORE CALL) is answered by the next prompt: finish it the same way until the settle is refused
+      let guard = 0; while (!all(a, 'g:coldcall:voided').length && s.open.size && guard++ < 4) { const rs = all(a, 'g:coldcall:result'); const p = rs[rs.length - 1]; if (!p || p.status !== 'pending') break; a.send('g:coldcall:decide', { roundId: r.roundId, ...(p.pending.k === 'pick' ? { k: 'pick', p: p.pending.choices[0] } : { k: 'more', take: false }) }); }
+      await sleep(150);
+      const vs = all(a, 'g:coldcall:voided'); assert.strictEqual(vs.length, 1, 'g:coldcall:voided was sent once: ' + JSON.stringify(vs)); assert.strictEqual(vs[0].roundId, r.roundId); assert.strictEqual(vs[0].reason, 'unresolvable');
+      assert.strictEqual(all(a, 'g:coldcall:result').filter((x) => x.status === 'done').length, 0, 'no result for a round the ledger refused to settle');
+      assert.deepStrictEqual(s.escrows(), [], 'the escrow is back with the player'); assert.strictEqual(s.bal('ann', 'play'), before, 'whole stake back (the 5 moved by hand included)');
+      assert.strictEqual(s.open.size, 0, 'the round is gone'); assert.strictEqual(s.store().allOpen().length, 0, 'its record is gone'); assert.strictEqual(s.disk() && Object.keys(s.disk().open || {}).length, 0);
+      assert.strictEqual(closeLines(s, r.roundId).filter((e) => e.reason === 'coldcall:void:unresolvable' || /void/.test(e.reason)).reduce((n, e) => n + e.amount, 0), kept, 'ONE void line returned the escrow');
+      const idAfter = s.lastId(), settlesAfter = settles; await sleep(200);
+      assert.strictEqual(s.lastId(), idAfter, 'no later retry wrote anything'); assert.strictEqual(settles, settlesAfter, 'and nothing asked the ledger to settle it again: the timer is gone');
+      assert.strictEqual(all(a, 'g:coldcall:voided').length, 1, 'still one voided'); assert.ok(id0 <= idAfter);
+      const n = spin(s, a, { bet: 100, mode: 'play', auto: true }); assert.strictEqual(n.status, 'done', 'the next spin works'); auditMatches(s);
+    });
+  }
+  await test('W3B (a): any OTHER money error on a live settle (disk, fence) keeps the round open with its timer, as before; only stake_mismatch voids', async () => {
+    for (const code of ['internal', 'io_error', 'fence']) {
+      const s = setup({ rng: E.rngFrom(PEND.seed), roundRng: E.rngFrom(5) }); const a = s.sock('ann');
+      E.CFG.pull.decision.timeoutMs = 40;
+      const r = spin(s, a, { bet: 100, mode: 'play', buyBonus: 'bonus1' }); assert.strictEqual(r.status, 'pending'); const cost = r.cost;
+      let n = 0; s.hooks.before.settle = () => { n++; throw Object.assign(new Error('refused'), { code }); };
+      s.clock.advance(200); a.send('g:coldcall:ready', { roundId: r.roundId }); await sleep(150);
+      assert.ok(n >= 2, code + ': it keeps trying as a timeout (' + n + ' tries)'); assert.strictEqual(all(a, 'g:coldcall:voided').length, 0, code + ': not voided');
+      assert.strictEqual(s.open.size, 1, code + ': still open'); assert.strictEqual(s.escrowSum('play'), cost, code + ': stake still in escrow'); assert.ok(s.open.get(r.roundId).timer, code + ': timer armed');
+      delete s.hooks.before.settle; await sleep(120);
+      assert.strictEqual(all(a, 'g:coldcall:result').filter((x) => x.status === 'done').length, 1, code + ': once the ledger works it settles'); assert.strictEqual(s.open.size, 0); assert.strictEqual(s.escrowSum('play'), 0);
+    }
+  });
+
   // ---------------------------------------------------------------- the game's own file
   await test('FILE: a store write that fails is told to the caller (audit finding 14): a paid round that cannot flush its record is voided (stake back), a Callback that cannot flush its record plays nothing and stays armed', async () => {
     const s = setup({ rng: E.rngFrom(PEND.seed), roundRng: E.rngFrom(5) }); const a = s.sock('ann'); const before = s.bal('ann', 'play');

@@ -309,6 +309,7 @@ function settle(rec, r, autoWhy, extraSocket) {
   try { const res = payOut(rec, winCents, pool); dup = !!(res && res.dup); }
   catch (e) {
     if (e && e.code === 'round_closed') closed = true;
+    else if (e && e.code === 'stake_mismatch') { logf('coldcall: settle refused, the escrow is not the stake the round recorded: voiding', rec.id); return voidRound(rec, 'unresolvable'); }   // retrying cannot change what the escrow holds; boot (recoverOne) does the same
     else return moneyFailed(rec, e, rec.stored ? 'settle' : 'round');
   }
 
