@@ -71,6 +71,7 @@ function start(env = process.env) {
   ctx.games = require('./games')({ io, accounts, social: ctx.social, now: () => Date.now(), wallet: ctx.wallet, money: ctx.gameMoney, service, rooms: ctx.registry.tables, tables: ctx.registry, ledger: presLedger, files: { coldcallPull: paths.COLDCALL_PULL_FILE, coldcallConfig: paths.COLDCALL_CFG_FILE } });
   const gr = ctx.games.recover();
   log(`game recovery: ${Object.entries(gr.games).map(([id, g]) => `${id} ${g.found} open/${g.settledOrVoidedByGame} by game/${g.kept} kept`).join(', ') || 'no games'}, ${gr.voided.length} escrows voided${gr.errors.length ? ', ERRORS ' + gr.errors.length : ''}`);
+  { const st = ledger.stats(), ck = ledger.checkpoint(); log(`ledger: ${st.lines} lines, ${st.inMemory} in memory, checkpoint ${ck.ok ? 'ok' : ck.why} ${ck.ms || 0} ms`); }
   if (gr.errors.length) console.error('[v2] game recovery errors:', JSON.stringify(gr.errors).slice(0, 500));
   ctx.registry.load();
   ctx.registry.startSweep();
@@ -147,6 +148,7 @@ function start(env = process.env) {
     try { ctx.registry.flush(); } catch {}
     try { accounts.flush(); } catch {}
     try { if (ctx.social.flush) ctx.social.flush(); } catch {}
+    try { ledger.checkpoint(); } catch {}
     try { ledger.close(); } catch {}
     process.exit(0);
   }
