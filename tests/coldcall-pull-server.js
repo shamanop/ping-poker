@@ -73,7 +73,7 @@ const rich = (s, key, mode = 'play') => s.rich(key, mode);
 const potOk = (p, s, mode) => { assert.strictEqual(p.fed, p.paid + p.bal, 'pot statistics: fed = paid + bal'); if (s) assert.strictEqual(s.pool(mode), p.bal, 'the mirror is the ledger pool'); };
 
 (async () => {
-  await test('store: file next to the wallet, atomic, survives a restart (state, pot), state is per currency', async () => {
+  await test('store: file next to money.jsonl, atomic, survives a restart (state, pot), state is per currency', async () => {
     const s = setup({ rng: E.rngFrom(31) }); const a = s.sock('ann');
     for (let i = 0; i < 30; i++) play(s, a, { bet: 100, mode: 'play' }, i);
     const view = last(a, 'g:coldcall:result').pull.state;
