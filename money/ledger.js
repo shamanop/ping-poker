@@ -67,6 +67,15 @@ const sigHash = typeof crypto.hash === 'function'      // one-shot (node >= 21.7
   ? (sig) => crypto.hash('sha256', sig, 'hex').slice(0, 32)
   : (sig) => crypto.createHash('sha256').update(sig).digest('hex').slice(0, 32);
 
+// A checkpoint is only believed by the code whose rules wrote it. RULES is set by hand (bump it when a rule changes in a way the
+// source hash would not show, e.g. a dependency); SRC_SHA is the sha256 of this very file, read once at load, so ANY change here
+// (a new source account, a new check, a new game) makes every older sidecar be refused: one full replay on the first boot of each
+// deploy that touches money/ledger.js, on purpose.
+const RULES = 1;
+const SRC_SHA = crypto.createHash('sha256').update(fs.readFileSync(__filename)).digest('hex');
+const RULES_ID = `${RULES}:${SRC_SHA}`;
+const CKPT_BLOCK = 5000;      // refs / balance pairs per sidecar line
+
 const CHUNK = 1 << 20;        // read size for every streamed read of the journal
 const IXK = 1024;             // sparse index: id + file offset of every IXK-th applied line (start points for cold streams)
 const COLD_LOG_MS = 250;      // a cold scan slower than this logs one line with its caller
@@ -192,7 +201,7 @@ function revReader(readAt, end) {
         } else if (bufOff === 0) return null;
         const n = Math.min(CHUNK, bufOff);
         const chunk = Buffer.allocUnsafe(n);
-        if (readAt(chunk, bufOff - n, n) !== n) return null;
+        if (readAt(chunk, bufOff - n, n) !== n) throw new MoneyError('journal_mismatch', { why: 'short read', at: bufOff - n });
         buf = Buffer.concat([chunk, buf.subarray(0, hi)]);
         bufOff -= n; hi = buf.length;
       }
@@ -249,7 +258,7 @@ function open(file, opts = {}) {
   const env = process.env;
   const numOpt = (v, envv, def) => { const x = v != null ? Number(v) : (envv != null && envv !== '' ? Number(envv) : def); return Number.isInteger(x) && x >= 0 ? x : def; };
   const window = numOpt(opts.window, env.LEDGER_WINDOW, 20000);
-  const ckptOn = opts.ckpt != null ? !!opts.ckpt && String(opts.ckpt) !== '0' : env.LEDGER_CKPT !== '0';
+  const ckptOn = opts.ckpt != null ? !!opts.ckpt && String(opts.ckpt) !== '0' : !["0", "false", "off", "no"].includes(String(env.LEDGER_CKPT).toLowerCase());
   const ckptEvery = numOpt(opts.ckptEvery, env.LEDGER_CKPT_EVERY, 0);
   const ckptVerify = opts.ckptVerify != null ? !!opts.ckptVerify && String(opts.ckptVerify) !== '0' : env.LEDGER_CKPT_VERIFY === '1';
   const ckptFile = file + '.ckpt';
@@ -313,13 +322,50 @@ function open(file, opts = {}) {
 
   // Reads and checks <file>.ckpt against the journal (jsize bytes), restores the state it covers, then replays the tail.
   // Throws Error(why) on any doubt; the caller then ignores the checkpoint and replays everything.
+  // Sidecar format v2: line 1 = header object, then one JSON array per line: ["bc", [acct, n, ...]] ["bp", ...] ["q", {quarantined}]
+  // ["r", [ref, id, sig, off, len, ...]] (blocks of CKPT_BLOCK), last line ["end"]. Read and written line by line, never as one string.
+  function readCkptLines(fn) {
+    let cfd = null;
+    try {
+      cfd = fs.openSync(ckptFile, 'r');
+      const csize = fs.fstatSync(cfd).size;
+      const pre = Buffer.alloc(7);
+      if (readFull(cfd, pre, 0, 7) !== 7) throw new Error('not readable JSON');
+      if (pre.toString('latin1') !== '{"v":2,') {
+        const m = /^\{"v":(\d+)/.exec(pre.toString('latin1'));
+        throw new Error(m ? 'version ' + m[1] : 'not readable JSON');
+      }
+      const rd = lineReader((b, pos, want) => readFull(cfd, b, pos, want), 0, csize);
+      let n = 0;
+      for (let l; (l = rd.next());) {
+        let v;
+        try { v = JSON.parse(l.buf.toString('utf8', l.s, l.e)); } catch { throw new Error('not readable JSON'); }
+        fn(v, n++);
+      }
+      if (rd.next() !== null) throw new Error('wrong shape');
+      return csize;
+    } finally { if (cfd != null) try { fs.closeSync(cfd); } catch {} }
+  }
+
   function loadCheckpoint(jsize) {
-    let c;
-    try { c = JSON.parse(fs.readFileSync(ckptFile, 'utf8')); } catch { throw new Error('not readable JSON'); }
-    if (!c || typeof c !== 'object' || Array.isArray(c)) throw new Error('wrong shape');
-    if (c.v !== 1) throw new Error('version ' + JSON.stringify(c.v));
+    let c = null, ended = false, nBc = 0, nBp = 0, nQ = 0, nR = 0;
+    const bal = { chips: [], play: [] }, quar = [], refsFlat = [];
+    readCkptLines((v, i) => {
+      if (i === 0) { c = v; if (!c || typeof c !== 'object' || Array.isArray(c)) throw new Error('wrong shape'); return; }
+      if (ended || !Array.isArray(v)) throw new Error('wrong shape');
+      if (v[0] === 'bc' || v[0] === 'bp') { if (!Array.isArray(v[1])) throw new Error('wrong shape'); const t = bal[v[0] === 'bc' ? 'chips' : 'play']; for (const x of v[1]) t.push(x); }
+      else if (v[0] === 'q') quar.push(v[1]);
+      else if (v[0] === 'r') { if (!Array.isArray(v[1])) throw new Error('wrong shape'); refsFlat.push(v[1]); }
+      else if (v[0] === 'end') ended = true;
+      else throw new Error('wrong shape');
+    });
+    if (!c) throw new Error('not readable JSON');
+    if (c.v !== 2) throw new Error('version ' + JSON.stringify(c.v));
+    if (c.rules !== RULES_ID) throw new Error('rules changed');
+    if (!ended) throw new Error('wrong shape (no end line)');
     if (!intOk(c.bytes) || !intOk(c.lastId) || !intOk(c.rawLines) || !intOk(c.applied) || typeof c.sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(c.sha256)) throw new Error('wrong shape');
-    if (!c.bal || !Array.isArray(c.bal.chips) || !Array.isArray(c.bal.play) || !Array.isArray(c.refs) || !Array.isArray(c.quarantined)) throw new Error('wrong shape');
+    if (c.nbc !== bal.chips.length / 2 || c.nbp !== bal.play.length / 2 || c.nq !== quar.length) throw new Error('wrong shape (counts)');
+    c.bal = bal; c.quarantined = quar; c.refs = null;
     if (c.bytes > jsize) throw new Error(`covers ${c.bytes} bytes but the journal has ${jsize}`);
     if (c.bytes > 0) {
       const one = Buffer.alloc(1);
@@ -338,19 +384,23 @@ function open(file, opts = {}) {
         S.bal[cur].set(flat[i], flat[i + 1]);
       }
     }
-    const fr = c.refs;
-    if (fr.length % 5) throw new Error('wrong shape (refs)');
-    const n = fr.length / 5;
+    let nflat = 0;
+    for (const b of refsFlat) { if (b.length % 5) throw new Error('wrong shape (refs)'); nflat += b.length / 5; }
+    const n = nflat;
     if (n !== c.applied) throw new Error(`refs ${n} but applied ${c.applied}`);
-    let prevId = 0, prevEnd = 0;
-    for (let i = 0; i < n; i++) {
-      const ref = fr[i * 5], id = fr[i * 5 + 1], sig = fr[i * 5 + 2], off = fr[i * 5 + 3], len = fr[i * 5 + 4];
-      if (typeof ref !== 'string' || !ref || !Number.isSafeInteger(id) || id <= prevId || typeof sig !== 'string' || sig.length !== 32
-        || !intOk(off) || !intOk(len) || off < prevEnd || off + len + 1 > c.bytes) throw new Error('wrong shape (refs)');
-      if (S.refs.has(ref)) throw new Error('duplicate ref in checkpoint');
-      S.refs.set(ref, { id, sig, off, len });
-      if (i % IXK === 0) { S.ixId.push(id); S.ixOff.push(off); }
-      prevId = id; prevEnd = off + len + 1;
+    let prevId = 0, prevEnd = 0, i = 0;
+    const offAt = [];                    // offset of every ref in order, for the window start
+    for (const fr of refsFlat) {
+      for (let j = 0; j < fr.length; j += 5, i++) {
+        const ref = fr[j], id = fr[j + 1], sig = fr[j + 2], off = fr[j + 3], len = fr[j + 4];
+        if (typeof ref !== 'string' || !ref || !Number.isSafeInteger(id) || id <= prevId || typeof sig !== 'string' || sig.length !== 32
+          || !intOk(off) || !intOk(len) || off < prevEnd || off + len + 1 > c.bytes) throw new Error('wrong shape (refs)');
+        if (S.refs.has(ref)) throw new Error('duplicate ref in checkpoint');
+        S.refs.set(ref, { id, sig, off, len });
+        if (i % IXK === 0) { S.ixId.push(id); S.ixOff.push(off); }
+        prevId = id; prevEnd = off + len + 1;
+        if (S.window === 0 || i >= n - S.window) { if (offAt.length === 0) offAt.push(off); }
+      }
     }
     if (c.lastId !== prevId) throw new Error('lastId does not match the refs');
     for (const q of c.quarantined) if (!q || typeof q.line !== 'string' || !intOk(q.lineNo) || typeof q.reason !== 'string') throw new Error('wrong shape (quarantined)');
@@ -360,7 +410,7 @@ function open(file, opts = {}) {
     // the window: the newest `window` applied lines, read back from the covered part (one contiguous read)
     const want = S.window === 0 ? n : Math.min(n, S.window);
     if (want > 0) {
-      const from = fr[(n - want) * 5 + 3];
+      const from = offAt[0];
       const rd = lineReader(readAt, from, c.bytes);
       for (let l; (l = rd.next());) {
         let rec;
@@ -470,10 +520,15 @@ function open(file, opts = {}) {
     return { id: prev.id, dup: true };
   }
 
+  // onLine(fn): fn() runs after every applied append (the line is already in memory and on disk). The service keeps its indexes up to date this way.
+  const listeners = [];
+  const onLine = (fn) => { listeners.push(fn); };
+
   function write(rec, items, sig, doSync, scratch) {
     const at = append(rec, doSync);
     commitBal(S.bal, scratch);
     recordLine(S, rec, sig, at.off, at.len);
+    for (const fn of listeners) { try { fn(); } catch (e) { log(`onLine listener failed: ${e.message}`); } }
     if (ckptEvery > 0 && ++sinceCkpt >= ckptEvery) { sinceCkpt = 0; checkpoint(); }
     return { id: rec.id, dup: false };
   }
@@ -516,6 +571,23 @@ function open(file, opts = {}) {
   const has = (ref) => S.refs.has(ref);
 
   // ---- reading lines back: memory window first, the journal file for older ones ----
+  // What a cold line is: the applied line the ref index points at (-> rec), a line that was legitimately not applied (blank, or one of
+  // the quarantined lines of this open: -> null), or anything else = the journal is not what the index says -> MoneyError, never a skip.
+  let qSet = null;
+  function coldLine(l) {
+    const ln = l.buf.toString('utf8', l.s, l.e);
+    if (ln.trim() === '') return null;
+    let rec = null;
+    try { rec = JSON.parse(ln); } catch {}
+    const r = rec && typeof rec.ref === 'string' ? S.refs.get(rec.ref) : null;
+    if (r && r.off === l.off) {
+      if (r.id !== rec.id) throw new MoneyError('journal_mismatch', { why: 'id differs from the index', at: l.off });
+      return rec;
+    }
+    if (!qSet) qSet = new Set(S.quarantined.map(q => q.line));
+    if (qSet.has(ln)) return null;
+    throw new MoneyError('journal_mismatch', { why: 'line is neither applied nor quarantined', at: l.off });
+  }
   // A cold stream: applied lines in order from the journal, starting at the sparse index point at or before applied-line `seq`.
   function coldOpen(seq) {
     const k = Math.min(Math.floor(seq / IXK), S.ixOff.length - 1);
@@ -524,13 +596,16 @@ function open(file, opts = {}) {
     stats.coldScans++;
     return c;
   }
-  function coldNext(c) {                // the next applied line (c.seq advances), or null
+  function coldNext(c) {                // the next applied line (c.seq advances), or null at the end of the file
     for (let l; (l = c.rd.next());) {
       c.lines++;
-      let rec;
-      try { rec = JSON.parse(l.buf.toString('utf8', l.s, l.e)); } catch { continue; }
-      const r = rec && typeof rec.ref === 'string' ? S.refs.get(rec.ref) : null;
-      if (r && r.off === l.off) { c.seq++; return rec; }
+      const rec = coldLine(l);
+      if (rec) {
+        // a cold line must lie before the first in-window line: past it the stream has lost one on the way
+        const first = S.lines.length ? S.refs.get(S.lines[0].ref).off : size;
+        if (l.off >= first) throw new MoneyError('journal_mismatch', { why: 'a cold line is missing', at: l.off });
+        c.seq++; return rec;
+      }
     }
     return null;
   }
@@ -568,7 +643,7 @@ function open(file, opts = {}) {
         } else {
           if (!cold || cold.seq > seq) { if (cold) coldDone(cold); cold = coldOpen(seq); }
           do { rec = coldNext(cold); } while (rec && cold.seq <= seq);
-          if (!rec) throw new Error(`ledger: the journal ${file} has no applied line ${seq}`);
+          if (!rec) throw new MoneyError('journal_mismatch', { why: `the journal has no applied line ${seq}`, file });
         }
         seq++;
         if (rec.id <= afterId) continue;
@@ -594,9 +669,10 @@ function open(file, opts = {}) {
     if (lo < L.length && L[lo].id === r.id) return expand(L[lo]);
     stats.coldLookups++;
     const buf = Buffer.allocUnsafe(r.len);
-    if (readAt(buf, r.off, r.len) !== r.len) throw new Error(`ledger: ${file} is shorter than its index`);
-    const rec = JSON.parse(buf.toString('utf8'));
-    if (!rec || rec.ref !== ref || rec.id !== r.id) throw new Error(`ledger: ${file} does not match its index at ${r.off}`);
+    if (readAt(buf, r.off, r.len) !== r.len) throw new MoneyError('journal_mismatch', { why: 'shorter than its index', file, at: r.off });
+    let rec = null;
+    try { rec = JSON.parse(buf.toString('utf8')); } catch {}
+    if (!rec || rec.ref !== ref || rec.id !== r.id) throw new MoneyError('journal_mismatch', { why: 'does not match its index', file, at: r.off });
     return expand(rec);
   }
 
@@ -620,10 +696,8 @@ function open(file, opts = {}) {
       const rd = revReader(readAt, end);
       for (let l; (l = rd.next());) {
         c.lines++;
-        let rec;
-        try { rec = JSON.parse(l.buf.toString('utf8', l.s, l.e)); } catch { continue; }
-        const r = rec && typeof rec.ref === 'string' ? S.refs.get(rec.ref) : null;
-        if (!r || r.off !== l.off) continue;
+        const rec = coldLine(l);
+        if (!rec) continue;
         if (Array.isArray(rec.batch)) {
           for (let j = rec.batch.length - 1; j >= 0; j--) { const e = legOf(rec, rec.batch[j]); if (!filterFn || filterFn(e)) return e; }
         } else {
@@ -656,21 +730,23 @@ function open(file, opts = {}) {
       if (closed) return { ok: false, why: 'closed' };
       try { fence(); } catch (e) { return { ok: false, why: e.code || e.message }; }
       fs.fsyncSync(fd);                 // the journal bytes the checkpoint covers are on disk before it says so
-      const flat = (m) => { const a = []; for (const [k, v] of m) a.push(k, v); return a; };
-      const head = JSON.stringify({
-        v: 1, bytes: size, sha256: S.hash.copy().digest('hex'), lastId: S.lastId, rawLines: S.raw, applied: S.applied,
-        bal: { chips: flat(S.bal.chips), play: flat(S.bal.play) }, quarantined: S.quarantined, ts: now(),
-      });
       wfd = fs.openSync(tmp, 'w');
-      const put = (s) => { const b = Buffer.from(s); let o = 0; while (o < b.length) o += fs.writeSync(wfd, b, o); };
-      put(head.slice(0, -1) + ',"refs":[');
-      let parts = [], first = true, n = 0;
-      for (const [ref, r] of S.refs) {
-        parts.push(`${first ? '' : ','}${JSON.stringify(ref)},${r.id},"${r.sig}",${r.off},${r.len}`);
-        first = false;
-        if (++n % 20000 === 0) { put(parts.join('')); parts = []; }
+      const put = (s) => { const b = Buffer.from(s + '\n'); let o = 0; while (o < b.length) o += fs.writeSync(wfd, b, o); };
+      const head = JSON.stringify({
+        v: 2, rules: RULES_ID, bytes: size, sha256: S.hash.copy().digest('hex'), lastId: S.lastId, rawLines: S.raw, applied: S.applied,
+        nbc: S.bal.chips.size, nbp: S.bal.play.size, nq: S.quarantined.length, ts: now(),
+      });
+      put(head);
+      for (const [tag, m] of [['bc', S.bal.chips], ['bp', S.bal.play]]) {
+        let blk = [];
+        for (const [k, v] of m) { blk.push(k, v); if (blk.length >= 2 * CKPT_BLOCK) { put(JSON.stringify([tag, blk])); blk = []; } }
+        if (blk.length) put(JSON.stringify([tag, blk]));
       }
-      put(parts.join('') + ']}');
+      for (const q of S.quarantined) put(JSON.stringify(['q', q]));
+      let blk = [];
+      for (const [ref, r] of S.refs) { blk.push(ref, r.id, r.sig, r.off, r.len); if (blk.length >= 5 * CKPT_BLOCK) { put(JSON.stringify(['r', blk])); blk = []; } }
+      if (blk.length) put(JSON.stringify(['r', blk]));
+      put('["end"]');
       fs.fsyncSync(wfd); fs.closeSync(wfd); wfd = null;
       fs.renameSync(tmp, ckptFile);
       const ms = Date.now() - t0;
@@ -691,7 +767,7 @@ function open(file, opts = {}) {
   function sync() { if (!closed) fs.fsyncSync(fd); }
   function close() { if (!closed) { closed = true; try { fs.closeSync(fd); } catch {} closeRfd(); releaseLock(); } }
 
-  return { transfer, batch, balance, list, has, entries, entriesOf, findLast, check, sync, close, checkpoint, stats: statsOut, file, quarantined, quarantineFile, get size() { return size; }, get lastId() { return S.lastId; } };
+  return { transfer, batch, balance, list, has, entries, entriesOf, findLast, onLine, check, sync, close, checkpoint, stats: statsOut, file, quarantined, quarantineFile, get size() { return size; }, get lastId() { return S.lastId; } };
 }
 
 module.exports = { open, MoneyError, SOURCE_ACCOUNTS, CURS };

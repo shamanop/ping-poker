@@ -34,8 +34,25 @@ const build = (nLines, o = {}) => {
   const led = OPEN(f, o); fill(led, 0, nLines);
   return { d, f, led };
 };
-const ckptOf = (f) => JSON.parse(fs.readFileSync(f + '.ckpt', 'utf8'));
-const putCkpt = (f, o) => fs.writeFileSync(f + '.ckpt', typeof o === 'string' ? o : JSON.stringify(o));
+// The sidecar is v2: a header line, then one JSON array per line (["bc"|"bp", [acct, n, ...]], ["q", {...}], ["r", [ref, id, sig, off, len, ...]], ["end"]).
+// ckptOf gives it back as one object { ...header, bal: { chips, play } (flat), quarantined, refs (flat) }; putCkpt writes such an object back (a string is written raw).
+const ckptOf = (f) => {
+  const ls = fs.readFileSync(f + '.ckpt', 'utf8').split('\n').filter(Boolean).map(x => JSON.parse(x));
+  const c = { ...ls[0], bal: { chips: [], play: [] }, quarantined: [], refs: [] };
+  for (const v of ls.slice(1)) { if (v[0] === 'bc') c.bal.chips.push(...v[1]); else if (v[0] === 'bp') c.bal.play.push(...v[1]); else if (v[0] === 'q') c.quarantined.push(v[1]); else if (v[0] === 'r') c.refs.push(...v[1]); }
+  return c;
+};
+const putCkpt = (f, o) => {
+  if (typeof o === 'string') return fs.writeFileSync(f + '.ckpt', o);
+  const { bal, quarantined, refs, ...head } = o;
+  const out = [JSON.stringify(head)];
+  if (bal.chips.length) out.push(JSON.stringify(['bc', bal.chips]));
+  if (bal.play.length) out.push(JSON.stringify(['bp', bal.play]));
+  for (const q of quarantined) out.push(JSON.stringify(['q', q]));
+  for (let i = 0; i < refs.length; i += 25) out.push(JSON.stringify(['r', refs.slice(i, i + 25)]));
+  out.push('["end"]');
+  fs.writeFileSync(f + '.ckpt', out.join('\n') + '\n');
+};
 // opens with the checkpoint in place, asserts the state equals the full replay, returns the ledger
 function openEqual(f, o = {}, why = '') {
   const want = full(f);
@@ -85,10 +102,40 @@ for (const [name, content] of [['garbage', 'garbage { not json'], ['empty', ''],
   });
 }
 
-t('v: 2 is ignored', () => {
+t('v: 3 is ignored, and so is a v: 1 file (the one 9ad1c59 wrote: one JSON string)', () => {
   const { f, led } = build(50); led.checkpoint(); led.close();
-  const c = ckptOf(f); c.v = 2; putCkpt(f, c);
-  const l2 = openEqual(f); eq(ignored(l2).length, 1); ok(/version/.test(ignored(l2)[0])); l2.close();
+  const c = ckptOf(f); c.v = 3; putCkpt(f, c);
+  const l2 = openEqual(f); eq(ignored(l2).length, 1); ok(/version/.test(ignored(l2)[0]), ignored(l2)[0]); l2.close();
+  const { f: g, led: lg } = build(50); lg.checkpoint(); lg.close();
+  putCkpt(g, JSON.stringify({ v: 1, bytes: 10, sha256: 'a'.repeat(64), lastId: 1, rawLines: 1, applied: 1, bal: { chips: [], play: [] }, refs: [], quarantined: [] }));
+  const l3 = openEqual(g); eq(ignored(l3).length, 1); ok(/version 1/.test(ignored(l3)[0]), ignored(l3)[0]); ok(fs.existsSync(g + '.ckpt.bad')); ok(!fs.existsSync(g + '.ckpt'));
+  ok(l3.checkpoint().ok); l3.close(); eq(ckptOf(g).v, 2, 'the next checkpoint replaces it with a v2 file');
+});
+
+t('E1: a sidecar written under other rules is refused (rules field missing, different, or the ledger source changed)', () => {
+  for (const [name, edit] of [['missing', (c) => { delete c.rules; }], ['different', (c) => { c.rules = '1:' + 'f'.repeat(64); }], ['hand RULES bumped', (c) => { c.rules = '2:' + String(c.rules).split(':')[1]; }]]) {
+    const { f, led } = build(60); led.checkpoint(); led.close();
+    const c = ckptOf(f); edit(c); putCkpt(f, c);
+    const l2 = openEqual(f); eq(ignored(l2).length, 1, name); ok(/rules changed/.test(ignored(l2)[0]), name + ': ' + ignored(l2)[0]); ok(fs.existsSync(f + '.ckpt.bad'), name); l2.close();
+  }
+});
+
+t('E5: a sidecar cut short (no end line) or with a line dropped is ignored; blocks of refs are written as lines', () => {
+  const { f, led } = build(300, { window: 20 }); led.checkpoint(); led.close();
+  const ls = fs.readFileSync(f + '.ckpt', 'utf8').split('\n').filter(Boolean);
+  ok(ls.length >= 4 && ls[ls.length - 1] === '["end"]', 'lines ' + ls.length);
+  fs.writeFileSync(f + '.ckpt', ls.slice(0, -1).join('\n') + '\n');
+  const l2 = openEqual(f, { window: 20 }); eq(ignored(l2).length, 1); l2.close();
+  const { f: g, led: lg } = build(300, { window: 20 }); lg.checkpoint(); lg.close();
+  const gs = fs.readFileSync(g + '.ckpt', 'utf8').split('\n').filter(Boolean);
+  const k = gs.findIndex(x => x.startsWith('["r"'));
+  fs.writeFileSync(g + '.ckpt', gs.filter((_, i) => i !== k).join('\n') + '\n');
+  const l3 = openEqual(g, { window: 20 }); eq(ignored(l3).length, 1); l3.close();
+});
+
+t('E1: check() cannot throw after a restore (the restored accounts are all classifiable by the code that restored them)', () => {
+  const { f, led } = build(80); led.checkpoint(); led.close();
+  const l2 = OPEN(f); ok(l2.stats().ckpt.used); l2.check(); l2.close();
 });
 
 t('.ckpt.tmp left behind without a .ckpt: nothing is read from it', () => {
