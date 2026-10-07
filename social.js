@@ -45,7 +45,11 @@ const ACH_BY_ID = new Map(ACHIEVEMENTS.map((a) => [a.id, a]));
 const emptyStats = () => ({ hands: 0, handsWon: 0, biggestPotCents: 0, benderSpins: 0, benderBestMult: 0, winStreak: 0, bestStreak: 0, xp: 0, level: 1 });
 
 function createSocial({ io, accounts, now = Date.now, file = null } = {}) {
-  let wallet = null;
+  let wallet = null, ledger = null;
+  // The daily bonus and an achievement reward are paid by a mint whose ref names the event (bonus:<key>:<day>, achv:<key>:<id>, see transport/wallet-adapter.js).
+  // That ledger line is the gate; the flags in accounts.json are a copy that may be one write behind after a crash, never ahead of the payment.
+  const refOf = (game, key, round) => `${game}:${String(key).toLowerCase().trim()}:${round}`;
+  const paid = (game, key, round) => { try { return !!(ledger && ledger.has(refOf(game, key, round))); } catch { return false; } };
   const lastEvent = new Map(); // game -> ms
   const acctKey = (s) => { const a = s && s.data && s.data.acct; return a ? String(typeof a === 'object' ? a.key : a) : null; };
   const feed = []; // newest first, public display data only: never keys or PINs
@@ -133,14 +137,15 @@ function createSocial({ io, accounts, now = Date.now, file = null } = {}) {
     const rec = accounts.social(key);
     if (!rec) return null;
     const u = (rec.achv && rec.achv.u) || {};
-    const list = ACHIEVEMENTS.map((a) => ({ id: a.id, name: a.name, desc: a.desc, tier: a.tier, target: a.t, progress: u[a.id] ? a.t : progressOf(rec, a), done: !!u[a.id], ts: u[a.id] || 0, rewardCents: TIER_REWARD[a.tier], xp: TIER_XP[a.tier], ...(a.s === 'biggestPotCents' ? { unit: 'cents' } : {}) }));
+    const has = (a) => !!u[a.id] || paid('achv', key, a.id);
+    const list = ACHIEVEMENTS.map((a) => ({ id: a.id, name: a.name, desc: a.desc, tier: a.tier, target: a.t, progress: has(a) ? a.t : progressOf(rec, a), done: has(a), ts: u[a.id] || 0, rewardCents: TIER_REWARD[a.tier], xp: TIER_XP[a.tier], ...(a.s === 'biggestPotCents' ? { unit: 'cents' } : {}) }));
     return { list, unlocked: list.filter((x) => x.done).length, total: list.length, unseen: (rec.achv && rec.achv.unseen) || 0 };
   }
   const pushAchv = (key) => { const v = achvView(key); if (!v) return; for (const s of sockets()) if (acctKey(s) === key) s.emit('achv:state', v); };
   function unlockAchv(key, a) {
+    // Ledger first: the reward mint (ref achv:<key>:<id>) is written before the flag, so a crash between the two leaves a payment with no flag, which checkAchv mends without a second reward.
+    try { wallet.credit(key, 'play', TIER_REWARD[a.tier], { game: 'achv', round: a.id }); } catch (e) { return false; }
     accounts.social(key, (rec) => { const x = counters(rec); x.u[a.id] = now(); x.unseen = (x.unseen || 0) + 1; });
-    try { wallet.credit(key, 'play', TIER_REWARD[a.tier], { game: 'achv', round: a.id }); }
-    catch (e) { accounts.social(key, (rec) => { const x = counters(rec); delete x.u[a.id]; x.unseen = Math.max(0, (x.unseen || 1) - 1); }); return false; }
     mutateStats(key, (st) => { st.xp += TIER_XP[a.tier]; });
     const payload = { id: a.id, name: a.name, desc: a.desc, tier: a.tier, rewardCents: TIER_REWARD[a.tier], xp: TIER_XP[a.tier] };
     for (const s of sockets()) if (acctKey(s) === key) s.emit('achv:unlocked', payload);
@@ -155,6 +160,9 @@ function createSocial({ io, accounts, now = Date.now, file = null } = {}) {
         const rec = accounts.social(key);
         if (!rec) return;
         const u = (rec.achv && rec.achv.u) || {};
+        // an achievement the ledger already paid but the account file lost (a crash between the two writes): set the flag, pay and announce nothing
+        const lost = ACHIEVEMENTS.filter((a) => !u[a.id] && paid('achv', key, a.id));
+        if (lost.length) { accounts.social(key, (r) => { const x = counters(r); for (const a of lost) if (!x.u[a.id]) x.u[a.id] = now(); }); continue; }
         const fresh = ACHIEVEMENTS.filter((a) => !u[a.id] && !skip.has(a.id) && progressOf(rec, a) >= a.t);
         if (!fresh.length) break;
         for (const a of fresh) if (!unlockAchv(key, a)) skip.add(a.id);
@@ -227,6 +235,12 @@ function createSocial({ io, accounts, now = Date.now, file = null } = {}) {
     const available = gap >= 1;
     const streak = available ? (gap === 1 ? b.streak + 1 : 1) : b.streak;
     const day = dayInCycle(streak);
+    if (available && paid('bonus', key, today)) {
+      // Today's mint (bonus:<key>:<day>) is in the ledger but accounts.json is one write behind (a crash between the two): the ledger says claimed.
+      // `streak` above is what that claim counted (the stale record is the pre-claim one), so mend the record with it and count nothing twice.
+      accounts.social(key, (rec) => { rec.bonus = { last: today, streak }; });
+      return { available: false, streak, day, amountCents: BONUS_DAYS[day - 1], today };
+    }
     return { available, streak, day, amountCents: BONUS_DAYS[day - 1], today };
   }
   const bonusView = (i) => ({ available: i.available, amountCents: i.amountCents, streak: i.streak, day: i.day, schedule: BONUS_DAYS });
@@ -234,11 +248,9 @@ function createSocial({ io, accounts, now = Date.now, file = null } = {}) {
   function claimBonus(key) {
     const info = bonusInfo(key);
     if (!info.available) return { ok: false, code: 'claimed', ...info };
-    // Persist first, so a failed credit cannot be retried into a double claim.
-    const prev = (accounts.social(key) || {}).bonus;
+    // Ledger first: the mint (ref bonus:<key>:<day>) pays once and is what bonusInfo reads; the account record follows. A credit that throws wrote nothing, so there is nothing to undo.
+    wallet.credit(key, 'play', info.amountCents, { game: 'bonus', round: info.today });
     accounts.social(key, (rec) => { rec.bonus = { last: info.today, streak: info.streak }; });
-    try { wallet.credit(key, 'play', info.amountCents, { game: 'bonus', round: info.today }); }
-    catch (e) { accounts.social(key, (rec) => { rec.bonus = prev; }); throw e; }
     pushFeed('bonus', key, { day: info.day, streak: info.streak });
     if (info.day === 7) bump(key, 'day7'); else checkAchv(key);
     return { ok: true, available: false, streak: info.streak, day: info.day, amountCents: info.amountCents };
@@ -268,7 +280,7 @@ function createSocial({ io, accounts, now = Date.now, file = null } = {}) {
   }
   if (io && typeof io.on === 'function') io.on('connection', (s) => { onConnection(s); try { s.emit('social:feed', { list: feedView(), now: now() }); s.emit('social:biggest', biggestView()); } catch (e) { /* best effort */ } });
 
-  return { onAction, achvView, checkAchv, biggestView, ACHIEVEMENTS, setWallet: (w) => { wallet = w; }, onSpin, onHandEnd, onConnection, onJoin, feedView, BONUS_DAYS, bonusInfo, claimBonus, statsView, broadcastBigWin, levelOf };
+  return { onAction, achvView, checkAchv, biggestView, ACHIEVEMENTS, setWallet: (w) => { wallet = w; }, setLedger: (l) => { ledger = l; }, onSpin, onHandEnd, onConnection, onJoin, feedView, BONUS_DAYS, bonusInfo, claimBonus, statsView, broadcastBigWin, levelOf };
 }
 
 module.exports = { createSocial, levelOf, dayOf };

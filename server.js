@@ -43,6 +43,7 @@ function start(env = process.env) {
   const { createWalletAdapter } = require('./transport/wallet-adapter');
   ctx.wallet = createWalletAdapter({ service, ledger, onChange: k => { ctx.pushWallet(k); ctx.pushMoney(k); ctx.pushBank(); } });
   ctx.social.setWallet(ctx.wallet);
+  ctx.social.setLedger(ledger);   // the daily bonus and achievement gates are the mint refs in the ledger (P6 A2/A3)
   const { createGameMoney } = require('./transport/game-money');
   ctx.gameMoney = createGameMoney({ service, ledger, onChange: k => { ctx.pushWallet(k); ctx.pushMoney(k); ctx.pushBank(); }, log: (...a) => console.error(...a) });
 
