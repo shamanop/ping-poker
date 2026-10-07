@@ -3,7 +3,7 @@
 Branch `v2-core` off origin/master 9440541 (live). Owner: Frank. Contracts: `V2-DESIGN.md`. Bugs from playtests: `QA-FRANK.md`.
 Never push or merge `master`.
 
-## 2026-10-06 21:50, branch `v2-all`: P6 wave 2, the slot on the one money system (head of the code: b55e7cb)
+## 2026-10-06 19:50, branch `v2-all`: P6 wave 2, the slot on the one money system (head of the code: b55e7cb)
 
 `v2-all` = `v2-core` + the money soak (wave 1, unfinished) + P6 wave 2. NOT merged anywhere, NOT deployed. Hand-off between lead sessions: `P6-STATE.md` (outside the repo); the builder's report: `P6-W2C-REPORT.md`.
 
