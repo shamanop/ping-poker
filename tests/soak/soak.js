@@ -51,7 +51,7 @@ async function main() {
     achvReward: new Map(), bonusSchedule: [],
     stepNo: 0, recent: [], fatal: [], lastSignupAt: 0,
     counters: { checks: 0, kills: 0, restarts: 0, sigterm: 0, buyIns: 0, cashOuts: 0, spinsRefused: 0, spinsUnacked: 0, handsVoidedByKill: 0, warnings: {} },
-    killLive: new Map(),
+    killLive: new Map(), mute: { showdown: false, bender: false, achv: false },
     sleep, chicagoDay,
   };
   W.warn = (k, detail) => { W.counters.warnings[k] = (W.counters.warnings[k] || 0) + 1; if (detail && W.counters.warnings[k] <= 3) console.error(`[soak] warning ${k}: ${detail}`); };
@@ -74,6 +74,7 @@ async function main() {
   W.connectedBots = () => W.botList().filter(b => b.connected());
   function wire(bot) {
     bot.on('g:bender:result', d => {
+      if (W.mute.bender) return;                       // chaos 'spinlost': the answer is dropped on the client side, as if the connection died first
       const i = W.inflightSpins.findIndex(s => s.key === bot.key && s.mode === d.mode && s.bet === d.bet && (s.buy || null) === (d.buyBonus || null));
       if (i >= 0) W.inflightSpins.splice(i, 1);
       if (!W.model.hasPlayer(bot.key)) return;
@@ -84,9 +85,10 @@ async function main() {
       }
       W.model.applySpin({ key: bot.key, cur: d.mode, cost: d.cost, win: d.totalWin, roundId: d.roundId });
     });
-    bot.on('showdown_result', d => W.onShowdown(bot, d));
+    bot.on('showdown_result', d => { if (!W.mute.showdown) W.onShowdown(bot, d); });
     bot.on('bonus:claimed', d => { if (d && d.ok) { if (!W.model.applyMint('bonus', bot.key, d.amountCents, `bonus:${bot.key}:${chicagoDay(Date.now())}`)) W.warn('bonus_ok_again', `${bot.key} was told ok for a bonus already counted today`); } });
-    bot.on('achv:unlocked', d => { if (d && d.id) W.model.applyMint('achv', bot.key, d.rewardCents, `achv:${bot.key}:${d.id}`); });
+    bot.on('achv:unlocked', d => { if (W.mute.achv) return;
+      if (d && d.id) W.model.applyMint('achv', bot.key, d.rewardCents, `achv:${bot.key}:${d.id}`); });
     // achievements: the server tells a client about every unlock it earned, either live (achv:unlocked) or in the achv:state it sends at sign-in.
     // A player whose socket was down when one fired learns it there. Same dedupe key, so it counts once.
     bot.on('achv:state', d => { if (d && d.list) for (const a of d.list) { W.achvReward.set(a.id, a.rewardCents); if (a.done && W.model.hasPlayer(bot.key)) W.model.applyMint('achv', bot.key, a.rewardCents, `achv:${bot.key}:${a.id}`); } });
@@ -335,7 +337,7 @@ async function main() {
     killTimes.push((f + jitter) * (minutes || 0) * 60000);
   }
   let killsDone = 0, result = null, failure = null;
-  const kinds = ['midhand', 'spin', 'showdown', 'buyins', 'midhand', 'spin'];
+  const kinds = ['midhand', 'spin', 'showdown', 'buyins', 'settle', 'spinlost', 'settle', 'spinlost'];
   try {
     await setup();
     await W.check();

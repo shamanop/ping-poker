@@ -24,7 +24,7 @@ class Bot {
     this.tableId = null; this.seatFund = null;
     const evs = ['auth_ok', 'auth_error', 'game_state', 'your_cards', 'showdown_result', 'bust_out', 'wallet', 'money', 'table_joined', 'table_left', 'table_created',
       'g:bender:result', 'g:bender:state', 'bonus:claimed', 'bonus:status', 'achv:unlocked', 'achv:state', 'admin_result', 'admin_overview', 'table_event', '__audit', 'error',
-      'room_update', 'balance_update', 'settle_up', 'ok'];
+      'room_update', 'balance_update', 'settle_up', 'table_info', 'lobby_tables', 'ok'];
     for (const ev of evs) sock.on(ev, d => { if (gen === this.gen) this._recv(ev, d); });
     sock.on('disconnect', () => { if (gen === this.gen) { this.authed = false; this.tableId = null; this.seatFund = null; } });
     return new Promise((res, rej) => {
