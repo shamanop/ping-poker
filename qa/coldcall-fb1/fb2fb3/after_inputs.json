@@ -1,0 +1,101 @@
+{
+ "key_digit5": {
+  "doneAfterMs": 729,
+  "lit": [
+   "5:5"
+  ],
+  "lcd": "_",
+  "anim": 1,
+  "youDialed": "DIALING FOR DOLLARS",
+  "bonusStarted": true,
+  "logs": []
+ },
+ "key_enter_nofocus": {
+  "doneAfterMs": 719,
+  "lit": [
+   "1:1"
+  ],
+  "lcd": "_",
+  "anim": 1,
+  "youDialed": "DIALING FOR DOLLARS",
+  "bonusStarted": true,
+  "logs": []
+ },
+ "key_enter_focused_9": {
+  "doneAfterMs": 762,
+  "lit": [
+   "9:9"
+  ],
+  "lcd": "_",
+  "anim": 1,
+  "youDialed": "DIALING FOR DOLLARS",
+  "bonusStarted": true,
+  "logs": []
+ },
+ "plate_click": {
+  "doneAfterMs": 810,
+  "lit": [
+   "1:1"
+  ],
+  "lcd": "_",
+  "anim": 1,
+  "youDialed": "DIALING FOR DOLLARS",
+  "bonusStarted": true,
+  "logs": []
+ },
+ "spin_button_poke": {
+  "doneAfterMs": 24716,
+  "lit": [
+   "1:1"
+  ],
+  "lcd": "_",
+  "anim": 1,
+  "youDialed": "DIALING FOR DOLLARS",
+  "bonusStarted": true,
+  "logs": []
+ },
+ "hook_finish": {
+  "doneAfterMs": 1522,
+  "lit": [
+   "1:1"
+  ],
+  "lcd": "1",
+  "anim": 2,
+  "youDialed": "DIALING FOR DOLLARS",
+  "bonusStarted": true,
+  "logs": []
+ },
+ "auto_0_7s": {
+  "doneAfterMs": 709,
+  "lit": [
+   "1:1"
+  ],
+  "lcd": "1",
+  "anim": 2,
+  "youDialed": "DIALING FOR DOLLARS",
+  "bonusStarted": true,
+  "logs": []
+ },
+ "idle_25s": {
+  "doneAfterMs": 24556,
+  "lit": [
+   "1:1"
+  ],
+  "lcd": "_",
+  "anim": 1,
+  "youDialed": "DIALING FOR DOLLARS",
+  "bonusStarted": true,
+  "logs": []
+ },
+ "reduced_motion_click": {
+  "doneAfterMs": 799,
+  "lit": [
+   "3:1"
+  ],
+  "lcd": "1",
+  "anim": 0,
+  "youDialed": "DIALING FOR DOLLARS",
+  "bonusStarted": true,
+  "logs": []
+ }
+}

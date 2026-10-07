@@ -269,10 +269,10 @@ app.get('/apic/:key/:ver', (req, res) => {
 // Live slot math (no deploy): GET current, POST {overrides, rtpLabel?, note?} to swap; POST {reset:true} restores defaults.
 // Token-only (BENDER_ADMIN_TOKEN env). Disabled when the env var is unset.
 function benderAdminOk(req) {
-  const want = process.env.BENDER_ADMIN_TOKEN || '';
-  const got = String(req.get('x-admin-token') || '');
-  if (!want || got.length !== want.length) return false;
-  return require('crypto').timingSafeEqual(Buffer.from(got), Buffer.from(want));
+  const want = Buffer.from(process.env.BENDER_ADMIN_TOKEN || '');
+  const got = Buffer.from(String(req.get('x-admin-token') || ''));          // BYTE lengths: a header with one non-ASCII character used to pass a character-length check and make timingSafeEqual throw (a 500 with a stack)
+  if (!want.length || got.length !== want.length) return false;
+  return require('crypto').timingSafeEqual(got, want);
 }
 function benderMod() { try { return require('./games/bender.js'); } catch { return null; } }
 app.get('/api/admin/bender-config', (req, res) => {
@@ -288,6 +288,25 @@ app.post('/api/admin/bender-config', express.json({ limit: '64kb' }), (req, res)
     const info = m.setLiveConfig(b.reset ? { overrides: {}, note: b.note || 'reset to defaults' } : { overrides: b.overrides || {}, rtpLabel: b.rtpLabel, note: b.note });
     io.emit('g:bender:cfg', { cfg: m.clientCfg(), rtp: info.rtpLabel });
     console.log('[bender] live config updated:', info.note || '(no note)');
+    res.json({ ok: true, ...info });
+  } catch (e) { res.status(400).json({ ok: false, error: e.message }); }
+});
+// Same switch for COLD CALL (same token, same header). GET current; POST {overrides, rtpLabel?, note?} swaps (400 + the reason on a bad config, nothing changes); POST {reset:true} restores the shipped math.
+function coldcallMod() { try { return require('./games/coldcall.js'); } catch { return null; } }
+app.get('/api/admin/coldcall-config', (req, res) => {
+  if (!benderAdminOk(req)) return res.status(403).json({ error: 'forbidden' });
+  const m = coldcallMod(); if (!m) return res.status(404).json({ error: 'no slot' });
+  res.json(m.liveInfo());
+});
+app.post('/api/admin/coldcall-config', express.json({ limit: '64kb' }), (req, res) => {
+  if (!benderAdminOk(req)) return res.status(403).json({ error: 'forbidden' });
+  const m = coldcallMod(); if (!m) return res.status(404).json({ error: 'no slot' });
+  const b = req.body, reset = !!b && b.reset === true;                 // only the boolean true resets ("false", 1, "yes" are not a reset and do not drop the overrides sent with them)
+  if (!b || typeof b !== 'object' || Array.isArray(b) || (!reset && (!b.overrides || typeof b.overrides !== 'object' || Array.isArray(b.overrides)))) return res.status(400).json({ ok: false, error: 'send {overrides: {...}} or {reset: true}' });
+  try {
+    const info = m.setLiveConfig(reset ? { overrides: {}, note: b.note || 'reset to defaults' } : { overrides: b.overrides, rtpLabel: b.rtpLabel, note: b.note });
+    io.emit('g:coldcall:cfg', m.cfgEvent());
+    console.log('[coldcall] live config updated:', info.note || '(no note)');
     res.json({ ok: true, ...info });
   } catch (e) { res.status(400).json({ ok: false, error: e.message }); }
 });
@@ -739,6 +758,7 @@ function maybeAutoStart(room, force) {
 
 function startHand(room) {
   const players = room.players;
+  if (!(room.dealerIdx >= 0 && room.dealerIdx < players.length)) room.dealerIdx = 0;
   if (room.pendingBlinds) { room.sb = room.pendingBlinds.sb; room.bb = room.pendingBlinds.bb; room.pendingBlinds = null; }
   room.deck      = makeDeck();
   room.community = [];
@@ -1029,7 +1049,7 @@ function scheduleNextHand(room, delayMs = 5000) {
     let nextDealer = null;
     for (let o = 1; o <= n0 && !nextDealer; o++) {
       const c = room.players[(room.dealerIdx + o) % n0];
-      if (c.connected && c.chips > 0 && !c.sitOutRequest) nextDealer = c;
+      if (c && c.connected && c.chips > 0 && !c.sitOutRequest) nextDealer = c;
     }
 
     // Remove disconnected players and busted bots; keep busted humans (rebuy option)
@@ -1340,9 +1360,9 @@ io.on('connection', socket => {
   if (process.env.AUTH_CLOCK_SKEW !== undefined) on('__test_skew', ({ ms } = {}) => { accounts.setSkew(ms); socket.emit('ok', { what: 'skew' }); });
 
   // ── Bank queries ──────────────────────────────────────────────────────────
-  on('check_balance', ({ name } = {}) => {
-    if (!cleanNameOf(name)) return;
-    socket.emit('balance_data', { balance: getBalance(cleanNameOf(name)) });
+  on('check_balance', () => {
+    if (!socket.data.acct) return;
+    socket.emit('balance_data', { balance: getBalance(accounts.displayOf(socket.data.acct)) });
   });
 
   on('get_bank_summary', ({ roomId, view } = {}) => {
@@ -1355,7 +1375,7 @@ io.on('connection', socket => {
     const room = rooms.get(ROOM_ID);
     const me = room && room.players.find(p => !p.isBot && p.socketId === socket.id);
     const admin = accounts.isAdmin(socket.data.acct);
-    if (!room || (!admin && (!me || bankKey(me.name) !== 'chris'))) { socket.emit('error', { message: 'Only Chris can edit the bank' }); return; }
+    if (!room || !admin) { socket.emit('error', { message: 'Only Chris can edit the bank' }); return; }
     const byName = me ? me.name : accounts.displayOf(socket.data.acct);
     const target = cleanNameOf(name);
     const total = Math.round(Number(balance));
@@ -1395,7 +1415,7 @@ io.on('connection', socket => {
   on('set_pause', ({ paused } = {}) => {
     const room = rooms.get(ROOM_ID);
     const me = room && room.players.find(p => !p.isBot && p.socketId === socket.id);
-    if (!room || (!accounts.isAdmin(socket.data.acct) && (!me || bankKey(me.name) !== 'chris'))) { socket.emit('error', { message: 'Only Chris can pause the table' }); return; }
+    if (!room || !accounts.isAdmin(socket.data.acct)) { socket.emit('error', { message: 'Only Chris can pause the table' }); return; }
     setRoomPaused(room, typeof paused === 'boolean' ? paused : !room.paused, 'Chris');
     broadcastGameState(room);
   });
@@ -1403,7 +1423,7 @@ io.on('connection', socket => {
   on('reset_table', ({ amount } = {}) => {
     const room = rooms.get(ROOM_ID);
     const me = room && room.players.find(p => !p.isBot && p.socketId === socket.id);
-    if (!room || (!accounts.isAdmin(socket.data.acct) && (!me || bankKey(me.name) !== 'chris'))) { socket.emit('error', { message: 'Only Chris can reset the table' }); return; }
+    if (!room || !accounts.isAdmin(socket.data.acct)) { socket.emit('error', { message: 'Only Chris can reset the table' }); return; }
     if (!room.paused) { socket.emit('error', { message: 'Pause the table first' }); return; }
     const stack = amount === undefined ? (room.startChips || STARTING_CHIPS) : Math.floor(Number(amount));
     if (!Number.isFinite(stack) || stack < BIG_BLIND * 10 || stack > 10000000) {
@@ -1486,7 +1506,9 @@ io.on('connection', socket => {
   socket.on('table_create', () => { try { const k = socket.data.acct; if (k && [...tables.tables.values()].some(t => t.hostKey === k && t.id !== tables.LEGACY_ID && Date.now() - t.createdAt < 3000)) social.onAction(socket, 'host'); } catch {} });
 
   // ── join_game ─────────────────────────────────────────────────────────────
-  on('join_game', ({ name, avatar, profilePic, password } = {}) => {
+  on('join_game', ({ avatar, profilePic, password } = {}) => {
+    if (!socket.data.acct) { socket.emit('error', { message: 'Sign in first' }); return; }
+    const name = accounts.displayOf(socket.data.acct);
     if (String(password || '').trim().toLowerCase() !== ROOM_PASSWORD) {
       socket.emit('error', { message: 'Incorrect password' }); return;
     }
@@ -1571,7 +1593,9 @@ io.on('connection', socket => {
   });
 
   // ── create_demo ───────────────────────────────────────────────────────────
-  on('create_demo', ({ name, avatar, profilePic } = {}) => {
+  on('create_demo', ({ avatar, profilePic } = {}) => {
+    if (!accounts.isAdmin(socket.data.acct)) { socket.emit('error', { message: 'Demo tables are admin-only' }); return; }
+    const name = accounts.displayOf(socket.data.acct);
     let roomId;
     do { roomId = generateRoomId(); } while (rooms.has(roomId));
 

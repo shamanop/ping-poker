@@ -51,5 +51,16 @@
     if (reduce) return; const d = document.createElement('div'); d.className = 'flash'; d.style.background = color; document.getElementById('stage').appendChild(d);
     d.animate([{ opacity: peak }, { opacity: 0 }], { duration: ms, easing: 'ease-out' }).finished.then(() => d.remove(), () => d.remove());
   }
-  CC.fx = { burst, coins, confetti, ring, shake, flash, clear, count: () => ps.length, running: () => !!raf };
+  // (chris 10-06 FB5) first-use GPU cost: the canvas layer and its fill / stroke programs are created the first time a particle shows, which was a 50 ms frame at the first big win.
+  // Show the canvas once at ~invisible opacity with one of every shape while the game loads (warm.js calls this).
+  function warm() {
+    if (raf || ps.length) return Promise.resolve(); if (!cv) init();
+    cv.style.display = ''; cv.style.opacity = '.02'; g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, cv.width, cv.height);
+    const c = COLORS(); g.save(); g.translate(120, 140); g.fillStyle = c[0]; star(30); g.restore();
+    g.save(); g.globalAlpha = 0.6; g.strokeStyle = c[1]; g.lineWidth = 6; g.beginPath(); g.arc(300, 140, 40, 0, 7); g.stroke(); g.restore();
+    g.save(); g.translate(120, 300); g.scale(0.6, 1); g.fillStyle = c[0]; g.beginPath(); g.arc(0, 0, 14, 0, 7); g.fill(); g.lineWidth = 3; g.strokeStyle = c[1]; g.stroke(); g.restore();
+    g.save(); g.translate(300, 300); g.rotate(0.5); g.fillStyle = c[2] || c[0]; g.fillRect(-8, -5, 16, 10); g.restore();
+    return new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(() => { if (!raf && !ps.length) { stop(); } cv.style.opacity = ''; r(); }, 120)))));
+  }
+  CC.fx = { burst, coins, confetti, ring, shake, flash, clear, warm, count: () => ps.length, running: () => !!raf };
 })();

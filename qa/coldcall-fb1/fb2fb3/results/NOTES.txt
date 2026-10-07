@@ -1,0 +1,3 @@
+inputs_all.txt: first pass over every way of placing the call. Its spin_button_poke row (24.7 s) is a wrong case, not a bug: the SPIN button only sets skip while a round is busy (game.js 691, unchanged from the dial build); Space is what calls CC.bonus.poke (game.js 704). Replaced by space_poke in inputs_rerun.txt (730 ms).
+Its lit/lcd columns were sampled before the key face turned over; inputs_rerun.txt samples 400 ms later (key 5 pressed -> lit "5:1", LCD "1"; reduced motion: 0 animations, "3:1").
+flow_*.txt / f1_*.txt: drivers copied to ../drivers, re-pointed to my port 4653 (decision timer 30 s via bump_timer.js), outputs to _scratch, never the tracked w2flow PNGs.

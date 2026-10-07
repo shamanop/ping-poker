@@ -1,0 +1,322 @@
+{
+ "port": 4650,
+ "label": "before",
+ "when": "2026-10-06T20:51:35.679Z",
+ "checks": {
+  "accept: every next spin starts within 150 ms of the round being over": false,
+  "money: shown balance == page wallet == server wallet": true,
+  "money: server wallet delta == sum(win + pot - cost) over the rounds": true,
+  "money: no mismatch / error / pull error": true,
+  "settled: no spin started before the previous round was done on the server": true,
+  "leads: note count == server leads, bar == leads/list, +N label hidden, no banner left": true,
+  "leads: every number the note showed lies in a server-sent from..to range": true,
+  "cleanup: nothing left on screen (stamps, plg, under)": true,
+  "leads supersede: the older leadGain draws nothing after the newer started, the +N label survives until the newer ends, the note ends on the view": false
+ },
+ "detail": {
+  "accept: every next spin starts within 150 ms of the round being over": {
+   "n": 30,
+   "med": 720,
+   "max": 1225,
+   "p": [
+    712,
+    714,
+    714,
+    715,
+    715,
+    715,
+    716,
+    716,
+    717,
+    717,
+    717,
+    718,
+    718,
+    719,
+    720,
+    720,
+    720,
+    721,
+    722,
+    722,
+    723,
+    724,
+    725,
+    725,
+    728,
+    728,
+    728,
+    731,
+    744,
+    1225
+   ]
+  },
+  "money: shown balance == page wallet == server wallet": {
+   "shown": 998420,
+   "page": 998420,
+   "server": 998420
+  },
+  "money: server wallet delta == sum(win + pot - cost) over the rounds": {
+   "delta": -1580,
+   "sum": -1580,
+   "rounds": 31
+  },
+  "money: no mismatch / error / pull error": {
+   "mm": [],
+   "err": null,
+   "pe": []
+  },
+  "settled: no spin started before the previous round was done on the server": {
+   "open": false
+  },
+  "leads: note count == server leads, bar == leads/list, +N label hidden, no banner left": {
+   "note": "32",
+   "server": 32,
+   "bar": "7.1%",
+   "wantBar": "7.1%",
+   "gainHidden": true
+  },
+  "leads: every number the note showed lies in a server-sent from..to range": {
+   "shown": [
+    0,
+    1,
+    2,
+    3,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    14,
+    15,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    29,
+    30,
+    31,
+    32
+   ],
+   "sent": [
+    32,
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31
+   ],
+   "stray": []
+  },
+  "naturalLeadGainOverlaps": 0,
+  "cleanup: nothing left on screen (stamps, plg, under)": {
+   "left": 0,
+   "plg": 0,
+   "under": 0
+  },
+  "hammer": [
+   {
+    "acceptMs": 1225,
+    "clicks": 61,
+    "started": true
+   },
+   {
+    "acceptMs": 725,
+    "clicks": 36,
+    "started": true
+   },
+   {
+    "acceptMs": 718,
+    "clicks": 36,
+    "started": true
+   },
+   {
+    "acceptMs": 731,
+    "clicks": 36,
+    "started": true
+   },
+   {
+    "acceptMs": 728,
+    "clicks": 36,
+    "started": true
+   },
+   {
+    "acceptMs": 715,
+    "clicks": 36,
+    "started": true
+   },
+   {
+    "acceptMs": 716,
+    "clicks": 36,
+    "started": true
+   },
+   {
+    "acceptMs": 728,
+    "clicks": 36,
+    "started": true
+   },
+   {
+    "acceptMs": 724,
+    "clicks": 36,
+    "started": true
+   },
+   {
+    "acceptMs": 728,
+    "clicks": 36,
+    "started": true
+   },
+   {
+    "acceptMs": 720,
+    "clicks": 36,
+    "started": true
+   },
+   {
+    "acceptMs": 712,
+    "clicks": 36,
+    "started": true
+   },
+   {
+    "acceptMs": 720,
+    "clicks": 36,
+    "started": true
+   },
+   {
+    "acceptMs": 722,
+    "clicks": 36,
+    "started": true
+   },
+   {
+    "acceptMs": 725,
+    "clicks": 36,
+    "started": true
+   },
+   {
+    "acceptMs": 718,
+    "clicks": 36,
+    "started": true
+   },
+   {
+    "acceptMs": 717,
+    "clicks": 36,
+    "started": true
+   },
+   {
+    "acceptMs": 722,
+    "clicks": 36,
+    "started": true
+   },
+   {
+    "acceptMs": 715,
+    "clicks": 36,
+    "started": true
+   },
+   {
+    "acceptMs": 714,
+    "clicks": 36,
+    "started": true
+   },
+   {
+    "acceptMs": 717,
+    "clicks": 36,
+    "started": true
+   },
+   {
+    "acceptMs": 721,
+    "clicks": 35,
+    "started": true
+   },
+   {
+    "acceptMs": 715,
+    "clicks": 36,
+    "started": true
+   },
+   {
+    "acceptMs": 716,
+    "clicks": 36,
+    "started": true
+   },
+   {
+    "acceptMs": 714,
+    "clicks": 36,
+    "started": true
+   },
+   {
+    "acceptMs": 717,
+    "clicks": 36,
+    "started": true
+   },
+   {
+    "acceptMs": 720,
+    "clicks": 36,
+    "started": true
+   },
+   {
+    "acceptMs": 723,
+    "clicks": 36,
+    "started": true
+   },
+   {
+    "acceptMs": 744,
+    "clicks": 36,
+    "started": true
+   },
+   {
+    "acceptMs": 719,
+    "clicks": 35,
+    "started": true
+   }
+  ],
+  "armedRows": 0,
+  "leads supersede: the older leadGain draws nothing after the newer started, the +N label survives until the newer ends, the note ends on the view": {
+   "below13": 17,
+   "samples": 81,
+   "mid": {
+    "gainHidden": true,
+    "n": 15
+   },
+   "end": {
+    "n": 15,
+    "gainHidden": true,
+    "bn": false
+   }
+  }
+ },
+ "ok": false
+}

@@ -1,3 +1,4 @@
+const { authJoin } = require('./authjoin');
 // Tables: create/validate, lobby, join/leave, host controls, nights, settle-up, rebuy, modes. Temp data files, port 4802.
 const { spawn } = require('child_process');
 const fs = require('fs'), os = require('os'), path = require('path');
@@ -228,7 +229,7 @@ const ledgerRows = () => JSON.parse(fs.readFileSync(F.ledger, 'utf8'));
 
     // ── legacy room still works ──
     const L = client('legacy');
-    L.s.emit('join_game', { name: 'Zed', avatar: '🦊', password: 'ping' });
+    authJoin(L.s, { name: 'Zed', avatar: '🦊', password: 'ping' });
     ok(await waitFor(() => L.last('room_joined')), 'legacy join_game still works');
     const lr = L.last('room_joined');
     ok(lr.roomId === 'POKERPING', 'legacy room id preserved');

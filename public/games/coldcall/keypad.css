@@ -1,0 +1,31 @@
+/* COLD CALL pick-a-number keypad styles (keypad.js). Loaded after ui.css. Art slots: --key-art (one key face) and --pad-art (the plate); set them to url(...) to paint, nothing else moves. */
+
+/* ---- FB3 (chris 10-06 FB3): PICK A NUMBER. A desk-phone keypad replaces the rotary dial (it did not answer a mouse drag). The root keeps the class .dial and the _finish
+   hook (drivers use both). A key press is a reveal: the pressed key lights and shows the digit the script already holds. Beige keys on a navy plate, ink outlines. ---- */
+.dial{--key-w:92px;--key-h:66px;--key-art:linear-gradient(var(--beige-hi),var(--beige-lo));--pad-art:linear-gradient(#2c4260,#16263e 60%,#0e1a2d);
+  position:relative;isolation:isolate;display:grid;gap:12px;width:316px;padding:14px 14px 16px;border:4px solid var(--ink-dk);border-radius:18px;outline:0;touch-action:manipulation;
+  box-shadow:inset 0 0 0 3px rgba(220,232,250,.3),0 10px 14px rgba(0,0,0,.55)}
+.dial::before{content:"";position:absolute;inset:0;z-index:-1;border-radius:14px;background:var(--pad-art) center/100% 100% no-repeat}
+.dial::after{content:"";position:absolute;inset:-9px;z-index:-2;border:3px solid var(--gold);border-radius:24px;opacity:0;pointer-events:none}
+.dial.hint::after{animation:padhint 1.1s ease-in-out infinite alternate}
+@keyframes padhint{from{opacity:.1}to{opacity:.85}}
+.dial .lcd{display:grid;grid-template-columns:1fr auto;align-items:center;height:48px;padding:0 14px;border:3px solid var(--ink-dk);border-radius:8px;background:linear-gradient(180deg,#070d18,#101c31 60%,#070d18);box-shadow:inset 0 3px 8px #000,0 0 0 2px rgba(246,232,196,.3)}
+.dial .lcd small{font-weight:700;font-size:13px;letter-spacing:.14em;color:var(--dim);text-align:left}
+.dial .lcd b{font-family:var(--display);font-weight:400;font-size:32px;line-height:1;min-width:24px;text-align:right;color:#8fa6c4;text-shadow:0 2px 0 #000}
+.dial .lcd b.land{color:var(--gold);text-shadow:0 0 12px rgba(255,190,80,.6),0 2px 0 #000;animation:padpop .35s ease-out}
+@keyframes padpop{0%{transform:scale(.6)}60%{transform:scale(1.25)}100%{transform:scale(1)}}
+.dial .keys{display:grid;grid-template-columns:repeat(3,1fr);grid-auto-rows:var(--key-h);gap:10px}
+.dial .key{position:relative;display:grid;place-items:center;min-height:44px;padding:0;border:3px solid var(--ink-dk);border-radius:12px;cursor:pointer;touch-action:manipulation;
+  background:var(--key-art) center/100% 100% no-repeat;color:var(--paper-ink);font-family:var(--display);font-size:32px;line-height:1;font-variant-numeric:tabular-nums;
+  text-shadow:0 1px 0 rgba(255,248,215,.8);box-shadow:0 5px 0 var(--ink-dk),0 8px 8px rgba(0,0,0,.4);transition:transform .06s,box-shadow .06s}
+.dial .key.zero{grid-column:2}
+.dial .key:hover{filter:brightness(1.07)}
+.dial .key:active,.dial .key.lit{transform:translateY(4px);box-shadow:0 1px 0 var(--ink-dk),0 2px 3px rgba(0,0,0,.4)}
+.dial .key:focus-visible{outline:3px solid var(--gold);outline-offset:3px}
+.dial .key.lit{background:linear-gradient(#ffe48a,var(--gold) 55%,var(--gold2));color:var(--ink-dk);filter:none;box-shadow:0 1px 0 var(--ink-dk),0 0 18px 4px rgba(255,208,88,.7)}
+.dial .key.lit b{display:block;animation:keyflip .28s ease-out}
+.dial .key b{font-weight:400}
+@keyframes keyflip{0%{transform:scaleY(1)}45%{transform:scaleY(.05)}100%{transform:scaleY(1)}}
+.dial.done{pointer-events:none}
+.dial.done .key:not(.lit){opacity:.55}
+@media (prefers-reduced-motion:reduce){.dial.hint::after{animation:none;opacity:.7}.dial .lcd b.land,.dial .key.lit b{animation:none}.dial .key{transition:none}}

@@ -1,3 +1,4 @@
+const { authJoin } = require('./authjoin');
 // Server restart (deploy): balances + chips on the table must come back as bank.
 const { spawn } = require('child_process');
 const fs = require('fs'), os = require('os'), path = require('path');
@@ -8,7 +9,7 @@ const PORT = 4781, ROOT = path.join(__dirname, '..');
 const env = { ...process.env, PORT: String(PORT), AUTO_START_MS: '600000', BANK_FILE: path.join(dir, 'bank.json'), LEDGER_FILE: path.join(dir, 'ledger.json') };
 const boot = async () => { const p = spawn('node', ['server.js'], { cwd: ROOT, env }); for (let i = 0; i < 60; i++) { try { await fetch(`http://localhost:${PORT}/`); break; } catch { await sleep(100); } } return p; };
 let fails = 0; const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails++; };
-const join = async name => { const s = io(`http://localhost:${PORT}`, { forceNew: true }); let gs = null, bal = null; s.on('game_state', g => { gs = g; }); s.on('balance_data', d => { bal = d.balance; }); s.emit('join_game', { name, avatar: '🦊', password: 'ping' }); await sleep(500); return { s, gs: () => gs, bal: () => bal }; };
+const join = async name => { const s = io(`http://localhost:${PORT}`, { forceNew: true }); let gs = null, bal = null; s.on('game_state', g => { gs = g; }); s.on('balance_data', d => { bal = d.balance; }); authJoin(s, { name, avatar: '🦊', password: 'ping' }); await sleep(500); return { s, gs: () => gs, bal: () => bal }; };
 (async () => {
   let proc = await boot();
   try {

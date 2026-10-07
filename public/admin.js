@@ -8,8 +8,12 @@
   const sock = () => window.PingSocket || null;
   const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const isAdmin = () => { try { const u = window.Lobby && Lobby.user && Lobby.user(); return !!(u && u.isAdmin); } catch (e) { return false; } };
-  const num = n => (n === null || n === undefined ? '–' : (window.Money ? Money.fmt(n) : Math.round(n).toLocaleString('en-US')));
-  const money = n => (window.Money ? Money.fmt(n) : String(n));
+  // every amount here is chips; showing and parsing with the same mode keeps typed values round-tripping
+  const cmode = () => { const p = window.Money && Money.getPref ? Money.getPref() : 'auto'; return p === 'auto' ? 'chips' : p; };
+  const num = n => (n === null || n === undefined ? '–' : (window.Money ? Money.fmt(n, { mode: cmode() }) : Math.round(n).toLocaleString('en-US')));
+  const money = n => (window.Money ? Money.fmt(n, { mode: cmode() }) : String(n));
+  const plainAmt = n => (window.Money ? Money.fmt(n, { symbol: false, mode: cmode() }).replace(/,/g, '') : String(n));
+  const parseChips = v => (window.Money ? Money.parse(v, { mode: cmode() }) : Math.round(Number(v)));
   const ago = t => {
     if (!t) return 'never';
     const s = Math.max(0, (Date.now() - t) / 1000);
@@ -129,7 +133,7 @@
       const k = esc(a.key);
       let acts;
       if (editing && editing.key === a.key && editing.kind === 'bal') {
-        acts = `<input class="adm-in" id="adm-edit" type="text" inputmode="decimal" value="${esc(window.Money ? Money.fmt(editing.value, { symbol: false }).replace(/,/g, '') : editing.value)}" aria-label="New total for ${esc(a.display)}">
+        acts = `<input class="adm-in" id="adm-edit" type="text" inputmode="decimal" value="${esc(plainAmt(editing.value))}" aria-label="New total for ${esc(a.display)}">
           <button type="button" class="adm-btn pri" data-a="bal-ok">Save</button><button type="button" class="adm-btn" data-a="cancel">Cancel</button>`;
       } else if (editing && editing.key === a.key && editing.kind === 'play') {
         acts = `<input class="adm-in" id="adm-edit" type="text" inputmode="decimal" value="${esc(String((editing.value || 0) / 100))}" aria-label="New Play dollars for ${esc(a.display)}">
@@ -160,7 +164,7 @@
     else if (act === 'pin') { editing = { key, kind: 'pin' }; renderAccounts(); }
     else if (act === 'cancel') { editing = null; renderAccounts(); }
     else if (act === 'bal-ok') {
-      const total = window.Money ? Money.parse($('adm-edit').value) : Math.round(Number($('adm-edit').value));
+      const total = parseChips($('adm-edit').value);
       if (total === null || !Number.isFinite(total) || total < 0 || total > 100000000) { status('Enter an amount from 0 to ' + money(100000000), 'err'); return; }
       if (!window.confirm('Set ' + a.display + "'s total money to " + money(total) + '?')) return;
       editing = null; status('Saving');
@@ -186,7 +190,6 @@
   let pendingBal = null;
 
   // ── table ──
-  const plainAmt = n => (window.Money ? window.Money.fmt(n, { symbol: false }).replace(/,/g, '') : String(n));
   function renderTable() {
     const host = $('adm-table'); if (!host || tab !== 'table') return;
     const t = overview && overview.table;
@@ -198,7 +201,7 @@
         <div class="adm-row"><button type="button" class="adm-btn pri" id="adm-pause">${t.paused ? 'Resume table' : 'Pause table'}</button></div></div>
       <div class="adm-card"><h3>Reset table</h3>
         <p>Cancels the current hand, refunds bets, and sets everyone's total money to the starting stack. The table must be paused first.</p>
-        <div class="adm-row"><input class="adm-in" id="adm-stack" type="number" min="200" step="1" value="${keepStack || last}" aria-label="Starting stack">
+        <div class="adm-row"><input class="adm-in" id="adm-stack" type="text" inputmode="decimal" value="${esc(keepStack || plainAmt(last))}" aria-label="Starting stack">
         <button type="button" class="adm-btn danger" id="adm-reset" ${t.paused ? '' : 'disabled'}>Reset table</button></div></div>
       <div class="adm-card"><h3>Blinds</h3>
         <p>Now ${esc(money(t.sb))} / ${esc(money(t.bb))}${t.nextBb ? ' &middot; next hand ' + esc(money(t.nextSb)) + ' / ' + esc(money(t.nextBb)) : ''}. Changes made mid-hand start on the next hand.</p>
@@ -206,9 +209,7 @@
         <input class="adm-in" id="adm-bb" type="text" inputmode="decimal" value="${esc(plainAmt(t.nextBb || t.bb))}" aria-label="Big blind">
         <button type="button" class="adm-btn pri" id="adm-blinds">Set blinds</button></div></div>`;
     $('adm-blinds').addEventListener('click', () => {
-      const M = window.Money, prevUnit = M && M.getUnit ? M.getUnit() : null; if (M && M.setUnit) M.setUnit('chips');
-      const sb = M ? M.parse($('adm-sb').value) : Math.round(Number($('adm-sb').value)), bb = M ? M.parse($('adm-bb').value) : Math.round(Number($('adm-bb').value));
-      if (prevUnit) M.setUnit(prevUnit);
+      const sb = parseChips($('adm-sb').value), bb = parseChips($('adm-bb').value);
       if (!(sb >= 1) || !(bb >= 2)) { status('Enter both blinds', 'err'); return; }
       if (sb >= bb) { status('Small blind must be less than the big blind', 'err'); return; }
       status('Working'); sock().emit('table_update', { tableId: 'POKERPING', patch: { blinds: { sb, bb } } });
@@ -216,9 +217,9 @@
     });
     $('adm-pause').addEventListener('click', () => { status('Working'); sock().emit('set_pause', { paused: !t.paused }); setTimeout(refresh, 350); });
     $('adm-reset').addEventListener('click', () => {
-      const amount = Math.floor(Number($('adm-stack').value));
-      if (!Number.isFinite(amount) || amount < 200) { status('Enter a whole number of chips, 200 or more', 'err'); return; }
-      if (!window.confirm('Reset the table to ' + amount.toLocaleString('en-US') + ' chips each? The hand is cancelled.')) return;
+      const amount = parseChips($('adm-stack').value);
+      if (amount == null || !Number.isFinite(amount) || amount < 200) { status('Enter a starting stack of ' + money(200) + ' or more', 'err'); return; }
+      if (!window.confirm('Reset the table to ' + money(amount) + ' each? The hand is cancelled.')) return;
       localStorage.setItem('pp-reset-stack', String(amount));
       status('Working'); sock().emit('reset_table', { amount }); setTimeout(refresh, 450);
     });

@@ -1,0 +1,3 @@
+// summarise --bonus json(s): node tools/lv-bonus-sum.js file.json ...
+const fs=require('fs');for(const f of process.argv.slice(2)){const j=JSON.parse(fs.readFileSync(f,'utf8'));console.log(f);
+for(const k of Object.keys(j.kinds)){for(const r of j.kinds[k]){if(r.more!=='bank')continue;console.log(`  ${k} ${r.pick.padEnd(5)} avg ${r.avgX.toFixed(1)} +-${r.ci.toFixed(1)} sd ${r.sdX.toFixed(0)} >=100x ${(r.ge100*100).toFixed(1)}% >=1000x ${(r.ge1000*100).toFixed(2)}% pick ${(r.pickRate*100).toFixed(0)}% offer ${(r.offerRate*100).toFixed(0)}%`)}}}

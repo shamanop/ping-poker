@@ -1,4 +1,5 @@
 'use strict';
+const { authJoin } = require('./authjoin');
 // Ping Poker multi-client stress test. REPORT-ONLY: runs a patched-free COPY of server.js
 // in a temp dir with a throwaway bank.json. Usage: node tests/mp.js [groupName ...]
 const path = require('path'), fs = require('fs'), os = require('os');
@@ -36,7 +37,7 @@ async function startServer(seed = {}) {
   proc.stdout.on('data', d => { srv.out += d; });
   proc.stderr.on('data', d => { srv.out += d; });
   proc.on('exit', code => { srv.exited = true; srv.exitCode = code; });
-  for (let i = 0; i < 100 && !srv.out.includes('running'); i++) await sleep(50);
+  for (let i = 0; i < 400 && !srv.out.includes('running'); i++) await sleep(50);
   if (!srv.out.includes('running')) throw new Error('server did not start: ' + srv.out);
   srv.bank = () => JSON.parse(fs.readFileSync(path.join(dir, 'bank.json'), 'utf8'));
   srv.stop = () => {
@@ -50,7 +51,7 @@ async function startServer(seed = {}) {
 
 class Client {
   constructor(srv, name) {
-    this.srv = srv; this.name = name; this.gs = null; this.cards = []; this.errors = [];
+    this.srv = srv; this.name = name.charAt(0).toUpperCase() + name.slice(1); this.gs = null; this.cards = []; this.errors = [];
     this.events = []; this.showdowns = []; this.busts = []; this.dead = false;
     this.sock = io(`http://127.0.0.1:${srv.port}`, { transports: ['websocket'], forceNew: true, reconnection: false });
     srv.clients.push(this);
@@ -64,7 +65,7 @@ class Client {
   connect() { return new Promise((res, rej) => { this.sock.once('connect', res); this.sock.once('connect_error', rej); }); }
   async join(name = this.name) {
     const n = this.errors.length, j = this.events.filter(e => e.ev === 'room_joined').length;
-    this.sock.emit('join_game', { name, avatar: 'x', password: PASS });
+    authJoin(this.sock, { name, avatar: 'x', password: PASS });
     for (let i = 0; i < 100; i++) {
       await sleep(20);
       if (this.events.filter(e => e.ev === 'room_joined').length > j) return { ok: true };
@@ -96,7 +97,7 @@ async function makeTable(names, seed, { start = true, host = 0, extra = [] } = {
   for (const n of names) { const c = new Client(srv, n); await c.connect(); cs.push(c); }
   for (const c of cs) { c.sock.once('room_joined', () => {}); }
   for (const c of cs) {
-    c.sock.emit('join_game', { name: c.name, avatar: 'x', password: PASS });
+    authJoin(c.sock, { name: c.name, avatar: 'x', password: PASS });
     await waitFor(() => c.events.some(e => e.ev === 'room_joined'), 3000);
   }
   if (start) {

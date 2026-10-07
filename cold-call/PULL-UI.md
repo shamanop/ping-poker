@@ -1,0 +1,77 @@
+# THE PULL: wave 2 UI contract (lead: wave-2 session; builders code against THIS file)
+
+Skin 3 look is fixed (see `public/games/coldcall/style.css`). Extend it; no new palette, no templated SaaS cards. Honesty: nothing shown that differs from the true odds or from the result fields. Spec wording: `PULL.md`. Server fields: `PULL-ENGINE.md`.
+
+## 0. Server pieces the UI depends on: ALL THREE LANDED (commit 9a59e6f, details in PULL-STATE.md 'Server bits for the wave-2 UI'). `timer` is authoritative for the countdown, keep a 1 s own fallback; a `rate` error on `ready` = ignore (double-send). `rules` = whole CFG.pull; `daily.next` is in every state view (null if unknown). Original ask:
+1. `g:coldcall:ready {roundId}` re-arms the decision timer once per open decision (the ONE MORE CALL pending event carries the whole bonus, 60 s+ of animation, the 20 s timer starts at the event). Reply `g:coldcall:timer {roundId, timeoutMs, expiresAt}`. UI: sends `ready` when the prompt is on screen; if no reply arrives within 1 s it counts down from its own `timeoutMs` receipt time.
+2. `state.pull.rules` = live `CFG.pull`. UI reads `rules` if present, else `E.CFG.pull` of the engine copy (byte-identical to the server file).
+3. `stateView.daily.next` = leads the next claim gives. UI: if absent, say "free leads" with no number until the claim result shows `pull.daily.leads`.
+
+## 1. Wire protocol (client side)
+Events from the server (socket directly, or relayed by `public/shell.js` as postMessage into the iframe): `g:coldcall:state` (adds `pull`, `pot`, `feed`, `open`), `g:coldcall:result` (status `done` | `pending`), `g:coldcall:voided`, `floor:feed`, `floor:pot`, `g:coldcall:timer`. Requests: `g:coldcall:spin {bet, mode, buyBonus?, auto?}`, `g:coldcall:decide {roundId, k:'pick', p} | {roundId, k:'more', take}`, `g:coldcall:ready {roundId}`.
+Bridge messages (iframe <-> shell): game -> shell `spin {reqId,bet,mode,buy,auto}`, `decide {reqId, roundId, k, p|take}`, `ready {roundId}`; shell -> game `init`, `wallet`, `result {payload}`, `error {message, code, open?}`, `floor {kind:'feed'|'pot', payload}`, `timer {payload}`, `voided {payload}`.
+Results: a spin request is answered by ONE result: `pending` (a decision is open) or `done`. A decide request is answered by the next result for that round: `pending` (next decision) or `done` (`resolved: true`). A `done` result for an open round can also arrive UNSOLICITED (server timeout / disconnect default: `auto: 'timeout'|'disconnect'`): the client must take it, close the prompt and finish the animation from the new script. Results are keyed by `roundId`, never by queue position.
+
+## 2. Resuming an animation (the hard part; builder A owns it)
+`pending.partial` is the script SO FAR (only what the player has seen); the next result's `script` is the longer/final one. A `cursor` per round remembers what is already on screen: base spin shown, bonus intro shown, N bonus spins shown, the decision spin's cascade shown. On each new result the animation continues from the cursor and never replays.
+- `pick` (first phone feature of a bonus; `pending.spin` = bonus spin n, `choices` = hot squares): the decision spin in `partial.bonus.spins[last]` has `pickPending: 1`, `phone: null`: animate drop + cascades, then show the PICK prompt on the lit squares (board stays as is), on result run only the phone feature of that spin (`playSpin` resume mode: no drop, no steps). Revealed upgraded square has `up: 1`.
+- `more` (end of bonus; `pending = {W, mult, pWin, capT}`): the whole bonus is in `partial.bonus` with `winTenths = W` (as played). Animate it, then the HANG UP / ONE MORE CALL prompt. On result: `pull.more.take`, `.won`; final total in `p.totalWinTenths`. If taken and lost the WIN meter drops to the final total (a dedicated path; the "win never decreases in a round" rule has this one exception, `selfCheck` compares to `p.totalWin`).
+- Timer: counts down from `timeoutMs` (restart on `g:coldcall:timer`). At 0 the UI shows "TIME'S UP: <default>" and waits for the server's unsolicited `done`; it never decides on its own.
+- Autoplay (`st.auto`) sends `auto: true`: no prompts, a caption line says what the default did ("AUTO: first lead picked", "AUTO: banked").
+- Turbo / skip never skips a decision.
+
+## 3. Money and display rules
+- A Callback round: cost 0, played at `result.betCents` (not the selected bet), allowed with a low balance. SPIN button reads CALLBACK while `view.cb` is set; the bet shown during it is `cb.bet`.
+- Play $ shows dollars, Chips shows whole chips (`dollars()` in game.js). Pot, feed amounts, Callback bet all go through it.
+- Warm squares show their bet: `view.warm` positions + `view.warmBet` (cents). Changing the bet to anything else drops them (`pull.warmDropped`): the UI warns BEFORE the spin ("4 warm leads work at $1.00 only").
+- Cold clock: `view.cold = {inMs, leads, warm}` -> "20 leads go cold in 3 h 12 m", always shown when non-null; counted down locally.
+- Ghost ("WOULD HAVE CLOSED $12.40"): only when `pull.ghost` is non-null and `ghost.pay > 0`; value = `ghost.pay` in tenths of the round's bet; flip the ghost squares from `ghost.script`; short, skippable, OFF in turbo, never when the same spin triggered a bonus.
+- Daily: `view.daily.claimed`; result `pull.daily = {leads, streak}` -> "APPOINTMENT KEPT +N leads, day S".
+- Pot: `state.pot[mode].bal` ticks on `floor:pot`; a pot win (`result.pot = {won, amount, who}`) gets its own celebration and the amount is ADDED on top of the win (info screen: the pot is extra, outside the 10,000x cap).
+- Feed: `floor:feed` events {kind: win|bonus|callback|pot, who, x, amount, mode, bonus}; rotate lines in a single ticker; own events included but marked "YOU". Never show Play $ events in Chips mode or the reverse (filter on `mode`).
+- Practice (not signed in, local engine): no pull UI at all.
+- Info screen: one honest line per mechanic, numbers from `rules`; states the pot is extra.
+
+## 4. Files and ownership
+- Builder A (flow): `game.js` (transport, results inbox, decide/ready, resume cursor, Callback spin), `bonus.js` (resume mid-bonus, more finale), `board.js` (resume phone only, pick tap targets, warm square markers), `phone.js` if needed, `public/shell.js` (bridge relay only).
+- Builder B (look): NEW `pull.js` + NEW `pull.css`-style rules appended to a NEW file `pull.css` (linked from index.html), `fx.js` additions, `index.html` DOM slots. Exposes `CC.pull` (see section 5). Does not touch the transport.
+- Engine copy stays byte-identical. No edits to `games/*` or `server.js`.
+
+## 5. `CC.pull` API (B implements, A calls)
+```
+CC.pull.setView(view, mode)          // lead list / callback / warm / cold / daily chip from a state view {leads, list, cb, warm, warmBet, cold, daily}
+CC.pull.setPot(modeBal)              // {bal, last} for the current mode
+CC.pull.feed(event)                  // push one floor:feed event
+CC.pull.onBetChange(betCents)        // warm warning
+CC.pull.leadGain(pullBlock)          // after a round: animates leads filled, daily, leaked, armed
+CC.pull.ghost(ghost, ctx)            // Promise; plays the would-have-closed line
+CC.pull.askPick(pending, ctx)        // Promise<p>; highlights choices, timer; resolves with the tapped square (never auto-resolves)
+CC.pull.askMore(pending, ctx)        // Promise<boolean take>
+CC.pull.expired(why)                 // closes a prompt: "TIME'S UP: <default>"
+CC.pull.moreOutcome(more, ctx)       // Promise; the gamble reveal (won or lost) after take
+CC.pull.potWin(pot, ctx)             // Promise
+CC.pull.rules(rules)                 // info-screen lines
+```
+Prompts are rendered inside `#ov` / `#scene` so `sweep()` removes everything.
+
+## 0b. Timer change (server, U4 fix, 2026-10-06 ~11:10, on the branch)
+The server now arms the decision timer at `max(timeoutMs, 180000)` (ceiling) when the pending result is sent; the FIRST `ready` brings it to a full `timeoutMs` from now. The pending view's `expiresAt` is now the CEILING: the client must NOT show a countdown until the `g:coldcall:timer` reply arrives (no `timer` yet = prompt armed but no clock; show "..." or nothing). A client that never sends `ready` defaults at the ceiling. Real-server drivers that wait for a default must send `ready` first. Restart 4640 (`_scratch/start4640.sh`) to pick it up.
+
+## 0c. Live config: what the server sends and when it changes (LIVECFG, server only, on the branch; nothing to build on the server side)
+The slot math can now change without a reload (admin switch, see `PULL-ENGINE.md` section 8). The client's local engine copy is animation only: it must never be the source of a price, a pay table or a rule shown to a signed-in player. Read these from the server:
+- `g:coldcall:state` (sent on open and on every `state` request) now also carries `cfg` = the live non-PULL math: `pay` (raw rows) with `payScale` and `payTenths` (the effective pay table per symbol in tenths of the bet, ready to show: a value of 10 = 1.0x), `weights`, `extra`, `reveal`, `bubbles`, `upsell`, `hunt`, `adjacency`, `spins`, `retrigger`, `maxSpins`, `maxCascades`, `maxRevealRounds`, `buyCost` (tenths of the bet), `maxWinTenths`. The PULL knobs stay in `state.pull.rules` (the whole live `CFG.pull`, including `on`, `list`, `pot`, `feed`, `decision`). Also live: `buyPriceCents[bet][buy]` (whole cents, use this for every price on a button), `buyCostX`, `maxWinX`, `rtp` (the label to print; it can read `custom settings, not measured`), `betLevels` / `bets`.
+- `g:coldcall:cfg { cfg, rules, buyPriceCents, rtp, bets }` is BROADCAST to every connected socket on each swap (and on a reset): `cfg` = the same object as `state.cfg`, `rules` = the same object as `state.pull.rules` (`null` only if the block is missing), the rest as in `state`. On receipt: replace the stored rules / cfg / prices / label, redraw the info screen and the BUY prices, and keep going: nothing about a round in flight changes (an open decision, a spin in animation and a result on its way all finish on the config they started on; the next spin runs on the new one). Do not reload, do not drop an open prompt, do not cancel a timer. `rules.on === false` means the PULL is switched off: hide the lead list, Callback, pot and decisions (spins are plain until it is on again; leads and an armed Callback are kept by the server).
+- A result's `pull.state.list` / `cold` / `daily.next` are shown on the config in force after the round (the state going forward), so the lead counter reads `leads / list` of the live list: a list that shrank can read 300 / 200 until the next paid spin, which then arms one Callback.
+- Keep the old fallbacks: no `cfg` or `rules` in `state` (an older server) = use the engine copy; a `g:coldcall:cfg` that never comes = nothing changed. A refused swap sends nothing.
+
+## 0d. DENOMS client (job C: 1c / 2c / 5c bets, live config; files `public/games/coldcall/{game,pull,phone,board,bonus}.js`, `public/shell.js`; engine copy untouched)
+Server side: `PULL-ENGINE.md` sections 7 and 8. The client changes below are data, text and logic only; the leads note, dial, buttons, bubbles and status-bar art are untouched.
+- **Bet ladder.** Signed in: the server's `bets` / `betLevels` (`1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2500` cents, both currencies); the default stays $1 (`setBets`). The stepper just walks the list (`-` disabled at 1c, `+` at $25). Practice (not signed in, local engine, no whole-cent rounding) offers 10c and up only.
+- **Cents of a script amount.** `ctx.cents(t) = t * pay.num / pay.den` of the round's own result (a spin: bet / 10; a Callback: its own bet / 10; a buy: price / cost multiple, so a 1c bonus1 buy is 0.0996c a tenth, not 0.1c). Pending results have no `pay`: the client falls back to `cost / costTenths`, else `bet / 10`. From 10c up the scale is whole and nothing changes.
+- **Step amounts** (cluster floats, bubbles, close chips): `ctx.amt(tenths)` = whole cents rounded to the nearest; in a fractional-cent round (`num % den != 0`) a step under half a cent shows as the multiple of the bet instead (`+0.3x`), never `$0.00` / `0 chips`. Chips follow the shell money pref like Bender (9d5f578): chips, or dollars when the player picked USD (then no ` chips` word).
+- **The WIN meter and totals.** In a fractional round the meter runs on the exact amount shown rounded DOWN (`<$0.01` / `<1` under one cent, never `$0.00` for a win that is not zero), at ONE MORE CALL it reads `bankCents`, and at the end it lands on the whole cents the server paid (`result.totalWin`, one allowed drop of at most a cent or two). The BIG WIN count-up, the bonus end card, the result caption and the wallet all use `totalWin` / `wallet`. A win that rounded to nothing says so ("Under one cent: it rounded down, nothing paid this time."). `selfCheck` compares `totalWin` with the exact amount within 2c in a fractional round and checks `pay.win == totalWin`.
+- **ONE MORE CALL.** The prompt shows the server's whole cents: HANG UP banks `pending.bankCents`, a won gamble pays `winCents`, a lost one `baseCents`, "THE BONUS" is `bonusCents` (never `W x bet / 10` in the client; the old computation stays only as a fallback for a server without the fields). Checked on the real page: shown bank cents == wallet change + cost, take-win == shown win cents, take-loss == base cents.
+- **Buy prices** come from `state.buyPriceCents[bet][buy]` (whole cents, nearest cent, at least 1c; `buyList()`), for the menu, the confirm, the "from $x" label, the funds check and the balance deduction. The engine copy prices only practice and an older server without the field. The info screen lists each buy as `x your bet (price at your bet)`.
+- **Live config** (`g:coldcall:cfg`, relayed by `shell.js` as `{type: 'cfg'}`; a standalone page listens on the socket): `onCfg` replaces `st.server.cfg`, `buyPriceCents`, `rtp`, `maxWinX`, `rules` (and `bets`), then repaints only what is idle: bet / buy labels, the MAX line, an OPEN buy menu / confirm (new price in place, a toast if the confirm price moved; the server charges the live price) and an OPEN info screen (rebuilt in place, scroll kept). The info screen reads the pay table (`cfg.payTenths`), bubble ranges, spins, 10,000x (`maxWinX`), the PULL lines (`rules`) and the RTP line (`rtp`, printed exactly as sent, "custom settings, not measured" included) from the server. A round in flight, an open decision, its timer and its prompt are never repainted; each round takes `st.rules` at its start (`ctx.rules`: pot card, ghost threshold) and the next round sees the new numbers. `rules.on === false` hides the lead list, Callback, pot and decisions (`CC.pull.setOn`, `pview()` returns null: no CALLBACK button) until a state with the pull comes back.
+- **Pot (FIX POT-CAP).** `R.pot.maxPayX` is gone: the info line says "each spin has a 1 in N chance per $1 bet of taking the pot, up to $50 whatever you bet; the pot can hold more than a hit pays, the rest stays for the next winner", and the pot-win card says "on top of your win. A pot pays up to $50 a hit, whatever you bet." (`capCents`, Chips 5,000 chips). The pot is still paid on top of the win and is not part of the 10,000x max win.
+- **Known gaps:** BELL HUNT's "about 5x the chance" and the pick / more / ghost wording of the info text are static where the engine has no single number to print; a hand-edited stored `cb.bet` is shown as sent; practice has no 1c / 2c / 5c.

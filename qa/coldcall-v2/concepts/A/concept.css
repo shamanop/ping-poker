@@ -1,0 +1,85 @@
+/* CONCEPT A: THE LEAD SHEET. Leads are a paper call sheet taped into the head band; every 10 leads = one box that gets ticked. Full sheet = stamped CALLBACK. */
+/* ---- the sheet (head band, top right, above the speech bubble) ---- */
+#sheet{position:absolute;right:10px;top:8px;width:224px;padding:4px 8px 5px;z-index:6;rotate:1.6deg;transform-origin:90% 0;color:var(--paper-ink);
+  background:repeating-linear-gradient(180deg,transparent 0 17px,rgba(60,90,140,.22) 17px 18px),linear-gradient(#f8ecc8,#ecdba8);border:3px solid var(--ink-dk);border-radius:3px;
+  box-shadow:0 5px 0 rgba(0,0,0,.35),0 10px 14px rgba(0,0,0,.55)}
+#sheet::before{content:"";position:absolute;left:7px;top:0;bottom:0;width:2px;background:rgba(216,64,46,.55)}
+#sheet::after{content:"";position:absolute;left:50%;top:-12px;width:62px;height:20px;margin-left:-31px;rotate:-3deg;background:linear-gradient(rgba(255,244,214,.82),rgba(231,215,165,.82));box-shadow:0 1px 3px rgba(0,0,0,.4)}   /* the tape */
+#sheet .h{display:flex;justify-content:space-between;align-items:baseline;padding-left:6px}
+#sheet .h b{font-family:var(--display);font-weight:400;font-size:13px;letter-spacing:.04em;color:var(--red-lo);white-space:nowrap}
+#sheet .h span{font-family:var(--display);font-size:23px;line-height:1;color:var(--paper-ink);white-space:nowrap}
+#sheet .h span i{font-style:normal;font-size:14px;color:#6a5a3a}
+#sheet .g{display:grid;grid-template-columns:repeat(20,1fr);gap:2px;margin:3px 0 3px 6px}
+#sheet .g u{display:block;height:12px;border:1.5px solid #4a3a20;background:rgba(255,255,255,.35);position:relative;text-decoration:none}
+#sheet .g u.on{background:#fff6dc}
+#sheet .g u.on::after{content:"";position:absolute;left:20%;top:-30%;width:35%;height:90%;border-right:3px solid var(--red-lo);border-bottom:3px solid var(--red-lo);rotate:38deg}
+#sheet .g u.part{background:linear-gradient(0deg,rgba(216,64,46,.55) 30%,rgba(255,255,255,.35) 30%)}
+#sheet .g u.last{border-color:var(--red-lo);border-width:2.5px}
+#sheet .f{padding-left:6px;font-family:var(--font);font-weight:700;font-size:13px;line-height:1.1;color:#4a2a14;white-space:nowrap}
+#sheet .f b{color:var(--red-lo);font-weight:400}
+#sheet.full .g u{background:#fff6dc}#sheet.full .g u::after{content:"";position:absolute;left:20%;top:-30%;width:35%;height:90%;border-right:3px solid var(--red-lo);border-bottom:3px solid var(--red-lo);rotate:38deg}
+#sheet .cb{position:absolute;left:50%;top:24px;translate:-50% 0;rotate:-5deg;padding:0 12px;border:3px double var(--red-lo);border-radius:6px;background:rgba(246,232,196,.95);color:var(--red-lo);font-family:var(--display);font-size:22px;letter-spacing:.06em;white-space:nowrap;box-shadow:0 3px 0 var(--ink-dk),0 8px 12px rgba(0,0,0,.5)}
+.bonus #sheet{display:none}
+/* ---- ribbon: pot rides the right end (always on screen); a gold variant for the Callback ---- */
+#ribbon .r.pot{font-size:15px;letter-spacing:.03em}
+#ribbon .r.pot small{font-family:var(--font);font-size:11px;letter-spacing:.14em;color:var(--cream);margin-right:6px;text-shadow:none}
+#ribbon.gold{color:var(--ink-dk);text-shadow:0 1px 0 rgba(255,255,255,.5)}
+#ribbon.gold::before{background:linear-gradient(var(--gold),var(--gold2))}
+#ribbon.gold .r,.bonus #ribbon .r{color:var(--red-lo);text-shadow:none}#ribbon.gold .r small,.bonus #ribbon .r small{color:var(--ink-dk)}
+/* ---- the bezel's top strip: friends feed, and the decision prompt in its place ---- */
+#strip{position:absolute;z-index:7;left:136px;top:19px;width:292px;height:30px;display:flex;align-items:center;gap:8px;padding:0 10px;overflow:hidden;border:3px solid var(--ink-dk);border-radius:7px;
+  background:linear-gradient(#060b14,#101a2e);box-shadow:inset 0 3px 8px #000,0 2px 0 rgba(255,244,214,.55);font-size:14.5px;white-space:nowrap;color:var(--cream)}
+#strip .dot{flex:none;width:9px;height:9px;border-radius:50%;background:var(--red);box-shadow:0 0 8px var(--red)}
+#strip b{color:var(--gold)}#strip em{font-style:normal;color:var(--gold);font-family:var(--display)}
+#strip.you b{color:var(--hot)}
+#strip.ask{background:linear-gradient(90deg,var(--red) 0 var(--left,100%),#34100c var(--left,100%));border-color:var(--ink-dk);justify-content:space-between;color:var(--cream);box-shadow:0 0 0 2px var(--gold),0 2px 0 rgba(255,244,214,.55),0 0 16px rgba(255,208,88,.55)}
+#strip.ask b{font-family:var(--display);font-weight:400;font-size:18px;letter-spacing:.04em;color:var(--cream);text-shadow:0 2px 0 var(--red-dk)}
+#strip.ask span{font-family:var(--display);font-size:16px;color:var(--gold);text-shadow:0 2px 0 #000}
+/* ---- the lips beside the win readout: appointment (left), warm leads (right) ---- */
+.lipc{position:absolute;z-index:7;top:402px;width:100px;height:46px;display:grid;align-content:center;justify-items:center;border:3px solid var(--ink-dk);border-radius:8px;background:linear-gradient(#060b14,#101a2e);box-shadow:inset 0 3px 8px #000,0 2px 0 rgba(255,244,214,.55);line-height:1.05}
+.lipc small{font-family:var(--display);font-size:12.5px;letter-spacing:.02em;color:var(--red);text-shadow:0 0 6px rgba(216,64,46,.55)}
+.lipc b{font-family:var(--display);font-weight:400;font-size:16px;color:var(--gold);text-shadow:0 0 8px rgba(255,170,40,.6),0 2px 0 #5a2a00;white-space:nowrap}
+#appt{left:22px}#warmc{left:440px}
+#appt.kept b::after{content:"";}
+/* ---- warm tag: a price tag on a string on the square's top-left ---- */
+.wtag{position:absolute;z-index:6;width:var(--cell);height:var(--cell);pointer-events:none}
+.wtag i{position:absolute;left:-1px;top:-2px;padding:0 4px 0 9px;font-style:normal;font-family:var(--display);font-size:13px;line-height:17px;color:var(--paper-ink);background:linear-gradient(#fff4d0,#e8d49a);border:2px solid var(--ink-dk);border-radius:2px 5px 5px 2px;rotate:-8deg;box-shadow:0 2px 0 var(--ink-dk);white-space:nowrap}
+.wtag i::before{content:"";position:absolute;left:2px;top:50%;width:4px;height:4px;margin-top:-2px;border-radius:50%;background:var(--ink-dk)}
+/* ---- spin: CALLBACK ---- */
+#spin.cb span{font-size:15.5px;letter-spacing:.02em}
+#spin.cb{filter:drop-shadow(0 0 14px rgba(255,208,88,.85)) drop-shadow(0 6px 6px rgba(0,0,0,.7))}
+#betM.cb .sq{opacity:.35}#betM.cb .lbl{color:var(--hot)}
+/* ---- decision prompts ---- */
+.slip{position:relative;align-self:end;margin:0 14px 80px;padding:14px 16px 14px;rotate:-.8deg;color:var(--paper-ink);z-index:2;
+  background:repeating-linear-gradient(180deg,transparent 0 27px,rgba(60,90,140,.2) 27px 28px),linear-gradient(#f8ecc8,#ecdba8);border:3px solid var(--ink-dk);border-radius:4px;box-shadow:0 6px 0 rgba(0,0,0,.4),0 14px 22px rgba(0,0,0,.65);display:grid;gap:10px;justify-items:center;animation:none}
+.slip .top{display:flex;justify-content:space-between;width:100%;font-family:var(--memo);font-size:13px;letter-spacing:.12em;color:#6a5a3a}
+.slip h2{font-family:var(--display);font-weight:400;font-size:36px;letter-spacing:.03em;color:var(--red-lo);-webkit-text-stroke:0;text-shadow:0 2px 0 rgba(255,255,255,.6);line-height:1}
+.slip .tm{width:100%;height:14px;border:3px solid var(--ink-dk);border-radius:7px;background:linear-gradient(90deg,var(--red) 0 var(--left,100%),#d9c690 var(--left,100%));box-shadow:inset 0 2px 3px rgba(0,0,0,.4);position:relative}
+.slip .tm span{position:absolute;right:8px;top:-3px;font-family:var(--display);font-size:13px;line-height:14px;color:var(--cream);text-shadow:0 1px 0 #000}
+.slip .two{display:grid;grid-template-columns:1fr 1.15fr;gap:12px;width:100%}
+.slip .k{display:grid;align-content:center;justify-items:center;gap:3px;min-height:104px;padding:8px 6px;border:3px solid var(--ink-dk);border-radius:9px;text-align:center;line-height:1.05;box-shadow:0 5px 0 var(--ink-dk),0 10px 10px rgba(0,0,0,.4)}
+.slip .k.hang{background:linear-gradient(var(--beige-hi),var(--beige-lo));color:var(--paper-ink)}
+.slip .k.more{background:linear-gradient(#e2472f,var(--red-lo));color:#fff3d6;text-shadow:0 2px 0 var(--red-dk)}
+.slip .k b{font-family:var(--display);font-weight:400;font-size:27px;letter-spacing:.02em}
+.slip .k em{font-style:normal;font-family:var(--display);font-size:24px;letter-spacing:.02em}
+.slip .k.hang em{color:var(--red-lo)}.slip .k.more em{color:var(--gold);text-shadow:0 2px 0 #000}
+.slip .k small{font-size:14px;font-weight:700;letter-spacing:.04em}
+.slip .odds{font-family:var(--memo);font-size:14px;color:#4a2a14;text-align:center}
+.slip .odds b{color:var(--red-lo);font-weight:400}
+/* ---- ghost line in the bubble ---- */
+#cap.ghost{max-width:262px;padding:8px 14px 9px}
+#cap.ghost small{display:block;font-size:13px;letter-spacing:.1em}
+#cap.ghost strong{display:block;font-family:var(--display);font-weight:400;font-size:24px;line-height:1.05;color:var(--red-lo)}
+/* ---- pick: lit squares get a gold keyline pulse ---- */
+.slots i.hot.pk{box-shadow:inset 0 0 0 3px var(--gold),0 0 0 3px var(--ink-dk),0 0 0 6px var(--gold),0 0 20px 8px rgba(255,208,88,.8)}
+.pkfinger{position:absolute;z-index:8;width:30px;height:30px;pointer-events:none}
+/* ---- pot celebration: the head band darkens, the pot stack stands in it ---- */
+#potwin{position:absolute;inset:0;z-index:9;display:grid;place-items:center;overflow:hidden;
+  background:repeating-conic-gradient(from 0deg at 50% 52%,rgba(255,208,88,.2) 0 6deg,transparent 6deg 18deg),radial-gradient(ellipse at 50% 55%,rgba(29,63,102,.9),rgba(5,10,20,.93) 80%)}
+#potwin .st{position:relative;display:grid;justify-items:center;gap:2px;text-align:center}
+#potwin small{font-family:var(--display);font-size:15px;letter-spacing:.2em;color:var(--cream);text-shadow:0 2px 3px #000}
+#potwin b{font-family:var(--display);font-weight:400;font-size:38px;letter-spacing:.04em;line-height:1;color:var(--gold);-webkit-text-stroke:6px var(--ink-dk);paint-order:stroke fill;text-shadow:0 5px 0 var(--red-lo),0 8px 8px rgba(0,0,0,.7)}
+#potwin em{font-style:normal;font-family:var(--display);font-size:46px;line-height:1.05;color:var(--gold);-webkit-text-stroke:7px var(--ink-dk);paint-order:stroke fill;text-shadow:0 4px 0 #000,0 0 16px rgba(255,190,80,.55)}
+#potwin span{font-weight:700;font-size:14.5px;letter-spacing:.04em;color:var(--cream);text-shadow:0 2px 3px #000}
+#potwin .cw{position:absolute;top:50%;width:86px;height:86px;margin-top:-48px;background:var(--img-cashwad) center/contain no-repeat;filter:drop-shadow(0 6px 5px rgba(0,0,0,.6))}
+#potwin .cw.l{left:-210px;rotate:-14deg}#potwin .cw.r{right:-210px;rotate:14deg;scale:-1 1}

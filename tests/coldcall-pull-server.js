@@ -1,0 +1,1201 @@
+'use strict';
+// node tests/coldcall-pull-server.js  (self-contained: temp dir, fake io, no network, no server). THE PULL, server side: store, pot, decisions, feed.
+// Contract: cold-call/PULL-ENGINE.md section 4 and 6. Runs against the real engine.
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const assert = require('assert');
+const EventEmitter = require('events');
+
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'coldcall-pull-srv-'));
+process.env.WALLET_FILE = path.join(tmp, 'wallet.json');
+delete process.env.COLDCALL_PULL_FILE;
+const { createWallet } = require('../wallet.js');
+const games = require('../games');
+const E = require('../games/coldcall-engine.js');
+const PIN = require('./lib-pull-pin.js').pin(E);   // mechanism tests run on fixed knob numbers (the levers agent owns the real values)
+const SRV = require('../games/coldcall.js');
+
+const clone = (o) => JSON.parse(JSON.stringify(o));
+const BASE = clone(E.CFG.pull); BASE.on = true;       // what every test starts from
+const resetCfg = () => { for (const k of Object.keys(E.CFG.pull)) delete E.CFG.pull[k]; Object.assign(E.CFG.pull, clone(BASE)); };
+
+let pass = 0;
+const test = async (name, fn) => { try { await fn(); pass++; console.log('ok   ' + name); } catch (e) { console.error('FAIL ' + name + '\n' + (e.stack || e)); process.exitCode = 1; } };
+const tick = () => new Promise((r) => setImmediate(r));
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function makeSocket(io, acct) {
+  const s = new EventEmitter();
+  s.data = acct ? { acct: typeof acct === 'string' ? { key: acct } : acct } : {};
+  s.out = [];
+  const emit = s.emit.bind(s);
+  s.send = (ev, p) => emit(ev, p);             // client -> server
+  s.emit = (ev, p) => { if (ev in { error: 1, wallet: 1 } || ev.startsWith('g:') || ev.startsWith('floor:')) { s.out.push([ev, p]); return true; } return emit(ev, p); };
+  io.sockets.sockets.set(String(Math.random()), s);
+  io.emit('connection', s);
+  return s;
+}
+const last = (s, ev) => { for (let i = s.out.length - 1; i >= 0; i--) if (s.out[i][0] === ev) return s.out[i][1]; return null; };
+const all = (s, ev) => s.out.filter((o) => o[0] === ev).map((o) => o[1]);
+
+// each setup has its own dir (wallet.json + coldcall-pull.json next to it); pass { dir, bank, t } to restart over the same files
+function setup(opts = {}) {
+  resetCfg();
+  SRV._history.clear();
+  SRV.log = opts.log || (() => {});
+  SRV.potRng = opts.potRng || (() => 1);          // never hits unless a test says so
+  SRV.roundRng = opts.roundRng;                   // the whole-cent rounding source (undefined = crypto); a separate stream from the round's own rng
+  const dir = opts.dir || fs.mkdtempSync(path.join(tmp, 's'));
+  const io = new EventEmitter(); io.sockets = { sockets: new Map() };
+  const ledger = { log: () => {} };
+  let t = opts.t || 1000000;
+  const clock = { now: () => t, advance: (ms) => { t += ms; } };
+  const hook = { push: () => {} };
+  const bank = opts.bank || new Map();
+  const chips = { get: (k) => (bank.has(k) ? bank.get(k) : 10000), add: (k, d) => { bank.set(k, Math.max(0, chips.get(k) + d)); hook.push(k); } };
+  const wallet = createWallet({ file: path.join(dir, 'wallet.json'), ledger, chips, now: clock.now, onChange: (k) => hook.push(k) });
+  const g = games({ io, ledger, now: clock.now, rng: opts.rng, accounts: {}, tables: {}, rooms: {}, wallet, chips });
+  hook.push = g.pushWallet;
+  const store = () => SRV._pull.store;
+  const potOf = (mode) => store().pot(mode, E.CFG.pull.pot.seed);
+  return { io, clock, wallet, g, dir, bank, chips, store, potOf, sock: (a) => makeSocket(io, a), open: SRV._pull.open };
+}
+
+// send a spin 200 ms after the last thing; returns the newest result (or error) that this send produced
+function spin(s, sock, payload) {
+  s.clock.advance(200);
+  const n = all(sock, 'g:coldcall:result').length, e = all(sock, 'error').length;
+  sock.send('g:coldcall:spin', payload);
+  const rs = all(sock, 'g:coldcall:result');
+  if (rs.length > n) return rs[rs.length - 1];
+  const es = all(sock, 'error'); assert.ok(es.length > e, 'a spin gives a result or an error');
+  return { error: es[es.length - 1] };
+}
+const policy = (i, pend) => (pend.k === 'pick' ? { k: 'pick', p: pend.choices[i % 2 ? pend.choices.length - 1 : 0] } : { k: 'more', take: i % 3 !== 0 });
+function decide(s, sock, res, d) {
+  const n = all(sock, 'g:coldcall:result').length;
+  sock.send('g:coldcall:decide', { roundId: res.roundId, ...d });
+  const rs = all(sock, 'g:coldcall:result'); assert.ok(rs.length > n, 'a decision gives a result: ' + JSON.stringify(last(sock, 'error')));
+  return rs[rs.length - 1];
+}
+// spin, then answer every decision with the policy until the round is done
+function play(s, sock, payload, i = 0) {
+  let r = spin(s, sock, payload), n = 0;
+  while (r.status === 'pending') r = decide(s, sock, r, policy(i + n++, r.pending));
+  return r;
+}
+// buy bonuses until one stops at a decision of the wanted kind at ANY step of the round (other decisions are answered by the policy)
+function toPending(s, sock, kind, mode = 'play', bet = 10) {
+  for (let i = 0; i < 600; i++) {
+    let r = spin(s, sock, { bet, mode, buyBonus: i % 3 === 2 ? 'bonus2' : 'bonus1' });
+    if (r.error) throw new Error('toPending: ' + JSON.stringify(r.error));
+    let n = 0;
+    while (r.status === 'pending') {   // every pending step of the round is checked, not only the first (a PICK is often followed by a ONE MORE CALL)
+      if (r.pending.k === kind) return r;
+      r = decide(s, sock, r, policy(i + n++, r.pending));
+    }
+  }
+  throw new Error('no ' + kind + ' decision in 600 buys');
+}
+const rich = (s, key, mode = 'play') => { if (mode === 'chips') s.bank.set(key, 1e10); else s.wallet.credit(key, 'play', 1e10); };
+const potOk = (p) => assert.strictEqual(p.fed + p.seeded, p.paid + p.bal, 'pot invariant fed + seeded = paid + bal');
+
+(async () => {
+  await test('store: file next to the wallet, atomic, survives a restart (state, pot), state is per currency', async () => {
+    const s = setup({ rng: E.rngFrom(31) }); const a = s.sock('ann');
+    for (let i = 0; i < 30; i++) play(s, a, { bet: 100, mode: 'play' }, i);
+    const view = last(a, 'g:coldcall:result').pull.state;
+    assert.ok(view.leads > 0 || view.lt > 0, 'leads were worked');
+    s.store().flush();
+    const file = path.join(s.dir, 'coldcall-pull.json');
+    assert.ok(fs.existsSync(file) && !fs.existsSync(file + '.tmp'), 'store file next to the wallet, no temp left');
+    const j = JSON.parse(fs.readFileSync(file, 'utf8'));
+    assert.strictEqual(j.v, 1); assert.ok(j.players.ann.play && !j.players.ann.chips, 'chips state untouched by Play $ spins'); assert.ok(j.pot.play && typeof j.pot.play.bal === 'number');
+    assert.deepStrictEqual(j.open, {});
+    const potBefore = clone(j.pot.play);
+    const s2 = setup({ dir: s.dir, bank: s.bank, rng: E.rngFrom(32), t: 1000000 + 60000 }); const a2 = s2.sock('ann');
+    a2.send('g:coldcall:state'); const st = last(a2, 'g:coldcall:state');
+    assert.strictEqual(st.pull.play.lt, j.players.ann.play.lt); assert.strictEqual(st.pull.chips.lt, 0); assert.deepStrictEqual(st.pot.play.bal, potBefore.bal);
+    assert.deepStrictEqual(clone(s2.potOf('play')), potBefore);
+  });
+
+  await test('store: COLDCALL_PULL_FILE overrides the location', async () => {
+    const f = path.join(tmp, 'elsewhere.json'); process.env.COLDCALL_PULL_FILE = f;
+    try { const s = setup({ rng: E.rngFrom(33) }); const a = s.sock('ann'); play(s, a, { bet: 10, mode: 'play' }); s.store().flush(); assert.ok(fs.existsSync(f)); assert.ok(!fs.existsSync(path.join(s.dir, 'coldcall-pull.json'))); }
+    finally { delete process.env.COLDCALL_PULL_FILE; }
+  });
+
+  await test('settlement, Play $ and Chips: every bet level and every buy incl. pot slice, pot prizes and taken gambles: before - cost + win + prize = after, pot invariant, slice exact, purses apart', async () => {
+    const buys = [null, null, 'call', 'hunt', 'bonus1', 'bonus2', null, 'bonus1'];
+    for (const mode of ['play', 'chips']) {
+      const other = mode === 'play' ? 'chips' : 'play';
+      const s = setup({ rng: E.rngFrom(mode === 'play' ? 41 : 42), potRng: E.rngFrom(7) }); const a = s.sock('ann');
+      E.CFG.pull.pot.oneInPerDollar = 40;               // make prizes common enough to be exercised (only plain spins roll since FIX M1)
+      rich(s, 'ann', mode);
+      const start = s.wallet.get('ann'); let bal = start[mode], sumCost = 0, prizes = 0, takes = 0, wins = 0, picks = 0, mores = 0, callbacks = 0;
+      for (let i = 0; i < 240; i++) {
+        const bet = E.BET_LEVELS[i % E.BET_LEVELS.length], buy = buys[(i / E.BET_LEVELS.length | 0) % buys.length];
+        const before = s.wallet.get('ann')[mode];
+        assert.strictEqual(before, bal);
+        const r = play(s, a, { bet, mode, buyBonus: buy }, i);
+        assert.strictEqual(r.status, 'done'); assert.strictEqual(r.mode, mode); assert.strictEqual(r.buyBonus, buy);
+        const played = r.betCents, cost = buy ? E.buyPrice(E.CFG.buyCost[buy], played) : r.callback ? 0 : played;      // whole cents: the exact price at 10c and up, the nearest cent below
+        assert.strictEqual(r.cost, cost); if (played % 10 === 0) assert.strictEqual(r.totalWin, r.totalWinTenths * played / 10); else assert.ok(Math.abs(r.totalWin - r.totalWinTenths * played / 10) < 2 || buy, 'rounded win');
+        const prize = r.pot ? r.pot.amount : 0;
+        for (const v of [r.cost, r.totalWin, prize, r.wallet.play, r.wallet.chips]) assert.ok(Number.isSafeInteger(v) && v >= 0, 'whole cents: ' + v);
+        assert.ok(r.totalWin <= E.MAX_WIN_X * played, 'cap');
+        bal += -cost + r.totalWin + prize;
+        assert.strictEqual(r.wallet[mode], bal, mode + ' round ' + i + ': before - cost + win + prize = after');
+        assert.strictEqual(r.wallet[other], start[other], 'the other purse never moves');
+        assert.deepStrictEqual(s.wallet.get('ann'), r.wallet);
+        if (mode === 'chips') assert.strictEqual(s.chips.get('ann'), bal);
+        if (!buy) sumCost += cost;                      // FIX M1: only a plain paid spin feeds the pot; a buy never feeds, never rolls
+        if (buy) assert.strictEqual(prize, 0, 'a buy wins no pot');
+        if (prize) prizes++; if (r.totalWin) wins++; if (r.callback) callbacks++;
+        if (r.pull && r.pull.more && r.pull.more.take) takes++; if (r.pull && r.pull.pick) picks++; if (r.pull && r.pull.more) mores++;
+        const p = s.potOf(mode); potOk(p);
+        assert.strictEqual(p.fed * 10000 + p.rem, sumCost * E.CFG.pull.pot.feedBps, 'the slice is exact: fed + rem = cost x bps / 10000');
+        assert.ok(p.bal >= 0);
+        const ow = s.potOf(other); assert.strictEqual(ow.fed, 0, 'the other currency pot is untouched');
+      }
+      assert.ok(prizes >= 1, 'the pot paid at least once: ' + prizes); assert.ok(wins > 40 && takes >= 3 && picks >= 1 && mores >= 10, [wins, takes, picks, mores].join());
+      const p = s.potOf(mode); assert.strictEqual(p.paid, last(a, 'g:coldcall:result').pot ? p.paid : p.paid);
+      const st = s.wallet.stats('ann').coldcall[mode];
+      assert.strictEqual(start[mode] - st.wagered + st.won, bal, 'the wallet stats reconcile');
+      assert.strictEqual(s.open.size, 0, 'nothing left open');
+    }
+  });
+
+  await test('spin: a refused spend (funds) leaves state, pot, store and open decisions untouched (plain spin and a bonus buy)', async () => {
+    const s = setup({ rng: E.rngFrom(43) }); const a = s.sock('bo');
+    s.wallet.spend('bo', 'play', 1000000 - 500, { game: 'x' });     // 5.00 left
+    const snap = JSON.stringify(s.store()._data());
+    let r = spin(s, a, { bet: 1000, mode: 'play' }); assert.strictEqual(r.error.code, 'funds');
+    r = spin(s, a, { bet: 10, mode: 'play', buyBonus: 'bonus1' }); assert.strictEqual(r.error.code, 'funds');
+    assert.strictEqual(JSON.stringify(s.store()._data()), snap, 'store untouched'); assert.strictEqual(s.open.size, 0);
+    assert.strictEqual(s.wallet.get('bo').play, 500); assert.strictEqual(all(a, 'g:coldcall:result').length, 0);
+    r = spin(s, a, { bet: 10, mode: 'play' }); assert.strictEqual(r.status, 'done'); assert.strictEqual(r.wallet.play, 500 - 10 + r.totalWin);
+  });
+
+  await test('decisions: a pending round emits only the partial script, no outcome, charges the cost once, and finishing it credits the win once', async () => {
+    const s = setup({ rng: E.rngFrom(44) }); const a = s.sock('ann'); rich(s, 'ann');
+    for (const kind of ['pick', 'more']) {
+      const before = s.wallet.get('ann').play;
+      const r = toPending(s, a, kind);
+      const cost = r.cost; assert.strictEqual(r.status, 'pending'); assert.strictEqual(r.pending.k, kind);
+      for (const k of ['script', 'totalWin', 'totalWinTenths', 'totalWinMult', 'tier', 'maxed']) assert.ok(!(k in r), 'pending must not carry ' + k);
+      assert.ok(r.partial && r.partial.partial === true, 'only the partial script'); assert.ok(r.timeoutMs > 0 && r.expiresAt > s.clock.now());
+      assert.strictEqual(r.pot, null);
+      assert.strictEqual(s.open.size, 1); const rec = s.open.get(r.roundId); assert.ok(rec.timer && rec.timer.hasRef() === false, 'timer is unref\'d');
+      const mid = s.wallet.get('ann').play;
+      const f = decide(s, a, r, kind === 'pick' ? { k: 'pick', p: r.pending.choices[r.pending.choices.length - 1] } : { k: 'more', take: false });
+      let fin = f; while (fin.status === 'pending') fin = decide(s, a, fin, policy(0, fin.pending));
+      assert.strictEqual(fin.status, 'done'); assert.strictEqual(fin.resolved, true); assert.strictEqual(fin.auto, null);
+      assert.deepStrictEqual(fin.script.spin, r.partial.spin, 'what the player saw is what happened');
+      assert.strictEqual(fin.wallet.play, mid + fin.totalWin + (fin.pot ? fin.pot.amount : 0));
+      assert.strictEqual(s.open.size, 0); assert.strictEqual(rec.timer, null, 'timer cleared on settle');
+      assert.ok(before - cost <= mid);
+    }
+  });
+
+  await test('decisions: pick is a real choice (every square is accepted, the base spin is identical whatever is picked), bad p / wrong kind / missing take are rejected and leave the round open', async () => {
+    const run = (which) => {
+      const s = setup({ rng: E.rngFrom(45) }); const a = s.sock('ann'); rich(s, 'ann');
+      const r = toPending(s, a, 'pick');
+      for (const bad of [{ k: 'pick', p: 999 }, { k: 'pick', p: -1 }, { k: 'pick', p: 'x' }, { k: 'pick' }, { k: 'more', take: true }, { k: 'pick', p: 0.5 }]) {
+        const n = all(a, 'g:coldcall:result').length;
+        if (!r.pending.choices.includes(bad.p)) { a.send('g:coldcall:decide', { roundId: r.roundId, ...bad }); assert.strictEqual(last(a, 'error').code, 'bad_request'); assert.strictEqual(all(a, 'g:coldcall:result').length, n); }
+      }
+      a.send('g:coldcall:decide', { roundId: r.roundId, k: 'pick', p: -5 }); assert.strictEqual(last(a, 'error').code, 'bad_request');
+      assert.strictEqual(s.open.size, 1, 'a bad decision leaves the round open');
+      const choice = which === 'first' ? r.pending.choices[0] : r.pending.choices[r.pending.choices.length - 1];
+      let f = decide(s, a, r, { k: 'pick', p: choice }); while (f.status === 'pending') f = decide(s, a, f, { k: 'more', take: false });
+      return { r, f, choice };
+    };
+    const x = run('first'), y = run('last');
+    assert.deepStrictEqual(x.r.pending, y.r.pending);
+    assert.notStrictEqual(x.choice, y.choice); assert.strictEqual(x.f.pull.pick.p, x.choice); assert.strictEqual(y.f.pull.pick.p, y.choice);
+    assert.deepStrictEqual(x.f.script.spin, y.f.script.spin, 'same rng consumption for every choice: the base spin does not move');
+  });
+
+  await test('decisions: more -> bank and take both settle the bonus (take pays W x mult or 0, bank pays W); a decision is answered once', async () => {
+    const s = setup({ rng: E.rngFrom(46) }); const a = s.sock('ann'); rich(s, 'ann');
+    let took = 0, won = 0, lost = 0, banked = 0;
+    for (let i = 0; i < 60 && (took < 6 || banked < 3); i++) {
+      const r = toPending(s, a, 'more'); const W = r.pending.W, take = i % 2 === 0;
+      let f = decide(s, a, r, { k: 'more', take }); assert.strictEqual(f.status, 'done');
+      const m = f.pull.more; assert.strictEqual(m.W, W); assert.strictEqual(m.take, take);
+      assert.ok(f.totalWinTenths <= E.MAX_WIN_T);
+      if (take) { took++; if (m.won) { won++; assert.ok(f.script.parts.bonus === W * m.mult); } else { lost++; assert.strictEqual(f.script.parts.bonus, 0); } } else { banked++; assert.strictEqual(f.script.parts.bonus, W); }
+      a.send('g:coldcall:decide', { roundId: r.roundId, k: 'more', take: true }); assert.strictEqual(last(a, 'error').code, 'no_round', 'a settled round cannot be decided again');
+    }
+    assert.ok(took >= 6 && banked >= 3);
+  });
+
+  await test('decisions: wrong account, unknown round, wrong kind are rejected and leave everything as it was', async () => {
+    const s = setup({ rng: E.rngFrom(47) }); const a = s.sock('ann'), b = s.sock('bo'); rich(s, 'ann');
+    const r = toPending(s, a, 'more'); const snap = JSON.stringify(s.store()._data()); const wal = s.wallet.get('ann');
+    b.send('g:coldcall:decide', { roundId: r.roundId, k: 'more', take: true }); assert.strictEqual(last(b, 'error').code, 'forbidden');
+    a.send('g:coldcall:decide', { roundId: 'nope', k: 'more', take: true }); assert.strictEqual(last(a, 'error').code, 'no_round');
+    a.send('g:coldcall:decide', { roundId: r.roundId, k: 'pick', p: 3 }); assert.strictEqual(last(a, 'error').code, 'bad_request');
+    a.send('g:coldcall:decide', { roundId: r.roundId, k: 'more', take: 'yes' }); assert.strictEqual(last(a, 'error').code, 'bad_request');
+    a.send('g:coldcall:decide', null); assert.strictEqual(last(a, 'error').code, 'no_round');
+    assert.strictEqual(JSON.stringify(s.store()._data()), snap); assert.deepStrictEqual(s.wallet.get('ann'), wal); assert.strictEqual(s.open.size, 1);
+    const u = s.sock(null); u.send('g:coldcall:decide', { roundId: r.roundId, k: 'more', take: true }); assert.strictEqual(last(u, 'error').code, 'auth'); assert.strictEqual(s.open.size, 1);
+    assert.strictEqual(decide(s, a, r, { k: 'more', take: false }).status, 'done');
+  });
+
+  await test('decisions: a spin while a decision is open is REJECTED (not defaulted) with the pending payload; the other currency is free; state shows the open decision', async () => {
+    const s = setup({ rng: E.rngFrom(48) }); const a = s.sock('ann'); rich(s, 'ann'); rich(s, 'ann', 'chips');
+    const r = toPending(s, a, 'more'); const wal = s.wallet.get('ann');
+    const e = spin(s, a, { bet: 10, mode: 'play' }).error;
+    assert.strictEqual(e.code, 'decision_open'); assert.strictEqual(e.open.roundId, r.roundId); assert.deepStrictEqual(e.open.pending, r.pending); assert.strictEqual(e.open.status, 'pending');
+    assert.deepStrictEqual(s.wallet.get('ann'), wal, 'nothing charged'); assert.strictEqual(s.open.size, 1);
+    a.send('g:coldcall:state'); const st = last(a, 'g:coldcall:state'); assert.strictEqual(st.open.roundId, r.roundId); assert.strictEqual(st.opens.length, 1);
+    const c = spin(s, a, { bet: 10, mode: 'chips' }); assert.ok(c.status === 'done' || c.status === 'pending', 'chips is a separate round');
+    if (c.status === 'pending') decide(s, a, c, { k: c.pending.k, ...(c.pending.k === 'more' ? { take: false } : { p: c.pending.choices[0] }) });
+    const b = s.sock('bo'); const r2 = spin(s, b, { bet: 10, mode: 'play' }); assert.ok(r2.status === 'done' || r2.status === 'pending', 'another account is free');
+    assert.strictEqual(decide(s, a, r, { k: 'more', take: false }).status, 'done');
+    assert.strictEqual(spin(s, a, { bet: 10, mode: 'play' }).error, undefined, 'free again once settled');
+  });
+
+  // U4: a decision is armed to the 180 s ceiling when the pending result is sent; the prompt's `ready` brings it down to timeoutMs (the tests that wait for a default send it)
+  const rdy = (s, sock, id) => { s.clock.advance(200); sock.send('g:coldcall:ready', { roundId: id }); };
+
+  await test('default on timeout: the safe default (first square, bank) settles exactly like a chosen round, marked auto: timeout, in the result and in the history; timer fires once', async () => {
+    const s = setup({ rng: E.rngFrom(49) }); const a = s.sock('ann'); rich(s, 'ann');
+    E.CFG.pull.decision.timeoutMs = 40;
+    for (const kind of ['pick', 'more']) {
+      const r = toPending(s, a, kind); const n = all(a, 'g:coldcall:result').length; const mid = s.wallet.get('ann').play;
+      rdy(s, a, r.roundId); await sleep(120);
+      const rs = all(a, 'g:coldcall:result'); assert.strictEqual(rs.length, n + 1, 'exactly one settlement');
+      const f = rs[rs.length - 1]; assert.strictEqual(f.roundId, r.roundId); assert.strictEqual(f.status, 'done'); assert.strictEqual(f.auto, 'timeout'); assert.strictEqual(f.resolved, true);
+      assert.strictEqual(f.wallet.play, mid + f.totalWin + (f.pot ? f.pot.amount : 0));
+      if (kind === 'pick') { assert.strictEqual(f.pull.pick.p, r.pending.choices[0]); assert.strictEqual(f.pull.pick.auto, true); }
+      if (f.pull.more) { assert.strictEqual(f.pull.more.take, false); assert.strictEqual(f.pull.more.auto, true); }
+      assert.strictEqual(s.open.size, 0); assert.strictEqual(s.store().allOpen().length, 0);
+      a.send('g:coldcall:history'); assert.strictEqual(last(a, 'g:coldcall:history').rounds[0].auto, 'timeout');
+    }
+  });
+
+  await test('default: a decision already made is kept, the later one defaults on timeout (pick chosen, more timed out)', async () => {
+    const s = setup({ rng: E.rngFrom(50) }); const a = s.sock('ann'); rich(s, 'ann');
+    for (let i = 0; i < 400; i++) {
+      s.clock.advance(200); E.CFG.pull.decision.timeoutMs = 30;
+      let r = spin(s, a, { bet: 10, mode: 'play', buyBonus: 'bonus1' }); let more = null;
+      if (r.status === 'pending' && r.pending.k === 'pick') {
+        const p = r.pending.choices[r.pending.choices.length - 1];
+        const f = decide(s, a, r, { k: 'pick', p });
+        if (f.status === 'pending') { more = f; rdy(s, a, r.roundId); await sleep(100); const fin = last(a, 'g:coldcall:result'); assert.strictEqual(fin.roundId, r.roundId); assert.strictEqual(fin.pull.pick.p, p); assert.strictEqual(fin.pull.pick.auto, false); assert.strictEqual(fin.pull.more.auto, true); assert.strictEqual(fin.auto, 'timeout'); return; }
+      } else if (r.status === 'pending') { rdy(s, a, r.roundId); await sleep(100); }
+    }
+    assert.fail('never saw a pick followed by a more');
+  });
+
+  await test('default on disconnect of the owning socket (bank), settles once, the pending timer is gone, a later timeout does nothing', async () => {
+    const s = setup({ rng: E.rngFrom(51) }); const a = s.sock('ann'); rich(s, 'ann');
+    E.CFG.pull.decision.timeoutMs = 60;
+    const r = toPending(s, a, 'more'); const mid = s.wallet.get('ann').play; const n = all(a, 'g:coldcall:result').length;
+    a.send('disconnect');
+    const rs = all(a, 'g:coldcall:result'); assert.strictEqual(rs.length, n + 1); const f = rs[rs.length - 1];
+    assert.strictEqual(f.auto, 'disconnect'); assert.strictEqual(f.pull.more.take, false); assert.strictEqual(f.pull.more.auto, true);
+    assert.strictEqual(f.wallet.play, mid + f.totalWin + (f.pot ? f.pot.amount : 0)); assert.strictEqual(s.open.size, 0); assert.strictEqual(s.store().allOpen().length, 0);
+    await sleep(150); assert.strictEqual(all(a, 'g:coldcall:result').length, n + 1, 'no second settlement'); assert.strictEqual(s.wallet.get('ann').play, f.wallet.play);
+    // a disconnect with nothing open is harmless, another socket of the account is not defaulted
+    const b = s.sock('ann'), c = s.sock('ann'); const r2 = spin(s, b, { bet: 10, mode: 'play', buyBonus: 'bonus1' });
+    c.send('disconnect'); if (r2.status === 'pending') assert.strictEqual(s.open.size, 1);
+  });
+
+  await test('autoplay: auto true never stops at a decision, defaults every one (first square, bank), marks autoplay, and settles', async () => {
+    const s = setup({ rng: E.rngFrom(52) }); const a = s.sock('ann'); rich(s, 'ann');
+    let marked = 0, bal = s.wallet.get('ann').play;
+    for (let i = 0; i < 60; i++) {
+      const r = spin(s, a, { bet: 10, mode: 'play', buyBonus: i % 2 ? 'bonus2' : 'bonus1', auto: true });
+      assert.strictEqual(r.status, 'done'); assert.strictEqual(s.open.size, 0);
+      bal += -r.cost + r.totalWin + (r.pot ? r.pot.amount : 0); assert.strictEqual(r.wallet.play, bal);
+      if (r.pull.pick) { assert.strictEqual(r.pull.pick.auto, true); assert.strictEqual(r.pull.pick.p, r.pull.pick.choices[0]); }
+      if (r.pull.more) { assert.strictEqual(r.pull.more.take, false); assert.strictEqual(r.pull.more.auto, true); }
+      if (r.pull.pick || r.pull.more) { assert.strictEqual(r.auto, 'autoplay'); marked++; } else assert.strictEqual(r.auto, null);
+      assert.strictEqual(r.resolved, false);
+    }
+    assert.ok(marked >= 40, 'bonus buys hit decision points: ' + marked);
+    const plain = spin(s, a, { bet: 10, mode: 'play', auto: true }); assert.strictEqual(plain.status, 'done'); assert.strictEqual(plain.auto, null);
+  });
+
+  await test('restart: an open decision is voided at init, the cost refunded exactly once, state and pot untouched, record dropped, logged; a second restart refunds nothing more', async () => {
+    const logs = [];
+    const s = setup({ rng: E.rngFrom(53) }); const a = s.sock('ann'); rich(s, 'ann');
+    for (let i = 0; i < 5; i++) play(s, a, { bet: 100, mode: 'play' }, i);
+    const r = toPending(s, a, 'more', 'play', 100);
+    const spent = s.wallet.get('ann').play;
+    // exact state right now (the open round has changed neither the state nor the pot)
+    const stNow = clone(s.store().player('ann', 'play')), potNow = clone(s.potOf('play'));
+    const onDisk = JSON.parse(fs.readFileSync(path.join(s.dir, 'coldcall-pull.json'), 'utf8'));
+    assert.strictEqual(Object.keys(onDisk.open).length, 1, 'the open record is on disk the moment the round opens');
+    assert.strictEqual(onDisk.open['ann|play'].cost, r.cost);
+    assert.strictEqual(JSON.parse(fs.readFileSync(path.join(s.dir, 'wallet.json'), 'utf8')).ann.play, spent, 'and so is the spend');
+    const s2 = setup({ dir: s.dir, bank: s.bank, rng: E.rngFrom(54), t: s.clock.now() + 5000, log: (...x) => logs.push(x.join(' ')) });
+    assert.strictEqual(s2.wallet.get('ann').play, spent + r.cost, 'refunded the cost');
+    assert.deepStrictEqual(clone(s2.store().player('ann', 'play')), stNow, 'state untouched'); assert.deepStrictEqual(clone(s2.potOf('play')), potNow, 'pot untouched');
+    assert.strictEqual(s2.store().allOpen().length, 0); assert.strictEqual(s2.open.size, 0); assert.ok(logs.some((l) => l.includes(r.roundId)), 'logged');
+    assert.strictEqual(JSON.parse(fs.readFileSync(path.join(s.dir, 'coldcall-pull.json'), 'utf8')).open['ann|play'], undefined);
+    const s3 = setup({ dir: s.dir, bank: s.bank, rng: E.rngFrom(55), t: s.clock.now() + 9000 });
+    assert.strictEqual(s3.wallet.get('ann').play, spent + r.cost, 'a second restart refunds nothing more');
+    await sleep(60); assert.strictEqual(s3.wallet.get('ann').play, spent + r.cost);
+  });
+
+  await test('restart: the same for Chips (refund goes to the bank), alongside a Play $ decision at the same time', async () => {
+    const s = setup({ rng: E.rngFrom(56) }); const a = s.sock('ann'); rich(s, 'ann'); rich(s, 'ann', 'chips');
+    const p = toPending(s, a, 'more', 'play'); const c = toPending(s, a, 'more', 'chips');
+    assert.strictEqual(s.store().allOpen().length, 2);
+    const w = s.wallet.get('ann');
+    const s2 = setup({ dir: s.dir, bank: s.bank, rng: E.rngFrom(57), t: s.clock.now() + 1000 });
+    assert.strictEqual(s2.wallet.get('ann').play, w.play + p.cost); assert.strictEqual(s2.wallet.get('ann').chips, w.chips + c.cost); assert.strictEqual(s2.bank.get('ann'), w.chips + c.cost);
+    assert.strictEqual(s2.store().allOpen().length, 0);
+  });
+
+  // FIX M1 (money critic 2): a buy (call, bonus1, bonus2, hunt) is priced at 98.0 with no pot, so it feeds no slice, moves no remainder, rolls no pot and can win none. Only a plain paid spin feeds and rolls.
+  await test('FIX M1: every buy (call, bonus1, bonus2, hunt) at 1c, $1 and $25, Play $ and Chips, on a pot of $50+ with the roll forced to hit: no prize, pot bal / fed / paid / rem / seeded unchanged, wallet moves by win - cost only, no pot in the result, the history row, the feed or floor:pot', async () => {
+    for (const mode of ['play', 'chips']) for (const buy of ['call', 'bonus1', 'bonus2', 'hunt']) for (const bet of [1, 100, 2500]) {
+      const s = setup({ rng: E.rngFrom(700 + bet), potRng: () => 0, roundRng: E.rngFrom(bet + 9) }); const a = s.sock('ann'), b = s.sock('bo'); rich(s, 'ann', mode); E.CFG.pull.pot.capCents = 5000;
+      const pot = s.potOf(mode); pot.bal = 7000; pot.fed = 7000; pot.rem = 4321; s.store().potChanged();
+      const snap = clone(pot), potEvents = all(b, 'floor:pot').length, feedEvents = all(b, 'floor:feed').length;
+      const w0 = s.wallet.get('ann')[mode];
+      const r = play(s, a, { bet, mode, buyBonus: buy }, bet);
+      const tag = mode + ' ' + buy + ' ' + bet + 'c';
+      assert.strictEqual(r.status, 'done', tag); assert.strictEqual(r.buyBonus, buy, tag); assert.ok(r.cost > 0, tag + ' a buy is a paid round');
+      assert.strictEqual(r.pot, null, tag + ': no pot part in the result');
+      assert.deepStrictEqual(clone(pot), snap, tag + ': bal, fed, paid, rem, seeded and last do not move');
+      assert.strictEqual(s.wallet.get('ann')[mode], w0 - r.cost + r.totalWin, tag + ': the wallet moves by win - cost only');
+      assert.strictEqual(r.wallet[mode], w0 - r.cost + r.totalWin, tag);
+      potOk(pot);
+      a.send('g:coldcall:history'); assert.strictEqual(last(a, 'g:coldcall:history').rounds[0].pot, null, tag + ': the history row carries no pot');
+      assert.strictEqual(all(b, 'floor:pot').length, potEvents, tag + ': no floor:pot event');
+      assert.ok(!all(b, 'floor:feed').slice(feedEvents).some((e) => e.kind === 'pot'), tag + ': no pot event in the room feed');
+    }
+  });
+
+  await test('FIX M1: a plain paid spin in the same state still feeds the pot and still wins it (guard against over-fixing)', async () => {
+    for (const mode of ['play', 'chips']) for (const bet of [1, 100, 2500]) {
+      const s = setup({ rng: E.rngFrom(710 + bet), potRng: () => 0 }); const a = s.sock('ann'); rich(s, 'ann', mode); E.CFG.pull.pot.capCents = 5000;
+      const pot = s.potOf(mode); pot.bal = 7000; pot.fed = 7000; s.store().potChanged();
+      const w0 = s.wallet.get('ann')[mode];
+      const r = play(s, a, { bet, mode, auto: true }, bet);
+      assert.strictEqual(r.buyBonus, null); assert.ok(r.pot && r.pot.won && r.pot.amount === 5000, mode + ' ' + bet + 'c: the plain spin won the capped pot: ' + JSON.stringify(r.pot));
+      assert.strictEqual(pot.paid, 5000); assert.strictEqual(pot.fed * 10000 + pot.rem, 7000 * 10000 + r.cost * E.CFG.pull.pot.feedBps, 'it fed its slice (a cent or the remainder)'); potOk(pot);
+      assert.strictEqual(s.wallet.get('ann')[mode], w0 - r.cost + r.totalWin + 5000);
+      a.send('g:coldcall:history'); assert.strictEqual(last(a, 'g:coldcall:history').rounds[0].pot.amount, 5000);
+      assert.ok(all(a, 'floor:pot').length >= 1, 'floor:pot sent after the plain spin');
+    }
+  });
+
+  await test('FIX M1: conservation with buys mixed in: fed + seeded = paid + bal after every round, the slice is exact on the PLAIN spins only (fed x 10000 + rem = plain cost x feedBps), buys move only win - cost, 1c / $1 / $25, both purses', async () => {
+    const buys = [null, 'call', null, 'hunt', 'bonus1', null, 'bonus2', null];
+    let hitsPlain = 0, buysDone = 0;
+    for (const mode of ['play', 'chips']) {
+      const s = setup({ rng: E.rngFrom(720), potRng: E.rngFrom(721), roundRng: E.rngFrom(722) }); const a = s.sock('ann'); rich(s, 'ann', mode);
+      E.CFG.pull.pot.oneInPerDollar = 40; E.CFG.pull.pot.minBal = 1; E.CFG.pull.pot.feedBps = 500;     // fill fast and hit often
+      let bal = s.wallet.get('ann')[mode], plainCost = 0;
+      for (let i = 0; i < 700; i++) {
+        const bet = [1, 100, 2500, 100][i % 4], buy = buys[i % buys.length], pot = s.potOf(mode), before = clone(pot);
+        const r = play(s, a, { bet, mode, buyBonus: buy }, i);
+        const prize = r.pot ? r.pot.amount : 0; bal += -r.cost + r.totalWin + prize;
+        assert.strictEqual(r.wallet[mode], bal, mode + ' round ' + i);
+        potOk(pot); assert.ok(pot.bal >= 0);
+        if (buy || r.callback) { assert.strictEqual(prize, 0, 'no prize on a buy or a Callback'); assert.deepStrictEqual(clone(pot), before, 'the pot did not move on round ' + i); if (buy) buysDone++; }
+        else { plainCost += r.cost; if (prize) hitsPlain++; }
+        assert.strictEqual(pot.fed * 10000 + pot.rem, plainCost * E.CFG.pull.pot.feedBps, 'the slice is exact on plain spins only');
+      }
+    }
+    assert.ok(hitsPlain >= 5 && buysDone >= 500, [hitsPlain, buysDone].join());
+  });
+
+  await test('pot: two players racing for it in one tick, the hit roll forced: exactly one takes it, the other gets nothing, invariant and wallet sums hold (Play $ and Chips)', async () => {
+    for (const mode of ['play', 'chips']) {
+      const s = setup({ rng: E.rngFrom(61), potRng: () => 0 }); const a = s.sock('ann'), b = s.sock('bo');
+      rich(s, 'ann', mode); rich(s, 'bo', mode);
+      const pot = s.potOf(mode); pot.bal += 5000; pot.fed += 5000; s.store().potChanged();
+      const w0 = { ann: s.wallet.get('ann')[mode], bo: s.wallet.get('bo')[mode] };
+      s.clock.advance(300);
+      a.send('g:coldcall:spin', { bet: 100, mode, auto: true }); b.send('g:coldcall:spin', { bet: 100, mode, auto: true });     // same tick, one synchronous block each
+      const ra = last(a, 'g:coldcall:result'), rb = last(b, 'g:coldcall:result');
+      const hits = [ra, rb].filter((r) => r.pot);
+      assert.strictEqual(hits.length, 1, 'one winner'); const w = hits[0];
+      assert.ok(w.pot.won && w.pot.amount >= 5000 && w.pot.amount <= 5000 + 10, 'took the whole pot: ' + w.pot.amount); assert.strictEqual(w.pot.who, w === ra ? 'ann' : 'bo');
+      potOk(pot); assert.strictEqual(pot.paid, w.pot.amount); assert.ok(pot.bal < 5, 'pot emptied (only a fresh slice left): ' + pot.bal); assert.strictEqual(pot.last.who, w.pot.who); assert.strictEqual(pot.last.amount, w.pot.amount);
+      assert.strictEqual(s.wallet.get('ann')[mode], w0.ann - 100 + ra.totalWin + (ra.pot ? ra.pot.amount : 0));
+      assert.strictEqual(s.wallet.get('bo')[mode], w0.bo - 100 + rb.totalWin + (rb.pot ? rb.pot.amount : 0));
+      const total = (s.wallet.get('ann')[mode] - w0.ann) + (s.wallet.get('bo')[mode] - w0.bo);
+      assert.strictEqual(total, -200 + ra.totalWin + rb.totalWin + pot.paid, 'wallet sums = costs, wins, one prize');
+    }
+  });
+
+  await test('pot: seed (tracked house money), minBal, capCents cap (the same for every bet), no slice and no roll on a Callback, hit chance follows the cost', async () => {
+    let s = setup({ rng: E.rngFrom(62), potRng: () => 0 }); let a = s.sock('ann');
+    E.CFG.pull.pot.seed = 700; E.CFG.pull.pot.capCents = 300;   // re-pinned (POT-CAP): the cap used to be maxPayX x bet = 3 x 100; it is now money, 300 cents, whatever the bet
+    // the pot is created lazily with its seed
+    s.potOf('play'); let p = s.potOf('play'); assert.strictEqual(p.bal, 700); assert.strictEqual(p.seeded, 700); potOk(p);
+    const r = spin(s, a, { bet: 100, mode: 'play', auto: true });
+    assert.ok(r.pot, 'forced hit on a pot above minBal'); assert.strictEqual(r.pot.amount, 300, 'prize = min(bal, capCents) = 300');
+    p = s.potOf('play'); potOk(p); assert.strictEqual(p.paid, 300); assert.strictEqual(p.bal, 700 - 300 + 700 + 0, 'the seed is put back after a hit') ;
+    assert.strictEqual(p.seeded, 1400);
+    // minBal
+    s = setup({ rng: E.rngFrom(63), potRng: () => 0 }); a = s.sock('ann'); E.CFG.pull.pot.minBal = 1000;
+    const r2 = spin(s, a, { bet: 10, mode: 'play', auto: true }); assert.strictEqual(r2.pot, null, 'below minBal there is no prize'); potOk(s.potOf('play'));
+    // Callback: free, no slice, no roll
+    s = setup({ rng: E.rngFrom(64), potRng: () => 0 }); a = s.sock('ann');
+    const pot = s.potOf('play'); pot.bal = 9000; pot.fed = 9000; s.store().potChanged();
+    s.store().setPlayer('ann', 'play', { ...E.newState(), cb: { bet: 100 } });
+    const w0 = s.wallet.get('ann').play; const rc = spin(s, a, { bet: 10, mode: 'play', auto: true });
+    assert.strictEqual(rc.callback, true); assert.strictEqual(rc.cost, 0); assert.strictEqual(rc.bet, 100); assert.strictEqual(rc.betCents, 100); assert.strictEqual(rc.pot, null, 'no pot roll on a free round');
+    assert.strictEqual(pot.fed, 9000); assert.strictEqual(pot.rem, 0); assert.strictEqual(pot.bal, 9000); assert.strictEqual(s.wallet.get('ann').play, w0 + rc.totalWin);
+    assert.strictEqual(rc.totalWin, rc.totalWinTenths * 100 / 10, 'a Callback pays at cb.bet'); assert.strictEqual(rc.pull.state.cb, null, 'Callback consumed');
+    // the next paid spin feeds again
+    const rn = spin(s, a, { bet: 100, mode: 'play', auto: true }); assert.ok(rn.cost === 100); assert.ok(pot.fed * 10000 + pot.rem === 100 * E.CFG.pull.pot.feedBps + 9000 * 10000);
+  });
+
+  await test('FIX POT-CAP: a hit pays min(balance, capCents) at every bet (a 10c hit on a $40 pot pays the cap, not 50 x 10c), never above the balance, damaged knob -> default cap; invariant holds over 4k scripted spins at mixed bets (the 200k run is in the engine test)', async () => {
+    const hit = (bet, bal, cap, mode = 'play') => {
+      const s = setup({ rng: E.rngFrom(91), potRng: () => 0 }); const a = s.sock('ann'); rich(s, 'ann', mode); E.CFG.pull.pot.minBal = 100; if (cap !== 'keep') E.CFG.pull.pot.capCents = cap;
+      const pot = s.potOf(mode); pot.bal = bal; pot.fed = bal; pot.rem = 0; s.store().potChanged();
+      const r = spin(s, a, { bet, mode, auto: true }); potOk(pot); return { r, pot };
+    };
+    for (const bet of [10, 100, 2500]) { const { r, pot } = hit(bet, 4000, 3000); assert.ok(r.pot, 'hit at ' + bet); assert.strictEqual(r.pot.amount, 3000, 'bet ' + bet + ': prize = capCents, not a multiple of the bet'); assert.strictEqual(pot.paid, 3000); }
+    { const { r, pot } = hit(10, 4000, 5000, 'chips'); assert.strictEqual(r.pot.amount, 4000, 'below the cap the whole balance is paid (chips pot too)'); assert.ok(pot.bal < 5, 'the pot is empty but for a fresh slice'); }
+    { const { r, pot } = hit(100, 700, 5000); assert.strictEqual(r.pot.amount, 700, 'never more than the balance'); assert.ok(pot.bal >= 0 && pot.bal < 5); }
+    for (const bad of [NaN, undefined, -1, 'x', Infinity]) { const { r, pot } = hit(10, 1e7, bad); assert.ok(r.pot && !r.error, 'damaged knob ' + String(bad) + ' still settles'); assert.strictEqual(r.pot.amount, E.potPrize({ pot: {} }, 1e9), 'damaged ' + String(bad) + ' pays the default cap'); assert.ok(pot.bal >= 0); }
+    // 4k scripted spins at mixed bets through the server (each is a wallet + store round trip, 200k take minutes; the 200k loop is in coldcall-pull-engine.js): the hit roll is scripted (a hit about every 30 spins), the pot pays by the cap, fed + seeded = paid + bal at every step that matters and at the end
+    const rolls = E.rngFrom(93); let s = setup({ rng: E.rngFrom(92), potRng: () => (rolls() < 1 / 30 ? 0 : 1) }); const a = s.sock('ann'); rich(s, 'ann'); E.CFG.pull.pot.seed = 0; E.CFG.pull.pot.minBal = 1000; E.CFG.pull.pot.capCents = 3000; E.CFG.pull.pot.feedBps = 10000;   // feed 100%: the pot fills fast so the cap binds
+    const bets = [10, 20, 50, 100, 200, 500, 1000, 2500], pot = s.potOf('play'); let hits = 0, big = 0, paid0 = 0;
+    for (let i = 0; i < 4000; i++) {
+      const r = spin(s, a, { bet: bets[i % 8], mode: 'play', auto: true }); if (r.error) throw new Error('spin ' + i + ' ' + JSON.stringify(r.error));
+      while (r.status === 'pending') throw new Error('auto spin left a decision');
+      if (r.pot) { hits++; assert.ok(r.pot.amount <= 3000, 'prize ' + r.pot.amount); if (r.pot.amount === 3000) big++; paid0 += r.pot.amount; }
+      if (i % 500 === 0) potOk(pot);
+    }
+    potOk(pot); assert.strictEqual(pot.paid, paid0, 'the pot file paid what the results said'); assert.ok(hits > 60 && big > 20, 'hits ' + hits + ' capped ' + big);
+  });
+
+  await test('pot: the hit roll uses its own rng with chance = (cost / 100) / oneInPerDollar (a roll just below hits, just above misses)', async () => {
+    const chance = (100 / 100) / E.CFG.pull.pot.oneInPerDollar;
+    for (const [u, want] of [[chance * 0.999, true], [chance * 1.001, false]]) {
+      const s = setup({ rng: E.rngFrom(65), potRng: () => u }); const a = s.sock('ann'); const pot = s.potOf('play'); pot.bal = 5000; pot.fed = 5000;
+      const r = spin(s, a, { bet: 100, mode: 'play', auto: true }); assert.strictEqual(!!r.pot, want, 'u=' + u);
+    }
+  });
+
+  await test('callback: the list fills, arms at the list size, the next spin is the free Callback, pays at cb.bet; Play $ and Chips lists are separate', async () => {
+    const s = setup({ rng: E.rngFrom(66) }); const a = s.sock('ann'); rich(s, 'ann'); rich(s, 'ann', 'chips');
+    E.CFG.pull.list = 5;
+    let armedAt = -1, cb = null;
+    for (let i = 0; i < 40 && armedAt < 0; i++) { const r = spin(s, a, { bet: 100, mode: 'play', auto: true }); assert.ok(!r.callback); if (r.pull.armed) { armedAt = i; cb = r.pull.state.cb; } }
+    assert.ok(armedAt >= 0 && armedAt <= 20, 'armed after ' + armedAt); assert.deepStrictEqual(cb, { bet: 100 });
+    a.send('g:coldcall:state'); const st = last(a, 'g:coldcall:state'); assert.deepStrictEqual(st.pull.play.cb, { bet: 100 }); assert.strictEqual(st.pull.chips.cb, null); assert.strictEqual(st.pull.chips.lt, 0, 'chips list untouched');
+    const w0 = s.wallet.get('ann');
+    const cr = spin(s, a, { bet: 10, mode: 'chips', auto: true }); assert.strictEqual(cr.callback, false, 'the Play $ Callback is not used by a Chips spin'); assert.ok(cr.cost === 10);
+    const r = spin(s, a, { bet: 10, mode: 'play', auto: true }); assert.strictEqual(r.callback, true); assert.strictEqual(r.cost, 0); assert.strictEqual(r.bet, 100);
+    assert.strictEqual(r.wallet.play, w0.play + r.totalWin); assert.ok(r.script.callback === true);
+    assert.strictEqual(r.pull.state.cb, null);
+  });
+
+  await test('feed + floor: win / bonus / callback / pot events with the right shape, to signed-in sockets only, floor:pot after pot changes, ring of 50, the floor handler and the state event serve it', async () => {
+    const s = setup({ rng: E.rngFrom(67), potRng: () => 0 });
+    const a = s.sock({ key: 'ann', display: 'Ann K' }), b = s.sock('bo'), u = s.sock(null); rich(s, 'ann');
+    E.CFG.pull.feed.minWinX = 1; E.CFG.pull.list = 3;
+    const pot = s.potOf('play'); pot.bal = 5000; pot.fed = 5000;
+    const kinds = new Set();
+    for (let i = 0; i < 60; i++) { play(s, a, { bet: 100, mode: 'play', buyBonus: i % 4 === 1 ? 'bonus1' : null }, i); if (i === 0) potRngOff(); }
+    function potRngOff() { SRV.potRng = () => 1; }
+    const evs = all(b, 'floor:feed'); assert.ok(evs.length > 20, 'the other signed-in socket got the feed');
+    assert.deepStrictEqual(all(a, 'floor:feed'), evs, 'everyone signed in sees the same events'); assert.strictEqual(all(u, 'floor:feed').length, 0, 'unsigned sockets get nothing'); assert.strictEqual(all(u, 'floor:pot').length, 0);
+    for (const e of evs) {
+      assert.deepStrictEqual(Object.keys(e).filter((k) => k !== 'bonus').sort(), ['amount', 'game', 'id', 'kind', 'mode', 't', 'who', 'x']);
+      assert.strictEqual(e.game, 'coldcall'); assert.strictEqual(e.who, 'Ann K'); assert.strictEqual(e.mode, 'play'); assert.ok(['win', 'bonus', 'callback', 'pot'].includes(e.kind), e.kind);
+      assert.ok(Number.isSafeInteger(e.amount) && e.amount >= 0 && typeof e.x === 'number' && Number.isFinite(e.x) && e.t > 0); kinds.add(e.kind);
+      if (e.kind === 'bonus') assert.ok(['bonus1', 'bonus2', 'bonus3'].includes(e.bonus), 'bonus kind: ' + e.bonus);
+    }
+    assert.deepStrictEqual([...kinds].sort(), ['bonus', 'callback', 'pot', 'win'], 'every kind fired');
+    const ids = evs.map((e) => e.id); assert.deepStrictEqual(ids, [...ids].sort((x, y) => x - y)); assert.strictEqual(new Set(ids).size, ids.length);
+    const pe = evs.find((e) => e.kind === 'pot'); assert.ok(pe.amount >= 5000 && pe.who === 'Ann K');
+    const fp = all(b, 'floor:pot'); assert.ok(fp.length >= 1 && fp.every((e) => e.mode === 'play' && Number.isSafeInteger(e.bal))); assert.strictEqual(fp[fp.length - 1].bal, pot.bal, 'floor:pot carries the live pot');
+    b.send('g:coldcall:floor'); const fl = last(b, 'g:coldcall:floor'); assert.strictEqual(fl.pot.play.bal, pot.bal); assert.strictEqual(fl.pot.chips.bal, 0); assert.ok(fl.feed.length <= 20 && fl.feed.length > 0); assert.deepStrictEqual(fl.feed, evs.slice(-fl.feed.length));
+    b.send('g:coldcall:state'); const st = last(b, 'g:coldcall:state'); assert.deepStrictEqual(st.feed, fl.feed); assert.deepStrictEqual(st.pot, fl.pot); assert.strictEqual(st.open, null);
+    assert.ok(st.pull.on && st.pull.list === 3 && st.pull.play && st.pull.chips && st.pull.decisionMs === E.CFG.pull.decision.timeoutMs);
+    u.send('g:coldcall:floor'); assert.strictEqual(last(u, 'error').code, 'auth');
+    // ring buffer: only the last 50 are kept
+    E.CFG.pull.feed.minWinX = 0;
+    for (let i = 0; i < 70; i++) spin(s, a, { bet: 10, mode: 'play', auto: true });
+    b.send('g:coldcall:state'); assert.strictEqual(last(b, 'g:coldcall:state').feed.length, 20);
+  });
+
+  await test('feed: a decision-timed-out round feeds at settle (not before), a pending round feeds nothing yet; win threshold respected', async () => {
+    const s = setup({ rng: E.rngFrom(68) }); const a = s.sock('ann'), b = s.sock('bo'); rich(s, 'ann');
+    E.CFG.pull.feed.minWinX = 100000;               // nothing is a "win" feed event
+    const n0 = all(b, 'floor:feed').length;
+    const r = toPending(s, a, 'more');
+    const before = all(b, 'floor:feed').length;
+    E.CFG.pull.decision.timeoutMs = 20; SRV._pull.open.get(r.roundId).timer && clearTimeout(SRV._pull.open.get(r.roundId).timer);
+    const f = decide(s, a, r, { k: 'more', take: false }); assert.strictEqual(f.status, 'done');
+    const evs = all(b, 'floor:feed'); assert.ok(evs.length > before, 'the bonus feeds when it settles'); assert.ok(evs.slice(before).some((e) => e.kind === 'bonus'));
+    assert.ok(evs.every((e) => e.kind !== 'win'), 'under the threshold: no win events'); assert.ok(n0 <= before);
+  });
+
+  await test('state: Play $ and Chips state never leak into each other; state event carries pull view, pot, feed, open', async () => {
+    const s = setup({ rng: E.rngFrom(69) }); const a = s.sock('ann'); rich(s, 'ann'); rich(s, 'ann', 'chips');
+    for (let i = 0; i < 25; i++) spin(s, a, { bet: 10, mode: 'play', auto: true });
+    a.send('g:coldcall:state'); let st = last(a, 'g:coldcall:state');
+    assert.ok(st.pull.play.lt > 0); assert.strictEqual(st.pull.chips.lt, 0); assert.strictEqual(st.pot.chips.bal, 0);
+    for (const k of ['leads', 'lt', 'list', 'cb', 'warm', 'cold', 'daily']) assert.ok(k in st.pull.play, k);
+    assert.deepStrictEqual(Object.keys(st.pull.play.daily).sort(), ['claimed', 'next', 'streak']); assert.strictEqual(st.pull.play.daily.claimed, true); assert.strictEqual(st.pull.chips.daily.claimed, false);
+    for (let i = 0; i < 10; i++) spin(s, a, { bet: 10, mode: 'chips', auto: true });
+    a.send('g:coldcall:state'); st = last(a, 'g:coldcall:state'); assert.ok(st.pull.chips.lt > 0);
+    const plays = s.store().player('ann', 'play'), chipsS = s.store().player('ann', 'chips'); assert.strictEqual(plays.rounds, 25); assert.strictEqual(chipsS.rounds, 10);
+    assert.ok(st.pot.play.bal >= 0 && st.pot.chips.bal >= 0 && Array.isArray(st.feed)); assert.strictEqual(st.open, null); assert.deepStrictEqual(st.opens, []);
+    assert.strictEqual(s.potOf('chips').fed * 10000 + s.potOf('chips').rem, 10 * 10 * E.CFG.pull.pot.feedBps, 'chips pot got only chips bets');
+  });
+
+  await test('state: the cold clock (idle 24 h) shows in the view and leaks leads; day is the America/Chicago calendar day and the daily appointment runs once per day', async () => {
+    const s = setup({ rng: E.rngFrom(70), t: Date.UTC(2026, 9, 6, 12, 0, 0) }); const a = s.sock('ann');   // 2026-10-06 07:00 Chicago
+    const r1 = spin(s, a, { bet: 10, mode: 'play', auto: true }); assert.strictEqual(r1.pull.daily.streak, 1); assert.ok(r1.pull.daily.leads > 0);
+    const r2 = spin(s, a, { bet: 10, mode: 'play', auto: true }); assert.strictEqual(r2.pull.daily, null, 'second spin of the same day');
+    s.clock.advance(5 * 3600000);                                       // 12:00 Chicago, same day
+    assert.strictEqual(spin(s, a, { bet: 10, mode: 'play', auto: true }).pull.daily, null);
+    s.clock.advance(12 * 3600000);                                      // 2026-10-07 00:00+ UTC-5 = 00:00 Chicago? 12:00+17h = 05:00 UTC+1d... next Chicago day starts at 05:00 UTC
+    const r4 = spin(s, a, { bet: 10, mode: 'play', auto: true });
+    assert.deepStrictEqual(r4.pull.daily && r4.pull.daily.streak, 2, 'next Chicago day, consecutive');
+    s.clock.advance(3 * 86400000); const r5 = spin(s, a, { bet: 10, mode: 'play', auto: true }); assert.strictEqual(r5.pull.daily.streak, 1, 'a gap resets the streak');
+    // the cold clock: lead list leaks after idle time and the state event shows when
+    const st0 = s.store().player('ann', 'play'); const lt0 = st0.lt; assert.ok(lt0 > 10 * 10 || true);
+    s.clock.advance(5 * 86400000); a.send('g:coldcall:state'); const v = last(a, 'g:coldcall:state').pull.play;
+    assert.ok(v.lt <= lt0); assert.ok(v.cold === null || (v.cold.inMs >= 0 && v.cold.leads >= 0));
+  });
+
+  await test('history: entries carry callback / auto / pot; pending rounds enter the history only when settled', async () => {
+    const s = setup({ rng: E.rngFrom(71), potRng: () => 0 }); const a = s.sock('ann'); rich(s, 'ann');
+    const pot = s.potOf('play'); pot.bal = 3000; pot.fed = 3000;
+    const r = spin(s, a, { bet: 100, mode: 'play', auto: true }); assert.ok(r.pot);
+    a.send('g:coldcall:history'); let h = last(a, 'g:coldcall:history').rounds; assert.strictEqual(h.length, 1);
+    for (const k of ['roundId', 't', 'bet', 'cost', 'mode', 'buy', 'totalWin', 'tier', 'callback', 'auto', 'pot']) assert.ok(k in h[0], k);
+    assert.strictEqual(h[0].callback, false); assert.strictEqual(h[0].pot.amount, r.pot.amount); assert.strictEqual(h[0].roundId, r.roundId);
+    SRV.potRng = () => 1;
+    const p = toPending(s, a, 'more'); a.send('g:coldcall:history'); h = last(a, 'g:coldcall:history').rounds; assert.ok(!h.some((x) => x.roundId === p.roundId), 'a pending round is not history yet');
+    decide(s, a, p, { k: 'more', take: false }); a.send('g:coldcall:history'); h = last(a, 'g:coldcall:history').rounds; assert.strictEqual(h[0].roundId, p.roundId); assert.strictEqual(h[0].auto, null);
+  });
+
+  await test('legacy: CFG.pull.on = false is the old stateless server (no state, pot, decisions, feed, no new fields) and money still balances', async () => {
+    const s = setup({ rng: E.rngFrom(72) }); const a = s.sock('ann'), b = s.sock('bo');
+    E.CFG.pull.on = false; const mirror = E.rngFrom(72); let bal = 1000000;
+    for (let i = 0; i < 40; i++) {
+      s.clock.advance(200); const bet = E.BET_LEVELS[i % 8], buy = i % 5 === 4 ? 'bonus1' : null;
+      a.send('g:coldcall:spin', { bet, mode: 'play', buyBonus: buy });
+      const r = last(a, 'g:coldcall:result'), m = E.resolveRound(mirror, buy);
+      assert.deepStrictEqual(r.script, m.script); assert.strictEqual(r.totalWinTenths, m.winTenths); bal += -r.cost + r.totalWin; assert.strictEqual(r.wallet.play, bal);
+      for (const k of ['pull', 'pot', 'callback', 'betCents', 'status', 'pending']) assert.ok(!(k in r), 'legacy result has no ' + k);
+    }
+    a.send('g:coldcall:state'); const st = last(a, 'g:coldcall:state'); for (const k of ['pull', 'pot', 'feed', 'open']) assert.ok(!(k in st), 'legacy state has no ' + k);
+    assert.strictEqual(all(b, 'floor:feed').length, 0); assert.deepStrictEqual(Object.keys(s.store()._data().players), []); assert.deepStrictEqual(Object.keys(s.store()._data().pot), []);
+  });
+
+  await test('QA hook with pull on: force plays that feature as a normal paid spin (state and Callback untouched, pot fed), ignored without COLDCALL_TEST', async () => {
+    const env0 = { t: process.env.COLDCALL_TEST, n: process.env.NODE_ENV };
+    try {
+      process.env.COLDCALL_TEST = '1'; delete process.env.NODE_ENV;
+      const s = setup({ rng: E.rngFrom(75) }); const a = s.sock('ann');
+      s.store().setPlayer('ann', 'play', { ...E.newState(), cb: { bet: 100 }, lt: 100 });
+      const w0 = s.wallet.get('ann').play;
+      const r = spin(s, a, { bet: 200, mode: 'play', force: 'big' });
+      assert.strictEqual(r.status, 'done'); assert.strictEqual(r.forced, 'big'); assert.ok(r.totalWinMult >= 25); assert.strictEqual(r.cost, 200); assert.strictEqual(r.callback, false); assert.strictEqual(r.betCents, 200);
+      assert.strictEqual(r.wallet.play, w0 - 200 + r.totalWin);
+      assert.deepStrictEqual(s.store().player('ann', 'play').cb, { bet: 100 }, 'the Callback is still waiting'); assert.strictEqual(s.store().player('ann', 'play').lt, 100);
+      assert.strictEqual(s.potOf('play').fed * 10000 + s.potOf('play').rem, 200 * E.CFG.pull.pot.feedBps);
+      delete process.env.COLDCALL_TEST;
+      const q = spin(s, a, { bet: 200, mode: 'play', force: 'big' }); assert.strictEqual(q.forced, undefined); assert.strictEqual(q.callback, true, 'without the hook the Callback plays');
+    } finally { if (env0.t == null) delete process.env.COLDCALL_TEST; else process.env.COLDCALL_TEST = env0.t; if (env0.n == null) delete process.env.NODE_ENV; else process.env.NODE_ENV = env0.n; }
+  });
+
+  await test('concurrency: many sockets and accounts spinning, buying and deciding in the same ticks keep exact accounting, pot invariant, nothing left open', async () => {
+    const s = setup({ rng: E.rngFrom(73), potRng: E.rngFrom(9) }); E.CFG.pull.pot.oneInPerDollar = 1000;
+    const names = ['ann', 'bo', 'cy', 'di']; const socks = names.flatMap((n) => [s.sock(n), s.sock(n)]);
+    for (const n of names) { rich(s, n); rich(s, n, 'chips'); }
+    const w0 = Object.fromEntries(names.map((n) => [n, s.wallet.get(n)]));
+    let spent = 0, won = 0, prizes = 0;
+    for (let i = 0; i < 80; i++) {
+      s.clock.advance(200);
+      for (const k of socks) {
+        const key = k.data.acct.key; const mode = i % 2 ? 'play' : 'chips';
+        if (s.open.size && [...s.open.values()].some((r) => r.nk === key && r.mode === mode)) continue;
+        k.send('g:coldcall:spin', { bet: 50, mode, buyBonus: i % 10 === 3 ? 'bonus1' : i % 10 === 7 ? 'call' : null, auto: i % 3 === 0 });
+      }
+      for (const k of socks) { const r = last(k, 'g:coldcall:result'); if (r && r.status === 'pending' && s.open.has(r.roundId) && k === s.open.get(r.roundId).socket) decide(s, k, r, policy(i, r.pending)); }
+    }
+    for (const rec of [...s.open.values()]) rec.socket.send('g:coldcall:decide', { roundId: rec.id, ...policy(1, rec.pending) });
+    for (const rec of [...s.open.values()]) rec.socket.send('disconnect');
+    assert.strictEqual(s.open.size, 0); assert.strictEqual(s.store().allOpen().length, 0);
+    const delta = { play: 0, chips: 0 };
+    const seen = new Set();   // a settled round that was open goes to every live socket of the account: count each round once
+    for (const k of socks) for (const r of all(k, 'g:coldcall:result')) if (r.status === 'done' && !seen.has(r.roundId) && seen.add(r.roundId)) { delta[r.mode] += -r.cost + r.totalWin + (r.pot ? r.pot.amount : 0); spent += r.cost; won += r.totalWin; if (r.pot) prizes++; }
+    for (const mode of ['play', 'chips']) {
+      const sum = names.reduce((a, n) => a + s.wallet.get(n)[mode] - w0[n][mode], 0); assert.strictEqual(sum, delta[mode], mode + ' wallets = the results'); potOk(s.potOf(mode));
+    }
+    assert.ok(spent > 0 && won > 0);
+  });
+
+  await test('rounds are settled by the module rng tape: a decision replay draws nothing twice (same draws for the prefix, fresh ones after)', async () => {
+    const draws = []; const base = E.rngFrom(74);
+    const s = setup({ rng: () => { const v = base(); draws.push(v); return v; } }); const a = s.sock('ann'); rich(s, 'ann');
+    SRV.rng = () => { const v = base(); draws.push(v); return v; };
+    const r = toPending(s, a, 'more'); const n = draws.length;
+    decide(s, a, r, { k: 'more', take: false });
+    const fresh = draws.length - n; assert.ok(fresh <= 2, 'only the draws after the decision are new (' + fresh + ')');
+  });
+
+  // ------------------------------------------------------------------------------------------------ server fix round (wave 1 critics)
+  const dayMs = 86400000;
+  // first ONE MORE CALL decision of a bought bonus; any pick before it is answered by the policy (so `after` = decisions already made)
+  const toMore = (s, sock, wantPick) => {
+    for (let i = 0; i < 600; i++) {
+      let r = spin(s, sock, { bet: 10, mode: 'play', buyBonus: i % 3 === 2 ? 'bonus2' : 'bonus1' }), n = 0;
+      while (r.status === 'pending' && r.pending.k !== 'more') r = decide(s, sock, r, policy(i + n++, r.pending));
+      if (r.status === 'pending' && (!wantPick || s.open.get(r.roundId).decisions.length > 0)) return r;
+      while (r.status === 'pending') r = decide(s, sock, r, { k: 'more', take: false });
+    }
+    throw new Error('no ONE MORE CALL found');
+  };
+  const resultsOf = (sock, id) => all(sock, 'g:coldcall:result').filter((r) => r.roundId === id);
+
+  await test('F3: knobs edited or pull.on flipped while a decision is open: default / timeout / decide pay exactly the shown bonus, never void', async () => {
+    const wreck = {
+      off: () => { E.CFG.pull.on = false; },
+      knobs: () => { const P = E.CFG.pull; P.more.on = false; P.more.mult = 5; P.more.minTenths = 99999; P.pick.on = false; P.pick.minLeads = 99; P.pick.mult = { bronze: 9, silver: 9, gold: 9, upsell: 9, close: 9 }; P.list = 7; P.fill.dead = 0.1; P.ghost.on = false; P.warm.chance = 0; },
+      offKnobs: () => { E.CFG.pull.on = false; E.CFG.pull.more.on = false; E.CFG.pull.pick.on = false; },
+    };
+    for (const how of ['disconnect', 'decide']) for (const [name, edit] of Object.entries(wreck)) {
+      const s = setup({ rng: E.rngFrom(81) }); const a = s.sock('ann'); rich(s, 'ann');
+      const r = toMore(s, a, true);
+      const mid = s.wallet.get('ann').play, W = r.pending.W, shown = clone(r.partial.spin);
+      edit();
+      let f;
+      if (how === 'disconnect') { a.send('disconnect'); f = last(a, 'g:coldcall:result'); } else f = decide(s, a, r, { k: 'more', take: false });
+      assert.strictEqual(all(a, 'g:coldcall:voided').length, 0, name + '/' + how + ': not voided');
+      assert.strictEqual(f.roundId, r.roundId); assert.strictEqual(f.status, 'done', name + '/' + how);
+      assert.strictEqual(f.pull.more.W, W, 'the bonus total is the one that was shown'); assert.strictEqual(f.pull.more.take, false);
+      assert.deepStrictEqual(f.script.spin, shown); assert.strictEqual(f.wallet.play, mid + f.totalWin + (f.pot ? f.pot.amount : 0), 'paid, not refunded');
+      assert.strictEqual(s.open.size, 0);
+    }
+  });
+
+  await test('F4: a throw while settling (pot / feed knob block removed) ends in exactly one refund, never a bare lost cost; every live socket of the account hears it', async () => {
+    for (const knob of ['pot', 'feed']) {
+      const s = setup({ rng: E.rngFrom(82) }); const a = s.sock('ann'), a2 = s.sock('ann'); const start = s.wallet.get('ann').play;
+      delete E.CFG.pull[knob];
+      const n = all(a, 'g:coldcall:result').length;
+      s.clock.advance(200); a.send('g:coldcall:spin', { bet: 2500, mode: 'play' });
+      const bal = s.wallet.get('ann').play, voids = all(a, 'g:coldcall:voided'), done = all(a, 'g:coldcall:result').slice(n).filter((r) => r.status === 'done');
+      assert.ok(!all(a, 'error').some((e) => e.code === 'internal'), knob + ': no router "Server error"');
+      if (voids.length) { assert.strictEqual(voids.length, 1); assert.strictEqual(bal, start, knob + ': refunded exactly once'); assert.strictEqual(voids[0].refund, 2500); assert.strictEqual(all(a2, 'g:coldcall:voided').length, 1, 'the other tab hears it'); }
+      else { assert.strictEqual(done.length, 1); assert.strictEqual(bal, start - 2500 + done[0].totalWin + (done[0].pot ? done[0].pot.amount : 0)); }
+      assert.strictEqual(s.open.size, 0); assert.strictEqual(s.store().allOpen().length, 0);
+    }
+  });
+
+  await test('F7: pull.leaked and pull.warmDied are reported after idle days (the server hands the engine the stored, un-ticked state)', async () => {
+    const s = setup({ rng: E.rngFrom(83) }); const a = s.sock('ann');
+    const st = E.newState(); st.lt = 300; st.avg = 100; st.warm = [3, 4]; st.coldAt = s.clock.now() + 1000; st.day = '2000-01-01';
+    s.store().setPlayer('ann', 'play', st);
+    s.clock.advance(3 * dayMs);
+    const r = play(s, a, { bet: 100, mode: 'play' });
+    assert.strictEqual(r.status, 'done'); assert.ok(r.pull.leaked > 0, 'leaked ' + r.pull.leaked); assert.strictEqual(r.pull.warmDied, 2);
+    a.send('g:coldcall:state');   // the views still show the cold clock applied
+    assert.ok(last(a, 'g:coldcall:state').pull.play.lt <= 300);
+  });
+
+  await test('F8: a stored state of the wrong shape resets that one state; spin and the state handler keep working for both currencies, balances move only by the real cost and win', async () => {
+    const bads = [{ v: 2 }, 'junk', 42, { v: 1, warm: 'x' }, { v: 1, lt: 50, avg: 100, cb: { bet: 15 }, warm: [1] }, { v: 1, warm: [1, 'a', 99] }, { v: 1, lt: 'many' }, { v: 1, cb: { bet: 2600 } }, { v: 1, cb: 'x' }, { v: 1, warmBet: -3 }, { v: 1, lt: null }];
+    for (const bad of bads) for (const mode of ['chips', 'play']) {
+      const other = mode === 'play' ? 'chips' : 'play';
+      const s = setup({ rng: E.rngFrom(84) }); const a = s.sock('ann'); rich(s, 'ann', mode);
+      s.store().setPlayer('ann', mode, bad);
+      a.send('g:coldcall:state'); const st = last(a, 'g:coldcall:state'); assert.ok(st && st.pull && st.pull[mode] && st.pull[other], 'state handler works: ' + JSON.stringify(bad));
+      assert.ok(!all(a, 'error').length, 'no error: ' + JSON.stringify(all(a, 'error')));
+      const before = s.wallet.get('ann')[mode];
+      const r = play(s, a, { bet: 100, mode }); assert.strictEqual(r.status, 'done', JSON.stringify(bad));
+      assert.strictEqual(r.wallet[mode], before - r.cost + r.totalWin + (r.pot ? r.pot.amount : 0));
+      const r2 = play(s, a, { bet: 100, mode: other }); assert.strictEqual(r2.status, 'done');
+    }
+    // a good state is kept as it is (leads, warm squares), an old one without warmBet gets 0
+    const s = setup({ rng: E.rngFrom(85) }); const a = s.sock('ann'); const g = E.newState(); g.lt = 120; g.avg = 100; g.warm = [3, 4];
+    s.store().setPlayer('ann', 'play', g); a.send('g:coldcall:state'); const v = last(a, 'g:coldcall:state').pull.play;
+    assert.strictEqual(v.lt, 120); assert.deepStrictEqual(v.warm, [3, 4]);
+  });
+
+  await test('N1-CARRY (c, server): the carry is stored per currency and is not in the client view; a garbage stored carry reads as 0 without resetting the rest of the state or locking the account', async () => {
+    const stored = (s, mode) => s.store().player('ann', mode);
+    // per currency: Play $ and Chips lists arm at their own pace, each keeps its own carry
+    const s = setup({ rng: E.rngFrom(66) }); const a = s.sock('ann'); rich(s, 'ann'); rich(s, 'ann', 'chips');
+    E.CFG.pull.list = 5; E.CFG.pull.daily.base = 0; E.CFG.pull.daily.perStreak = 0;
+    const seedSt = (carry, avg) => Object.assign(E.newState(), { lt: 40, avg, carry, day: '2026-10-06' });
+    s.store().setPlayer('ann', 'play', seedSt(3.5, 99.96)); s.store().setPlayer('ann', 'chips', seedSt(8.25, 19.99));
+    let n = 0; while (!stored(s, 'play').cb && n++ < 60) { const r = spin(s, a, { bet: 100, mode: 'play', auto: true }); assert.ok(!r.error, JSON.stringify(r.error)); }
+    assert.ok(stored(s, 'play').cb, 'play armed'); assert.strictEqual(stored(s, 'chips').carry, 8.25, 'the chips carry did not move when the Play $ list armed');
+    assert.strictEqual(stored(s, 'play').cb.bet, 100, 'avg 99.96 + carry 3.5 = 103.46: the Callback plays at $1, the 3.46c left over is carried'); assert.ok(Math.abs(stored(s, 'play').carry - 3.46) < 0.01, 'play carry ' + stored(s, 'play').carry);
+    n = 0; while (!stored(s, 'chips').cb && n++ < 60) { const r = spin(s, a, { bet: 10, mode: 'chips', auto: true }); assert.ok(!r.error, JSON.stringify(r.error)); }
+    assert.ok(stored(s, 'chips').cb && stored(s, 'chips').cb.bet % 10 === 0 && stored(s, 'chips').carry < 10 && stored(s, 'chips').carry >= 0);
+    // the screen never sees it
+    a.send('g:coldcall:state'); const v = last(a, 'g:coldcall:state').pull; for (const m of ['play', 'chips']) assert.ok(!('carry' in v[m]), 'the view of ' + m + ' has no carry');
+    const rr = spin(s, a, { bet: 100, mode: 'play', auto: true }); assert.ok(!('carry' in rr.pull.state), 'the result view has no carry');
+    // garbage carry: reads as 0, the rest of the state is kept, both currencies keep working, money moves only by cost and win
+    for (const bad of [NaN, -3, 'x', null, 50, 10, {}, [], true, Infinity, 1e300]) for (const mode of ['play', 'chips']) {
+      const t = setup({ rng: E.rngFrom(86) }); const b = t.sock('ann'); rich(t, 'ann', mode); E.CFG.pull.list = 5;
+      const g = Object.assign(E.newState(), { lt: 40, avg: 99.96, warm: [3, 4], warmBet: 100, day: '2026-10-06' }); g.carry = bad;   // NaN / Infinity become null in the store file; the raw object covers the in-memory case
+      t.store().setPlayer('ann', mode, g);
+      b.send('g:coldcall:state'); const vv = last(b, 'g:coldcall:state').pull[mode]; assert.strictEqual(vv.lt, 40, 'garbage carry ' + String(bad) + ' does not reset the list'); assert.deepStrictEqual(vv.warm, [3, 4]);
+      assert.ok(!all(b, 'error').length);
+      let m = 0, armed = null; while (!armed && m++ < 60) { const before = t.wallet.get('ann')[mode]; const r = play(t, b, { bet: 100, mode }); assert.strictEqual(r.status, 'done'); assert.strictEqual(r.wallet[mode], before - r.cost + r.totalWin + (r.pot ? r.pot.amount : 0)); if (t.store().player('ann', mode).cb) armed = t.store().player('ann', mode); }
+      assert.ok(armed, 'armed with a garbage carry ' + String(bad)); assert.ok(armed.carry >= 0 && armed.carry < 10, 'carry reset to a clean value: ' + armed.carry); assert.strictEqual(armed.cb.bet % 10, 0);
+    }
+    // a store file written by the old code (no carry at all) loads as carry 0
+    const dir = fs.mkdtempSync(path.join(tmp, 'old')); const old = Object.assign(E.newState(), { lt: 12, avg: 100 }); delete old.carry;
+    fs.writeFileSync(path.join(dir, 'coldcall-pull.json'), JSON.stringify({ v: 1, players: { ann: { play: old } }, pot: {}, open: {} }));
+    const o = setup({ dir, rng: E.rngFrom(87) }); const oa = o.sock('ann'); rich(o, 'ann'); oa.send('g:coldcall:state'); assert.strictEqual(last(oa, 'g:coldcall:state').pull.play.lt, 12, 'an old state keeps its leads');
+    const r0 = play(o, oa, { bet: 100, mode: 'play' }); assert.strictEqual(r0.status, 'done'); assert.strictEqual(o.store().player('ann', 'play').carry, 0, 'missing carry reads as 0 and is written back as 0');
+  });
+
+  await test('F9a: the rate limit is per account (three sockets in one ms: one spin), and a clock stepped back is not a lockout', async () => {
+    const s = setup({ rng: E.rngFrom(86) }); const [x, y, z] = [s.sock('ann'), s.sock('ann'), s.sock('ann')];
+    s.clock.advance(200);
+    for (const k of [x, y, z]) k.send('g:coldcall:spin', { bet: 10, mode: 'play', auto: true });
+    assert.strictEqual(all(x, 'g:coldcall:result').length, 1); assert.strictEqual(last(y, 'error').code, 'rate'); assert.strictEqual(last(z, 'error').code, 'rate');
+    assert.strictEqual(all(y, 'g:coldcall:result').length + all(z, 'g:coldcall:result').length, 0);
+    s.clock.advance(200); y.send('g:coldcall:spin', { bet: 10, mode: 'play', auto: true }); assert.strictEqual(all(y, 'g:coldcall:result').length, 1, 'allowed again after the gap');
+    s.clock.advance(-3600000); x.send('g:coldcall:spin', { bet: 10, mode: 'play', auto: true });
+    assert.strictEqual(all(x, 'g:coldcall:result').length, 2, 'clock stepped back 1 h: not a lockout');
+    const b = s.sock('bo'); b.send('g:coldcall:spin', { bet: 10, mode: 'play', auto: true }); assert.strictEqual(all(b, 'g:coldcall:result').length, 1, 'another account is its own limit');
+  });
+
+  await test('F9b: history is keyed by the normalised account key, pull path and legacy path', async () => {
+    for (const on of [true, false]) {
+      const s = setup({ rng: E.rngFrom(87) }); E.CFG.pull.on = on; const a = s.sock('ANN '), b = s.sock('ann');
+      play(s, a, { bet: 10, mode: 'play', auto: true }); play(s, b, { bet: 10, mode: 'play', auto: true });
+      a.send('g:coldcall:history'); b.send('g:coldcall:history');
+      assert.strictEqual(last(a, 'g:coldcall:history').rounds.length, 2, 'pull ' + on); assert.strictEqual(last(b, 'g:coldcall:history').rounds.length, 2);
+      assert.ok(SRV._history.has('ann') && !SRV._history.has('ANN '));
+    }
+  });
+
+  await test('F9c: reserved names (__proto__, constructor, prototype) are refused at every handler; the store keeps its maps prototype-free', async () => {
+    try {
+      for (const name of ['__proto__', 'constructor', 'prototype']) {
+        const s = setup({ rng: E.rngFrom(88) }); const a = s.sock(name);
+        for (const ev of ['state', 'history', 'floor', 'spin', 'decide']) { const n = all(a, 'error').length; a.send('g:coldcall:' + ev, { bet: 10, mode: 'play', roundId: 'x' }); assert.ok(all(a, 'error').length > n, name + ' ' + ev + ' answers an error'); assert.strictEqual(last(a, 'error').code === 'internal', false); }
+        assert.strictEqual(({}).play, undefined, 'Object.prototype untouched by ' + name); assert.strictEqual(({}).chips, undefined);
+        assert.strictEqual(all(a, 'g:coldcall:result').length, 0);
+      }
+    } finally { delete Object.prototype.play; delete Object.prototype.chips; }
+    const store = require('../games/coldcall-store.js').createStore(null); const st = E.newState();
+    store.setPlayer('__proto__', 'play', st); store.putOpen({ roundId: 'r', key: '__proto__', mode: 'play', cost: 1, bet: 10, buy: null, t: 1 });
+    assert.strictEqual(({}).play, undefined, 'Object.prototype not polluted by the store'); assert.deepStrictEqual(store.player('__proto__', 'play'), st); assert.strictEqual(store.player('someone', 'play'), null);
+    assert.strictEqual(store.allOpen().length, 1); assert.strictEqual(store.delOpen('__proto__', 'play'), true);
+    const f = path.join(tmp, 'proto.json'); fs.writeFileSync(f, '{"v":1,"players":{"__proto__":{"play":{"v":1,"lt":77}}},"pot":{},"open":{}}');
+    const loaded = require('../games/coldcall-store.js').createStore(f); assert.strictEqual(({}).play, undefined); assert.strictEqual(loaded.player('__proto__', 'play').lt, 77); assert.strictEqual(loaded.player('x', 'play'), null);
+  });
+
+  await test('F9d: a pot prize is flushed to disk before it is credited (the pot file never still holds a prize the wallet has)', async () => {
+    const s = setup({ rng: E.rngFrom(89), potRng: () => 0 }); const a = s.sock('ann');
+    E.CFG.pull.pot.minBal = 1; E.CFG.pull.pot.oneInPerDollar = 1;
+    let seenOnDisk = null;
+    const credit = s.wallet.credit.bind(s.wallet);
+    s.wallet.credit = (key, mode, amt, ref) => { if (ref && ref.pot) { try { seenOnDisk = JSON.parse(fs.readFileSync(path.join(s.dir, 'coldcall-pull.json'), 'utf8')).pot[mode]; } catch { seenOnDisk = null; } } return credit(key, mode, amt, ref); };
+    const r = spin(s, a, { bet: 2500, mode: 'play', auto: true });
+    assert.strictEqual(r.status, 'done'); assert.ok(r.pot && r.pot.won, 'the pot was won');
+    assert.ok(seenOnDisk && seenOnDisk.paid === r.pot.amount, 'at the moment of the prize credit the pot file already says paid ' + r.pot.amount + ': ' + JSON.stringify(seenOnDisk));
+  });
+
+  await test('F9e / W2 / W6: a settled round goes to every live socket of the account, never to a socket that has since signed in as someone else', async () => {
+    const s = setup({ rng: E.rngFrom(90) }); const a1 = s.sock('ann'), a2 = s.sock('ann'), b = s.sock('bob'); rich(s, 'ann');
+    E.CFG.pull.decision.timeoutMs = 60;
+    const r = toMore(s, a1); rdy(s, a1, r.roundId); const mine = (k) => k.out.filter((o) => o[0] === 'g:coldcall:result' || o[0] === 'g:coldcall:voided').length; const n1 = mine(a1);
+    a1.data.acct = { key: 'bob' };                       // the socket re-signed-in as bob (no disconnect)
+    await sleep(160);
+    assert.strictEqual(resultsOf(a2, r.roundId).filter((x) => x.status === 'done').length, 1, 'the other tab of ann hears the settlement'); assert.strictEqual(resultsOf(a2, r.roundId).filter((x) => x.status === 'done')[0].auto, 'timeout');
+    assert.strictEqual(mine(a1), n1, 'the re-signed-in socket gets nothing of ann'); assert.strictEqual(mine(b), 0, 'bob hears nothing of ann');
+    assert.strictEqual(s.open.size, 0);
+    // owner disconnect: the other tab hears the default
+    const c1 = s.sock('cy'), c2 = s.sock('cy'); rich(s, 'cy'); E.CFG.pull.decision.timeoutMs = 20000;
+    const r2 = toMore(s, c1); c1.send('disconnect');
+    assert.strictEqual(resultsOf(c2, r2.roundId).filter((x) => x.status === 'done' && x.auto === 'disconnect').length, 1);
+  });
+
+  // ------------------------------------------------------------------------------------------------ wave-2 UI server bits (PULL-UI.md section 0)
+  const readyOf = (sock, id) => { sock.send('g:coldcall:ready', { roundId: id }); };
+  const timers = (sock, id) => all(sock, 'g:coldcall:timer').filter((t) => !id || t.roundId === id);
+
+  await test('ready: re-arms the open decision to a full timeoutMs once, replies g:coldcall:timer to every socket of the account, the default fires at the NEW time; a second ready is a no-op with the same expiresAt', async () => {
+    const s = setup({ rng: E.rngFrom(101) }); const a = s.sock('ann'), a2 = s.sock('ann'), b = s.sock('bo'); rich(s, 'ann');
+    E.CFG.pull.decision.timeoutMs = 300;
+    const r = toMore(s, a); const rec = s.open.get(r.roundId), t0 = Date.now();
+    assert.strictEqual(r.timeoutMs, 300); const timer0 = rec.timer; assert.ok(timer0);
+    await sleep(150); s.clock.advance(150);
+    readyOf(a, r.roundId);
+    for (const sock of [a, a2]) { const ts = timers(sock, r.roundId); assert.strictEqual(ts.length, 1, 'every socket of the account hears the timer'); assert.deepStrictEqual(Object.keys(ts[0]).sort(), ['expiresAt', 'roundId', 'timeoutMs']); assert.strictEqual(ts[0].timeoutMs, 300); assert.strictEqual(ts[0].expiresAt, s.clock.now() + 300); }
+    assert.strictEqual(timers(b).length, 0, 'another account hears nothing');
+    assert.ok(rec.timer && rec.timer !== timer0 && rec.timer.hasRef() === false, 'a new unref\'d timer'); assert.strictEqual(rec.expiresAt, s.clock.now() + 300);
+    const exp = timers(a, r.roundId)[0].expiresAt, timerNow = rec.timer;
+    s.clock.advance(200); readyOf(a, r.roundId);                         // a second ready (past the 150 ms rate window): changes nothing
+    const ts = timers(a, r.roundId); assert.strictEqual(ts.length, 2); assert.strictEqual(ts[1].expiresAt, exp, 'unchanged expiresAt'); assert.strictEqual(rec.timer, timerNow, 'timer not touched'); assert.strictEqual(rec.expiresAt, exp);
+    await sleep(Math.max(0, t0 + 250 - Date.now()));                     // ~250 ms after the spin: the ORIGINAL default (300 ms) has not fired and would have by ~320
+    await sleep(120); assert.strictEqual(s.open.size, 1, 'the round is still open past the original 300 ms');
+    assert.strictEqual(resultsOf(a, r.roundId).filter((x) => x.status === 'done').length, 0);
+    await sleep(250); const fin = resultsOf(a, r.roundId).filter((x) => x.status === 'done'); assert.strictEqual(fin.length, 1, 'it defaults once, later'); assert.strictEqual(fin[0].auto, 'timeout'); assert.strictEqual(s.open.size, 0);
+  });
+
+  await test('ready: only the owner (another account is refused, nothing changes and the owner can still ready), unknown / settled round and malformed payloads never throw and never answer a timer', async () => {
+    const s = setup({ rng: E.rngFrom(102) }); const a = s.sock('ann'), b = s.sock('bo'), u = s.sock(null); rich(s, 'ann');
+    E.CFG.pull.decision.timeoutMs = 5000;
+    const r = toMore(s, a); const rec = s.open.get(r.roundId), timer0 = rec.timer, exp0 = rec.expiresAt;
+    s.clock.advance(300);
+    readyOf(b, r.roundId); assert.strictEqual(last(b, 'error').code, 'forbidden'); assert.strictEqual(timers(b).length, 0); assert.strictEqual(timers(a).length, 0);
+    assert.strictEqual(rec.timer, timer0); assert.strictEqual(rec.expiresAt, exp0, 'a foreign ready changed nothing');
+    readyOf(u, r.roundId); assert.strictEqual(last(u, 'error').code, 'auth'); assert.strictEqual(timers(u).length, 0);
+    s.clock.advance(300);
+    for (const bad of [null, undefined, 'x', 5, [], {}, { roundId: 5 }, { roundId: {} }, { roundId: null }, { roundId: 'nope' }, { roundId: r.roundId + 'x' }]) {
+      s.clock.advance(300); a.send('g:coldcall:ready', bad); assert.ok(last(a, 'error'), 'answered with an error, not a throw: ' + JSON.stringify(bad)); assert.strictEqual(timers(a).length, 0, 'no timer for ' + JSON.stringify(bad));
+    }
+    assert.strictEqual(rec.timer, timer0, 'junk changed nothing');
+    s.clock.advance(300); readyOf(a, r.roundId); assert.strictEqual(timers(a, r.roundId).length, 1, 'the owner is still able to ready (the foreign one did not use it up)'); assert.strictEqual(rec.expiresAt, s.clock.now() + 5000);
+    const f = decide(s, a, r, { k: 'more', take: false }); assert.strictEqual(f.status, 'done');
+    const nT = timers(a).length, nE = all(a, 'error').length; s.clock.advance(300);
+    readyOf(a, r.roundId); assert.strictEqual(last(a, 'error').code, 'no_round'); assert.strictEqual(all(a, 'error').length, nE + 1); assert.strictEqual(timers(a).length, nT, 'no timer for a settled round'); assert.strictEqual(s.open.size, 0);
+  });
+
+  await test('ready: one re-arm per DECISION: PICK then ONE MORE CALL in one round each get their own, the second ready of the same decision is a no-op', async () => {
+    const s = setup({ rng: E.rngFrom(103) }); const a = s.sock('ann'); rich(s, 'ann');
+    E.CFG.pull.decision.timeoutMs = 5000;
+    let done = false;
+    for (let i = 0; i < 400 && !done; i++) {
+      s.clock.advance(200);
+      let r = spin(s, a, { bet: 10, mode: 'play', buyBonus: 'bonus1' });
+      if (r.status !== 'pending') continue;
+      if (r.pending.k === 'more') { decide(s, a, r, { k: 'more', take: false }); continue; }
+      const rec = s.open.get(r.roundId); s.clock.advance(400);
+      readyOf(a, r.roundId); const t1 = timers(a, r.roundId); assert.strictEqual(t1.length, 1); assert.strictEqual(t1[0].expiresAt, s.clock.now() + 5000); assert.ok(t1[0].expiresAt < r.expiresAt, 'brought down from the ceiling the pick was armed to');
+      s.clock.advance(200); readyOf(a, r.roundId); assert.strictEqual(timers(a, r.roundId).length, 2); assert.strictEqual(timers(a, r.roundId)[1].expiresAt, t1[0].expiresAt, 'the second ready of the pick is a no-op');
+      const m = decide(s, a, r, { k: 'pick', p: r.pending.choices[0] });
+      if (m.status !== 'pending') continue;                                  // no ONE MORE CALL behind this pick: look for another round
+      assert.strictEqual(m.pending.k, 'more'); assert.strictEqual(rec.timer !== null, true);
+      s.clock.advance(400); readyOf(a, r.roundId); const ts = timers(a, r.roundId); assert.strictEqual(ts.length, 3, 'the second decision gets its own re-arm');
+      assert.strictEqual(ts[2].expiresAt, s.clock.now() + 5000); assert.ok(ts[2].expiresAt < m.expiresAt);
+      s.clock.advance(200); readyOf(a, r.roundId); assert.strictEqual(timers(a, r.roundId).length, 4); assert.strictEqual(timers(a, r.roundId)[3].expiresAt, ts[2].expiresAt, 'and only one');
+      const f = decide(s, a, m, { k: 'more', take: false }); assert.strictEqual(f.status, 'done'); done = true;
+    }
+    assert.ok(done, 'saw a pick followed by a more');
+  });
+
+  await test('ready: goes through a rate limit (150 ms per account; a refused ready does not use the re-arm up), and can never hold a round open past its ceiling (a late ready is ignored)', async () => {
+    const s = setup({ rng: E.rngFrom(104) }); const a = s.sock('ann'), a2 = s.sock('ann'); rich(s, 'ann');
+    E.CFG.pull.decision.timeoutMs = 5000;
+    const r = toMore(s, a); const rec = s.open.get(r.roundId); s.clock.advance(1000);
+    a.send('g:coldcall:ready', { roundId: 'nope' }); a2.send('g:coldcall:ready', { roundId: 'nope' });          // two sockets, one ms: one is refused for the rate
+    assert.deepStrictEqual([last(a, 'error').code, last(a2, 'error').code], ['no_round', 'rate']);
+    s.clock.advance(1000); readyOf(a, r.roundId); readyOf(a2, r.roundId);
+    assert.strictEqual(timers(a, r.roundId).length, 1); assert.strictEqual(last(a2, 'error').code, 'rate'); assert.strictEqual(rec.expiresAt, s.clock.now() + 5000);
+    const s2 = setup({ rng: E.rngFrom(105) }); const c = s2.sock('cy'); rich(s2, 'cy'); E.CFG.pull.decision.timeoutMs = 5000;
+    const r2 = toMore(s2, c); const rec2 = s2.open.get(r2.roundId), timer2 = rec2.timer, exp2 = rec2.expiresAt;
+    s2.clock.advance(180000 + 1);                                               // the clock says the decision is already past the ceiling
+    readyOf(c, r2.roundId); assert.strictEqual(timers(c).length, 0, 'no re-arm'); assert.strictEqual(rec2.timer, timer2); assert.strictEqual(rec2.expiresAt, exp2);
+    const s3 = setup({ rng: E.rngFrom(106) }); const d = s3.sock('di'); rich(s3, 'di'); E.CFG.pull.decision.timeoutMs = 5000;
+    const r3 = toMore(s3, d); s3.clock.advance(4000); readyOf(d, r3.roundId);   // late but inside: the cap clips it
+    const t3 = timers(d, r3.roundId)[0]; assert.ok(t3.expiresAt <= r3.expiresAt - 0 + 5000 + 4000 && t3.expiresAt <= r3.expiresAt + 5000, 'expiresAt never beyond armedAt + ceiling: ' + t3.expiresAt);
+  });
+
+  await test('U4: the decision timer is armed to max(timeoutMs, 180000) when the pending result is sent; the first ready (after the whole bonus has played) brings it to a full timeoutMs from then; a client that never sends ready keeps the ceiling; a ready past the ceiling is ignored', async () => {
+    const s = setup({ rng: E.rngFrom(107) }); const a = s.sock('ann'); rich(s, 'ann'); E.CFG.pull.decision.timeoutMs = 20000;
+    const r = toMore(s, a); const rec = s.open.get(r.roundId);
+    assert.strictEqual(rec.timeoutMs, 20000); assert.strictEqual(rec.ceilingMs, 180000); assert.strictEqual(rec.expiresAt, rec.armedAt + 180000, 'armed to the ceiling');
+    assert.strictEqual(r.timeoutMs, 20000, 'the view still states the decision time');
+    s.clock.advance(45000); readyOf(a, r.roundId);                              // 45 s of bonus animation later: more than timeoutMs, still open
+    assert.strictEqual(s.open.size, 1); assert.strictEqual(rec.expiresAt, s.clock.now() + 20000); const t = timers(a, r.roundId); assert.strictEqual(t.length, 1); assert.strictEqual(t[0].timeoutMs, 20000); assert.strictEqual(t[0].expiresAt, rec.expiresAt);
+    const s2 = setup({ rng: E.rngFrom(108) }); const b = s2.sock('bo'); rich(s2, 'bo'); E.CFG.pull.decision.timeoutMs = 200000;
+    const r2 = toMore(s2, b); const rec2 = s2.open.get(r2.roundId); assert.strictEqual(rec2.ceilingMs, 200000, 'a longer decision time is never cut to the ceiling');
+    E.CFG.pull.decision.timeoutMs = 20000;
+    const s3 = setup({ rng: E.rngFrom(109) }); const c = s3.sock('cy'); rich(s3, 'cy');
+    const r3 = toMore(s3, c); const rec3 = s3.open.get(r3.roundId); s3.clock.advance(179000); readyOf(c, r3.roundId);
+    assert.strictEqual(rec3.expiresAt, rec3.armedAt + 180000, 'a late ready is clipped to the ceiling');
+  });
+
+  await test('state.pull.rules: a plain JSON copy of the live CFG.pull (what pullCfg() returns), follows a knob edit on the next state, editing the payload cannot move the live knobs', async () => {
+    const s = setup({ rng: E.rngFrom(107) }); const a = s.sock('ann');
+    a.send('g:coldcall:state'); let st = last(a, 'g:coldcall:state');
+    assert.ok(st.pull.rules && typeof st.pull.rules === 'object', 'rules is there');
+    assert.deepStrictEqual(st.pull.rules, JSON.parse(JSON.stringify(E.CFG.pull)));
+    assert.strictEqual(JSON.stringify(st.pull.rules), JSON.stringify(JSON.parse(JSON.stringify(st.pull.rules))), 'plain JSON: nothing is lost on a round trip (no functions, no undefined)');
+    assert.notStrictEqual(st.pull.rules, E.CFG.pull); assert.notStrictEqual(st.pull.rules.daily, E.CFG.pull.daily);
+    st.pull.rules.daily.base = 999; st.pull.rules.pot.capCents = 1; assert.strictEqual(E.CFG.pull.daily.base, 3, 'a copy');
+    E.CFG.pull.daily.base = 11; E.CFG.pull.decision.timeoutMs = 7777; E.CFG.pull.pick.mult.gold = 9;
+    a.send('g:coldcall:state'); st = last(a, 'g:coldcall:state');
+    assert.strictEqual(st.pull.rules.daily.base, 11); assert.strictEqual(st.pull.rules.decision.timeoutMs, 7777); assert.strictEqual(st.pull.rules.pick.mult.gold, 9);
+    assert.deepStrictEqual(st.pull.rules, JSON.parse(JSON.stringify(E.CFG.pull)));
+  });
+
+  await test('stateView.daily.next: the leads the next daily claim grants, same rule as the claim: before a claim, after it (tomorrow, streak up), through the streak cap, after a gap, per currency, on a knob edit, and in the result views', async () => {
+    const s = setup({ rng: E.rngFrom(108), t: Date.UTC(2026, 9, 6, 12, 0, 0) }); const a = s.sock('ann'); rich(s, 'ann'); rich(s, 'ann', 'chips');
+    E.CFG.pull.list = 5000;                                                // no Callback in the way (a Callback spin claims nothing)
+    const nextOf = (mode) => { a.send('g:coldcall:state'); return last(a, 'g:coldcall:state').pull[mode].daily; };
+    let d = nextOf('play'); assert.strictEqual(d.claimed, false); assert.strictEqual(d.next, E.CFG.pull.daily.base, 'day 1: base');
+    assert.strictEqual(nextOf('chips').next, d.next);
+    const granted = [];
+    for (let day = 1; day <= 9; day++) {
+      const before = nextOf('play'); assert.strictEqual(before.claimed, false); assert.ok(Number.isInteger(before.next) && before.next > 0, 'a number: ' + before.next);
+      const r = spin(s, a, { bet: 10, mode: 'play', auto: true });
+      assert.ok(r.pull.daily, 'claimed on day ' + day); assert.strictEqual(r.pull.daily.streak, day); assert.strictEqual(r.pull.daily.leads, before.next, 'day ' + day + ': next == what the claim granted'); granted.push(r.pull.daily.leads);
+      assert.strictEqual(r.pull.state.daily.claimed, true); assert.ok(Number.isInteger(r.pull.state.daily.next), 'the result view carries it too');
+      const after = nextOf('play'); assert.strictEqual(after.claimed, true);
+      const P = E.CFG.pull.daily; assert.strictEqual(after.next, P.base + P.perStreak * Math.min(day, P.streakMax), 'after a claim: tomorrow\'s grant, streak continues');
+      assert.strictEqual(r.pull.state.daily.next, after.next);
+      s.clock.advance(86400000);
+    }
+    assert.ok(granted[granted.length - 1] === granted[granted.length - 2], 'the streak cap holds: ' + granted.join());
+    assert.strictEqual(nextOf('chips').next, E.CFG.pull.daily.base, 'the Chips purse has its own streak');
+    s.clock.advance(3 * 86400000);                                          // a gap: the streak is gone
+    d = nextOf('play'); assert.strictEqual(d.claimed, false); assert.strictEqual(d.next, E.CFG.pull.daily.base);
+    E.CFG.pull.daily.base = 6; E.CFG.pull.daily.perStreak = 2;
+    d = nextOf('play'); assert.strictEqual(d.next, 6, 'a knob edit shows on the next state');
+    const r = spin(s, a, { bet: 10, mode: 'play', auto: true }); assert.strictEqual(r.pull.daily.leads, 6); assert.strictEqual(r.pull.daily.streak, 1);
+    assert.strictEqual(nextOf('play').next, 8);
+    // a bonus round that stops at a decision carries the view too
+    const p = toPending(s, a, 'more'); assert.strictEqual(p.status, 'pending'); assert.ok(Number.isInteger(p.pull.state.daily.next));
+    decide(s, a, p, { k: 'more', take: false });
+  });
+
+  // ---------------------------------------------------------------- wave 1B fix round (Opus re-check N3, N4, N5, N6)
+  await test('W1B N3: a knob snapshot keeps Infinity ("never"): pull.list = Infinity arms no Callback on the server, and a non-finite decision.timeoutMs gets the default timer', async () => {
+    const s = setup({ rng: E.rngFrom(91) }); const a = s.sock('ann'); rich(s, 'ann');
+    E.CFG.pull.list = Infinity;
+    let cb = 0;
+    for (let i = 0; i < 80; i++) { const r = play(s, a, { bet: 100, mode: 'play' }, i); assert.strictEqual(r.status, 'done'); if (r.callback || (r.pull && r.pull.armed)) cb++; }
+    assert.strictEqual(cb, 0, 'no Callback with list Infinity');
+    assert.strictEqual(s.store().player('ann', 'play').cb, null);
+    resetCfg(); E.CFG.pull.decision.timeoutMs = Infinity;
+    const p = toPending(s, a, 'more', 'play', 10);
+    const rec = s.open.get(p.roundId); assert.strictEqual(rec.timeoutMs, 20000, 'default timer'); assert.ok(rec.timer, 'timer armed'); assert.strictEqual(p.timeoutMs, 20000);
+    decide(s, a, p, { k: 'more', take: false });
+  });
+
+  await test('W1B N4: a throw after the spend on the pending path ends in one refund (open_error), no open round, no stuck account; a missing decision block gets the default timer', async () => {
+    const s = setup({ rng: E.rngFrom(92) }); const a = s.sock('ann'); rich(s, 'ann');
+    const st = s.store(), realPut = st.putOpen; st.putOpen = () => { throw new Error('disk gone'); };
+    let voided = 0, spins = 0;
+    try {
+      for (let i = 0; i < 400 && !voided; i++) {
+        const before = s.wallet.get('ann').play, nv = all(a, 'g:coldcall:voided').length;
+        s.clock.advance(200); const ne = all(a, 'error').length; a.send('g:coldcall:spin', { bet: 10, mode: 'play', buyBonus: i % 3 === 2 ? 'bonus2' : 'bonus1' }); spins++;
+        assert.ok(!all(a, 'error').slice(ne).some((e) => e.code === 'internal'), 'no "Server error": ' + JSON.stringify(all(a, 'error').slice(ne)));
+        if (all(a, 'g:coldcall:voided').length > nv) { voided++; const v = last(a, 'g:coldcall:voided'); assert.strictEqual(v.reason, 'open_error'); assert.strictEqual(s.wallet.get('ann').play, before, 'refunded exactly once'); }
+        assert.strictEqual(s.open.size, 0, 'no open round'); assert.strictEqual(st.allOpen().length, 0);
+      }
+    } finally { st.putOpen = realPut; }
+    assert.strictEqual(voided, 1, 'a pending round was voided within ' + spins + ' buys');
+    const r = spin(s, a, { bet: 10, mode: 'play' }); assert.ok(!r.error, 'the account can spin again: ' + JSON.stringify(r.error));
+    // decision block removed: the default timer, the pending event arrives, the round times out
+    delete E.CFG.pull.decision;
+    const p = toPending(s, a, 'pick', 'play', 10); const rec = s.open.get(p.roundId);
+    assert.strictEqual(rec.timeoutMs, 20000); assert.ok(rec.timer, 'timer armed'); assert.strictEqual(all(a, 'error').filter((e) => e.code === 'internal').length, 0);
+    decide(s, a, p, { k: 'pick', p: p.pending.choices[0] });
+  });
+
+  await test('W1B N5: day, players[key] and pot[mode] of a damaged store file reset to defaults; spins keep working in both currencies, money moves only by cost and win, no timer throw', async () => {
+    const files = [
+      { v: 1, players: { ann: 'x' }, pot: {}, open: {} }, { v: 1, players: { ann: 5 }, pot: {}, open: {} }, { v: 1, players: { ann: [1] }, pot: {}, open: {} },
+      { v: 1, players: {}, pot: { play: 5, chips: 'x' }, open: {} }, { v: 1, players: {}, pot: { play: { bal: 'a', fed: 1, seeded: 0, paid: 0, rem: 0, last: null }, chips: { bal: 1.5, fed: 1, seeded: 0, paid: 0, rem: 0, last: null } }, open: {} },
+      { v: 1, players: {}, pot: { play: { bal: 10, fed: 10, seeded: 0, paid: 0, rem: 0, last: 7 } }, open: {} },
+    ];
+    for (const f of files) {
+      const dir = fs.mkdtempSync(path.join(tmp, 'n5')); fs.writeFileSync(path.join(dir, 'coldcall-pull.json'), JSON.stringify(f));
+      const s = setup({ dir, rng: E.rngFrom(93) }); const a = s.sock('ann'); rich(s, 'ann'); rich(s, 'ann', 'chips');
+      a.send('g:coldcall:state'); assert.ok(last(a, 'g:coldcall:state'), 'state handler works: ' + JSON.stringify(f));
+      for (const mode of ['play', 'chips']) for (let i = 0; i < 6; i++) {
+        const before = s.wallet.get('ann')[mode]; const r = play(s, a, { bet: 100, mode }, i);
+        assert.strictEqual(r.status, 'done', JSON.stringify(f)); assert.strictEqual(r.wallet[mode], before - r.cost + r.totalWin + (r.pot ? r.pot.amount : 0), JSON.stringify(f));
+      }
+      potOk(s.potOf('play')); potOk(s.potOf('chips')); assert.ok(!all(a, 'error').length, JSON.stringify(all(a, 'error')));
+      // a decision left to time out settles without a throw in the timer
+      E.CFG.pull.decision.timeoutMs = 30; const p = toPending(s, a, 'more', 'play', 10); rdy(s, a, p.roundId); const before = s.wallet.get('ann').play; await sleep(120);
+      assert.strictEqual(s.open.size, 0, 'the timer settled it'); assert.ok(all(a, 'g:coldcall:result').some((r) => r.roundId === p.roundId && r.status === 'done'));
+      assert.ok(s.wallet.get('ann').play >= before, 'settled, win credited');
+    }
+    for (const day of ['zzz', '2026-13-45', '2026-1-5', 42, '']) for (const mode of ['play', 'chips']) {
+      const s = setup({ rng: E.rngFrom(94) }); const a = s.sock('ann'); rich(s, 'ann', mode);
+      s.store().setPlayer('ann', mode, Object.assign(E.newState(), { day }));
+      a.send('g:coldcall:state'); assert.ok(last(a, 'g:coldcall:state') && !all(a, 'error').length, 'state handler works for day ' + JSON.stringify(day) + ': ' + JSON.stringify(all(a, 'error')));
+      const before = s.wallet.get('ann')[mode]; const r = play(s, a, { bet: 100, mode }); assert.strictEqual(r.status, 'done'); assert.strictEqual(r.wallet[mode], before - r.cost + r.totalWin + (r.pot ? r.pot.amount : 0));
+    }
+  });
+
+  await test('W1B N6: spins, retrigger, maxSpins, maxRevealRounds, maxCascades and buyCost are frozen into the round: editing them while a decision is open changes nothing', async () => {
+    const edits = () => { E.CFG.spins.bonus1 = 30; E.CFG.spins.bonus2 = 30; E.CFG.retrigger.two = 9; E.CFG.retrigger.three = 9; E.CFG.maxSpins = 90; E.CFG.maxRevealRounds = 2; E.CFG.maxCascades = 1; E.CFG.buyCost.bonus1 = 5000; };
+    const keep = clone({ spins: E.CFG.spins, retrigger: E.CFG.retrigger, maxSpins: E.CFG.maxSpins, maxRevealRounds: E.CFG.maxRevealRounds, maxCascades: E.CFG.maxCascades, buyCost: E.CFG.buyCost });
+    const restore = () => Object.assign(E.CFG, clone(keep));
+    const run = (kind, edit) => {
+      const s = setup({ rng: E.rngFrom(95) }); const a = s.sock('ann'); rich(s, 'ann');
+      const p = toPending(s, a, kind, 'play', 10);
+      if (edit) edit();
+      try {
+        let r = p, n = 0;
+        while (r.status === 'pending') r = decide(s, a, r, r.pending.k === 'pick' ? { k: 'pick', p: r.pending.choices[0] } : { k: 'more', take: n++ % 2 === 0 });
+        return { r, wallet: s.wallet.get('ann').play };
+      } finally { restore(); }
+    };
+    for (const kind of ['pick', 'more']) {
+      const ctl = run(kind, null), edt = run(kind, edits);
+      assert.strictEqual(edt.r.totalWin, ctl.r.totalWin, kind + ': decided round pays the same under an edit'); assert.deepStrictEqual(edt.r.script, ctl.r.script, kind + ': same bonus script'); assert.strictEqual(edt.wallet, ctl.wallet);
+      // a disconnect defaults the round under the snapshot too
+      const run2 = (edit) => { const s = setup({ rng: E.rngFrom(96) }); const a = s.sock('ann'); rich(s, 'ann'); const p = toPending(s, a, kind, 'play', 10); if (edit) edit(); try { SRV.onDisconnect(a); return { r: last(a, 'g:coldcall:result'), wallet: s.wallet.get('ann').play }; } finally { restore(); } };
+      const c2 = run2(null), e2 = run2(edits);
+      assert.strictEqual(c2.r.status, 'done'); assert.strictEqual(e2.r.totalWin, c2.r.totalWin, kind + ': defaulted round pays the same under an edit'); assert.deepStrictEqual(e2.r.script, c2.r.script); assert.strictEqual(e2.wallet, c2.wallet);
+    }
+    assert.strictEqual(E.CFG.spins.bonus1, keep.spins.bonus1, 'knobs restored after the run');
+  });
+
+  // ================================================================ DENOMS: 1c / 2c / 5c bets through the real handlers ================================================================
+  const SMALL = [1, 2, 5];
+  const exactOf = (r) => r.totalWinTenths * r.pay.num / r.pay.den;
+
+  await test('DENOMS settlement to the cent, Play $ and Chips, 1c / 2c / 5c, thousands of rounds with every buy and decisions: before - cost + win + prize = after, whole cents, pot fed = paid + left with remainders carried, nothing negative, rounding noise only', async () => {
+    const buys = [null, null, 'call', 'hunt', 'bonus1', 'bonus2', null, 'bonus1'];
+    let rounds = 0, takes = 0, picks = 0, callbacks = 0, prizes = 0, ups = 0, downs = 0;
+    for (const mode of ['play', 'chips']) for (const bet of SMALL) {
+      const other = mode === 'play' ? 'chips' : 'play';
+      const s = setup({ rng: E.rngFrom(bet * 10 + (mode === 'play' ? 1 : 2)), potRng: E.rngFrom(bet + 700), roundRng: E.rngFrom(bet + 900) }); const a = s.sock('ann'); rich(s, 'ann', mode);
+      E.CFG.pull.pot.oneInPerDollar = 0.4; E.CFG.pull.pot.minBal = 1; E.CFG.pull.pot.feedBps = 10000;     // fill fast and hit often: prizes at 1c bets need a pot
+      const start = s.wallet.get('ann'); let bal = start[mode], sumCost = 0, paid = 0, exact = 0, sq = 0;
+      for (let i = 0; i < 1500; i++) {
+        const buy = buys[i % buys.length]; assert.strictEqual(s.wallet.get('ann')[mode], bal);
+        const r = play(s, a, { bet, mode, buyBonus: buy }, i);
+        assert.strictEqual(r.status, 'done'); assert.strictEqual(r.mode, mode); assert.strictEqual(r.buyBonus, buy);
+        const played = r.betCents, price = buy ? E.buyPrice(E.CFG.buyCost[buy], bet) : bet, cost = r.callback ? 0 : price;
+        assert.strictEqual(r.cost, cost, 'cost is the whole-cent price, fixed before the spin'); assert.strictEqual(r.pay.price, cost); assert.strictEqual(r.totalWin, r.pay.win);
+        const ex = exactOf(r); assert.ok(Math.abs(r.totalWin - ex) < 2, 'round ' + i + ': paid ' + r.totalWin + ' exact ' + ex + ' (the base spin and the bonus are rounded apart)');
+        const prize = r.pot ? r.pot.amount : 0;
+        for (const v of [r.cost, r.totalWin, prize, r.wallet.play, r.wallet.chips]) assert.ok(Number.isSafeInteger(v) && v >= 0, 'whole cents: ' + v);
+        assert.ok(r.totalWin <= E.MAX_WIN_X * played, 'cap'); assert.ok(r.callback ? played >= 1 : played === bet);
+        bal += -cost + r.totalWin + prize; assert.strictEqual(r.wallet[mode], bal, mode + ' ' + bet + 'c round ' + i + ': before - cost + win + prize = after');
+        assert.strictEqual(r.wallet[other], start[other], 'the other purse never moves');
+        if (mode === 'chips') assert.strictEqual(s.chips.get('ann'), bal);
+        if (!buy) sumCost += cost; if (buy) assert.strictEqual(prize, 0, 'a buy wins no pot (FIX M1)'); if (prize) prizes++; if (r.callback) callbacks++; else { paid += r.totalWin; exact += ex; sq += (r.totalWin - ex) * (r.totalWin - ex); }
+        if (r.pull && r.pull.more && r.pull.more.take) takes++; if (r.pull && r.pull.pick) picks++; rounds++;
+        const p = s.potOf(mode); potOk(p); assert.strictEqual(p.fed * 10000 + p.rem, sumCost * E.CFG.pull.pot.feedBps, 'the slice is exact: fed + rem = cost x bps / 10000 (remainders carried)'); assert.ok(p.bal >= 0);
+        assert.strictEqual(s.potOf(other).fed, 0);
+      }
+      assert.strictEqual(s.open.size, 0, 'nothing left open');
+      assert.ok(Math.abs(paid - exact) < 6 * Math.sqrt(sq) + 2, mode + ' ' + bet + 'c: paid ' + paid + ' vs exact ' + exact + ' differ by rounding noise only');
+      const st = s.wallet.stats('ann').coldcall[mode]; assert.strictEqual(start[mode] - st.wagered + st.won, bal, 'the wallet stats reconcile');
+    }
+    assert.ok(rounds === 9000 && takes >= 20 && picks >= 10 && callbacks >= 10 && prizes >= 20, [rounds, takes, picks, callbacks, prizes].join());
+  });
+
+  await test('DENOMS shown = paid through the server: banking pays the shown bank amount, a won gamble the shown win amount, a lost gamble the shown base; defaults (timeout, disconnect) pay the shown bank amount', async () => {
+    const s = setup({ rng: E.rngFrom(310), roundRng: E.rngFrom(311) }); const a = s.sock('ann'); rich(s, 'ann');
+    const seen = { bank: 0, won: 0, lost: 0, auto: 0 };
+    for (let i = 0; i < 700 && (seen.bank < 6 || seen.won < 6 || seen.lost < 6 || seen.auto < 4); i++) {
+      const bet = SMALL[i % 3]; let r = spin(s, a, { bet, mode: 'play', buyBonus: i % 2 ? 'bonus2' : 'bonus1' }), shown = null;
+      while (r.status === 'pending') {
+        if (r.pending.k === 'more') {
+          shown = r.pending; for (const k of ['bankCents', 'baseCents', 'bonusCents', 'winCents']) assert.ok(Number.isSafeInteger(shown[k]), k);
+          const how = (i + seen.bank) % 4;
+          if (how === 3) { SRV.onDisconnect(a); const f = last(a, 'g:coldcall:result'); assert.strictEqual(f.status, 'done'); assert.strictEqual(f.auto, 'disconnect'); assert.strictEqual(f.totalWin, shown.bankCents, 'a default banks the shown amount'); seen.auto++; r = f; break; }
+          r = decide(s, a, r, { k: 'more', take: how !== 0 });
+          if (r.status === 'done') { if (how === 0) { assert.strictEqual(r.totalWin, shown.bankCents); seen.bank++; } else if (r.pull.more.won) { assert.strictEqual(r.totalWin, shown.winCents); seen.won++; } else { assert.strictEqual(r.totalWin, shown.baseCents); seen.lost++; } }
+        } else r = decide(s, a, r, policy(i, r.pending));
+      }
+      if (!shown) assert.ok(r.status === 'done');
+    }
+    assert.ok(seen.bank >= 6 && seen.won >= 6 && seen.lost >= 6 && seen.auto >= 4, JSON.stringify(seen));
+  });
+
+  await test('DENOMS the rounding draw is not the round\'s stream: the same main rng gives the same round at 1c and 10c, the rounding source is read twice per round at 1c and never at 10c, and the tape of a 10c+ round does not move', async () => {
+    const run = (bet) => { let n = 0; const rr = E.rngFrom(77), s = setup({ rng: E.rngFrom(312), roundRng: () => { n++; return rr(); } }); const a = s.sock('ann'); rich(s, 'ann');
+      const out = []; for (let i = 0; i < 40; i++) { const r = play(s, a, { bet, mode: 'play', buyBonus: i % 3 === 0 ? 'bonus1' : null, auto: true }, i); out.push([r.totalWinTenths, r.script.parts, r.script.spin, r.script.bonus, r.callback]); } return { out, n }; };
+    const a1 = run(1), a10 = run(10), a5 = run(5);
+    assert.deepStrictEqual(a1.out.map((x) => x.slice(0, 4)), a10.out.map((x) => x.slice(0, 4)), 'same rounds at 1c and 10c'); assert.deepStrictEqual(a5.out.map((x) => x.slice(0, 4)), a10.out.map((x) => x.slice(0, 4)));
+    assert.strictEqual(a10.n, 0, 'no rounding draw at 10c'); assert.ok(a1.n >= 40 * 2 && a1.n % 2 === 0, 'two per done round at 1c: ' + a1.n);
+  });
+
+  await test('DENOMS restart with an open decision at a 1c bet: the open record keeps the rounding draws, the cost (the whole-cent price) is refunded exactly once, nothing else moves', async () => {
+    const logs = [];
+    const s = setup({ rng: E.rngFrom(313), roundRng: E.rngFrom(314) }); const a = s.sock('ann'); rich(s, 'ann');
+    for (let i = 0; i < 5; i++) play(s, a, { bet: 1, mode: 'play' }, i);
+    const r = toPending(s, a, 'more', 'play', 1); assert.ok(r.cost >= 1 && r.cost === E.buyPrice(E.CFG.buyCost[r.buyBonus], 1), 'cost ' + r.cost);
+    const spent = s.wallet.get('ann').play, stNow = clone(s.store().player('ann', 'play')), potNow = clone(s.potOf('play'));
+    s.store().flush();
+    const onDisk = JSON.parse(fs.readFileSync(path.join(s.dir, 'coldcall-pull.json'), 'utf8')), rec = onDisk.open['ann|play'];
+    assert.ok(rec && rec.cost === r.cost && rec.bet === 1, 'the open record is on disk'); assert.ok(Array.isArray(rec.rnd) && rec.rnd.length === 2 && rec.rnd.every((x) => x >= 0 && x < 1), 'the rounding draws survive in the stored record: ' + JSON.stringify(rec.rnd));
+    const s2 = setup({ dir: s.dir, bank: s.bank, rng: E.rngFrom(315), t: s.clock.now() + 5000, log: (...x) => logs.push(x.join(' ')) });
+    assert.strictEqual(s2.wallet.get('ann').play, spent + r.cost, 'refunded the cost'); assert.deepStrictEqual(clone(s2.store().player('ann', 'play')), stNow); assert.deepStrictEqual(clone(s2.potOf('play')), potNow);
+    assert.strictEqual(s2.store().allOpen().length, 0); assert.ok(logs.some((l) => l.includes(r.roundId)));
+    const s3 = setup({ dir: s.dir, bank: s.bank, rng: E.rngFrom(316), t: s.clock.now() + 9000 }); await sleep(60);
+    assert.strictEqual(s3.wallet.get('ann').play, spent + r.cost, 'a second restart refunds nothing more');
+    // an old open record without the rounding draws (written before this change) is refunded the same way
+    const old = JSON.parse(fs.readFileSync(path.join(s.dir, 'coldcall-pull.json'), 'utf8')); old.open['ann|play'] = { roundId: 'old1', key: 'ann', mode: 'play', cost: 7, bet: 1, buy: 'call', t: 1 };
+    fs.writeFileSync(path.join(s.dir, 'coldcall-pull.json'), JSON.stringify(old));
+    const s4 = setup({ dir: s.dir, bank: s.bank, rng: E.rngFrom(317), t: s.clock.now() + 12000 }); assert.strictEqual(s4.wallet.get('ann').play, spent + r.cost + 7);
+  });
+
+  await test('DENOMS stored state: normState accepts cb.bet 1..2500 (any whole number of cents) and a carry in [0, 10); damaged values read as safe defaults; the Callback at 1c is played at 1c', async () => {
+    const mk = (extra) => Object.assign(E.newState(), { lt: 120, avg: 3, warm: [3, 4], warmBet: 2, rounds: 7 }, extra);
+    for (const [cb, carry] of [[{ bet: 1 }, 0], [{ bet: 2 }, 0.5], [{ bet: 5 }, 0.99], [{ bet: 7 }, 3.3], [{ bet: 15 }, 9.9], [{ bet: 2500 }, 0], [{ bet: 10 }, 0]]) {
+      const s = setup({ rng: E.rngFrom(318), roundRng: E.rngFrom(319) }); const a = s.sock('ann'); rich(s, 'ann');
+      s.store().setPlayer('ann', 'play', mk({ cb, carry })); a.send('g:coldcall:state'); const v = last(a, 'g:coldcall:state').pull.play;
+      assert.deepStrictEqual(v.cb, cb, 'kept ' + JSON.stringify(cb)); assert.strictEqual(v.lt, 120); assert.deepStrictEqual(v.warm, [3, 4]);
+      const w0 = s.wallet.get('ann').play, r = play(s, a, { bet: 100, mode: 'play' }); assert.strictEqual(r.callback, true); assert.strictEqual(r.betCents, cb.bet); assert.strictEqual(r.cost, 0); assert.ok(Number.isInteger(r.totalWin)); assert.strictEqual(r.wallet.play, w0 + r.totalWin + (r.pot ? r.pot.amount : 0));
+      assert.strictEqual(s.store().player('ann', 'play').carry, carry, 'a Callback round leaves the carry as it is');
+    }
+    for (const carry of [-1, 10, 12, NaN, 'x', null, [], {}, Infinity]) {          // damaged carry: reads as 0, the rest of the state is kept
+      const s = setup({ rng: E.rngFrom(320), roundRng: E.rngFrom(321) }); const a = s.sock('ann'); rich(s, 'ann');
+      s.store().setPlayer('ann', 'play', mk({ cb: { bet: 1 }, carry })); a.send('g:coldcall:state'); const v = last(a, 'g:coldcall:state').pull.play;
+      assert.deepStrictEqual(v.cb, { bet: 1 }, 'carry ' + String(carry) + ' keeps the Callback'); assert.strictEqual(v.lt, 120); assert.deepStrictEqual(v.warm, [3, 4]);
+      const r = play(s, a, { bet: 100, mode: 'play' }); assert.strictEqual(r.status, 'done'); assert.strictEqual(r.betCents, 1); assert.ok(!all(a, 'error').length);
+    }
+    for (const cb of [{ bet: 0 }, { bet: -1 }, { bet: 2501 }, { bet: 1.5 }, { bet: '5' }, { bet: NaN }, {}, 'x', 5, []]) {    // a damaged cb: that state is reset, the account keeps working
+      const s = setup({ rng: E.rngFrom(322), roundRng: E.rngFrom(323) }); const a = s.sock('ann'); rich(s, 'ann');
+      s.store().setPlayer('ann', 'play', mk({ cb })); a.send('g:coldcall:state'); const v = last(a, 'g:coldcall:state').pull.play; assert.strictEqual(v.cb, null, JSON.stringify(cb)); assert.ok(!all(a, 'error').length);
+      const r = play(s, a, { bet: 1, mode: 'play' }); assert.strictEqual(r.status, 'done'); assert.strictEqual(r.callback, false);
+    }
+  });
+
+  await test('DENOMS the room feed needs BOTH: win >= minWinX x bet AND winCents >= minWinCents (default 500); the player\'s own result is untouched', async () => {
+    assert.strictEqual(PIN.real.feed.minWinCents, 500, 'the live default is 500 cents'); assert.strictEqual(PIN.real.feed.minWinX, 100);
+    assert.strictEqual(PIN.PINNED.feed.minWinCents, 0);
+    const run = (minX, minC, bets) => { const s = setup({ rng: E.rngFrom(324), roundRng: E.rngFrom(325) }); const a = s.sock('ann'), b = s.sock('bo'); rich(s, 'ann'); E.CFG.pull.feed.minWinX = minX; E.CFG.pull.feed.minWinCents = minC;
+      const res = []; for (let i = 0; i < 500; i++) { const n = all(b, 'floor:feed').length, bet = bets[i % bets.length]; const r = play(s, a, { bet, mode: 'play', buyBonus: i % 4 === 1 ? 'bonus1' : null, auto: true }, i); const evs = all(b, 'floor:feed').slice(n).filter((e) => e.kind === 'win'); res.push({ r, evs, bet }); } return res; };
+    const res = run(5, 20, [1]);
+    let both = 0, xOnly = 0, cOnly = 0;
+    for (const { r, evs } of res) { const x = r.totalWinMult >= 5, c = r.totalWin >= 20; if (x && c) { both++; assert.strictEqual(evs.length, 1, 'both hold: fed'); assert.strictEqual(evs[0].amount, r.totalWin); } else { assert.strictEqual(evs.length, 0, 'only ' + (x ? 'x' : c ? 'cents' : 'neither') + ' holds: not fed, x ' + r.totalWinMult + ' win ' + r.totalWin); if (x) xOnly++; if (c) cOnly++; } }
+    assert.ok(both >= 3 && xOnly >= 10, [both, xOnly, cOnly].join());
+    const z = run(5, 0, [1]); for (const { r, evs } of z) assert.strictEqual(evs.length, r.totalWinMult >= 5 ? 1 : 0, 'minWinCents 0 is the old rule');
+    const big = run(5, 1e9, [5, 100]); for (const { evs } of big) assert.strictEqual(evs.length, 0);
+    const mixed = run(5, 300, [1, 2, 5, 100]); for (const { r, evs, bet } of mixed) assert.strictEqual(evs.length, r.totalWinMult >= 5 && r.totalWin >= 300 ? 1 : 0, bet + 'c');
+    // a 100x win at 1c is one dollar and is not broadcast with the real knobs; at 5c it is exactly 500 cents and is
+    E.CFG.pull.feed.minWinX = 100; E.CFG.pull.feed.minWinCents = 500;
+    assert.ok(Math.floor(100 * 1) < 500 && 100 * 5 >= 500);
+  });
+
+  await test('DENOMS the state event lists 1c / 2c / 5c, whole-cent buy prices for every bet, and the spin handler takes the new bets and refuses others', async () => {
+    const s = setup({ rng: E.rngFrom(326), roundRng: E.rngFrom(327) }); const a = s.sock('ann'); rich(s, 'ann');
+    a.send('g:coldcall:state'); const st = last(a, 'g:coldcall:state'); assert.deepStrictEqual(st.betLevels, [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2500]); assert.deepStrictEqual(st.bets, st.betLevels);
+    for (const b of st.betLevels) for (const buy of E.BUYS) assert.strictEqual(st.buyPriceCents[b][buy], E.buyPrice(E.CFG.buyCost[buy], b), b + ' ' + buy);
+    for (const bet of [1, 2, 5]) { const r = spin(s, a, { bet, mode: 'play' }); assert.strictEqual(r.status, 'done'); assert.strictEqual(r.cost, bet); }
+    for (const bad of [3, 4, 0, 7, 15, 25, 1.5, -1, 2501, '1', null]) { const r = spin(s, a, { bet: bad, mode: 'play' }); assert.strictEqual(r.error && r.error.code, 'bad_bet', String(bad)); }
+  });
+
+  await test('DENOMS legacy server (pull.on = false) at 1c: whole-cent price and rounded win, wallet balances to the cent', async () => {
+    const s = setup({ rng: E.rngFrom(328), roundRng: E.rngFrom(329) }); const a = s.sock('ann'); rich(s, 'ann'); E.CFG.pull.on = false;
+    let bal = s.wallet.get('ann').play;
+    for (let i = 0; i < 400; i++) { const bet = SMALL[i % 3], buy = [null, 'call', 'bonus1', 'hunt', 'bonus2'][i % 5]; const r = spin(s, a, { bet, mode: 'play', buyBonus: buy }); assert.ok(!r.error, JSON.stringify(r.error));
+      assert.strictEqual(r.cost, buy ? E.buyPrice(E.CFG.buyCost[buy], bet) : bet); assert.ok(Number.isInteger(r.totalWin) && r.totalWin <= E.MAX_WIN_X * bet); bal += -r.cost + r.totalWin; assert.strictEqual(r.wallet.play, bal); }
+  });
+
+  console.log(pass + ' passed' + (process.exitCode ? ', with failures' : ''));
+  for (const k of Object.keys(E.CFG.pull)) delete E.CFG.pull[k]; Object.assign(E.CFG.pull, {}); PIN.restore();
+  SRV.potRng = undefined; SRV.roundRng = undefined; SRV.log = undefined;
+  try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
+})();

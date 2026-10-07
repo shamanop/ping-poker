@@ -22,6 +22,7 @@
   const gs = (id) => (L.games[id] || (L.games[id] = { open: false, mode: 'dock', side: 'right', w: 0.4, rect: null, restore: 'dock' }));
 
   const dollars = (c) => { const n = Math.round(c), a = Math.abs(n), whole = Math.floor(a / 100).toLocaleString('en-US'); return (n < 0 ? '-' : '') + '$' + whole + (a % 100 ? '.' + String(a % 100).padStart(2, '0') : ''); };
+  const chipAmt = (n) => { const M = window.Money, p = M && M.getPref ? M.getPref() : 'auto'; return M ? M.fmt(n, { mode: p === 'auto' ? 'chips' : p }) : Number(n).toLocaleString('en-US'); };
   const dollars2 = (c) => { const n = Math.round(c), a = Math.abs(n); return (n < 0 ? '-' : '') + '$' + Math.floor(a / 100).toLocaleString('en-US') + '.' + String(a % 100).padStart(2, '0'); };
 
   const IC = {
@@ -276,9 +277,10 @@
 
   // ---------- top bar / dock refresh ----------
   const user = () => { try { return window.Lobby && window.Lobby.user ? window.Lobby.user() : null; } catch (e) { return null; } };
+  if (window.Money && window.Money.onChange) window.Money.onChange(() => { try { refreshTop(); } catch (e) {} try { if (ccReady) toCC({ type: 'pref' }); } catch (e) {} });   // Chips shown as chips or dollars: the slot repaints its idle amounts
   function refreshTop() {
     const p = $('sh-play'); if (!p) return;
-    const c = $('sh-chips'); if (c) c.innerHTML = '<small>Chips</small>' + (chipsTotal == null ? '--' : Number(chipsTotal).toLocaleString('en-US'));
+    const c = $('sh-chips'); if (c) c.innerHTML = '<small>Chips</small>' + (chipsTotal == null ? '--' : chipAmt(chipsTotal));
     p.innerHTML = '<small>Play</small>' + (wallet.play == null ? '--' : dollars(wallet.play));
     const u = user(); $('sh-acct').textContent = u ? (u.display || u.key || '') : '';
   }
@@ -339,12 +341,23 @@
       toBender({ type: 'result', reqId, payload: p }); refreshDock();
     });
     s.on('g:bender:error', (e) => benderErr(e));
-    s.on('g:coldcall:state', (st) => { ccReady = true; if (st && st.balances) setWallet(st.balances); toCC({ type: 'init', wallet: Object.assign({}, wallet), mode: wmode, bets: (st && (st.bets || st.betLevels)) || undefined, state: st }); });
+    s.on('g:coldcall:state', (st) => { ccReady = true; if (st && st.balances) setWallet(st.balances); toCC({ type: 'init', wallet: Object.assign({}, wallet), mode: wmode, bets: (st && (st.bets || st.betLevels)) || undefined, state: st, name: (user() && (user().display || user().key)) || undefined }); });
     s.on('g:coldcall:result', (p) => {
-      const reqId = ccQ.shift(); if (p && typeof p.totalWin === 'number' && typeof p.cost === 'number') ccNet += p.totalWin - p.cost;
+      const reqId = ccQ.shift(); ccBadge(p);
       if (p && p.balances) setWallet(p.balances);
       toCC({ type: 'result', reqId, payload: p }); refreshDock();
     });
+    // THE PULL: a decision timer restart, the shared floor (feed + pot) and a refunded round go to the game as they are; the game keys everything by roundId
+    s.on('g:coldcall:timer', (p) => toCC({ type: 'timer', payload: p }));
+    // LIVECFG: the admin changed the slot math; the game stores it for its NEXT round (prices, pay table, rules, RTP label) and never touches a round in flight
+    s.on('g:coldcall:cfg', (p) => toCC({ type: 'cfg', payload: p }));
+    // a dropped line (U6): the game closes its prompt at once, then settles the screen from the server's history after the reconnect (state first, then history)
+    s.on('disconnect', () => { if (ccReady) { ccDropped = true; toCC({ type: 'disconnect' }); } });
+    s.on('auth_ok', () => { if (ccDropped) { ccDropped = false; s.emit('g:coldcall:state', {}); } });
+    s.on('g:coldcall:history', (p) => toCC({ type: 'history', payload: p }));
+    s.on('g:coldcall:voided', (p) => { if (p && p.wallet) setWallet(p.wallet); toCC({ type: 'voided', payload: p }); refreshDock(); });
+    s.on('floor:feed', (p) => toCC({ type: 'floor', kind: 'feed', payload: p }));
+    s.on('floor:pot', (p) => toCC({ type: 'floor', kind: 'pot', payload: p }));
     s.on('error', (e) => { if (e && e.game === 'coldcall') return ccErr(e); if (spinQ.length) benderErr(e); });
     if (user()) { setSignedIn(true); s.emit('wallet_get'); s.emit('account:stats'); bonusShown = false; s.emit('bonus:status'); }
     return true;
@@ -369,7 +382,7 @@
   function onSocialEvent(e) {
     if (!e || e.kind !== 'bigwin' || !window.PingJuice) return;
     const nm = String(e.name || 'Someone').replace(/\*/g, '');
-    const amt = typeof e.amountCents === 'number' ? (e.unit === 'chips' ? e.amountCents.toLocaleString('en-US') + ' chips' : dollars(e.amountCents)) : '';
+    const amt = typeof e.amountCents === 'number' ? (e.unit === 'chips' ? chipAmt(e.amountCents) : dollars(e.amountCents)) : '';
     if (e.game === 'bender') PingJuice.toast(`**${nm}** hit **${amt}** on Ballot Bender`, { sticker: 'vp-chip' });
     else PingJuice.toast(`**${nm}** took a **${amt}** pot`, { sticker: 'ping-hand' });
   }
@@ -429,18 +442,33 @@
   });
 
   // ---------- Cold Call bridge (same protocol as Bender, own queue) ----------
-  let ccReady = false, ccNet = 0; const ccQ = [];
+  let ccReady = false, ccDropped = false, ccNet = 0; const ccQ = [], ccReq = [], ccOwn = new Set();
+  // P1: the dock badge counts the rounds THIS page spun. ccReq = spins in flight (bet, mode, buy); the first result that matches one (not `resolved`, same mode and bet; a Callback plays
+  // at its own bet) makes its round ours; its done result then moves the badge by win + pot prize - cost. A round another tab spun, or a stray settle, never moves it.
+  function ccBadge(p) {
+    if (!p || !p.roundId) return; const now = Date.now(); while (ccReq.length && now - ccReq[0].t > 25000) ccReq.shift();
+    if (!ccOwn.has(p.roundId) && !p.resolved) {
+      const i = ccReq.findIndex((q) => q.mode === p.mode && (p.callback || q.bet === (p.betCents != null ? p.betCents : p.bet)) && (p.callback || (q.buy || null) === (p.buyBonus || null)));
+      if (i >= 0) { ccReq.splice(i, 1); ccOwn.add(p.roundId); }
+    }
+    if (p.status === 'done' && ccOwn.has(p.roundId)) { ccOwn.delete(p.roundId); if (typeof p.totalWin === 'number' && typeof p.cost === 'number') ccNet += p.totalWin + (p.pot && p.pot.won ? p.pot.amount : 0) - p.cost; }
+  }
   const ccFrame = () => { const g = games.get('coldcall'); return g && g.el ? g.el.querySelector('iframe') : null; };
   function toCC(m) { const f = ccFrame(); if (f && f.contentWindow) f.contentWindow.postMessage(m, '*'); }
-  function ccErr(e) { toCC({ type: 'error', reqId: ccQ.shift(), message: (e && e.message) || 'Spin refused.' }); }
+  function ccErr(e) { toCC({ type: 'error', reqId: ccQ.shift(), message: (e && e.message) || 'Spin refused.', code: e && e.code, open: e && e.open }); }
   window.addEventListener('message', (ev) => {
     const f = ccFrame(); if (!f || ev.source !== f.contentWindow) return;
     const m = ev.data || {}, s = sock();
     if (m.type === 'hello') { if (!s || !signedIn) return; ccReady = false; s.emit('g:coldcall:state', {}); }
     else if (m.type === 'spin') {
       if (!s) return toCC({ type: 'error', reqId: m.reqId, message: 'Not connected.' });
-      ccQ.push(m.reqId); const p = { bet: m.bet, mode: m.mode }; if (m.buy) p.buyBonus = m.buy; s.emit('g:coldcall:spin', p);
-    } else if (m.type === 'mode') { wmode = m.mode === 'chips' ? 'chips' : 'play'; }
+      ccQ.push(m.reqId); ccReq.push({ bet: m.bet, mode: m.mode, buy: m.buy || null, t: Date.now() }); const p = { bet: m.bet, mode: m.mode, auto: m.auto === true }; if (m.buy) p.buyBonus = m.buy; s.emit('g:coldcall:spin', p);
+    } else if (m.type === 'decide') {                          // THE PULL: PICK YOUR LEAD / ONE MORE CALL (the answer comes as a result keyed by roundId)
+      if (!s) return toCC({ type: 'error', reqId: m.reqId, message: 'Not connected.' });
+      const d = { roundId: m.roundId, k: m.k }; if (m.k === 'pick') d.p = m.p; else d.take = m.take === true; s.emit('g:coldcall:decide', d);
+    } else if (m.type === 'ready') { if (s && m.roundId) s.emit('g:coldcall:ready', { roundId: m.roundId }); }
+    else if (m.type === 'history') { if (s) s.emit('g:coldcall:history', {}); }
+    else if (m.type === 'mode') { wmode = m.mode === 'chips' ? 'chips' : 'play'; }
     else if (m.type === 'round') refreshDock();
     else if (m.type === 'esc') focus('poker');
   });

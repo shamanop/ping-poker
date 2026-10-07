@@ -1,0 +1,13 @@
+COLD CALL --pull: 100000 sessions x 2000 paid spins = 200000000 paid spins, bet MIX 1c/10c, hi while average < 5.5c (N1 attacker), state carried across sessions, pick best, gamble bank, seed 121, 24 threads, 200 batches, 53.2s
+  total payback   95.035% +- 0.277 (95%, by batch means, per PAID spin, money in real cents; Callback rounds are free)
+  paid cents      wallet gets 94.122% of stake (+-0.276) incl. Callback, ex pot; exact value of the same rounds 94.122%; rounding drift 0.0000% +- 0.0002 (should be 0)
+  decision ledger 868484 ONE MORE CALL offers (26.8% shown rounded up, taken 0.0%): policy bank gains -0.00062 cents per offer +- 0.00073 (sd 0.345); 0 = the shown amount tells nothing
+  by part         base clusters 29.45%  base phone 16.47%  natural bonus 25.67% (+-0.221)  Callback bonus 22.53% (+-0.128)  ONE MORE CALL net 0.000% (+-0.000)  pot paid 0.914% (+-0.012)
+  Callback        0.239 per 100 paid spins; spins per Callback mean 418.9  P10 413  median 419  P90 425; avg Callback bonus 94.39x of its own bet; avg Callback bet 5.5c, 0 of 477305 played under the nominal bet
+  left over       211.4 leads on average and 0 of 200 Callbacks still waiting at the end of every batch (carried until then)
+  bet mix         average stake 5.50c a paid spin, average Callback bet 5.50c (a floor of the lead-weighted average plus the carry: the Callback is worth 100.0% of what the leads were staked at)
+  spins           dead 79.01%  paid base 20.83%  natural bonus 1 in 421  cap hits 68  leads worked 1.074 per paid spin  value per lead 0.0115x bet (Callback part 22.53% of stake)
+  warm            marked-no-phone spins 25.31 per 100; warm squares created 0.494 per spin; spins starting with warm 7.88 per 100; phone features fired on warm squares 0.395 per 100 (avg pay 6.46x)
+  ghost           3.66 per 100 spins; avg shown 11.79x; pay > 0 100.0%; >= 1x 100.0%; >= 10x 33.80%; max 10000.0x
+  decisions       picks 0.438 per 100 spins; ONE MORE CALL offered 0.434 per 100, taken 0.000 per 100
+  pot             14.7 hits per 1M spins; avg pot at hit 45.92 (bet units: 45.9x bet); fed 1.000% of stake, seed 0.000%, paid out 0.914%, 9502.51 left in the pot at the end

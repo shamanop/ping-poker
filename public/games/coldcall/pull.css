@@ -1,0 +1,137 @@
+/* COLD CALL THE PULL, look layer (concept B "the rolodex" + steals from A and C). Extends skin 3 in style.css: no new palette, only its variables and art.
+   Board-local coordinates (#board is 564 x 466, the 6x5 grid starts at 95.4 / 72.5): everything that stays on screen sits in the bezel (top strip y < 70, bottom lip y > 395),
+   never over the playable cells. Looping animation: none (the drain bars are redrawn by a 100 ms timer, the ticker fades only when motion is allowed). */
+.pl[hidden]{display:none !important}
+
+/* the leads strip (#plNote) lives in ui.css now (chris 10-06 FB2) */
+#plGain{position:absolute;z-index:8;left:380px;top:-2px;padding:0 7px;border:2px solid var(--ink-dk);border-radius:4px;background:var(--red);color:#fff3d6;font-family:var(--display);font-size:14px;line-height:19px;white-space:nowrap;pointer-events:none;box-shadow:0 2px 0 var(--ink-dk);rotate:3deg}
+#plGain[hidden]{display:none}
+
+/* ---- bottom lips: appointment leaf (left), office-pot mug (right) ---- */
+.pllip{position:absolute;z-index:7;top:402px;width:100px;height:46px;pointer-events:none}
+#plLeaf{left:22px;border:3px solid var(--ink-dk);border-radius:6px;overflow:hidden;background:linear-gradient(#fff6dc,#e3d3a6);box-shadow:0 2px 0 rgba(255,244,214,.55),0 4px 4px rgba(0,0,0,.4);display:grid;grid-template-rows:14px 1fr;text-align:center}
+#plLeaf small{background:var(--red);color:var(--cream);font-family:var(--display);font-size:11px;letter-spacing:.12em;line-height:14px}
+#plLeaf b{font-family:var(--display);font-weight:400;font-size:19px;line-height:24px;color:var(--paper-ink);white-space:nowrap}
+#plLeaf b i{font-style:normal;font-size:13px;color:var(--red-lo);margin-left:4px}
+#plLeaf.s b{font-size:14px}
+#plLeaf.kept small{background:#3b8a4a}
+#plPot{left:440px;border:3px solid var(--ink-dk);border-radius:8px;background:linear-gradient(#060b14,#101a2e);box-shadow:inset 0 3px 8px #000,0 2px 0 rgba(255,244,214,.55);display:grid;align-content:center;justify-items:center;line-height:1}
+#plPot .m{display:flex;align-items:center;gap:4px;font-family:var(--display);font-size:11.5px;letter-spacing:.1em;color:var(--red);text-shadow:0 0 6px rgba(216,64,46,.55)}
+#plPot .m i{display:block;width:24px;height:24px;margin:-4px 0;background:var(--img-big_mug) center/contain no-repeat;filter:drop-shadow(0 2px 2px rgba(0,0,0,.7))}
+#plPot b{font-family:var(--display);font-weight:400;font-size:15px;color:var(--gold);text-shadow:0 0 8px rgba(255,170,40,.6),0 2px 0 #5a2a00;white-space:nowrap;margin-top:2px;font-variant-numeric:tabular-nums}
+#plPot b.s{font-size:13px}#plPot b.xs{font-size:11px}
+#plPot.tick b{color:#fff3d6;text-shadow:0 0 12px rgba(255,208,88,.95),0 2px 0 #5a2a00}
+
+/* ---- warm squares (idle only: the lit squares of a quiet board ARE the warm leads) + their price stamp ---- */
+#app.pl-on:not(.pl-busy) .slots i.hot{background:linear-gradient(165deg,#ffd9a0,#e9953a 45%,#b4561a 80%,#6e300c);box-shadow:inset 0 0 0 2px rgba(255,208,88,.8),inset 0 -10px 14px rgba(60,20,0,.4),0 0 10px rgba(255,160,70,.55),0 3px 6px rgba(0,0,0,.6)}
+#app.pl-on:not(.pl-busy) .slots i.hot::after{background:linear-gradient(315deg,#2a1204 48%,rgba(255,235,200,.7) 52%)}
+.wst{position:absolute;z-index:6;width:var(--cell);height:var(--cell);pointer-events:none;display:grid;place-items:end center}
+.wst i{margin-bottom:1px;padding:0 4px;font-style:normal;font-family:var(--display);font-size:13.5px;line-height:17px;color:#fff3d6;background:rgba(122,22,12,.92);border:2px solid var(--cream);border-radius:4px;rotate:-5deg;box-shadow:0 2px 0 var(--ink-dk);white-space:nowrap}
+
+/* ---- feed: rides the rule bar's right end ---- */
+#ribbon>#plFeed{position:absolute;right:16px;left:40%;top:0;bottom:0;display:flex;align-items:center;justify-content:flex-end;overflow:hidden;white-space:nowrap;font-family:var(--display);font-size:14px;letter-spacing:.02em;color:var(--gold);text-shadow:0 2px 0 var(--red-dk);opacity:1;transition:opacity .25s}
+#ribbon>#plFeed[hidden]{display:none}
+#plFeed s{text-decoration:none;color:var(--cream);margin-right:6px;min-width:0;overflow:hidden;text-overflow:ellipsis;flex:0 1 auto}
+#plFeed.you s{color:#fff;background:var(--ink-dk);padding:0 5px;border-radius:3px}
+#ribbon.plf #ribR{visibility:hidden}
+.bonus #plFeed{color:var(--red-lo);text-shadow:none}.bonus #plFeed s{color:var(--ink-dk)}
+@media (prefers-reduced-motion:reduce){#plFeed{transition:none}}
+
+/* ---- the rule bar is the prompt during PICK / ONE MORE CALL: it drains left to right ---- */
+#ribbon.ask::before{background:linear-gradient(90deg,var(--red) 0 var(--left,100%),#34100c var(--left,100%))}
+#ribbon.ask{color:var(--cream);text-shadow:0 2px 0 #000}
+#ribbon.ask #ribR{color:var(--gold);text-shadow:0 2px 0 #000;font-size:15px}
+#ribbon.ask.late::before{background:linear-gradient(90deg,#ef5a42 0 var(--left,100%),#34100c var(--left,100%))}
+#ribbon.gold{color:var(--ink-dk);text-shadow:0 1px 0 rgba(255,255,255,.5)}
+#ribbon.gold::before{background:linear-gradient(var(--gold),var(--gold2))}
+#ribbon.gold #ribR,#ribbon.gold .r{color:var(--red-lo);text-shadow:none}
+#ribbon.warn #ribL{color:var(--gold)}
+
+/* ---- CALLBACK on the desk ---- */
+#spin.cb{filter:drop-shadow(0 0 14px rgba(255,208,88,.85)) drop-shadow(0 6px 6px rgba(0,0,0,.7))}
+#spin.cb span{font-size:15.5px;letter-spacing:.02em}
+#betM.cb .sq{opacity:.35}#betM.cb .lbl{color:var(--hot)}
+
+/* ---- PICK YOUR LEAD: gold ring on the lit squares (the board swallows the tap) ---- */
+.slots i.pick{outline:none !important;cursor:pointer;box-shadow:inset 0 0 0 3px var(--gold),0 0 0 3px var(--ink-dk),0 0 0 6px var(--gold),0 0 20px 8px rgba(255,208,88,.8) !important;z-index:2}
+.slots i.pick.pl-late{box-shadow:inset 0 0 0 3px #ef5a42,0 0 0 3px var(--ink-dk),0 0 0 6px #ef5a42,0 0 20px 8px rgba(239,90,66,.8) !important}
+
+/* ---- ONE MORE CALL: the HUD's top row becomes the keys (thumb zone). The board stays fully visible.
+   The SAFE key (HANG UP / bank) sits where SPIN sits (centre column, biggest): a stray skip tap at the SPIN position can only bank. ONE MORE CALL is the side key.
+   Both prompts are inert for their first 600 ms (.arming: dimmed, a bar fills along the key's lower edge; pull.js ARM_MS). ---- */
+#hud.dec{grid-template-rows:auto 36px auto}
+#hud.dec #balM,#hud.dec #spin,#hud.dec #betM{display:none}
+.dec2{grid-column:1/-1;grid-row:1;display:grid;grid-template-columns:minmax(0,1fr) 196px minmax(0,1fr);grid-template-rows:9px auto;gap:6px 8px;align-items:stretch}
+.dec2 .dr{grid-column:1/-1;height:9px;border:2px solid var(--ink-dk);border-radius:5px;overflow:hidden;background:#1a2c48;box-shadow:0 1px 0 rgba(255,244,214,.35)}
+.dec2 .dr i{display:block;height:100%;width:var(--w,100%);background:linear-gradient(var(--gold),var(--gold2))}
+.dec2 .dr.late i{background:linear-gradient(#ef5a42,var(--red))}
+.dec2 .bon{grid-column:1;grid-row:2;display:grid;align-content:center;justify-items:center;gap:2px;min-width:0;text-align:center;line-height:1.05;text-shadow:0 3px 0 #000,0 0 8px #000;pointer-events:none}
+.dec2 .bon small{font-family:var(--display);font-size:11px;letter-spacing:2px;color:var(--gold)}
+.dec2 .bon b{font-family:var(--display);font-weight:400;font-size:22px;color:var(--cream);font-variant-numeric:tabular-nums;max-width:100%;overflow-wrap:anywhere}
+.dec2 .bon em{font-style:normal;font-family:var(--memo);font-size:13px;color:#d8c9a0}
+.dec2 .k{position:relative;overflow:hidden;display:grid;grid-row:2;align-content:center;justify-items:center;gap:3px;min-height:96px;min-width:0;padding:5px 5px;border:3px solid var(--ink-dk);border-radius:10px;text-align:center;line-height:1.08;box-shadow:0 5px 0 var(--ink-dk),0 10px 10px rgba(0,0,0,.45);transition:opacity .15s}
+.dec2 .k:active{transform:translateY(4px);box-shadow:0 1px 0 var(--ink-dk)}
+.dec2 .k[disabled]{opacity:.55}
+.dec2 .hang{grid-column:2;min-height:104px;background:linear-gradient(var(--beige-hi),var(--beige-lo));color:var(--paper-ink)}
+.dec2 .more{grid-column:3;background:linear-gradient(#e2472f,var(--red-lo));color:#fff3d6;text-shadow:0 2px 0 var(--red-dk)}
+.dec2 .k b{font-family:var(--display);font-weight:400;font-size:28px}
+.dec2 .more b{font-size:17px;letter-spacing:.01em}
+.dec2 .k em{font-style:normal;font-family:var(--display);font-size:19px;max-width:100%;overflow-wrap:anywhere;line-height:1.05}
+.dec2 .hang em{color:var(--red-lo)}
+.dec2 .hang small{font-size:13px;font-weight:700;color:var(--paper-ink)}
+.dec2 .more span{display:block;font-family:var(--font);font-weight:700;font-size:13px;line-height:1.12;color:#fff3d6;text-shadow:0 1px 0 var(--red-dk);overflow-wrap:anywhere}
+.dec2 .more span b{font-family:var(--font);font-size:inherit;letter-spacing:0;color:var(--gold);text-shadow:0 1px 0 #000}
+.dec2.s .hang em{font-size:16px}.dec2.s .more span{font-size:12px}.dec2.s .bon b{font-size:18px}
+.dec2.xs .hang em{font-size:13px}.dec2.xs .more span{font-size:11px}.dec2.xs .bon b{font-size:15px}
+.dec2.arming .k{opacity:.5;cursor:progress}
+.dec2.arming .k::after{content:"";position:absolute;left:0;bottom:0;height:5px;width:100%;background:var(--gold);transform-origin:left;animation:plarm .6s linear forwards}
+@keyframes plarm{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+.slots i.pick.pl-arm{opacity:.55;box-shadow:inset 0 0 0 3px var(--cream),0 0 0 3px var(--ink-dk),0 0 0 6px var(--cream) !important}
+@media (prefers-reduced-motion:reduce){.dec2.arming .k::after{animation:none;transform:none}}
+
+/* ---- GHOST: a sticky with a rubber stamp in the head band (steal 2, concept C). Leaves the WIN window alone. ---- */
+#head.plg #cap{visibility:hidden}
+#head>.stamp.plgh{left:auto;right:12px;top:50%;translate:0 -50%;rotate:-5deg;padding:12px 12px 9px;border:0;border-radius:0;display:grid;justify-items:center;gap:2px;line-height:1;
+  background:linear-gradient(172deg,#fff3a0,#f6d84a 70%,#e8bf2e);box-shadow:0 3px 0 rgba(120,90,10,.55),0 12px 18px rgba(0,0,0,.55);color:var(--red-lo);animation:none}
+#head>.stamp.plgh::before{content:"";position:absolute;left:50%;top:-9px;width:64px;height:18px;margin-left:-32px;rotate:2deg;background:linear-gradient(rgba(240,232,205,.92),rgba(214,202,164,.92));box-shadow:0 2px 4px rgba(0,0,0,.4)}
+#head>.stamp.plgh::after{content:"";position:absolute;right:0;bottom:0;width:18px;height:18px;background:linear-gradient(315deg,#6d5410 46%,rgba(255,250,210,.9) 50%)}
+.plgh .t{padding:3px 8px 2px;border:3px double var(--red-lo);border-radius:5px;font-family:var(--display);font-size:14px;letter-spacing:.06em;color:var(--red-lo);white-space:nowrap}
+.plgh .v{font-family:var(--display);font-size:40px;letter-spacing:.01em;color:var(--red-lo);-webkit-text-stroke:0;margin-top:3px;white-space:nowrap}
+.plgh .v.s{font-size:30px}
+.plgh small{font-family:var(--memo);font-size:13px;color:#241a0a;margin-top:1px;text-align:center;line-height:1.1}
+.slots i.hot.plg{box-shadow:inset 0 0 0 3px var(--gold),0 0 0 3px var(--ink-dk),0 0 0 6px var(--gold),0 0 20px 8px rgba(255,208,88,.8)}
+.ghostrv{opacity:.92}
+
+/* ---- banners (lead gain, daily, ONE MORE CALL result): a sticky in the head band ---- */
+#plBn{position:absolute;z-index:7;right:12px;top:44%;max-width:250px;padding:9px 13px 11px;rotate:-2deg;text-align:center;line-height:1.1;pointer-events:none;
+  color:#241a0a;font-family:var(--memo);font-size:16px;background:linear-gradient(172deg,#fff3a0,#f6d84a 70%,#e8bf2e);box-shadow:0 3px 0 rgba(120,90,10,.55),0 10px 16px rgba(0,0,0,.5)}
+#plBn::after{content:"";position:absolute;right:0;bottom:0;width:14px;height:14px;background:linear-gradient(315deg,#6d5410 46%,rgba(255,250,210,.9) 50%)}
+#plBn b{display:block;font-family:var(--display);font-weight:400;font-size:21px;color:#b02a1d;margin-bottom:2px}
+#plBn[hidden]{display:none}
+#head.plbn #cap{visibility:hidden}
+
+/* ---- ONE MORE CALL reveal and the POT medallion (in #scene, so sweep() takes them) ---- */
+#plmo,#plpot{position:relative;align-self:end;justify-self:center;margin:0 auto 150px;display:grid;justify-items:center;text-align:center;pointer-events:auto}
+#plmo{width:360px;padding:16px 12px 18px;rotate:-2.5deg;color:#241a0a;font-family:var(--memo);background:linear-gradient(172deg,#fff3a0,#f6d84a 70%,#e8bf2e);box-shadow:0 3px 0 rgba(120,90,10,.55),0 14px 24px rgba(0,0,0,.7)}
+#plmo::after{content:"";position:absolute;right:0;bottom:0;width:24px;height:24px;background:linear-gradient(315deg,#6d5410 46%,rgba(255,250,210,.9) 50%)}
+#plmo b{font-family:var(--display);font-weight:400;font-size:30px;line-height:1.05;color:#b02a1d}
+#plmo em{font-style:normal;font-family:var(--display);font-size:48px;line-height:1.1;color:#241a0a;margin:2px 0}
+#plmo span{font-size:16px}
+#plmo.lost b{color:#241a0a}#plmo.lost em{color:#b02a1d}
+#plpot{width:420px;padding:14px 10px 16px;overflow:visible;border:3px solid var(--cream);outline:3px solid var(--ink-dk);border-radius:14px;
+  background:repeating-conic-gradient(from 0deg at 50% 38%,rgba(255,208,88,.2) 0 6deg,transparent 6deg 18deg),radial-gradient(ellipse at 50% 30%,#1f4570,var(--glass-mid) 55%,var(--glass-lo) 100%);box-shadow:inset 0 0 30px rgba(0,0,0,.5),0 12px 30px rgba(0,0,0,.7)}
+#plpot .mug{width:128px;height:128px;margin:-62px 0 -10px;background:var(--img-big_mug) center/contain no-repeat;filter:drop-shadow(0 10px 8px rgba(0,0,0,.6))}
+#plpot small{font-family:var(--display);font-size:15px;letter-spacing:.2em;color:var(--cream);text-shadow:0 2px 3px #000}
+#plpot b{font-family:var(--display);font-weight:400;font-size:34px;line-height:1.05;color:var(--gold);-webkit-text-stroke:6px var(--ink-dk);paint-order:stroke fill;text-shadow:0 4px 0 var(--red-lo)}
+#plpot em{font-style:normal;font-family:var(--display);font-size:52px;line-height:1.05;color:var(--gold);-webkit-text-stroke:7px var(--ink-dk);paint-order:stroke fill;text-shadow:0 4px 0 #000,0 0 16px rgba(255,190,80,.55);font-variant-numeric:tabular-nums}
+#plpot em.s{font-size:40px}
+#plpot span{font-weight:700;font-size:14px;color:var(--cream);text-shadow:0 2px 3px #000}
+#plpot .cw{position:absolute;top:50%;width:84px;height:84px;margin-top:-30px;background:var(--img-cashwad) center/contain no-repeat;filter:drop-shadow(0 6px 5px rgba(0,0,0,.6))}
+#plpot .cw.l{left:-26px;rotate:-14deg}#plpot .cw.r{right:-26px;rotate:14deg;scale:-1 1}
+
+/* ---- info screen: the pull section ---- */
+.card.info .plinfo{margin-top:6px;padding-top:6px;border-top:2px solid rgba(246,232,196,.25)}
+.card.info .plinfo p{margin:6px 0}
+
+/* ---- narrow screens: the lips and the sticky keep their stage size (the whole stage scales); nothing extra to do. Reduced motion: no pulses. ---- */
+@media (prefers-reduced-motion:reduce){#plNote.hit{animation:none}}

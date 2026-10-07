@@ -1,0 +1,458 @@
+[
+ {
+  "hidden": false,
+  "note": {
+   "x": 11.7,
+   "y": 324.1,
+   "w": 291.3,
+   "h": 41.1,
+   "b": 365.2
+  },
+  "scale": 0.667,
+  "noteStageH": 61.6,
+  "board": {
+   "x": -8,
+   "y": 317.3,
+   "w": 376,
+   "h": 310.7,
+   "b": 628
+  },
+  "gain": {
+   "x": 0,
+   "y": 0,
+   "w": 0,
+   "h": 0,
+   "b": 0
+  },
+  "gainHidden": true,
+  "cellsTop": 365.66668701171875,
+  "symTop": 364.60418701171875,
+  "overlapsCell": false,
+  "overlapsSymbol": true,
+  "nCells": 30,
+  "nSyms": 60,
+  "cold": "8 leads + 4 warm go cold in 3 h 12 m",
+  "text": "LEADS | 312 | / 450 | 8 leads + 4 warm go cold in 3 h 12 m",
+  "fontMin": 8,
+  "overflowX": false,
+  "tag": "before_360_idle_play"
+ },
+ {
+  "hidden": false,
+  "note": {
+   "x": 11.7,
+   "y": 324.1,
+   "w": 291.3,
+   "h": 41.1,
+   "b": 365.2
+  },
+  "scale": 0.667,
+  "noteStageH": 61.6,
+  "board": {
+   "x": -8,
+   "y": 317.3,
+   "w": 376,
+   "h": 310.7,
+   "b": 628
+  },
+  "gain": {
+   "x": 0,
+   "y": 0,
+   "w": 0,
+   "h": 0,
+   "b": 0
+  },
+  "gainHidden": true,
+  "cellsTop": 365.66668701171875,
+  "symTop": 364.60418701171875,
+  "overlapsCell": false,
+  "overlapsSymbol": true,
+  "nCells": 30,
+  "nSyms": 60,
+  "cold": "8 leads + 4 warm go cold in 3 h 12 m",
+  "text": "LEADS | 312 | / 450 | 8 leads + 4 warm go cold in 3 h 12 m",
+  "fontMin": 8,
+  "overflowX": false,
+  "tag": "before_360_idle_chips"
+ },
+ {
+  "hidden": false,
+  "note": {
+   "x": 11.7,
+   "y": 324.1,
+   "w": 291.3,
+   "h": 41.1,
+   "b": 365.2
+  },
+  "scale": 0.667,
+  "noteStageH": 61.6,
+  "board": {
+   "x": -8,
+   "y": 317.3,
+   "w": 376,
+   "h": 310.7,
+   "b": 628
+  },
+  "gain": {
+   "x": 0,
+   "y": 0,
+   "w": 0,
+   "h": 0,
+   "b": 0
+  },
+  "gainHidden": true,
+  "cellsTop": 365.66668701171875,
+  "symTop": 364.60418701171875,
+  "overlapsCell": false,
+  "overlapsSymbol": true,
+  "nCells": 30,
+  "nSyms": 60,
+  "cold": "8 leads + 4 warm go cold in 3 h 12 m",
+  "text": "FULL | 450 | / 450 | 8 leads + 4 warm go cold in 3 h 12 m",
+  "fontMin": 8,
+  "overflowX": false,
+  "tag": "before_360_callback_play"
+ },
+ {
+  "hidden": false,
+  "note": {
+   "x": 11.7,
+   "y": 324.1,
+   "w": 291.3,
+   "h": 41.1,
+   "b": 365.2
+  },
+  "scale": 0.667,
+  "noteStageH": 61.6,
+  "board": {
+   "x": -8,
+   "y": 317.3,
+   "w": 376,
+   "h": 310.7,
+   "b": 628
+  },
+  "gain": {
+   "x": 0,
+   "y": 0,
+   "w": 0,
+   "h": 0,
+   "b": 0
+  },
+  "gainHidden": true,
+  "cellsTop": 365.66668701171875,
+  "symTop": 364.60418701171875,
+  "overlapsCell": false,
+  "overlapsSymbol": true,
+  "nCells": 30,
+  "nSyms": 60,
+  "cold": "8 leads + 4 warm go cold in 3 h 12 m",
+  "text": "LEADS | 324 | / 450 | 8 leads + 4 warm go cold in 3 h 12 m",
+  "fontMin": 8,
+  "overflowX": false,
+  "tag": "before_360_gain_play"
+ },
+ {
+  "hidden": false,
+  "note": {
+   "x": 17.6,
+   "y": 336.2,
+   "w": 436.9,
+   "h": 61.6,
+   "b": 397.8
+  },
+  "scale": 1,
+  "noteStageH": 61.6,
+  "board": {
+   "x": -12,
+   "y": 326,
+   "w": 564,
+   "h": 466,
+   "b": 792
+  },
+  "gain": {
+   "x": 0,
+   "y": 0,
+   "w": 0,
+   "h": 0,
+   "b": 0
+  },
+  "gainHidden": true,
+  "cellsTop": 398.5,
+  "symTop": 396.90625,
+  "overlapsCell": false,
+  "overlapsSymbol": true,
+  "nCells": 30,
+  "nSyms": 60,
+  "cold": "8 leads + 4 warm go cold in 3 h 12 m",
+  "text": "LEADS | 312 | / 450 | 8 leads + 4 warm go cold in 3 h 12 m",
+  "fontMin": 12,
+  "overflowX": false,
+  "tag": "before_540_idle_play"
+ },
+ {
+  "hidden": false,
+  "note": {
+   "x": 17.6,
+   "y": 336.2,
+   "w": 436.9,
+   "h": 61.6,
+   "b": 397.8
+  },
+  "scale": 1,
+  "noteStageH": 61.6,
+  "board": {
+   "x": -12,
+   "y": 326,
+   "w": 564,
+   "h": 466,
+   "b": 792
+  },
+  "gain": {
+   "x": 0,
+   "y": 0,
+   "w": 0,
+   "h": 0,
+   "b": 0
+  },
+  "gainHidden": true,
+  "cellsTop": 398.5,
+  "symTop": 396.90625,
+  "overlapsCell": false,
+  "overlapsSymbol": true,
+  "nCells": 30,
+  "nSyms": 60,
+  "cold": "8 leads + 4 warm go cold in 3 h 12 m",
+  "text": "LEADS | 312 | / 450 | 8 leads + 4 warm go cold in 3 h 12 m",
+  "fontMin": 12,
+  "overflowX": false,
+  "tag": "before_540_idle_chips"
+ },
+ {
+  "hidden": false,
+  "note": {
+   "x": 17.6,
+   "y": 336.2,
+   "w": 436.9,
+   "h": 61.6,
+   "b": 397.8
+  },
+  "scale": 1,
+  "noteStageH": 61.6,
+  "board": {
+   "x": -12,
+   "y": 326,
+   "w": 564,
+   "h": 466,
+   "b": 792
+  },
+  "gain": {
+   "x": 0,
+   "y": 0,
+   "w": 0,
+   "h": 0,
+   "b": 0
+  },
+  "gainHidden": true,
+  "cellsTop": 398.5,
+  "symTop": 396.90625,
+  "overlapsCell": false,
+  "overlapsSymbol": true,
+  "nCells": 30,
+  "nSyms": 60,
+  "cold": "8 leads + 4 warm go cold in 3 h 12 m",
+  "text": "FULL | 450 | / 450 | 8 leads + 4 warm go cold in 3 h 12 m",
+  "fontMin": 12,
+  "overflowX": false,
+  "tag": "before_540_callback_play"
+ },
+ {
+  "hidden": false,
+  "note": {
+   "x": 17.6,
+   "y": 336.2,
+   "w": 436.9,
+   "h": 61.6,
+   "b": 397.8
+  },
+  "scale": 1,
+  "noteStageH": 61.6,
+  "board": {
+   "x": -12,
+   "y": 326,
+   "w": 564,
+   "h": 466,
+   "b": 792
+  },
+  "gain": {
+   "x": 0,
+   "y": 0,
+   "w": 0,
+   "h": 0,
+   "b": 0
+  },
+  "gainHidden": true,
+  "cellsTop": 398.5,
+  "symTop": 396.90625,
+  "overlapsCell": false,
+  "overlapsSymbol": true,
+  "nCells": 30,
+  "nSyms": 60,
+  "cold": "8 leads + 4 warm go cold in 3 h 12 m",
+  "text": "LEADS | 324 | / 450 | 8 leads + 4 warm go cold in 3 h 12 m",
+  "fontMin": 12,
+  "overflowX": false,
+  "tag": "before_540_gain_play"
+ },
+ {
+  "hidden": false,
+  "note": {
+   "x": 483.3,
+   "y": 315.2,
+   "w": 409.6,
+   "h": 57.8,
+   "b": 372.9
+  },
+  "scale": 0.938,
+  "noteStageH": 61.6,
+  "board": {
+   "x": 455.6,
+   "y": 305.6,
+   "w": 528.8,
+   "h": 436.9,
+   "b": 742.5
+  },
+  "gain": {
+   "x": 0,
+   "y": 0,
+   "w": 0,
+   "h": 0,
+   "b": 0
+  },
+  "gainHidden": true,
+  "cellsTop": 373.59375,
+  "symTop": 372.099609375,
+  "overlapsCell": false,
+  "overlapsSymbol": true,
+  "nCells": 30,
+  "nSyms": 60,
+  "cold": "8 leads + 4 warm go cold in 3 h 12 m",
+  "text": "LEADS | 312 | / 450 | 8 leads + 4 warm go cold in 3 h 12 m",
+  "fontMin": 11.25,
+  "overflowX": false,
+  "tag": "before_1440_idle_play"
+ },
+ {
+  "hidden": false,
+  "note": {
+   "x": 483.3,
+   "y": 315.2,
+   "w": 409.6,
+   "h": 57.8,
+   "b": 372.9
+  },
+  "scale": 0.938,
+  "noteStageH": 61.6,
+  "board": {
+   "x": 455.6,
+   "y": 305.6,
+   "w": 528.8,
+   "h": 436.9,
+   "b": 742.5
+  },
+  "gain": {
+   "x": 0,
+   "y": 0,
+   "w": 0,
+   "h": 0,
+   "b": 0
+  },
+  "gainHidden": true,
+  "cellsTop": 373.59375,
+  "symTop": 372.099609375,
+  "overlapsCell": false,
+  "overlapsSymbol": true,
+  "nCells": 30,
+  "nSyms": 60,
+  "cold": "8 leads + 4 warm go cold in 3 h 12 m",
+  "text": "LEADS | 312 | / 450 | 8 leads + 4 warm go cold in 3 h 12 m",
+  "fontMin": 11.25,
+  "overflowX": false,
+  "tag": "before_1440_idle_chips"
+ },
+ {
+  "hidden": false,
+  "note": {
+   "x": 483.3,
+   "y": 315.2,
+   "w": 409.6,
+   "h": 57.8,
+   "b": 372.9
+  },
+  "scale": 0.938,
+  "noteStageH": 61.6,
+  "board": {
+   "x": 455.6,
+   "y": 305.6,
+   "w": 528.8,
+   "h": 436.9,
+   "b": 742.5
+  },
+  "gain": {
+   "x": 0,
+   "y": 0,
+   "w": 0,
+   "h": 0,
+   "b": 0
+  },
+  "gainHidden": true,
+  "cellsTop": 373.59375,
+  "symTop": 372.099609375,
+  "overlapsCell": false,
+  "overlapsSymbol": true,
+  "nCells": 30,
+  "nSyms": 60,
+  "cold": "8 leads + 4 warm go cold in 3 h 12 m",
+  "text": "FULL | 450 | / 450 | 8 leads + 4 warm go cold in 3 h 12 m",
+  "fontMin": 11.25,
+  "overflowX": false,
+  "tag": "before_1440_callback_play"
+ },
+ {
+  "hidden": false,
+  "note": {
+   "x": 480.8,
+   "y": 314.8,
+   "w": 414.7,
+   "h": 58.5,
+   "b": 373.3
+  },
+  "scale": 0.938,
+  "noteStageH": 62.4,
+  "board": {
+   "x": 455.6,
+   "y": 305.6,
+   "w": 528.8,
+   "h": 436.9,
+   "b": 742.5
+  },
+  "gain": {
+   "x": 0,
+   "y": 0,
+   "w": 0,
+   "h": 0,
+   "b": 0
+  },
+  "gainHidden": true,
+  "cellsTop": 373.59375,
+  "symTop": 372.099609375,
+  "overlapsCell": false,
+  "overlapsSymbol": true,
+  "nCells": 30,
+  "nSyms": 60,
+  "cold": "8 leads + 4 warm go cold in 3 h 12 m",
+  "text": "LEADS | 312 | / 450 | 8 leads + 4 warm go cold in 3 h 12 m",
+  "fontMin": 11.25,
+  "overflowX": false,
+  "tag": "before_1440_gain_play"
+ }
+]

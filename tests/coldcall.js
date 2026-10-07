@@ -11,6 +11,7 @@ process.env.WALLET_FILE = path.join(tmp, 'wallet.json');
 const { createWallet } = require('../wallet.js');
 const games = require('../games');
 const E = require('../games/coldcall-engine.js');
+E.CFG.pull.on = false;   // these tests script the rng through the old stateless path; THE PULL has its own files (run at the end)
 
 let pass = 0;
 const test = async (name, fn) => { try { await fn(); pass++; console.log('ok   ' + name); } catch (e) { console.error('FAIL ' + name + '\n' + (e.stack || e)); process.exitCode = 1; } };
@@ -242,7 +243,7 @@ function replayRound(s, cfg) {
     assert.strictEqual(E.COLS, 6); assert.strictEqual(E.ROWS, 5); assert.strictEqual(E.N, 30); assert.strictEqual(E.MIN_CLUSTER, 5);
     assert.deepStrictEqual(E.SYM, ['mug', 'note', 'ball', 'can', 'cups', 'headset', 'rx', 'pile', 'cashwad', 'cash', 'closer', 'bell', 'phone']);
     assert.strictEqual(E.MAX_WIN_X, 10000); assert.strictEqual(CFG.maxWinTenths, 100000);
-    assert.deepStrictEqual(E.BET_LEVELS, [10, 20, 50, 100, 200, 500, 1000, 2500]);
+    assert.deepStrictEqual(E.BET_LEVELS, [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2500]);   // DENOMS: 1c / 2c / 5c
     assert.deepStrictEqual(CFG.spins, { bonus1: 8, bonus2: 12, bonus3: 12 });
     assert.deepStrictEqual(CFG.retrigger, { two: 2, three: 4, upgrade: 4 });
     assert.deepStrictEqual(CFG.bubbles.bronze.map((b) => b[0]), [2, 5, 10, 20, 30, 40]);
@@ -531,7 +532,7 @@ function replayRound(s, cfg) {
   });
 
   await test('engine: integer tenths everywhere; the script parts add up to the round win; every pay has an integer cents value at every bet level (30,000 rounds, property test)', () => {
-    for (const b of E.BET_LEVELS) assert.strictEqual(b % 10, 0);
+    for (const b of E.BET_LEVELS) assert.ok(b % 10 === 0 || [1, 2, 5].includes(b));      // whole tenths of a bet are whole cents from 10c up; at 1c / 2c / 5c wins are rounded (roundCents)
     for (const v of Object.values(PAYT).flat()) assert.ok(Number.isInteger(v) && v > 0);
     const rng = E.rngFrom(9);
     for (let i = 0; i < 30000; i++) {
@@ -544,7 +545,8 @@ function replayRound(s, cfg) {
       assert.strictEqual(s.winTenths, Math.min(spinWin + bonusWin, MAXT)); assert.strictEqual(r.winTenths, s.winTenths);
       if (s.spin) { assert.strictEqual(s.spin.steps.reduce((a, x) => a + x.pay, 0), s.spin.cluster); assert.strictEqual(s.spin.win, spinWin); }
       if (s.bonus) assert.strictEqual(s.bonus.spins.reduce((a, x) => a + x.win, 0) >= s.bonus.winTenths, true);
-      for (const bet of E.BET_LEVELS) { const win = E.cents(r.winTenths, bet), cost = E.cents(r.costTenths, bet); assert.strictEqual(win * 10, r.winTenths * bet); assert.strictEqual(cost * 10, r.costTenths * bet); }
+      for (const bet of E.BET_LEVELS.filter((x) => x % 10 === 0)) { const win = E.cents(r.winTenths, bet), cost = E.cents(r.costTenths, bet); assert.strictEqual(win * 10, r.winTenths * bet); assert.strictEqual(cost * 10, r.costTenths * bet); }
+      if (i % 7 === 0) for (const bet of [1, 2, 5]) { const p = E.payRound(r.round, bet, rng); assert.ok(Number.isInteger(p.win) && Number.isInteger(p.price) && p.price >= 1 && Math.abs(p.win - r.winTenths * p.num / p.den) < 2); }
     }
     assert.throws(() => E.cents(1.5, 10)); assert.throws(() => E.cents(5, 15)); assert.throws(() => E.cents(5, 1.5)); assert.throws(() => E.cents(NaN, 10));
   });
@@ -580,11 +582,13 @@ function replayRound(s, cfg) {
     }
   });
 
-  await test('engine: short sanity band (2M spins, fixed seed): hit rate 18-26%, any bonus 1 in 120-250, RTP in a wide band (the tight figure is the sim)', () => {
+  await test('engine: short sanity band (2M spins, fixed seed): hit rate 18-26%, natural bonus 1 in 300-600, RTP 60-130 (the tight figure is the sim)', () => {
+    // re-pinned at 265dd33 (levers values, LEVERS.md 8): this is the STATELESS base game (pull.on = false: no Callback, warm squares, PICK or pot), so it is the full game minus about 28 points:
+    // natural bonus 1 in 420 (was 207; the Callback adds the rest, any bonus stays 1 in 208), measured 1 in 417, hit 20.48%, RTP 67.6% (full game 97.96 less Callback 22.4, warm 4.3, pot 1.0, PICK edge)
     const rng = E.rngFrom(2026); const N = 2000000; let sum = 0, hit = 0, bonus = 0, tot = 0;
     for (let i = 0; i < N; i++) { const r = eng.round(rng, null); sum += r.winTenths; if (r.clusterTenths > 0) hit++; if (r.bonusKind) bonus++; }
     const rtp = sum / N / 10 * 100, hr = hit / N * 100;
-    assert.ok(hr > 18 && hr < 26, 'hit ' + hr.toFixed(2)); assert.ok(N / bonus > 120 && N / bonus < 250, 'bonus 1 in ' + N / bonus); assert.ok(rtp > 70 && rtp < 130, 'rtp ' + rtp.toFixed(2));
+    assert.ok(hr > 18 && hr < 26, 'hit ' + hr.toFixed(2)); assert.ok(N / bonus > 300 && N / bonus < 600, 'bonus 1 in ' + N / bonus); assert.ok(rtp > 60 && rtp < 130, 'rtp ' + rtp.toFixed(2));
   });
 
   await test('engine: buys priced near 98% each (bonus buys 60k runs, call 400k; wide band, the tight figure is the sim)', () => {
@@ -621,7 +625,7 @@ function replayRound(s, cfg) {
       s.clock.advance(200); const bet = E.BET_LEVELS[i % E.BET_LEVELS.length];
       a.send('g:coldcall:spin', { bet, mode: 'play' });
       const r = last(a, 'g:coldcall:result'); const m = E.resolveRound(mirror, null);
-      assert.strictEqual(r.bet, bet); assert.strictEqual(r.cost, bet); assert.strictEqual(r.totalWin, m.winTenths * bet / 10); assert.strictEqual(r.totalWinTenths, m.winTenths);
+      assert.strictEqual(r.bet, bet); assert.strictEqual(r.cost, bet); if (bet % 10 === 0) assert.strictEqual(r.totalWin, m.winTenths * bet / 10); else assert.ok(Math.abs(r.totalWin - m.winTenths * bet / 10) < 2, 'rounded win at ' + bet + 'c'); assert.strictEqual(r.totalWinTenths, m.winTenths);
       assert.deepStrictEqual(r.script, m.script);
       expect += -bet + r.totalWin; assert.strictEqual(r.wallet.play, expect); assert.strictEqual(r.wallet.chips, 10000);
       for (const k of ['roundId', 'script', 'totalWin', 'tier', 'wallet']) assert.ok(k in r, k);
@@ -738,8 +742,8 @@ function replayRound(s, cfg) {
         a.send('g:coldcall:spin', { bet, mode, buyBonus: buy });                    // the double click, same instant: refused, not charged
         assert.strictEqual(last(a, 'error').code, 'rate');
         const res = all(a, 'g:coldcall:result'); assert.strictEqual(res.length, ++n, 'exactly one round per click pair');
-        const r = res[n - 1], cost = buy ? E.CFG.buyCost[buy] * bet / 10 : bet;
-        assert.strictEqual(r.mode, mode); assert.strictEqual(r.cost, cost); assert.strictEqual(r.totalWin, r.totalWinTenths * bet / 10);
+        const r = res[n - 1], cost = buy ? E.buyPrice(E.CFG.buyCost[buy], bet) : bet;
+        assert.strictEqual(r.mode, mode); assert.strictEqual(r.cost, cost); if (bet % 10 === 0) assert.strictEqual(r.totalWin, r.totalWinTenths * bet / 10); else assert.ok(r.totalWin >= 0 && Math.abs(r.totalWin - r.pay.win) === 0 && Math.abs(r.totalWin - r.totalWinTenths * r.pay.num / r.pay.den) < 2);
         for (const v of [r.cost, r.totalWin, r.wallet.play, r.wallet.chips]) assert.ok(Number.isSafeInteger(v) && v >= 0, 'whole units: ' + v);
         assert.ok(r.totalWin <= E.MAX_WIN_X * bet, 'cap');
         bal += -cost + r.totalWin; if (r.totalWin) paid++; if (buy) bought++;
@@ -836,4 +840,10 @@ function replayRound(s, cfg) {
 
   console.log(pass + ' passed' + (process.exitCode ? ', with failures' : ''));
   fs.rmSync(tmp, { recursive: true, force: true });
+  for (const f of ['coldcall-pull-engine.js', 'coldcall-pull-server.js', 'coldcall-livecfg.js', 'coldcall-presets.js']) {   // THE PULL + LIVECFG: separate processes (own module state, pull.on = true)
+    const r = require('child_process').spawnSync(process.execPath, [path.join(__dirname, f)], { encoding: 'utf8', env: process.env });
+    const m = /(\d+) passed/.exec(r.stdout || '');
+    console.log(f + ': ' + (m ? m[1] + ' passed' : 'NO RESULT') + (r.status ? ', FAILED (exit ' + r.status + ')' : ''));
+    if (r.status) { process.exitCode = 1; console.error((r.stdout || '').split('\n').filter((l) => /^FAIL/.test(l)).join('\n') + (r.stderr || '')); }
+  }
 })();

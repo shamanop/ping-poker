@@ -1,3 +1,4 @@
+const { authJoin } = require('./authjoin');
 // Bank reconciliation checks: rejoin must not inflate buy-ins, names are case-insensitive, totals reconcile.
 // Spawns a throwaway server (TEST_PORT, default 3302) with scratch bank/ledger files under qa/bankfix/.
 const { spawn } = require('child_process');
@@ -26,7 +27,7 @@ function client(name) {
   c.s.on('error', e => c.errors.push(e.message));
   c.s.on('room_joined', d => { c.joined = d; });
   c.s.on('bank_summary', d => { c.sum = d; });
-  c.join = async () => { c.joined = null; c.s.emit('join_game', { name, avatar: 'x', password: 'ping' }); for (let i = 0; i < 40 && !c.joined && !c.errors.length; i++) await sleep(50); await sleep(150); return c.joined; };
+  c.join = async () => { c.joined = null; authJoin(c.s, { name, avatar: 'x', password: 'ping' }); for (let i = 0; i < 40 && !c.joined && !c.errors.length; i++) await sleep(50); await sleep(150); return c.joined; };
   c.summary = async () => { c.sum = null; c.s.emit('get_bank_summary', { roomId: 'POKERPING' }); for (let i = 0; i < 40 && !c.sum; i++) await sleep(50); return c.sum; };
   return c;
 }

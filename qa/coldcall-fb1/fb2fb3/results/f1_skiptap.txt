@@ -1,0 +1,2 @@
+{"build":"AFTER","scenario":"U1 skiptap spin","mode":"play","ok":true,"prompts":4,"answeredUnder600ms":0,"rows":[{"k":"pick","answeredAfterMs":712},{"k":"more","answeredAfterMs":620},{"k":"pick","answeredAfterMs":653},{"k":"more","answeredAfterMs":719}]}
+exit 0
