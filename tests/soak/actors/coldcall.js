@@ -188,7 +188,7 @@ function reconcile(W, cls, sent) {
     if (err) v(err, { ref: L.ref }, 'the close line of the open round', L.ref);
   }
   for (const [id, o] of [...B.open]) {
-    if (o.cost > 0) v(`round ${id} (stake ${o.cost}) was still open after the restart: boot recovery wrote no close line for it`, { round: id }, 'settle or void', 'nothing');
+    if (o.cost > 0) v(`round ${id} (stake ${o.cost}) was still open after the restart: boot recovery wrote no close line for it`, { round: id, openSince: Date.now() - o.since, epoch: o.epoch, nowEpoch: S.epoch, racing: cls.racing.length, boot: cls.boot.length, bootSlot: cls.bootSlot.length, closeLine: !!(C.slotRounds.get(id) || {}).close }, 'settle or void', 'nothing');
     else { W.model.applySlot({ key: o.key, cur: o.cur, rid: o.rid, cost: 0, win: 0, prize: 0, buy: null, callback: true, plain: false, escrowed: false, via: 'unacked', void: false, epoch: o.epoch }); S.c.unacked++; }
   }
   // the state file is at most one round behind the ledger after a crash (D3): a Callback may or may not still be waiting

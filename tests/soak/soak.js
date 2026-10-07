@@ -123,7 +123,9 @@ async function main() {
   };
   // the currency a seat's money counts toward = its fund (what the harness asked for), kept per (table, key)
   W.fundAt = new Map();
-  W.fundCur = (tableId, key) => W.fundAt.get(`${tableId}:${key}`) || (W.tables.get(tableId) ? W.tables.get(tableId).cur : 'chips');
+  // The product's rule (money/service.js seatFund): the fund of a seat is the one of its MOST RECENT buyin:<fund> line. A rebuy can be applied after the server answered (it waits for the hand to end), so what the harness
+  // asked for is not proof of what the seat is funded from: the ledger decides, what the harness asked for is the fallback.
+  W.fundCur = (tableId, key) => { W.checker.poll(); return W.checker.buyFund.get(`seat:${tableId}:${key}`) || W.fundAt.get(`${tableId}:${key}`) || (W.tables.get(tableId) ? W.tables.get(tableId).cur : 'chips'); };
 
   // ---------------- server ----------------
   async function openAuditSock() {
