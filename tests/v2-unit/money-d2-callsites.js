@@ -1,8 +1,9 @@
 'use strict';
 // The converted call sites that keep incremental caches (service.nightSummary, port.buyInCount, port.lastHandNo) against the
-// pre-D2 way of answering (a brute-force scan of every entry), over seeded random histories with a tiny window and reopens.
+// pre-D2 way of answering (a brute-force scan of every entry of the FROZEN pre-D2 ledger, fed the same calls), over seeded random histories with a tiny window and reopens.
+// The D2 side is pinned: window, ckpt, ckptEvery, ckptVerify.
 const L = require('./money-d2-lib');
-const { New, mulberry32, eq, deq, ok, fs, path } = L;
+const { New, Ref, mulberry32, eq, deq, ok, fs, path } = L;
 const { createService } = require('../../money/service');
 const { createMoneyPort } = require('../../tables/money-port');
 const run = L.makeRunner('money-d2-callsites');
@@ -10,7 +11,7 @@ const SEEDS = Number(process.env.D2_SEEDS) || 60;
 const root = L.mkdir('money-d2-callsites-');
 const now = () => 1000;
 
-// the pre-D2 bodies, over `led.entries` (which is the equivalence-proven part)
+// the pre-D2 bodies, over the frozen ledger's `entries`
 function oldNight(led, tableId, fromId) {
   const prefix = `seat:${tableId}:`, per = {};
   const row = (k) => (per[k] || (per[k] = { buyIn: 0, cashOut: 0, open: 0, net: 0 }));
@@ -32,36 +33,45 @@ function seed(s) {
   const rng = mulberry32(s * 31 + 7);
   const f = path.join(root, 'c' + s + '.jsonl');
   const window = rng.pick([1, 2, 3, 10]);
-  const o = { now, fsync: 'none', log: () => {}, window, ckptEvery: rng.pick([0, 3]) };
-  let led, svc, port, n = 0;
-  const mk = () => { led = New.open(f, o); svc = createService(led, { now }); port = createMoneyPort({ service: svc, ledger: led, bootId: 'bt', afterWrite: () => {}, onFence: () => {} }); };
+  const o = { now, fsync: 'none', log: () => {}, window, ckpt: true, ckptEvery: rng.pick([0, 3]), ckptVerify: false };
+  let led, ref, svc, port, n = 0;
+  const mk = () => { ref = Ref.open(f + '.ref', { now, fsync: 'none', log: () => {} }); led = New.open(f, o); svc = createService(led, { now }); port = createMoneyPort({ service: svc, ledger: led, bootId: 'bt', afterWrite: () => {}, onFence: () => {} }); };
   mk();
-  const tables = ['T1', 'T2', 'T3'], keys = ['ann', 'bob', 'cy'];
-  for (const k of keys) led.transfer('mint:signup', 'bank:' + k, 1e7, 'chips', 'sign', 'sign:' + k);
+  // the same call goes to the frozen ledger and to the D2 ledger; the outcome (id or error code) must agree
+  const both = (fn) => {
+    const go = (l) => { try { return JSON.stringify(fn(l)); } catch (e) { if (!e.code) throw e; return 'E:' + e.code; } };
+    const want = go(ref), got = go(led);
+    eq(got, want, 'the same call gives the same outcome');
+    if (got.startsWith('E:')) throw new MoneyErrorLike(got);
+  };
+  class MoneyErrorLike extends Error {}
+  const tables = ['T1', 'T2', 'T3', 'Tö'], keys = ['ann', 'bob', 'cy', 'jürgen'];
+  for (const k of keys) both(l => l.transfer('mint:signup', 'bank:' + k, 1e7, 'chips', 'sign', 'sign:' + k));
   const marks = [0];
-  const handIds = ['T1', 'T2', 'T3', 'a:b', 'a', ''];
+  const handIds = ['T1', 'T2', 'T3', 'Tö', 'a:b', 'a', ''];
   const check = (tag) => {
     for (let i = 0; i < 4; i++) {
       const t = rng.pick(tables), k = rng.pick(keys), from = rng.chance(0.3) ? 0 : rng.pick(marks);
-      eq(port.buyInCount({ id: t }, k, from), oldBuyIns(led, `seat:${t}:${k}`, from), `${tag} buyInCount ${t} ${k} from ${from}`);
-      deq(svc.nightSummary(t, { fromId: from }), oldNight(led, t, from), `${tag} nightSummary ${t} from ${from}`);
+      eq(port.buyInCount({ id: t }, k, from), oldBuyIns(ref, `seat:${t}:${k}`, from), `${tag} buyInCount ${t} ${k} from ${from}`);
+      deq(svc.nightSummary(t, { fromId: from }), oldNight(ref, t, from), `${tag} nightSummary ${t} from ${from}`);
     }
-    deq(svc.nightSummary('T1'), oldNight(led, 'T1', 0), tag + ' nightSummary no fromId');
-    for (const h of handIds) eq(port.lastHandNo(h), oldHandNo(led, h), `${tag} lastHandNo '${h}'`);
+    deq(svc.nightSummary('T1'), oldNight(ref, 'T1', 0), tag + ' nightSummary no fromId');
+    for (const h of handIds) eq(port.lastHandNo(h), oldHandNo(ref, h), `${tag} lastHandNo '${h}'`);
   };
   for (let i = 0; i < 80; i++) {
     const x = rng();
     const t = rng.pick(tables), k = rng.pick(keys), seat = `seat:${t}:${k}`;
     try {
-      if (x < 0.3) led.transfer('bank:' + k, seat, rng.range(1, 500), 'chips', 'buyin:chips', 'bi' + (n++));
-      else if (x < 0.5) led.transfer(seat, 'bank:' + k, Math.max(1, Math.min(led.balance(seat, 'chips'), rng.range(1, 300))), 'chips', rng.pick(['cashout:chips', 'boot:recover', 'sweep']), 'co' + (n++));
-      else if (x < 0.75) led.batch([{ from: 'bank:' + k, to: 'bank:' + rng.pick(keys.filter(y => y !== k)), amount: 1, cur: 'chips', reason: 'x' }], rng.pick(['hand:T1:', 'hand:T2:', 'hand:a:b:', 'hand:a:', 'hand::', 'hand:T3:', 'hand:']) + rng.pick(['1', '2', '5', '17', 'x', '', '1:2', '-4', '0x10', '3.5', String(rng.int(40))]) + (rng.chance(0.2) ? 'u' + (n++) : ''), 'hand');
+      if (x < 0.3) { const amt = rng.range(1, 500), r1 = 'bi' + (n++); both(l => l.transfer('bank:' + k, seat, amt, 'chips', 'buyin:chips', r1)); }
+      else if (x < 0.45) { const amt = Math.max(1, Math.min(led.balance(seat, 'chips'), rng.range(1, 300))), why = rng.pick(['cashout:chips', 'boot:recover', 'sweep']), ref1 = 'co' + (n++); both(l => l.transfer(seat, 'bank:' + k, amt, 'chips', why, ref1)); }
+      else if (x < 0.5) { const t2 = rng.pick(tables), k2 = rng.pick(keys), amt = Math.max(1, Math.min(led.balance(seat, 'chips'), rng.range(1, 50))), why = rng.pick(['cashout:chips', 'boot:x', 'buyin:chips']), ref1 = 'ss' + (n++); both(l => l.transfer(seat, `seat:${t2}:${k2}`, amt, 'chips', why, ref1)); }   // seat -> seat, same and other table
+      else if (x < 0.75) { const k2 = rng.pick(keys.filter(y => y !== k)), r1 = rng.pick(['hand:T1:', 'hand:T2:', 'hand:a:b:', 'hand:a:', 'hand::', 'hand:T3:', 'hand:Tö:', 'hand:']) + rng.pick(['1', '2', '5', '17', 'x', '', '1:2', '-4', '0x10', '3.5', String(rng.int(40))]) + (rng.chance(0.2) ? 'u' + (n++) : ''); both(l => l.batch([{ from: 'bank:' + k, to: 'bank:' + k2, amount: 1, cur: 'chips', reason: 'x' }], r1, 'hand')); }
       else if (x < 0.82) marks.push(led.lastId);
-      else if (x < 0.9) { led.close(); mk(); }
-    } catch (e) { if (!e.code) throw e; }
+      else if (x < 0.9) { led.close(); ref.close(); mk(); }
+    } catch (e) { if (!(e instanceof MoneyErrorLike)) throw e; }
     check(`seed ${s} i${i}`);
   }
-  led.close();
+  led.close(); ref.close();
 }
 for (let s = 1; s <= SEEDS; s++) run.t('call sites vs brute force, seed ' + s, () => seed(s));
 fs.rmSync(root, { recursive: true, force: true });
