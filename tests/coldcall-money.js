@@ -444,6 +444,27 @@ function auditMatches(s) {
     });
   }
 
+  // D3 (critic round 2, mutant N3): the probe that tells a void from a settle cannot answer at boot: the record is LEFT, nothing is replayed (the replay of a voided round advances the state and arms a Callback)
+  await test('D3: the void probe fails at boot for a reason other than round_closed (the ledger call throws): the record of the voided round is kept, no ledger line, no state advance, no Callback; the next boot, with the probe answering, drops it as before', async () => {
+    const { seed } = findSeed({ buy: null, bet: R1_BET, state: NEAR(), auto: false }, (r) => r.status === 'pending');
+    const s = setup({ rng: E.rngFrom(seed), roundRng: E.rngFrom(5) }); const a = s.sock('ann');
+    s.store().setPlayer('ann', 'play', NEAR()); s.flush();
+    const before = s.bal('ann', 'play'), st0 = clone(s.disk().players.ann.play);
+    let thrown = false; const emit = a.emit;
+    a.emit = (ev, p) => { if (ev === 'g:coldcall:result' && p && p.status === 'pending' && !thrown) { thrown = true; throw new Error('socket write failed'); } return emit(ev, p); };
+    s.hooks.after.void = () => { throw new H.Crash(); };
+    s.clock.advance(200); a.send('g:coldcall:spin', { bet: R1_BET, mode: 'play' });
+    assert.ok(thrown, 'the round stopped at a decision'); const id = s.disk().open['ann|play'].roundId, voidIds = closeLines(s, id).map((e) => e.id);
+    assert.strictEqual(voidIds.length, 1, 'the ledger closed the round by a void'); assert.ok(diskHas(s), 'and the record is still on disk');
+    s.crash(); let probes = 0; s.hooks.before.void = () => { probes++; throw new Error('probe cannot be answered'); }; s.boot();
+    assert.ok(probes >= 1, 'boot asked the ledger how the round was closed');
+    assert.ok(diskHas(s), 'the record is kept on the disk'); assert.strictEqual(s.store().allOpen().length, 1, 'and in the store');
+    assert.deepStrictEqual(closeLines(s, id).map((e) => e.id), voidIds, 'no ledger line written'); assert.strictEqual(s.bal('ann', 'play'), before);
+    assert.deepStrictEqual(s.store().player('ann', 'play'), st0, 'no state advance, no Callback armed from a refunded round'); assert.strictEqual(s.store().player('ann', 'play').cb, null);
+    s.reboot();                                                                                                                  // the probe answers now
+    assert.strictEqual(s.store().allOpen().length, 0, 'dropped'); assert.ok(!diskHas(s)); assert.deepStrictEqual(s.store().player('ann', 'play'), st0, 'still nothing replayed'); assert.deepStrictEqual(closeLines(s, id).map((e) => e.id), voidIds);
+  });
+
   // C1 control: a round the ledger closed by a SETTLE is still replayed (state advances, nothing paid), and the probe that tells the two apart writes nothing
   await test('C1 control: a round the ledger SETTLED, record not dropped: boot answers round_closed / dup through the replay, the state advances, the void probe wrote no line, nothing is paid twice', async () => {
     const { seed } = toKind({ buy: null, bet: R1_BET, state: NEAR(), auto: false }, 'more');
@@ -517,6 +538,24 @@ function auditMatches(s) {
     const done = all(a, 'g:coldcall:result').filter((x) => x.status === 'done'); assert.strictEqual(done.length, 1, 'once the disk works the same round can be answered: ' + JSON.stringify(last(a, 'error')));
     assert.deepStrictEqual(seen.decisions[seen.decisions.length - 1], { k: 'more', take: true }, 'the final answer was on disk before the money call');
     assert.strictEqual(s.bal('ann', 'play'), before - cost + done[0].totalWin); assert.deepStrictEqual(s.escrows(), []); assert.ok(!diskHas(s), 'the record is dropped with the state');
+  });
+
+  // D4 (critic round 2, mutant N10): the refused answer is not what the store retries to write
+  await test('D4: a final answer whose flush failed is refused AND taken back out of the store: when the disk works again (the store\'s retry) the record on disk holds the answers before it, and a restart settles the round without the refused answer', async () => {
+    const PE = findSeed({ buy: 'bonus1', bet: 100, auto: false }, (r) => r.status === 'pending');
+    const s = setup({ rng: E.rngFrom(PE.seed), roundRng: E.rngFrom(5) }); const a = s.sock('ann'); const before = s.bal('ann', 'play');
+    let r = answerTo(s, a, spin(s, a, { bet: 100, mode: 'play', buyBonus: 'bonus1' }), 'more'); assert.strictEqual(r.pending.k, 'more'); const cost = r.cost, id = r.roundId;
+    const decs0 = clone(s.disk().open['ann|play'].decisions); assert.ok(decs0.length > 0 && decs0.every((d) => d.k === 'pick'), 'the picks so far are on disk');
+    fs.mkdirSync(s.files.pull + '.tmp'); a.send('g:coldcall:decide', { roundId: id, k: 'more', take: true }); assert.strictEqual(last(a, 'error').code, 'internal', 'refused');
+    fs.rmdirSync(s.files.pull + '.tmp'); s.flush();                                                                           // the disk works again: the store writes what it holds
+    assert.deepStrictEqual(s.disk().open['ann|play'].decisions, decs0, 'the record on disk is the one before the refused answer');
+    assert.deepStrictEqual(s.store().allOpen()[0].decisions, decs0, 'and so is the store');
+    s.reboot();
+    assert.deepStrictEqual(s.escrows(), []); assert.strictEqual(s.store().allOpen().length, 0);
+    const paid = sum(closeLines(s, id), 'coldcall:credit'), h = (SRV._history.get('ann') || []).find((x) => x.roundId === id);
+    assert.strictEqual(s.bal('ann', 'play'), before - cost + paid); assert.ok(h && h.auto === 'restart', 'boot settled it as a timeout');
+    const bank = E.playRound(E.rngFrom(PE.seed), { buy: 'bonus1', bet: 100, state: E.newState(), now: 1000200, day: '1970-01-01', script: false, auto: false, rnd: E.rngFrom(5) }, [...decs0, { k: 'more', take: false }]);
+    assert.strictEqual(bank.status, 'done'); assert.strictEqual(h.totalWin, bank.pay.win, 'what boot paid is the default (bank), not the refused take');
   });
 
   // C3: killed after the ledger call of a plain paid round, before the flush: the pot's numbers and the player's state after boot match what the ledger paid
