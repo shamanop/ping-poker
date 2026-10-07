@@ -119,12 +119,12 @@ const LEDGER = {
   },
   // The slot: the pot feed leg is dropped now and then, or a prize is paid from house:coldcall instead of the pool (both still sum to zero).
   'pool-skim'(ledger) {
-    const fire = every(3), orig = ledger.batch; let n = 0;
+    const mode = process.env.SOAK_BUG_MODE || 'both', feedFire = every(3), prizeFire = every(2), orig = ledger.batch;      // SOAK_BUG_MODE=feed|prize runs one variant alone (default: both)
     ledger.batch = function (items, ref, reason) {
-      if (typeof ref === 'string' && ref.startsWith('coldcall:') && items.some(it => it.reason === 'coldcall:feed' || it.reason === 'coldcall:prize') && fire()) {
+      if (typeof ref === 'string' && ref.startsWith('coldcall:')) {
         const prize = items.find(it => it.reason === 'coldcall:prize');
-        if (prize && ++n % 2 === 0) { say('paid a prize from the house, not the pool', ref, prize.amount); items = items.map(it => (it === prize ? { ...it, from: 'house:coldcall' } : it)); }
-        else if (items.some(it => it.reason === 'coldcall:feed')) { say('dropped the pot feed leg', ref); items = items.filter(it => it.reason !== 'coldcall:feed'); }
+        if (prize && mode !== 'feed' && prizeFire()) { say('paid a prize from the house, not the pool', ref, prize.amount); items = items.map(it => (it === prize ? { ...it, from: 'house:coldcall' } : it)); }
+        else if (!prize && mode !== 'prize' && items.some(it => it.reason === 'coldcall:feed') && feedFire()) { say('dropped the pot feed leg', ref); items = items.filter(it => it.reason !== 'coldcall:feed'); }
       }
       return orig.call(this, items, ref, reason);
     };
