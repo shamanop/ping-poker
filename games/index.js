@@ -4,7 +4,7 @@
 const crypto = require('crypto');
 const { createWallet } = require('../wallet.js');
 
-const MODULES = ['./bender.js', './coldcall.js']; // add new game modules here; poker.js (adapter) is optional and wired by server.js
+const MODULES = ['./bender.js', './coldcall.js', './campaign.js']; // add new game modules here; poker.js (adapter) is optional and wired by server.js
 
 module.exports = function games(ctx) {
   const sockets = () => (ctx.io && ctx.io.sockets && ctx.io.sockets.sockets ? [...ctx.io.sockets.sockets.values()] : []);

@@ -27,7 +27,7 @@ const CURS = ['chips', 'play'];
 const PLAYER_KINDS = { bank: 2, play: 2, seat: 3, pot: 3, orphan: 2, escrow: 4, pool: 3 };
 const SOURCE_ACCOUNTS = new Set([
   'mint:signup', 'mint:bonus', 'mint:achv', 'mint:topup', 'mint:migration',
-  'house:bender', 'house:coldcall', 'admin:adjust', 'fx:chips', 'fx:play',
+  'house:bender', 'house:coldcall', 'house:campaign', 'admin:adjust', 'fx:chips', 'fx:play',
 ]);
 const ONLY_CUR = { bank: 'chips', play: 'play', 'fx:chips': 'chips', 'fx:play': 'play' };
 
