@@ -109,7 +109,7 @@ function createService(ledger, opts = {}) {
     if (fund != null && fund !== '') fund = needFund(fund, tableCur);
     if (ledger.has(ref)) {
       if (fund == null || fund === '') { // infer the original fund from the entry the ref wrote (cashout:<fund>)
-        for (const e of ledger.entries(x => x.ref === ref && x.reason.startsWith('cashout:'))) { fund = e.reason.slice(8); break; }
+        for (const e of ledger.entriesOf(ref)) { if (e.reason.startsWith('cashout:')) { fund = e.reason.slice(8); break; } }
       }
     } else {
       const have = seatFund(tableId, key, tableCur);
@@ -243,7 +243,7 @@ function createService(ledger, opts = {}) {
   // stake = the escrow leg (<game>:spend) of a settle. Only runs on a retry, so the scan over the ledger is not on any hot path.
   function closeOf(game, ref) {
     let out = null;
-    for (const e of ledger.entries(x => x.ref === ref)) {
+    for (const e of ledger.entriesOf(ref)) {
       if (!out) out = { id: e.id, kind: 'settle', cur: e.cur, stake: 0, win: 0, feed: 0, prize: 0, pool: null };
       if (e.reason.startsWith(game + ':void:')) out.kind = 'void';
       else if (e.reason === game + ':spend') out.stake += e.amount;
@@ -383,7 +383,7 @@ function createService(ledger, opts = {}) {
   function topUp(key, ref) {
     needRef(ref);
     if (ledger.has(ref)) { // replay: re-issue the original amount so the ledger answers dup or ref_conflict
-      for (const e of ledger.entries(x => x.ref === ref)) return mint('topup', key, e.amount, 'play', ref);
+      for (const e of ledger.entriesOf(ref)) return mint('topup', key, e.amount, 'play', ref);
     }
     const e = topUpEligible(key);
     if (!e.eligible) throw new MoneyError(e.why, { retryMs: e.retryMs, total: e.total });
@@ -394,7 +394,8 @@ function createService(ledger, opts = {}) {
   function seatFund(tableId, key, cur) {
     const seat = seatName(tableId, key);
     let fund = null;
-    for (const e of ledger.entries(x => x.to === seat && x.reason.startsWith('buyin:'))) fund = e.reason.slice(6);
+    const last = ledger.findLast(x => x.to === seat && x.reason.startsWith('buyin:'));
+    if (last) fund = last.reason.slice(6);
     if (fund) return fund;
     if (cur) return cur;
     return null;
@@ -468,16 +469,28 @@ function createService(ledger, opts = {}) {
   // Buy-ins, cash-outs and net per key for one table, from the ledger. Boot recovery counts as a cash-out.
   // `open` is what seats still hold (stack + committed), so zeroSum holds during and after a night.
   // opts.fromId limits the window to entries after that ledger id (a table that is reused across nights).
+  // The ledger is append-only, so the buy-in / cash-out sums per (table, fromId) are kept and only the entries after the last id seen are read
+  // (D2: with old lines on disk, a full scan per call would be a cold scan). Same answers as scanning from fromId every time.
+  const nights = new Map();     // `${tableId}|${fromId}` -> { upTo, rows: Map key -> { buyIn, cashOut } } (first-seen order)
   function nightSummary(tableId, o = {}) {
     needStr(tableId, 'bad_table', 'tableId');
     const prefix = `seat:${tableId}:`;
+    const fromId = o.fromId || 0;
+    const nk = tableId + '|' + fromId;
+    let c = nights.get(nk);
+    if (!c) { c = { upTo: fromId, rows: new Map() }; nights.set(nk, c); }
+    const f = (e) => (e.to.startsWith(prefix) && e.reason.startsWith('buyin:')) || (e.from.startsWith(prefix) && (e.reason.startsWith('cashout:') || e.reason.startsWith('boot:')));
+    const upTo = ledger.lastId;
+    for (const e of ledger.entries(f, c.upTo)) {
+      const k = e.to.startsWith(prefix) ? e.to.slice(prefix.length) : e.from.slice(prefix.length);
+      let r = c.rows.get(k);
+      if (!r) c.rows.set(k, r = { buyIn: 0, cashOut: 0 });
+      if (e.to.startsWith(prefix)) r.buyIn += e.amount; else r.cashOut += e.amount;
+    }
+    c.upTo = Math.max(c.upTo, upTo);
     const per = {};
     const row = (k) => (per[k] || (per[k] = { buyIn: 0, cashOut: 0, open: 0, net: 0 }));
-    const f = (e) => (e.to.startsWith(prefix) && e.reason.startsWith('buyin:')) || (e.from.startsWith(prefix) && (e.reason.startsWith('cashout:') || e.reason.startsWith('boot:')));
-    for (const e of ledger.entries(f, o.fromId || 0)) {
-      if (e.to.startsWith(prefix)) row(e.to.slice(prefix.length)).buyIn += e.amount;
-      else row(e.from.slice(prefix.length)).cashOut += e.amount;
-    }
+    for (const [k, r] of c.rows) { const x = row(k); x.buyIn = r.buyIn; x.cashOut = r.cashOut; }
     for (const cur of CURS) for (const { account, balance } of ledger.list(prefix, cur)) row(account.slice(prefix.length)).open += balance;
     let sum = 0;
     for (const r of Object.values(per)) { r.net = r.cashOut + r.open - r.buyIn; sum += r.net; }

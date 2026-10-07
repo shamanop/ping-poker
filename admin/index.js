@@ -37,7 +37,7 @@ function createAdmin({ service, ledger, accounts, registry, views, onlineKeys })
     if (!validOp(opId)) return { ok: false, code: 'bad_op' };
     const reason = `admin set play to ${cents}`;
     if (opId != null && ledger.has(refOf(key, opId))) {
-      const held = ledger.entries((e) => e.ref === refOf(key, opId)).next().value;
+      const held = ledger.entriesOf(refOf(key, opId))[0];
       return held && held.cur === 'play' && held.reason === 'admin:' + reason ? { ok: true, dup: true } : { ok: false, code: 'ref_conflict' };
     }
     const delta = cents - playOf(key);
