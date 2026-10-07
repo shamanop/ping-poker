@@ -74,5 +74,17 @@ t('E11 the other way: written without the add, read with it: refused too; unchan
   ok(New.SOURCE_ACCOUNTS instanceof Set && New.SOURCE_ACCOUNTS.has('house:coldcall'));
 });
 
+// ---- E12: window 1 is raised to 2 ----
+t('E12 window 1: 2000 appends do 0 cold scans, one log line says the window was raised; window 0 is still "off"', () => {
+  const l = OPEN(file(), { window: 1 }); ok(l.logs.some(m => /window 1 raised to 2/.test(m)), JSON.stringify(l.logs)); eq(l.stats().window, 2);
+  const s = createService(l, { now });
+  for (let i = 0; i < 300; i++) l.transfer('mint:bonus', 'bank:p' + (i % 7), 1, 'chips', 'bonus', 'x' + i);
+  const c0 = l.stats().coldScans;
+  for (let i = 0; i < 2000; i++) l.transfer('mint:bonus', 'bank:p' + (i % 7), 1, 'chips', 'bonus', 'y' + i);
+  eq(l.stats().coldScans - c0, 0); ok(l.stats().inMemory <= 4); s.buyInCount('T', 'a', 0); l.close();
+  const z = OPEN(file(), { window: 0 }); eq(z.stats().window, 0); ok(!z.logs.some(m => /raised/.test(m))); for (let i = 0; i < 30; i++) z.transfer('mint:bonus', 'bank:p', 1, 'chips', 'bonus', 'z' + i);
+  eq(z.stats().inMemory, 30); z.close();
+});
+
 fs.rmSync(root, { recursive: true, force: true });
 run.done();

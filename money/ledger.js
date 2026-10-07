@@ -263,7 +263,9 @@ function open(file, opts = {}) {
   const log = opts.log || ((m) => console.error('[money] ' + m));
   const env = process.env;
   const numOpt = (v, envv, def) => { const x = v != null ? Number(v) : (envv != null && envv !== '' ? Number(envv) : def); return Number.isInteger(x) && x >= 0 ? x : def; };
-  const window = numOpt(opts.window, env.LEDGER_WINDOW, 20000);
+  const window0 = numOpt(opts.window, env.LEDGER_WINDOW, 20000);
+  const window = window0 === 1 ? 2 : window0;      // a window of 1 would leave the window at every append (a cold scan each): 2 is the smallest
+  if (window0 === 1) log('window 1 raised to 2 (a window of 1 reads the journal back on every append)');
   const ckptOn = opts.ckpt != null ? !!opts.ckpt && String(opts.ckpt) !== '0' : !["0", "false", "off", "no"].includes(String(env.LEDGER_CKPT).toLowerCase());
   const ckptEvery = numOpt(opts.ckptEvery, env.LEDGER_CKPT_EVERY, 0);
   const ckptVerify = opts.ckptVerify != null ? !!opts.ckptVerify && String(opts.ckptVerify) !== '0' : env.LEDGER_CKPT_VERIFY === '1';

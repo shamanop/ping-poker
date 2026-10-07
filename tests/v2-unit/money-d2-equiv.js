@@ -101,8 +101,9 @@ function runSeed(seed) {
     eq(q(fn), q(fr), at + ' quarantine file');
     const st = N.stats();
     eq(st.lines, new Set([...R.entries()].map(e => e.id)).size, at + ' stats lines (applied lines of the frozen ledger)');
-    ok(window === 0 || st.inMemory <= 2 * window, at + ` inMemory ${st.inMemory} > 2x${window}`);
-    ok(window === 0 || st.inMemory >= Math.min(window, st.lines), at + ` inMemory ${st.inMemory} < window`);
+    const eff = window === 1 ? 2 : window;           // fix2 E12: a window of 1 is raised to 2
+    ok(window === 0 || st.inMemory <= 2 * eff, at + ` inMemory ${st.inMemory} > 2x${eff}`);
+    ok(window === 0 || st.inMemory >= Math.min(eff, st.lines), at + ` inMemory ${st.inMemory} < window`);
   }
 
   const tail = (f, n = 1) => fs.readFileSync(f, 'utf8').split('\n').filter(Boolean).slice(-n).join('\n');

@@ -58,7 +58,7 @@ t('findLast: exactly the last of `for (const e of entries(f)) r = e`, same leg i
   let before = led.stats().coldScans;
   eq(mk(led, isBuy).reason, 'buyin:play', 'the later of the two matching legs');
   for (let i = 0; i < 5; i++) tr(led, i);              // the batch is cold now (window 1)
-  ok(led.stats().inMemory <= 2);
+  ok(led.stats().inMemory <= 4);                       // (window 1 is raised to 2)
   eq(mk(led, isBuy).amount, 7); ok(led.stats().coldScans > before, 'cold scan counted');
   mk(led, null); mk(led, (e) => false); mk(led, (e) => e.ref === 'seed'); mk(led, (e) => e.cur === 'chips');
   eq(led.findLast(() => false), null);
@@ -85,7 +85,8 @@ t('window bounds and refs: at least W and at most 2W lines in memory, every ref 
     const led = OPEN(file(), { window: W });
     for (let i = 0; i < 400; i++) {
       tr(led, i);
-      const st = led.stats(); ok(st.inMemory <= 2 * W && st.inMemory >= Math.min(W, st.lines), `W${W} i${i} inMemory ${st.inMemory}`);
+      const E = W === 1 ? 2 : W;                       // (window 1 is raised to 2)
+      const st = led.stats(); ok(st.inMemory <= 2 * E && st.inMemory >= Math.min(E, st.lines), `W${W} i${i} inMemory ${st.inMemory}`);
     }
     eq(led.stats().lines, 400);
     ok(led.has('r0') && led.has('r399')); deq(led.transfer('mint:signup', 'bank:a', 1, 'chips', 'x', 'r0'), { id: 1, dup: true });
