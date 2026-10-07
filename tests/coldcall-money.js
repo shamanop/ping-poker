@@ -238,7 +238,7 @@ function auditMatches(s) {
       // a decision that keeps the round open (a PICK followed by ONE MORE CALL) is answered by the next prompt: finish it the same way until the settle is refused
       let guard = 0; while (!all(a, 'g:coldcall:voided').length && s.open.size && guard++ < 4) { const rs = all(a, 'g:coldcall:result'); const p = rs[rs.length - 1]; if (!p || p.status !== 'pending') break; a.send('g:coldcall:decide', { roundId: r.roundId, ...(p.pending.k === 'pick' ? { k: 'pick', p: p.pending.choices[0] } : { k: 'more', take: false }) }); }
       await sleep(150);
-      const vs = all(a, 'g:coldcall:voided'); assert.strictEqual(vs.length, 1, 'g:coldcall:voided was sent once: ' + JSON.stringify(vs)); assert.strictEqual(vs[0].roundId, r.roundId); assert.strictEqual(vs[0].reason, 'unresolvable');
+      const vs = all(a, 'g:coldcall:voided'); assert.strictEqual(vs.length, 1, 'g:coldcall:voided was sent once: ' + JSON.stringify(vs)); assert.strictEqual(vs[0].roundId, r.roundId); assert.strictEqual(vs[0].reason, 'unresolvable'); assert.strictEqual(vs[0].refund, kept, 'refund = what the ledger returned (the escrow as it was, not the recorded cost)');
       assert.strictEqual(all(a, 'g:coldcall:result').filter((x) => x.status === 'done').length, 0, 'no result for a round the ledger refused to settle');
       assert.deepStrictEqual(s.escrows(), [], 'the escrow is back with the player'); assert.strictEqual(s.bal('ann', 'play'), before, 'whole stake back (the 5 moved by hand included)');
       assert.strictEqual(s.open.size, 0, 'the round is gone'); assert.strictEqual(s.store().allOpen().length, 0, 'its record is gone'); assert.strictEqual(s.disk() && Object.keys(s.disk().open || {}).length, 0);
@@ -261,6 +261,31 @@ function auditMatches(s) {
       delete s.hooks.before.settle; await sleep(120);
       assert.strictEqual(all(a, 'g:coldcall:result').filter((x) => x.status === 'done').length, 1, code + ': once the ledger works it settles'); assert.strictEqual(s.open.size, 0); assert.strictEqual(s.escrowSum('play'), 0);
     }
+  });
+
+  // ---------------------------------------------------------------- P6 W3b slot (b): g:coldcall:voided.refund is what the ledger returned
+  await test('W3B (b): refund is the escrow the ledger gave back for an open paid round, and 0 for an instant round that was never charged and for a Callback; payload shape unchanged', async () => {
+    const SHAPE = ['mode', 'reason', 'refund', 'roundId', 'wallet'];
+    // an open paid round voided (the record cannot be written: open_error): the whole stake comes back, refund = the stake
+    { const s = setup({ rng: E.rngFrom(PEND.seed), roundRng: E.rngFrom(5) }); const a = s.sock('ann'); const before = s.bal('ann', 'play');
+      const st = s.store(); st.putOpen = () => { throw new Error('disk gone'); };
+      s.clock.advance(200); a.send('g:coldcall:spin', { bet: 100, mode: 'play', buyBonus: 'bonus1' });
+      const v = last(a, 'g:coldcall:voided'); assert.ok(v && v.reason === 'open_error', 'voided: ' + JSON.stringify(v));
+      const cost = 100 * E.CFG.buyCost.bonus1 / 10; assert.strictEqual(cost, s.lines((e) => e.reason === 'coldcall:void:open_error' || /void/.test(e.reason)).reduce((n, e) => n + e.amount, 0), 'the ledger returned the stake');
+      assert.strictEqual(v.refund, cost, 'refund = the escrowed stake'); assert.strictEqual(s.bal('ann', 'play'), before); assert.deepStrictEqual(Object.keys(v).sort(), SHAPE.slice().sort()); }
+    // an instant paid round that dies before the ledger (settle_error): never charged, nothing returned: refund 0, no ledger line, the balance untouched
+    { const s = setup({ rng: E.rngFrom(82) }); const a = s.sock('ann'); const before = s.bal('ann', 'play'), id = s.lastId();
+      delete E.CFG.pull.pot;
+      s.clock.advance(200); a.send('g:coldcall:spin', { bet: 2500, mode: 'play' });
+      const v = last(a, 'g:coldcall:voided'); assert.ok(v && v.reason === 'settle_error', 'voided: ' + JSON.stringify(v));
+      assert.strictEqual(v.refund, 0, 'nothing was charged, nothing was returned'); assert.strictEqual(s.lastId(), id, 'no ledger line'); assert.strictEqual(s.bal('ann', 'play'), before); assert.deepStrictEqual(Object.keys(v).sort(), SHAPE.slice().sort()); }
+    // a Callback voided (settle_error on its own settle): it has no escrow, refund 0, the entitlement stays armed
+    { const s = setup({ rng: E.rngFrom(82) }); const a = s.sock('ann'); const before = s.balances('ann');
+      s.store().setPlayer('ann', 'chips', { ...E.newState(), cb: { bet: 100, id: 'cbvoid1' } }); s.flush();
+      delete E.CFG.pull.feed; const id = s.lastId();
+      s.clock.advance(200); a.send('g:coldcall:spin', { bet: 100, mode: 'chips', auto: true });
+      const v = last(a, 'g:coldcall:voided'); assert.ok(v && v.reason === 'settle_error' && v.roundId === 'cbvoid1', 'voided: ' + JSON.stringify(v));
+      assert.strictEqual(v.refund, 0, 'a Callback has no stake'); assert.strictEqual(s.lastId(), id, 'no ledger line'); assert.deepStrictEqual(s.balances('ann'), before); assert.ok(s.store().player('ann', 'chips').cb, 'still armed'); assert.deepStrictEqual(Object.keys(v).sort(), SHAPE.slice().sort()); }
   });
 
   // ---------------------------------------------------------------- the game's own file

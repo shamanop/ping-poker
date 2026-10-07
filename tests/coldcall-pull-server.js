@@ -670,7 +670,7 @@ const potOk = (p, s, mode) => { assert.strictEqual(p.fed, p.paid + p.bal, 'pot s
       s.clock.advance(200); a.send('g:coldcall:spin', { bet: 2500, mode: 'play' });
       const bal = s.bal('ann', 'play'), voids = all(a, 'g:coldcall:voided'), done = all(a, 'g:coldcall:result').slice(n).filter((r) => r.status === 'done');
       assert.ok(!all(a, 'error').some((e) => e.code === 'internal'), knob + ': no router "Server error"');
-      if (voids.length) { assert.strictEqual(voids.length, 1); assert.strictEqual(bal, start, knob + ': refunded exactly once'); assert.strictEqual(voids[0].refund, 2500); assert.strictEqual(all(a2, 'g:coldcall:voided').length, 1, 'the other tab hears it'); }
+      if (voids.length) { assert.strictEqual(voids.length, 1); assert.strictEqual(bal, start, knob + ': refunded exactly once'); assert.strictEqual(voids[0].refund, 0, 'P6 W3b: this instant round never reached the ledger, so the ledger returned nothing (it said 2500 before)'); assert.strictEqual(all(a2, 'g:coldcall:voided').length, 1, 'the other tab hears it'); }
       else { assert.strictEqual(done.length, 1); assert.strictEqual(bal, start - 2500 + done[0].totalWin + (done[0].pot ? done[0].pot.amount : 0)); }
       assert.strictEqual(s.open.size, 0); assert.strictEqual(s.store().allOpen().length, 0);
     }

@@ -376,17 +376,21 @@ function settle(rec, r, autoWhy, extraSocket) {
 // A Callback has no escrow: voiding it only drops the record and leaves the entitlement armed. -> 'voided' | null (the ledger refused: the round stays open, see moneyFailed)
 function voidRound(rec, why) {
   if (rec.settled) return null;
+  let refund = 0;                                  // what the ledger really returned: the escrow of an open paid round; 0 for an instant round that never reached the ledger, a Callback, a round already closed
   if (rec.stored || rec.escrow) {
+    let before = null;
+    try { before = M().balance(rec.key, rec.mode); } catch {}
     try { M().void(rec.key, rec.mode, rec.id, why); }
     catch (e) { if (!(e && e.code === 'round_closed')) return moneyFailed(rec, e, 'void'); }     // round_closed: it was played already, nothing to give back
+    try { if (before != null) refund = Math.max(0, M().balance(rec.key, rec.mode) - before); } catch {}   // the player's own balance, read either side of the one synchronous void
   }
   rec.settled = true;
   dropOpen(rec);
   if (rec.stored) { try { store.delOpen(rec.nk, rec.mode); store.flush(); } catch (e) { logf('coldcall: record drop not flushed', rec.id, e && e.message); } }
   let w = null;
   try { w = balances(rec.key); } catch {}
-  logf('coldcall: voided round', rec.id, why, 'refund', rec.cost, rec.mode);
-  emitAcct(rec, 'g:coldcall:voided', { roundId: rec.id, mode: rec.mode, refund: rec.cost, reason: why, wallet: w });
+  logf('coldcall: voided round', rec.id, why, 'refund', refund, rec.mode);
+  emitAcct(rec, 'g:coldcall:voided', { roundId: rec.id, mode: rec.mode, refund, reason: why, wallet: w });
   return 'voided';
 }
 
