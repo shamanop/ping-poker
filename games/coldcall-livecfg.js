@@ -169,7 +169,9 @@ function validate(overrides) { const next = merge(overrides); return { next, smo
 // ---------------------------------------------------------------------------------------------------------------- live state + file
 let live = { overrides: {}, rtpLabel: null, note: '', updatedAt: null };
 let applied = false;                     // true once this process has put something other than its own boot values into Eng.CFG
-const cfgFile = () => process.env.COLDCALL_CFG_FILE || path.join(process.env.DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH || path.join(__dirname, '..'), 'coldcall-config.json');
+let fileGiven = null;                    // set by the game module's init from the server's paths (next to money.jsonl); COLDCALL_CFG_FILE still wins
+const setFile = (f) => { fileGiven = typeof f === 'string' && f ? f : null; };
+const cfgFile = () => process.env.COLDCALL_CFG_FILE || fileGiven || path.join(process.env.DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH || path.join(__dirname, '..'), 'coldcall-config.json');
 
 function swapIn(next) {                  // synchronous, between rounds: Eng.CFG stays the one object every reader holds; open rounds hold their own snapshot (snapshot())
   for (const k of Object.keys(Eng.CFG)) delete Eng.CFG[k];
@@ -274,10 +276,32 @@ function snapshot() {
   snapMemo = { json: j, K };
   return K;
 }
+// P6: an open round's record carries the WHOLE config it runs on, so a restart can finish it on the same numbers. JSON turns Infinity / NaN into null, so a non-finite number is stored as
+// { $num: 'Infinity' | '-Infinity' | 'NaN' } and read back as the number. restoreSnapshot gives the same { cfg (frozen), eng } shape as snapshot(), built from a stored config (memoised on its content).
+const encodeCfg = (v) => (typeof v === 'number' && !Number.isFinite(v) ? { $num: String(v) } : Array.isArray(v) ? v.map(encodeCfg) : v !== null && typeof v === 'object' ? Object.fromEntries(Object.keys(v).map((k) => [k, encodeCfg(v[k])])) : v);
+const decodeCfg = (v) => {
+  if (Array.isArray(v)) return v.map(decodeCfg);
+  if (v !== null && typeof v === 'object') {
+    const ks = Object.keys(v);
+    if (ks.length === 1 && ks[0] === '$num') { if (!['Infinity', '-Infinity', 'NaN'].includes(v.$num)) throw new Error('bad stored number'); return Number(v.$num); }
+    return Object.fromEntries(ks.map((k) => [k, decodeCfg(v[k])]));
+  }
+  return v;
+};
+const restored = new Map();
+function restoreSnapshot(stored) {
+  if (!isPlain(stored)) throw new Error('stored config is not an object');
+  const j = JSON.stringify(stored);
+  if (restored.has(j)) return restored.get(j);
+  const cfg = deepFreeze(decodeCfg(JSON.parse(j))), K = { cfg, eng: Eng.createEngine(cfg) };
+  if (restored.size >= 8) restored.delete(restored.keys().next().value);
+  restored.set(j, K);
+  return K;
+}
 // the stateless round of the old game (pull off, the QA hook) on a snapshot; same shape as Eng.resolveRound
 function resolveRound(K, rng, buy, opts) {
   const r = K.eng.round(rng, buy, { script: true, ...(opts || {}) });
   return { round: r, buy: r.buy, costTenths: r.costTenths, winTenths: r.winTenths, winX: r.winX, capped: r.capped, tier: r.tier, script: r.script };
 }
 
-module.exports = { DEFAULT, CUSTOM_LABEL, RULES, file: cfgFile, configHash, presets, merge, validate, smoke, setLiveConfig, loadLiveConfig, liveInfo, clientCfg, publicCfg, buyPrices, rtp, snapshot, resolveRound };
+module.exports = { DEFAULT, CUSTOM_LABEL, RULES, file: cfgFile, setFile, encodeCfg, decodeCfg, restoreSnapshot, configHash, presets, merge, validate, smoke, setLiveConfig, loadLiveConfig, liveInfo, clientCfg, publicCfg, buyPrices, rtp, snapshot, resolveRound };

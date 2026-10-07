@@ -1,0 +1,146 @@
+'use strict';
+// A ledger-backed world for the COLD CALL server tests (P6 W2-d). Everything is real except the socket layer: money/ledger.js on a temp file, money/service.js, transport/game-money.js
+// (ctx.money), the games registry (games/index.js, which calls recover() at boot exactly as server.js does) and games/coldcall.js. No wallet.js anywhere.
+//
+//   const w = H.world({ rng, potRng, roundRng, keys, dir, t });   // boots: ledger -> service -> accounts -> registry -> recover()
+//   w.fund('ann', 'play', 1e10)            // through the service (an admin:adjust line), either currency
+//   w.bal('ann', 'chips'), w.escrows(), w.pool('play'), w.house('chips'), w.lines(fn), w.has(ref), w.conservation('play')   // read from the LEDGER
+//   w.reboot()                             // "crash and reboot": the old instance is abandoned (nothing unwritten is flushed), a new ledger / service / registry opens the same files, recover() runs
+//   w.hooks.before.settle = (args) => { throw new Crash() }   // inject a failure before / after any ctx.money call (round, open, settle, void); w.hooks.after.settle = (args, result) => ...
+//   w.sock('ann'), w.send(sock, ev, payload), H.last(sock, ev), H.all(sock, ev)
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const EventEmitter = require('events');
+
+const { open } = require('../money/ledger');
+const { createService } = require('../money/service');
+const { createGameMoney } = require('../transport/game-money');
+const { createWalletAdapter } = require('../transport/wallet-adapter');
+const games = require('../games');
+const SRV = require('../games/coldcall.js');
+
+const base = fs.mkdtempSync(path.join(os.tmpdir(), 'coldcall-ledger-'));
+let counter = 0;
+
+const last = (s, ev) => { for (let i = s.out.length - 1; i >= 0; i--) if (s.out[i][0] === ev) return s.out[i][1]; return null; };
+const all = (s, ev) => s.out.filter((o) => o[0] === ev).map((o) => o[1]);
+
+class Crash extends Error { constructor(m) { super(m || 'simulated crash'); this.name = 'Crash'; } }
+
+const CALLS = ['round', 'open', 'settle', 'void'];
+const curOf = (c) => (c === 'chips' ? 'chips' : 'play');
+const acct = (key, cur) => (cur === 'chips' ? 'bank:' : 'play:') + String(key).toLowerCase().trim();
+
+function world(opts = {}) {
+  const dir = opts.dir || fs.mkdtempSync(path.join(base, 'w'));
+  const files = { money: path.join(dir, 'money.jsonl'), pull: path.join(dir, 'coldcall-pull.json'), cfg: path.join(dir, 'coldcall-config.json') };
+  const io = new EventEmitter(); io.sockets = { sockets: new Map() };
+  let t = opts.t || 1000000;
+  const clock = { now: () => t, advance: (ms) => { t += ms; }, set: (v) => { t = v; } };
+  const hooks = { before: {}, after: {}, calls: [] };       // calls: every ctx.money write call, [name, key, cur, roundId, outcome] in order
+  const w = { dir, files, io, clock, hooks, SRV, keys: new Set((opts.keys || []).map((k) => String(k).toLowerCase())), boots: 0, funded: { chips: 0, play: 0 }, report: null };
+
+  function boot() {
+    w.boots++;
+    SRV.log = opts.log || (() => {});
+    SRV.potRng = opts.potRng || (() => 1);          // never hits unless a test says so
+    SRV.roundRng = opts.roundRng;                   // the whole-cent rounding source (undefined = crypto); a separate stream from the round's own rng
+    const ledger = w.ledger = open(files.money, { fsync: 'none', log: () => {} });
+    const service = w.service = createService(ledger);
+    for (const k of w.keys) service.ensureAccount(k);
+    let reg = null;
+    const onChange = (k) => { if (reg) reg.pushWallet(k); };
+    const real = createGameMoney({ service, ledger, onChange, log: () => {} });
+    // the bound money object, wrapped so a test can fail a call before or after it ran and see every write call in order
+    const gm = {
+      forGame: (game) => {
+        const m = real.forGame(game), out = { ...m };
+        for (const name of CALLS) {
+          out[name] = (...args) => {
+            const rec = [name, args[0], args[1], args[2], args[3]];
+            if (hooks.before[name]) hooks.before[name](args);
+            const res = m[name](...args);
+            hooks.calls.push(rec);
+            if (hooks.after[name]) hooks.after[name](args, res);
+            return res;
+          };
+        }
+        return out;
+      },
+    };
+    const wallet = createWalletAdapter({ service, ledger, onChange, log: () => {} });
+    io.removeAllListeners('connection');
+    reg = w.g = games({ io, wallet, money: gm, service, modules: [SRV], accounts: {}, tables: {}, rooms: {}, now: clock.now, rng: opts.rng, files: { coldcallPull: files.pull, coldcallConfig: files.cfg }, ledger: { log: () => {} } });
+    w.wallet = wallet;
+    w.report = reg.recover();
+    return w.report;
+  }
+
+  w.addKey = (k) => { k = String(k).toLowerCase().trim(); w.keys.add(k); if (w.service) w.service.ensureAccount(k); };
+  // a player who plays has an account; a socket for an unknown key creates it first
+  w.sock = (a) => {
+    const acctObj = typeof a === 'string' ? { key: a } : a;
+    if (acctObj && acctObj.key) w.addKey(acctObj.key);
+    const s = new EventEmitter();
+    s.data = a ? { acct: acctObj } : {};
+    s.out = [];
+    const emit = s.emit.bind(s);
+    s.send = (ev, p) => emit(ev, p);             // client -> server
+    s.emit = (ev, p) => { if (ev in { error: 1, wallet: 1 } || ev.startsWith('g:') || ev.startsWith('floor:')) { s.out.push([ev, p]); return true; } return emit(ev, p); };
+    io.sockets.sockets.set(String(Math.random()), s);
+    io.emit('connection', s);
+    return s;
+  };
+  w.send = (s, ev, p) => s.send(ev, p);
+
+  // ---- funding: through the service, either currency ----
+  w.fund = (key, cur, amount) => {
+    key = String(key).toLowerCase().trim(); curOf(cur);
+    w.addKey(key);
+    const r = w.service.adminAdjust(key, amount, curOf(cur), 'test-fund', `test:fund:${w.boots}:${++counter}`);
+    if (amount > 0) w.funded[curOf(cur)] += amount;
+    return r;
+  };
+  w.rich = (key, cur = 'play') => w.fund(key, cur, 1e10);
+
+  // ---- reads, all from the ledger ----
+  w.bal = (key, cur) => w.ledger.balance(acct(key, curOf(cur)), curOf(cur));
+  w.balances = (key) => ({ play: w.bal(key, 'play'), chips: w.bal(key, 'chips') });
+  w.escrows = (cur) => { const out = []; for (const c of cur ? [cur] : ['chips', 'play']) for (const x of w.ledger.list('escrow:coldcall:', c)) out.push({ ...x, cur: c }); return out; };
+  w.escrowSum = (cur) => w.escrows(cur).reduce((n, x) => n + x.balance, 0);
+  w.pool = (cur) => w.ledger.balance('pool:coldcall:office', curOf(cur));
+  w.house = (cur) => w.ledger.balance('house:coldcall', curOf(cur));
+  w.has = (ref) => w.ledger.has(ref);
+  w.lines = (fn) => [...w.ledger.entries(fn || null)];
+  w.lastId = () => w.ledger.lastId;
+  // the lines written after `id`
+  w.since = (id) => [...w.ledger.entries(null, id)];
+  // every game account of one currency, plus the players: for "nothing was created or lost"
+  w.conservation = (cur) => {
+    cur = curOf(cur);
+    const sum = (prefix) => w.ledger.list(prefix, cur).reduce((n, x) => n + x.balance, 0);
+    const players = sum(cur === 'chips' ? 'bank:' : 'play:'), escrows = sum('escrow:'), pool = sum('pool:'), house = sum('house:coldcall');
+    const everything = w.ledger.list('', cur).reduce((n, x) => n + x.balance, 0);
+    return { players, escrows, pool, house, held: players + escrows + pool + house, everything };
+  };
+  // the game's own file as the next boot will read it (written state, not memory)
+  w.disk = () => { try { return JSON.parse(fs.readFileSync(files.pull, 'utf8')); } catch { return null; } };
+  w.store = () => SRV._pull.store;
+  w.flush = () => SRV._pull.store.flush();
+
+  // "crash and reboot": whatever the old instance had not written is gone, then the same files are opened by a fresh ledger / service / registry and recover() runs
+  w.crash = () => {
+    for (const rec of SRV._pull.open.values()) if (rec.timer) { clearTimeout(rec.timer); rec.timer = null; }
+    try { SRV._pull.store.close(true); } catch {}
+    try { w.ledger.close(); } catch {}
+    hooks.before = {}; hooks.after = {};
+  };
+  w.reboot = () => { w.crash(); return boot(); };
+  w.boot = boot;
+  w.audit = () => SRV.audit();
+  boot();
+  return w;
+}
+
+module.exports = { world, last, all, Crash, SRV };
