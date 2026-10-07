@@ -14,6 +14,7 @@
     ps = ps.filter((p) => (p.life -= dt) > 0 && p.y < cv.height + 80);
     for (const p of ps) {
       if (p.shape === 'ring') { const t = Math.min(1, Math.max(0, 1 - p.life / p.dur)); g.save(); g.globalAlpha = Math.max(0, 1 - t); g.strokeStyle = p.c; g.lineWidth = p.w * (1 - t) + 1.5; g.beginPath(); g.arc(p.x, p.y, p.r0 + (p.r1 - p.r0) * (1 - Math.pow(1 - t, 3)), 0, 7); g.stroke(); g.restore(); continue; }
+      if (p.shape === 'puff') { const t = Math.min(1, Math.max(0, 1 - p.life / p.dur)); p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 1 - p.drag * dt; p.vy *= 1 - p.drag * dt; const r = p.r0 + (p.r1 - p.r0) * (1 - Math.pow(1 - t, 2)); g.fillStyle = p.c; const a = Math.pow(1 - t, 1.4); for (let k = 0; k < 4; k++) { g.globalAlpha = (p.a || 0.13) * a; g.beginPath(); g.arc(p.x, p.y - r * 0.08 * k, r * (1 - k * 0.2), 0, 7); g.fill(); } g.globalAlpha = 1; continue; }   // 4 stacked discs = a soft-edged puff without a gradient per frame   // (chris 10-06 FB6) soft smoke puff: landing dust, pop smoke (juice.js)
       p.vy += p.g * dt; p.vx *= 1 - p.drag * dt; p.vy *= 1 - p.drag * dt * 0.5; p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vr * dt;
       g.save(); g.translate(p.x, p.y); g.rotate(p.rot); g.globalAlpha = Math.min(1, p.life / 0.35); g.fillStyle = p.c;
       if (p.shape === 'star') star(p.size);
@@ -42,6 +43,11 @@
     if (reduce) return; cols = cols || COLORS();
     for (let i = 0; i < (o.n || 2); i++) add({ shape: 'ring', x, y, r0: 10, r1: (o.r1 || 90) * (1 + i * 0.4), w: o.w || 8, c: cols[i % 2 ? 1 : 0], life: 0.55 + i * 0.12, dur: 0.55 + i * 0.12, vx: 0, vy: 0, g: 0, drag: 0, rot: 0, vr: 0, size: 0 });
   }
+  // (chris 10-06 FB6) puff(x, y, { n, r0, r1, life, c, spread, up }): soft round smoke puffs that grow and fade (landing dust, symbols popping). Additive: nothing in the game calls it, only juice.js.
+  function puff(x, y, o = {}) {
+    const n = Math.round((o.n || 2) * (reduce ? 0.4 : 1)), life = o.life || 0.5;
+    for (let i = 0; i < n; i++) add({ shape: 'puff', x: x + rnd(-1, 1) * (o.spread || 10), y: y + rnd(-5, 5), vx: rnd(-1, 1) * (o.speed || 60), vy: -rnd(10, 40) - (o.up || 0), g: 0, drag: 2.2, life: life * rnd(0.8, 1.2), dur: life, r0: (o.r0 || 7) * rnd(0.8, 1.1), r1: (o.r1 || 20) * rnd(0.8, 1.2), c: o.c || '#efe6d2', a: o.a || 0, rot: 0, vr: 0, size: 0 });
+  }
   function shake(amp, dur) {
     if (reduce) return; const el = document.getElementById('shake'), kf = [], N = 12;
     for (let i = 0; i < N; i++) { const k = 1 - i / N; kf.push({ transform: `translate(${rnd(-amp, amp) * k}px,${rnd(-amp, amp) * k}px)` }); }
@@ -62,5 +68,5 @@
     g.save(); g.translate(300, 300); g.rotate(0.5); g.fillStyle = c[2] || c[0]; g.fillRect(-8, -5, 16, 10); g.restore();
     return new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(() => { if (!raf && !ps.length) { stop(); } cv.style.opacity = ''; r(); }, 120)))));
   }
-  CC.fx = { burst, coins, confetti, ring, shake, flash, clear, warm, count: () => ps.length, running: () => !!raf };
+  CC.fx = { burst, coins, confetti, ring, puff, shake, flash, clear, warm, count: () => ps.length, running: () => !!raf };
 })();

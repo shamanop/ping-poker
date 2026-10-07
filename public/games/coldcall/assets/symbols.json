@@ -105,7 +105,14 @@
     "ui_rim_panel": "img/ui/ui_rim_panel.webp",
     "ui_rim_win": "img/ui/ui_rim_win.webp",
     "ui_strip_memo": "img/ui/ui_strip_memo.webp",
-    "ui_trough": "img/ui/ui_trough.webp"
+    "ui_trough": "img/ui/ui_trough.webp",
+    "ui_key_tray": "img/ui/ui_key_tray.webp",
+    "ui_plaque": "img/ui/ui_plaque.webp",
+    "ui_row_alt": "img/ui/ui_row_alt.webp",
+    "ui_row_band": "img/ui/ui_row_band.webp",
+    "ui_rule": "img/ui/ui_rule.webp",
+    "ui_sym_well": "img/ui/ui_sym_well.webp",
+    "ui_tab_off": "img/ui/ui_tab_off.webp"
   },
   "textures": {},
   "fonts": [

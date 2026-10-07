@@ -118,3 +118,51 @@
 .dec2 .more{padding-left:9px;padding-right:9px}.dec2 .more span,.dec2.xs .more span{font-size:10.5px}.dec2 .hang em{font-size:12.5px;letter-spacing:0}}
 /* ... and on the 360 phone the small toggle pills use the blank as ONE image (no 9-slice, so no seam to show) */
 @media (max-width:420px){.btns button:not(#buy){border-image:none;background:var(--img-ui_key_cream) center/100% 100% no-repeat}.btns button.on:not(#buy){background-image:var(--img-ui_key_gold)}}
+
+/* ---- WAVE B (chris 10-06 FB4), builder fb1b-paint. CSS only, no box changes size. ---- */
+/* (chris 10-06 FB4) info: 'SCROLL FOR THE PAY TABLE sits on the last visible text line'. The old cue was a transparent-to-navy gradient laid over the text; it is now a solid footer band with a brass top rule,
+   so the hint never shares pixels with a glyph: text scrolling under it is cut cleanly at the band's rule, the way it is cut at the card's edge. Hidden (opacity 0) once the end is in view, as before. */
+.card.info .cue{padding:7px 0 6px;font-size:11.5px;line-height:13px;background:#0a1830;border-top:2px solid rgba(214,170,72,.7);box-shadow:0 -6px 8px rgba(10,24,48,.9);text-shadow:0 1px 0 #000}
+/* (chris 10-06 FB4) leads strip: 'the cold line reads as struck through by the painted ruler'. The painted memo has two ruler lines (rows 24 and 40 of 60 = y 12 and 20 of the 30 px strip); the text sits between / on them.
+   A paper-coloured plate (the strip's own yellow, soft ends) sits behind the LEADS count and the cold line and covers the rule where there is text; the rule stays visible everywhere else. Plate rows y 7..22, so the torn top edge (y 5) and the outline (y 25) are not touched. */
+#plNote .cold,#plNote .r1{--pl:#f7d56e;background:linear-gradient(90deg,rgba(247,213,110,0),var(--pl) 8px,var(--pl) calc(100% - 8px),rgba(247,213,110,0)) 0 var(--py)/100% 15px no-repeat;padding-left:8px;padding-right:8px;margin-right:-8px}
+#plNote .r1{--py:5.5px;margin-left:-8px}
+#plNote .cold{--py:4.5px;flex:0 1 auto;margin-left:auto;color:#1a1206}
+@media (max-width:420px){#plNote .r1{--py:2.5px}}
+
+/* ---- WAVE B part B (chris 10-06 FB4), sheet S6 (cold-call/art/PAINT-NOTES.md). Art inside the existing boxes; nothing resizes. ---- */
+/* info pay table: each row is a painted leather band (dark / lighter, alternating, header row left bare), the symbol sits in a brass bezel, the title is a riveted brass nameplate, the divider is a brass rule */
+.pt tr{background-size:100% 100%;background-repeat:no-repeat}
+.pt tr:nth-child(even){background-image:var(--img-ui_row_band)}
+.pt tr:nth-child(odd){background-image:var(--img-ui_row_alt)}
+.pt tr:first-child{background:none}
+.pt td{border-top-color:transparent}
+.pt td.sy{padding-left:12px}.pt tr td:last-child{padding-right:15px}
+.pt td.sy img{box-sizing:border-box;padding:3px;background:var(--img-ui_sym_well) center/100% 100% no-repeat}
+.card.info .tl{background:var(--img-ui_plaque) center/100% 100% no-repeat;font-size:13px;line-height:20px;color:#2b1a05;text-shadow:0 1px 0 rgba(255,232,160,.7)}
+.card.info .plinfo{border-top-color:transparent;background:var(--img-ui_rule) top/100% 8px no-repeat}
+/* keypad: THE NUMBER readout takes the brass-rimmed window (the WIN plate's rim), the keys sit in a painted tray (a layer behind the key grid, grown into the plate's padding, no size change) */
+.dial .lcd{border-color:transparent;background:none;box-shadow:none;border-image:var(--img-ui_rim_win) 22 fill/8px stretch}
+.dial .keys{position:relative}
+.dial .keys::before{content:"";position:absolute;z-index:-1;inset:-7px -9px -9px -9px;border:solid transparent;border-width:9px;border-image:var(--img-ui_key_tray) 22 fill/9px stretch;pointer-events:none}
+/* mode tabs: the inactive tab is a sunken slot */
+#modebar button:not(.on){background:var(--img-ui_tab_off) center/100% 100% no-repeat}
+
+/* ---- WAVE B fix round r1 (chris 10-06 FB4), builder fb1b-fit. CSS only, no box changes size; everything but item 7 is <= 420 px wide. ---- */
+/* (r1) critic r0: 'in the memo strip, the painted tick row sits flush on the tops of the letters of "8 leads + 4 warm go cold in 3 h 12 m". The first digit reads as "6" or "8".'
+   The tick row is the bezel's painted comb above the strip, ending at the strip's torn top edge; at 360 the strip is 20 px, so the text row (centred above a 5 px bottom padding) touched it. The 5 px padding goes (text row moves
+   2.5 stage px = 1.7 px down, the box and the bar stay), and the 56%..92% red highlight under "8 leads" (it lay over the lower half of the digit) becomes a thin underline. */
+@media (max-width:420px){#plNote{padding-bottom:0}#plNote .cold u{background:linear-gradient(transparent 80%,rgba(216,64,46,.6) 80% 94%,transparent 94%)}}
+/* (r1) critic r0: 'the labels "SPINS LEFT" and "BONUS TOTAL" are about 5 px tall, barely readable' */
+/* the label is drawn 1.2x by transform so its layout width (which sets the chip's width) stays what it was: no box moves */
+@media (max-width:420px){#bh .chip small{transform:scale(1.2);color:#e2ecfa}}
+/* (r1) critic r0: '"50% you double ($71.68)." and "50% you leave with $0.00." are tiny pale text on red, low contrast' */
+@media (max-width:420px){.dec2 .more span{color:#fff;font-weight:700;text-shadow:0 1px 0 #4a0600,0 0 3px #4a0600,0 0 5px rgba(74,6,0,.9)}.dec2 .more span b{color:#ffe27a;text-shadow:0 1px 0 #000,0 0 3px #000}}
+/* (r1) critic r0: '"n/a" under BUY BONUS is tiny and dim on maroon' (also "Callback first", "from $2.00") */
+@media (max-width:420px){#buy span{font-size:10.5px;line-height:10px;font-weight:700;color:#fff}#buy:disabled{opacity:.75}}
+/* (r1) critic r0: '"Max win 10,000x. Play money only: no deposits, no payouts." is very small grey-blue on navy, low contrast' */
+@media (max-width:420px){.card.info .plinfo small{font-size:12px;color:#dbe7f8}}
+/* (r1) critic r0: 'pay-table values in columns 5-9 ("1.8 1.8 6.3 8.3 13.2", "1.3 1.3") nearly run together': narrower name column, wider gutter between value columns */
+@media (max-width:420px){.pt table{font-size:11.5px}.pt td{padding-left:3px;padding-right:3px}.pt td.sy{padding-left:8px;gap:4px;font-size:11px}}
+/* (r1) critic r0: 'the placeholder dash in the THE NUMBER display sits on the frame's lower-right inner edge': the "_" sits on the em box's baseline, below the window's middle; raise it into the window (digits, class .land, stay put) */
+.dial .lcd b:not(.land){transform:translateY(-9px);margin-right:9px}

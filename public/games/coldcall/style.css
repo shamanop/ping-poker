@@ -46,6 +46,10 @@ button[disabled]{opacity:.4;pointer-events:none}
   #sides{display:block}
   .side{position:absolute;top:0;bottom:0;width:calc(50% - 270px * var(--s) - 8px);overflow:hidden;container-type:size}
   .side.l{left:0}.side.r{right:0}
+  /* (chris 10-06 FB5) the stage's 2 px ring + 80 px drop shadow, as its own static pseudo-element (same place in the paint order: after the side props, under the stage). On #stage itself the 80 px blur was
+     re-rasterised every time the stage layer repainted (class change on the big-win card, ...): five 19 ms FillRRectOp frames at the first big win. In landscape the stage is always 960 high (--H = 960). */
+  #stage{box-shadow:none}
+  #sides::after{content:"";position:absolute;left:50%;top:50%;width:540px;height:960px;margin:-480px 0 0 -270px;transform:scale(var(--s));box-shadow:0 0 0 2px #000,0 20px 80px rgba(0,0,0,.7);pointer-events:none}
   .side::before{content:"";position:absolute;left:50%;top:46%;width:max(100cqw,110cqh);aspect-ratio:1;translate:-50% -50%;background:repeating-conic-gradient(from 0deg,rgba(255,208,88,.13) 0 6deg,transparent 6deg 18deg);-webkit-mask:radial-gradient(circle,#000 0,transparent 66%);mask:radial-gradient(circle,#000 0,transparent 66%);animation:sidespin 90s linear infinite}
   @keyframes sidespin{to{rotate:360deg}}
   .side::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent 62%,rgba(8,16,30,.7));pointer-events:none}
@@ -181,7 +185,7 @@ button[disabled]{opacity:.4;pointer-events:none}
 /* ---- win readout in the monitor's bottom lip ---- */
 #winbox{grid-row:3;z-index:4;align-self:end;justify-self:center;width:300px;height:46px;margin-bottom:8px;display:grid;grid-template-columns:auto 1fr;align-items:center;padding:0 14px;
   border:3px solid var(--ink-dk);border-radius:8px;background:linear-gradient(#060b14,#101a2e);box-shadow:inset 0 3px 8px #000,0 2px 0 rgba(255,244,214,.55);
-  will-change:transform}   /* (chris 10-06 FB5) own compositor layer: #win is rewritten every frame of a count-up (cascade, big-win card), which re-rastered the whole stage-layer tile strip under it with every rounded plate and blurred shadow in it (FillRRectOp 39k per 3 s, 13x less with this) */
+  will-change:transform}   /* (chris 10-06 FB5) own compositor layer: #win is rewritten every frame of a cascade / big-win count-up, which re-rastered the stage-layer tile strip under it with every rounded plate and blurred shadow in it (FillRRectOp 39k per 3 s, 13x less with this; GPU-process thread in the big-win card 154 -> 57 ms/s). Cost: the ONE MORE CALL card sits over this plate, so #scene becomes a layer while it is up (GPU thread 10 -> 38 ms/s there). A class toggled only during count-ups (tried) made raster worse: the layer is built and torn down on every count. */
 #winbox .lbl{font-family:var(--display);font-weight:400;font-size:14px;letter-spacing:2px;color:var(--red);text-shadow:0 0 6px rgba(216,64,46,.55)}
 #win{font-family:var(--display);font-weight:400;font-size:27px;line-height:1;text-align:right;color:var(--gold);font-variant-numeric:tabular-nums;text-shadow:0 0 10px rgba(255,170,40,.7),0 2px 0 #5a2a00;white-space:nowrap}
 #win.pop{animation:winpop .3s ease-out}
@@ -194,7 +198,7 @@ button[disabled]{opacity:.4;pointer-events:none}
 .meter{display:grid;gap:3px;align-content:center;text-shadow:0 3px 0 #000,0 0 8px #000}
 .meter .lbl{font-family:var(--display);font-weight:400;font-size:11px;letter-spacing:2px;color:var(--gold)}
 .meter .val{font-family:var(--display);font-weight:400;font-size:25px;line-height:1.05;font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--cream)}
-#balM{grid-column:1;grid-row:1;padding-left:4px;will-change:transform}   /* (chris 10-06 FB5) own layer: the balance counts every frame at the start / end of a round (see #winbox) */
+#balM{grid-column:1;grid-row:1;padding-left:4px}
 #betM{grid-column:3;grid-row:1;justify-items:end}
 #betM .row{display:grid;grid-template-columns:34px minmax(60px,auto) 34px;gap:8px;align-items:center}
 #betM .val{font-size:25px;text-align:center}

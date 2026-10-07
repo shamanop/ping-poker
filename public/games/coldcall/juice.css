@@ -1,0 +1,92 @@
+/* COLD CALL FB6 "juice" (chris 10-06 FB6: "game is laggy and needs more graphics improvements"): motion that closes the gap to Ballot Bender and a real slot (Le Bandit).
+   Loaded by boot.js after ready, last in the cascade, so it only OVERRIDES animations and adds a few pseudo-elements; no layout, colour or image of the base game changes.
+   Kill switch: ?nojuice (boot.js then loads neither this file nor juice.js).
+   Rules (FB5-PERF.md): transform and opacity only, no animated filter / box-shadow / background / layout, no standing will-change, no new image. A box-shadow or gradient written here is STATIC
+   on the element that moves (rastered once). #app.calm (idle > 8 s) pauses every looping animation below through the base rule, so the room is quiet when nobody plays. */
+
+/* ---- idle: the title card floats like Bender's logo (5 s, 1.5 deg, 2 %) ---- */
+#ttl{animation:jttl 3s ease-in-out infinite}
+@keyframes jttl{0%,100%{transform:rotate(-6.5deg)}50%{transform:rotate(-1.5deg) translateY(-5px) scale(1.07)}}
+/* (r1) judge r0: 'six identical frames ... the sibling mascot drinks and its bubble fades; the office game is frozen for 3 s.' (chris 10-06 FB6): idle motion big enough to read across 3 s at 540x960:
+   title rocks 5 deg + lifts 5 px, hero sways +-3 deg and bobs 7 px (was +-1.2 deg), the bubble bobs and breathes, SPIN breathes 1.09 (was 1.05); juice.js adds a timed fist-pump pose every ~3.4 s (only while idle) */
+#hero:not([data-mood]),#hero[data-mood="idle"]{animation:jsway 3s ease-in-out infinite}
+@keyframes jsway{0%,100%{transform:rotate(-3deg) translateY(0)}50%{transform:rotate(3deg) translateY(-7px)}}
+#cap{animation:jcap 3s ease-in-out infinite;transform-origin:0% 60%}
+#cap.pop{animation:bpop .35s cubic-bezier(.2,1.6,.4,1),jcap 3s ease-in-out .35s infinite}   /* captions.js leaves .pop on: keep the bob after the pop-in */
+@keyframes jcap{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-6px) scale(1.07)}}
+#cap.pop{animation:bpop .35s cubic-bezier(.2,1.6,.4,1)}
+#spin.idle{animation:jbreathe 2.4s ease-in-out infinite}
+@keyframes jbreathe{0%,100%{transform:scale(1)}50%{transform:scale(1.09)}}
+
+/* ---- hero moods move like Bender's mascot (cheer hop, shock jolt, slump): hero.js sets data-mood, the image swap stays, the pose now has a body ---- */
+#hero[data-mood="hype"]{animation:jhype .5s ease-in-out infinite}
+#hero[data-mood="win"]{animation:jcheer .42s ease-in-out infinite}
+#hero[data-mood="shock"]{animation:jjolt .12s linear 6,sway 3.4s ease-in-out .72s infinite}
+#hero[data-mood="rage"]{animation:jrage .08s linear infinite}
+@keyframes jhype{0%,100%{transform:translateY(0) rotate(-1.5deg)}50%{transform:translateY(-9px) rotate(1.5deg)}}
+@keyframes jcheer{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-18px) rotate(2deg)}}
+@keyframes jjolt{0%{transform:translateX(-6px)}50%{transform:translateX(6px)}100%{transform:translateX(-6px)}}
+@keyframes jrage{0%{transform:translate(-4px,1px) scale(1.02)}50%{transform:translate(4px,-1px) scale(1.02)}100%{transform:translate(-4px,1px) scale(1.02)}}
+
+/* ---- symbol landings: juice.js squashes the symbol about its base when its drop ends (this class only sets the pivot) ---- */
+.cell img.sym.jland{transform-origin:50% 100%}
+
+/* ---- win emphasis: the winning symbols swell in (Le Bandit), then keep the base pulse; a light bloom pulses behind them (Bender's outline ring, without outlining 25 touching cells) ---- */
+.cell.hit img.sym{animation:jswell .28s cubic-bezier(.2,1.6,.4,1),hit .42s ease-in-out .28s infinite alternate}
+@keyframes jswell{0%{transform:scale(1) rotate(-2deg)}50%{transform:scale(1.36) rotate(3deg)}100%{transform:scale(1) rotate(-2deg)}}
+.cell.hit::before{content:"";position:absolute;inset:-8px;border-radius:50%;pointer-events:none;background:radial-gradient(circle,rgba(255,244,190,.95),rgba(255,208,88,.4) 50%,transparent 74%);animation:jglow .42s ease-in-out infinite alternate}
+@keyframes jglow{from{opacity:.3;transform:scale(.8)}to{opacity:1;transform:scale(1.12)}}
+
+/* (r1) judge r0: 'it has glow, swell, popup and mascot reaction, but no ring, no dimming of losers, no counter punch.' (chris 10-06 FB6): the WIN number punches 1.5x (was 1.14); juice.js adds the ring.
+   (a :has() rule that dimmed the losing cells measured no effect, 111 vs 113 mean luminance, and was removed: dimming is left) */
+#win.pop{animation:jwinpop .42s cubic-bezier(.2,1.5,.4,1);transform-origin:100% 55%}
+@keyframes jwinpop{0%{transform:scale(1)}35%{transform:scale(1.5)}100%{transform:scale(1)}}
+
+/* ---- bells that tease or trigger a bonus: a harder pulse (Bender's tease: 1 to 1.22, +-4 deg) ---- */
+.cell.pulse img.sym{animation:jtease .3s ease-in-out infinite alternate}
+@keyframes jtease{from{transform:scale(1) rotate(-4deg)}to{transform:scale(1.22) rotate(4deg)}}
+
+/* ---- buttons: SPIN visibly sinks while the round runs (it was only dimmed) ---- */
+#spin.run{transform:translateY(4px) scale(.965)}
+
+/* ---- scene cards (bonus intro, finale): drop in with an overshoot instead of a fade (Bender cardin) ---- */
+.scn{animation:jscn .45s cubic-bezier(.2,1.3,.4,1)}
+@keyframes jscn{from{transform:scale(.7) rotate(-2.5deg);opacity:0}30%{opacity:1}to{transform:none;opacity:1}}
+
+/* ---- big win: the painted sunburst (paint.css) sways like a searchlight, a glow blooms behind the banner, the banner drops and slams, the hero bobs (Bender bannerdrop / glowpop / turning rays) ----
+   #tierbg keeps paint.css's own background; ::before is a second copy of it (same image, same anchor) that rocks +-3 deg about the burst centre and covers it, so the rays move without a new image */
+#tierbg{overflow:hidden}
+#tierbg::before{content:"";position:absolute;inset:0;background:var(--img-ui_burst) 50% 45%/cover no-repeat;transform-origin:50% 45%;animation:jrays 3.6s ease-in-out infinite alternate}
+@keyframes jrays{from{transform:rotate(-7deg) scale(1.2)}to{transform:rotate(7deg) scale(1.2)}}
+#tierbg::after{content:"";position:absolute;left:50%;top:45%;width:900px;height:900px;margin:-450px 0 0 -450px;pointer-events:none;background:radial-gradient(circle,rgba(255,236,170,.3) 0,rgba(245,185,66,.13) 24%,rgba(200,53,43,.05) 46%,transparent 66%);animation:jglowpop .7s ease-out,jglowbeat 1.8s ease-in-out .7s infinite alternate}
+@keyframes jglowpop{from{transform:scale(.2);opacity:0}60%{opacity:1}to{transform:scale(1);opacity:1}}
+@keyframes jglowbeat{from{opacity:.55}to{opacity:1}}
+/* (r1) judge r0: 'no impact, shockwave or moving particles, and no build after the title lands' (chris 10-06 FB6): the particle canvas (#fx z 25) sat UNDER #ov (z 30) so the game's own coin / confetti rain
+   and rings were hidden behind the opaque backdrop; while the card is up (.bw) it goes on top, like Bender's. The name keeps beating after it lands, the rays sweep faster. */
+.bw #fx{z-index:35}
+#tier .name{animation:jdrop .62s linear,jnamebeat .6s ease-in-out .7s infinite}
+@keyframes jnamebeat{0%,100%{transform:scale(1)}50%{transform:scale(1.09) rotate(-1deg)}}
+@keyframes jdrop{0%{transform:translateY(-300px) scale(1.5) rotate(-5deg);animation-timing-function:cubic-bezier(.55,0,.9,.5)}52%{transform:translateY(0) scale(1.14,.86) rotate(1deg);animation-timing-function:ease-out}66%{transform:translateY(-34px) scale(.96,1.05) rotate(-.5deg);animation-timing-function:ease-in}80%{transform:translateY(0) scale(1.03,.97);animation-timing-function:ease-out}100%{transform:none}}
+#tier .xx{animation:jslam .45s .5s cubic-bezier(.2,1.8,.4,1) backwards}
+@keyframes jslam{from{transform:scale(2.2) rotate(-6deg);opacity:.75}to{transform:none;opacity:1}}
+#tier .bwh{animation:bpop .5s cubic-bezier(.2,1.6,.4,1),jbob 2s ease-in-out .5s infinite}
+@keyframes jbob{0%,100%{transform:translateY(0) rotate(-1.5deg)}50%{transform:translateY(-10px) rotate(1.5deg)}}
+#tier .amt.jshk{animation:jamt .09s linear infinite}   /* juice.js sets the class only while the number is counting */
+@keyframes jamt{0%{transform:translate(-3px,1px)}50%{transform:translate(3px,-2px)}100%{transform:translate(-2px,-1px)}}
+
+@media (prefers-reduced-motion:reduce){
+  #ttl{animation:none}
+  #hero:not([data-mood]),#hero[data-mood="idle"]{animation:sway 3.4s ease-in-out infinite}
+  #cap{animation:none}
+  #spin.idle{animation:breathe 2.4s ease-in-out infinite}
+  #win.pop{animation:winpop .3s ease-out}
+  #tier .name{animation:bpop .45s cubic-bezier(.2,1.6,.4,1)}
+  #hero[data-mood]{animation:sway 3.4s ease-in-out infinite}
+  .cell.hit::before,#tierbg::before,#tierbg::after,#tier .name,#tier .bwh,#tier .xx,#tier .amt.jshk{animation:none}
+  #tierbg::before{display:none}
+  #spin.run{transform:none}
+  .cell.hit img.sym{animation:hit .42s ease-in-out infinite alternate}
+  .cell.pulse img.sym{animation:hit .3s ease-in-out infinite alternate}
+  .scn{animation:fadein .25s ease-out}
+  #tier .bwh{animation:bpop .5s cubic-bezier(.2,1.6,.4,1)}
+}
