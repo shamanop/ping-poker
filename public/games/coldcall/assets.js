@@ -21,8 +21,11 @@
     // every image path reaches CSS through custom properties (--img-bg, --img-<piece>, --img-<texture>): no path is written in style.css
     const root = document.documentElement.style;
     root.setProperty('--img-bg', `url("${A.bgUrl()}")`);
-    pcs.forEach((k) => root.setProperty('--img-' + k, `url("${A.pieceUrl(k)}")`)); txs.forEach((k) => root.setProperty('--img-' + k, `url("${A.texUrl(k)}")`));
-    const urls = [...new Set([...Object.keys(man.symbols).map(A.symUrl), A.heroUrl(), A.bgUrl(), ...mds.map(A.moodUrl), ...pcs.map(A.pieceUrl), ...txs.map(A.texUrl)])];
+    // (chris 10-06 FB5) the 12 big cut-outs (wide-screen side props + the pot mug, ~500 KB of 2 MB) are not needed for the first spin: they are fetched and decoded right after ready, and each
+    // --img-big_* is set only once its image is decoded (the first paint fetches whatever a custom property points at, so setting them early put them on the critical path).
+    const later = pcs.filter((k) => /^big_/.test(k)), now = pcs.filter((k) => !/^big_/.test(k));
+    now.forEach((k) => root.setProperty('--img-' + k, `url("${A.pieceUrl(k)}")`)); txs.forEach((k) => root.setProperty('--img-' + k, `url("${A.texUrl(k)}")`));
+    const urls = [...new Set([...Object.keys(man.symbols).map(A.symUrl), A.heroUrl(), A.bgUrl(), ...mds.map(A.moodUrl), ...now.map(A.pieceUrl), ...txs.map(A.texUrl)])];
     const fonts = (man.fonts || []).map((f) => document.fonts.load('16px "' + f + '"').catch(() => {}));   // faces are declared in style.css; load them during the splash too
     let done = 0;
     await Promise.all(urls.map(async (u) => {
@@ -34,6 +37,7 @@
     }));
     await Promise.all(fonts);
     A.ready = true;
+    later.forEach((k) => { const u = A.pieceUrl(k), im = new Image(); im.src = u; im.decode().catch(() => { A.warn.push('decode failed: ' + u); }).then(() => { A.imgs.set(u, im); root.setProperty('--img-' + k, `url("${u}")`); }); });
     if (A.warn.length) console.info('[coldcall assets]', A.warn.join('; '));
     return man;
   };

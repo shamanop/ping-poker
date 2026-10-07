@@ -1,0 +1,2 @@
+{"build":"AFTER","scenario":"U8 rate-on-ready","mode":"play","ok":true,"promptStillOpenAt3s":"pick","abortsAt3s":0,"final":{"aborted":0,"rounds":[{"first":"pending","decisions":["player","player"],"aborted":null}]}}
+exit 0

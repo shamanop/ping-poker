@@ -1,0 +1,28 @@
+/* COLD CALL UI pieces that were rebuilt after Chris's 2026-10-06 play notes. Loaded after style.css and pull.css.
+   Art swap rule (a later wave paints these): every piece has ONE element that carries the art (#plNote::before; keypad.css has .dial .key and .dial::before) and reads it
+   from a CSS variable (--note-art, --key-art, --pad-art in keypad.css). Replace the variable with url(...) and nothing else changes size or moves. */
+
+/* ---- FB2 (chris 10-06 FB2): the leads strip. One slim row in the monitor's top bezel, 30 px tall (was a 54 px two-row sticky, rotated, 62 px on screen).
+   Left: LEADS + count + / list. Right: the cold line (right-aligned, clipped, never wraps). The fill bar is a 5 px meter along the strip's bottom edge.
+   Sits at y 36..66 of the board: the glass (and the first symbol row) starts at y 72.5, so it never touches a symbol. Markup and ids are the same as before. ---- */
+#plNote{--note-w:516px;--note-h:30px;--note-top:36px;--note-art:linear-gradient(172deg,#fff3a0,#f6d84a 70%,#e8bf2e);
+  position:absolute;z-index:7;left:calc((564px - var(--note-w)) / 2);top:var(--note-top);width:var(--note-w);height:var(--note-h);padding:0 14px 5px 12px;
+  display:flex;align-items:center;gap:12px;isolation:isolate;pointer-events:none;color:#241a0a;font-family:var(--memo);box-shadow:0 2px 0 rgba(120,90,10,.55),0 3px 4px rgba(0,0,0,.45)}
+#plNote::before{content:"";position:absolute;inset:0;z-index:-1;background:var(--note-art) center/100% 100% no-repeat}
+#plNote .r1{display:flex;align-items:baseline;gap:6px;flex:none;min-width:0}
+#plNote small{flex:none;display:flex;align-items:center;gap:5px;font-family:var(--display);font-size:14px;letter-spacing:.1em;color:#b02a1d}
+#plNote small::before{content:"";width:8px;height:8px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#ff9a82,var(--red) 55%,var(--red-dk));box-shadow:0 1px 1px rgba(0,0,0,.55)}
+#plNote b{flex:none;font-family:var(--display);font-weight:400;font-size:24px;line-height:1;color:#241a0a;font-variant-numeric:tabular-nums}
+#plNote em{flex:none;font-style:normal;font-family:var(--memo);font-size:15px;color:#4a3a14}
+#plNote .bar{position:absolute;left:0;right:0;bottom:0;height:5px;border-top:1px solid #241a0a;background:rgba(36,26,10,.2);overflow:hidden}
+#plNote .bar i{display:block;height:100%;width:var(--w,0%);background:#d8402e}
+#plNote .cold{flex:1;min-width:0;text-align:right;font-size:15px;line-height:20px;color:#241a0a;white-space:nowrap;overflow:hidden;text-overflow:clip}
+#plNote .cold.long{font-size:14.5px}
+#plNote .cold u{text-decoration:none;font-weight:700;background:linear-gradient(transparent 56%,rgba(216,64,46,.45) 56% 92%,transparent 92%)}
+#plNote.nocold .cold{display:none}
+#plNote.full small{color:#fff3d6;background:var(--red);padding:0 5px;border-radius:3px;letter-spacing:.08em}
+#plNote.full small::before{display:none}
+#plNote.full .bar i{background:linear-gradient(#ffd058,#e9b23a)}
+#plNote.hit{animation:plhit .5s ease-out}
+@keyframes plhit{0%{transform:scale(1)}35%{transform:scale(1.04)}100%{transform:scale(1)}}
+@media (prefers-reduced-motion:reduce){#plNote.hit{animation:none}}

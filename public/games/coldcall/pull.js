@@ -11,7 +11,7 @@
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const app = $('app'), board = $('board'), head = $('head'), ribbon = $('ribbon'), hud = $('hud'), scene = $('scene'), ribL = $('ribL'), ribR = $('ribR');
   const el = (tag, cls, html, id) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; if (id) e.id = id; return e; };
-  const S = { off: false, view: null, mode: 'play', pot: null, rules: null, bet: 0, prompt: null, rib: null, mine: null, idleKey: '', feed: [], fi: 0, phase: 0, seen: new Set(), demo: false, hold: null, bn: 0, potPend: null, potDone: false };
+  const S = { off: false, view: null, mode: 'play', pot: null, rules: null, bet: 0, prompt: null, rib: null, mine: null, idleKey: '', feed: [], fi: 0, phase: 0, seen: new Set(), demo: false, hold: null, bn: 0, potPend: null, potDone: false, lg: 0, gh: null };
   const ARM_MS = 600;                                           // U1: a decision ignores taps for its first 600 ms (a skip tap that started before the prompt must not answer it)
   const st = () => K().st;
   const live = () => !!st().live;
@@ -193,20 +193,27 @@
   }
   async function leadGain(p) {                                      // after a round: leads filled, daily claim, cold leak, Callback armed
     if (!p || !live() || !S.view) return; const k = K(), v = S.view, list = v.list || 1, from = Math.floor((p.leadsBefore || 0) / 10), to = Math.floor((p.leadsAfter != null ? p.leadsAfter : (p.leadsBefore || 0)) / 10);
-    const steps = [];
+    const steps = [], my = ++S.lg;                                  // (chris 10-06 FB1) game.js no longer waits for this (only a Callback announcement holds SPIN): a newer call supersedes an older one, only the newest touches the note
+    gain.hidden = true;
     if (p.leaked > 0) steps.push(['WENT COLD', `${ldTxt(p.leaked / 10)} went cold while you were away.`]);
     if (p.daily) steps.push(['APPOINTMENT', `+${ldTxt(p.daily.leads)}, day ${p.daily.streak} kept.`]);
     if (p.armed) steps.push(['CALLBACK!', 'Your list is full. The next call is free.']);
     if (p.filled > 0) {
       const f = +(p.filled / 10).toFixed(1); gain.textContent = '+' + f + (f === 1 ? ' LEAD' : ' LEADS'); gain.hidden = false; note.classList.remove('hit'); void note.offsetWidth; note.classList.add('hit');
-      k.tween(from, Math.max(from, to), 600, (x) => drawNote(Math.round(x)));
+      drawNote(from);                                               // (chris 10-06 FB1) the count starts on this call's own number now, not on the next frame: with frames starved a superseded call's last number stayed up (fb1 driver, 26 of 81 samples)
+      k.tween(from, Math.max(from, to), 600, (x) => { if (my === S.lg) drawNote(Math.round(x)); });
     }
     for (const [t, tx] of steps) await banner(t, tx, 1200, k);
     if (!steps.length) await k.wait(700);
-    gain.hidden = true; drawNote();
+    if (my === S.lg) { gain.hidden = true; drawNote(); }
   }
 
   // ------------------------------------------------------------------ GHOST: "WOULD HAVE CLOSED $12.40", a stamped sticky in the head band; the squares flip, nothing is added to the win
+  // (chris 10-06 FB1) the ghost never holds SPIN: game.js starts it AFTER the round is settled and the button is free; play() / a bet change end it with endGhost(); every await checks G.dead
+  function endGhost() {
+    const G = S.gh; if (!G) return false; S.gh = null; G.dead = true; if (G.stamp) G.stamp.remove(); head.classList.remove('plg'); G.nodes.forEach((n) => n.remove());
+    G.leads.forEach((p) => { const s = $('slots').children[p]; if (s) s.classList.remove('plg'); const sq = CC.board.el(p); if (sq) sq.classList.remove('under'); }); CC.board.setHot([]); return true;
+  }
   async function ghost(g, ctx) {
     const ph = g && g.script, gr = (ctx.rules || rulesOf()).ghost; if (!ph || !(g.pay > 0) || !live() || (gr && gr.minTenths > g.pay)) return;   // only at the knob's minTenths (50 = 5x)
     const B = CC.board, ovl = B.ovl(), k = K(), amt = Math.round(ctx.cents(g.pay)), nodes = [];
@@ -216,7 +223,8 @@
       for (const u of rd.upsells) for (const h of u.hits) { const f = fin.get(h.p); if (f && (f.k === 'b' || (f.k === 'c' && !h.pend))) f.v = h.after; }   // every hit counts: an upsell on a close that already collected multiplies it (U10)
       for (const c of rd.collects) { const f = fin.get(c.p); if (f) f.v = c.value; }
     }
-    head.classList.add('plg'); B.setHot(ph.leads); await ctx.wait(380);
+    endGhost(); const G = (S.gh = { dead: false, nodes, leads: ph.leads, stamp: null });
+    head.classList.add('plg'); B.setHot(ph.leads); await ctx.wait(380); if (G.dead) return;
     ph.leads.forEach((p) => { const s = $('slots').children[p]; if (s) s.classList.add('plg'); });
     let i = 0;
     for (const [p, f] of fin) {
@@ -228,12 +236,12 @@
       const sq = B.el(p); if (sq) sq.classList.add('under');
       if (!reduce) n.animate([{ transform: 'scaleX(0)' }, { transform: 'scaleX(1.12)', offset: 0.65 }, { transform: 'scaleX(1)' }], { duration: 230 * k.speed(), delay: i * 60 * k.speed(), fill: 'backwards', easing: 'ease-out' }); i++;
     }
-    await ctx.wait(i * 60 + 300);
+    await ctx.wait(i * 60 + 300); if (G.dead) return;
     const a = money(amt), mx = xTxt(g.pay / 10), stamp = el('div', 'stamp plgh', `<div class="t">IF A PHONE HAD LANDED</div><div class="v">${mx}</div><small>${a.length > 12 ? 'times your bet' : a + ' at your bet'}<br>Not paid.</small>`);
-    head.appendChild(stamp); ctx.SFX.stamp && ctx.SFX.stamp(); ctx.CC_ghost = true;
+    head.appendChild(stamp); G.stamp = stamp; ctx.SFX.stamp && ctx.SFX.stamp(); ctx.CC_ghost = true;
     if (!reduce) stamp.animate([{ transform: 'scale(2.2) rotate(-12deg)', opacity: 0 }, { transform: 'scale(.94)', opacity: 1, offset: 0.3 }, { transform: 'none', opacity: 1 }], { duration: 300 * k.speed(), easing: 'ease-out' });
     if (ctx.demoHold) await hold(ctx, 0); else await Promise.race([ctx.waitTap(2400), ctx.wait(2600)]);
-    stamp.remove(); head.classList.remove('plg'); nodes.forEach((n) => n.remove()); ph.leads.forEach((p) => { const s = $('slots').children[p]; if (s) s.classList.remove('plg'); const sq = B.el(p); if (sq) sq.classList.remove('under'); }); B.setHot([]);
+    if (S.gh === G) endGhost();
   }
 
   // ------------------------------------------------------------------ ONE MORE CALL taken: the reveal. The WIN meter then moves to the server's final total (game.js).
@@ -293,7 +301,7 @@
     if (!p) return; if ((S.potPend || (S.pot && typeof p.bal === 'number' && p.bal < S.pot.bal)) && potHeld()) { S.potPend = p; return; }
     S.potPend = null; S.pot = p; drawPot(); potb.hidden = !(live() && S.view);
   }
-  function onBetChange(b) { S.bet = b != null ? b : betNow(); drawWarm(); idleRibbon(); }
+  function onBetChange(b) { endGhost(); S.bet = b != null ? b : betNow(); drawWarm(); idleRibbon(); }
   new MutationObserver(() => {                                      // the SPIN button class is the busy flag; the spin button's .cb is the Callback flag
     const busy = st().busy; app.classList.toggle('pl-busy', busy); syncCb(); if (!busy) { S.potDone = false; potFlush(); }
     if (busy) { S.view && drawWarmOff(); ribbon.classList.remove('gold', 'warn'); if (S.idleKey) { ribRestore(); S.idleKey = ''; } feedStep(true); } else if (S.view) { drawWarm(); idleRibbon(); }
@@ -343,6 +351,6 @@
   const release = () => { if (S.hold) { const r = S.hold; S.hold = null; r(); } };
 
   const armed = () => !!(S.prompt && S.prompt.armed);                 // true once the open prompt takes taps (false: no prompt, or still inside the 600 ms arming window)
-  CC.pull = { setOn, decorate, armed, feedClear, setView, setPot, feed, onBetChange, leadGain, ghost, askPick, askMore, expired, moreOutcome, potWin, rules, timer, infoLines, demo, release, _S: S };
+  CC.pull = { setOn, decorate, armed, feedClear, setView, setPot, feed, onBetChange, leadGain, ghost, endGhost, askPick, askMore, expired, moreOutcome, potWin, rules, timer, infoLines, demo, release, _S: S };
   if (Q.get('mock') === 'pull') { window.demo = demo; demo(Q.get('state') || 'idle', Q.get('mode') || 'play'); }
 })();

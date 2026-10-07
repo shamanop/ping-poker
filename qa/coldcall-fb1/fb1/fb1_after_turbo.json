@@ -1,0 +1,407 @@
+{
+ "port": 4651,
+ "label": "after_turbo",
+ "when": "2026-10-06T20:49:59.172Z",
+ "checks": {
+  "accept: every next spin starts within 150 ms of the round being over": true,
+  "money: shown balance == page wallet == server wallet": true,
+  "money: server wallet delta == sum(win + pot - cost) over the rounds": true,
+  "money: no mismatch / error / pull error": true,
+  "settled: no spin started before the previous round was done on the server": true,
+  "leads: note count == server leads, bar == leads/list, +N label hidden, no banner left": true,
+  "leads: every number the note showed lies in a server-sent from..to range": true,
+  "cleanup: nothing left on screen (stamps, plg, under)": true,
+  "leads supersede: the older leadGain draws nothing after the newer started, the +N label survives until the newer ends, the note ends on the view": true
+ },
+ "detail": {
+  "accept: every next spin starts within 150 ms of the round being over": {
+   "n": 40,
+   "med": 4,
+   "max": 10,
+   "p": [
+    2,
+    3,
+    3,
+    3,
+    3,
+    3,
+    3,
+    3,
+    3,
+    3,
+    3,
+    3,
+    4,
+    4,
+    4,
+    4,
+    4,
+    4,
+    4,
+    4,
+    4,
+    4,
+    4,
+    5,
+    5,
+    5,
+    5,
+    5,
+    5,
+    6,
+    6,
+    6,
+    6,
+    7,
+    7,
+    7,
+    8,
+    9,
+    10,
+    10
+   ]
+  },
+  "money: shown balance == page wallet == server wallet": {
+   "shown": 997120,
+   "page": 997120,
+   "server": 997120
+  },
+  "money: server wallet delta == sum(win + pot - cost) over the rounds": {
+   "delta": -2880,
+   "sum": -2880,
+   "rounds": 41
+  },
+  "money: no mismatch / error / pull error": {
+   "mm": [],
+   "err": null,
+   "pe": []
+  },
+  "settled: no spin started before the previous round was done on the server": {
+   "open": false
+  },
+  "leads: note count == server leads, bar == leads/list, +N label hidden, no banner left": {
+   "note": "43",
+   "server": 43,
+   "bar": "9.6%",
+   "wantBar": "9.6%",
+   "gainHidden": true
+  },
+  "leads: every number the note showed lies in a server-sent from..to range": {
+   "shown": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    11,
+    12,
+    13,
+    14,
+    15,
+    17,
+    16,
+    18,
+    19,
+    20,
+    21,
+    23,
+    22,
+    24,
+    25,
+    26,
+    27,
+    29,
+    28,
+    30,
+    31,
+    32,
+    33,
+    35,
+    34,
+    36,
+    37,
+    38,
+    39,
+    41,
+    40,
+    42,
+    43
+   ],
+   "sent": [
+    43,
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39,
+    40,
+    41,
+    42
+   ],
+   "stray": []
+  },
+  "naturalLeadGainOverlaps": 0,
+  "cleanup: nothing left on screen (stamps, plg, under)": {
+   "left": 0,
+   "plg": 0,
+   "under": 0
+  },
+  "hammer": [
+   {
+    "acceptMs": 8,
+    "clicks": 1,
+    "started": true
+   },
+   {
+    "acceptMs": 9,
+    "clicks": 1,
+    "started": true
+   },
+   {
+    "acceptMs": 5,
+    "clicks": 1,
+    "started": true
+   },
+   {
+    "acceptMs": 7,
+    "clicks": 1,
+    "started": true
+   },
+   {
+    "acceptMs": 3,
+    "clicks": 1,
+    "started": true
+   },
+   {
+    "acceptMs": 6,
+    "clicks": 1,
+    "started": true
+   },
+   {
+    "acceptMs": 10,
+    "clicks": 1,
+    "started": true
+   },
+   {
+    "acceptMs": 4,
+    "clicks": 1,
+    "started": true
+   },
+   {
+    "acceptMs": 6,
+    "clicks": 1,
+    "started": true
+   },
+   {
+    "acceptMs": 4,
+    "clicks": 1,
+    "started": true
+   },
+   {
+    "acceptMs": 4,
+    "clicks": 1,
+    "started": true
+   },
+   {
+    "acceptMs": 6,
+    "clicks": 1,
+    "started": true
+   },
+   {
+    "acceptMs": 7,
+    "clicks": 1,
+    "started": true
+   },
+   {
+    "acceptMs": 3,
+    "clicks": 1,
+    "started": true
+   },
+   {
+    "acceptMs": 3,
+    "clicks": 1,
+    "started": true
+   },
+   {
+    "acceptMs": 4,
+    "clicks": 1,
+    "started": true
+   },
+   {
+    "acceptMs": 7,
+    "clicks": 1,
+    "started": true
+   },
+   {
+    "acceptMs": 4,
+    "clicks": 1,
+    "started": true
+   },
+   {
+    "acceptMs": 3,
+    "clicks": 1,
+    "started": true
+   },
+   {
+    "acceptMs": 5,
+    "clicks": 1,
+    "started": true
+   },
+   {
+    "acceptMs": 4,
+    "clicks": 1,
+    "started": true
+   },
+   {
+    "acceptMs": 3,
+    "clicks": 1,
+    "started": true
+   },
+   {
+    "acceptMs": 4,
+    "clicks": 1,
+    "started": true
+   },
+   {
+    "acceptMs": 5,
+    "clicks": 1,
+    "started": true
+   },
+   {
+    "acceptMs": 3,
+    "clicks": 1,
+    "started": true
+   },
+   {
+    "acceptMs": 3,
+    "clicks": 1,
+    "started": true
+   },
+   {
+    "acceptMs": 5,
+    "clicks": 1,
+    "started": true
+   },
+   {
+    "acceptMs": 5,
+    "clicks": 1,
+    "started": true
+   },
+   {
+    "acceptMs": 6,
+    "clicks": 1,
+    "started": true
+   },
+   {
+    "acceptMs": 10,
+    "clicks": 1,
+    "started": true
+   },
+   {
+    "acceptMs": 4,
+    "clicks": 1,
+    "started": true
+   },
+   {
+    "acceptMs": 3,
+    "clicks": 1,
+    "started": true
+   },
+   {
+    "acceptMs": 3,
+    "clicks": 1,
+    "started": true
+   },
+   {
+    "acceptMs": 2,
+    "clicks": 1,
+    "started": true
+   },
+   {
+    "acceptMs": 3,
+    "clicks": 1,
+    "started": true
+   },
+   {
+    "acceptMs": 5,
+    "clicks": 1,
+    "started": true
+   },
+   {
+    "acceptMs": 4,
+    "clicks": 1,
+    "started": true
+   },
+   {
+    "acceptMs": 4,
+    "clicks": 1,
+    "started": true
+   },
+   {
+    "acceptMs": 3,
+    "clicks": 1,
+    "started": true
+   },
+   {
+    "acceptMs": 4,
+    "clicks": 1,
+    "started": true
+   }
+  ],
+  "armedRows": 0,
+  "leads supersede: the older leadGain draws nothing after the newer started, the +N label survives until the newer ends, the note ends on the view": {
+   "below13": 0,
+   "samples": 33,
+   "mid": {
+    "gainHidden": false,
+    "n": 15
+   },
+   "end": {
+    "n": 15,
+    "gainHidden": true,
+    "bn": false
+   }
+  }
+ },
+ "ok": true
+}

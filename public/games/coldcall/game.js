@@ -426,6 +426,7 @@
     const v = pview(), cbv = st.live && kind === 'spin' && v && v.cb ? v.cb : null;       // a Callback is pending: this spin is it (free, at its own bet)
     const b = bet(), cost = cbv ? 0 : costC(kind, b);                      // whole cents: the bet, or the server's buy price at this bet
     if (avail() < cost) { toast(kind === 'spin' ? 'Not enough funds. Lower your bet.' : 'Not enough funds for that bonus.'); st.auto = false; $('auto').classList.remove('on'); return; }
+    if (P('endGhost')) syncWarm();   // (chris 10-06 FB1) a would-have-closed stamp still showing is dropped, the warm squares come back
     SFX_.init(); wake(); dbg.started = (dbg.started || 0) + 1; setBusy(true); st.skip = false; CC.hero.set('idle'); sweep(true); resetWin(); st.cbBet = cbv ? cbv.bet : null; drawBet(); setBal(st.bal - cost, true); SFX_.spin(); say(kind === 'spin' ? 'spin' : 'buy');
     let p;
     try { p = await T.spin(b, st.mode, kind === 'spin' ? null : kind, st.auto); }
@@ -441,12 +442,12 @@
   // animate a round from its first result to its done result, then settle the screen. `adopted`: a round that was already open (reload, other tab): nothing was charged here.
   async function runRound(p, kind, adopted) {
     const b = p.betCents || p.bet || bet(), S0 = p.script || p.partial;
-    if (adopted) { setBusy(true); st.skip = false; CC.hero.set('idle'); sweep(true); resetWin(); setBal(walletBal(), false); }
+    if (adopted) { P('endGhost'); setBusy(true); st.skip = false; CC.hero.set('idle'); sweep(true); resetWin(); setBal(walletBal(), false); }
     st.cbBet = p.callback ? b : null; drawBet();
     const cost = p.cost != null ? p.cost : 0;
     const row = { id: p.roundId, kind, forced: p.forced || null, tease: !!(S0.spin && S0.spin.bells === 2 && !S0.bonus), cluster: S0.spin ? S0.spin.cluster : 0, bigClose: allSpins(S0).some((s) => s.phone && s.phone.rounds.some((r) => r.collects.some((c) => c.value >= 250))), bonus: S0.bonus ? S0.bonus.kind : null, phone: !!((S0.spin && S0.spin.phone) || (S0.bonus && S0.bonus.spins.some((s) => s.phone))), tier: p.tier, win: p.totalWinTenths, callback: !!p.callback, adopted: !!adopted, first: p.status || 'done' };
     dbg.rounds.push(row);
-    let ctx = null, aborted = null;
+    let ctx = null, aborted = null, ghostNow = null;
     try { ctx = makeCtx(p, b, kind); st.ctx = ctx; ctx.rd = inbox.get(p.roundId) || mkBox(p.roundId); await animateRound(ctx); }
     catch (e) { if (e instanceof Abort) aborted = e; else { console.error(e); dbg.error = String(e && e.stack || e); } }
     if (aborted) return abortRound(p, ctx, aborted, row);
@@ -475,7 +476,7 @@
       // pull extras: the pot prize (on top of the win), the would-have-closed ghost (a dead-ish base spin only, off in turbo, never with a bonus)
       if (st.live && f.pot && f.pot.won) { row.pot = f.pot.amount; if (CC.pull && CC.pull.potWin) await PA('potWin', f.pot, ctx); else { toast('POT WON: ' + dollars(f.pot.amount), 2600); SFX_.win(3); await wait(1200); } }
       const gh = st.live && f.pull && f.pull.ghost;
-      if (gh && gh.pay > 0 && !st.turbo && !(f.script && f.script.bonus)) { row.ghost = gh.pay; await PA('ghost', gh, ctx); }
+      if (gh && gh.pay > 0 && !st.turbo && !(f.script && f.script.bonus)) { row.ghost = gh.pay; ghostNow = gh; }   // (chris 10-06 FB1) not awaited here: it plays after the round is settled and SPIN is free (see below)
     } catch (e) { console.error(e); dbg.error = String(e && e.stack || e); }
     sweep();
     if (ctx) selfCheck(f, ctx); else dbg.mismatch.push({ round: f.roundId, what: 'animation error', shown: dbg.error || '', script: '' });
@@ -485,11 +486,12 @@
       setBal(walletBal(), true); dbg.lastBal = { shown: st.bal, wallet: walletBal() };
       row.cost = cost; row.totalWin = f.totalWin; row.potWon = f.pot && f.pot.won ? f.pot.amount : 0; row.wallet = walletBal();
       toParent({ type: 'round', win: f.totalWin, bet: b, mode: st.mode, tier: f.tier });
-      if (f.pull) { await Promise.race([PA('leadGain', f.pull), delay(4000)]); }
+      if (f.pull) { const lg = PA('leadGain', f.pull); if (f.pull.armed) await Promise.race([lg, delay(4000)]); }   // (chris 10-06 FB1) the leads note (count, bar, +N LEADS, banners) runs on its own time and never holds SPIN; only the Callback announcement does
       syncView();
     } else { st.pracBal += f.totalWin - cost; if (st.pracBal < bet()) { st.pracBal = 100000; toast('Out of practice money. Free refill.', 2200); } setBal(st.pracBal, true); }
     st.skip = false; setBusy(false); wake(); syncWarm();
-    if (st.auto) { clearTimeout(autoT); autoT = setTimeout(() => { if (st.auto && !st.busy) play('spin'); }, 450 * speed()); }
+    const gp = ghostNow ? PA('ghost', ghostNow, ctx).then(() => syncWarm()) : null;   // (chris 10-06 FB1) the would-have-closed stamp plays on a free button; the next spin (or a bet change) ends it via CC.pull.endGhost
+    if (st.auto) { const arm = () => { clearTimeout(autoT); autoT = setTimeout(() => { if (st.auto && !st.busy) play('spin'); }, 450 * speed()); }; if (gp) gp.then(arm); else arm(); }
   }
   // the screen cannot finish this round (voided by the server, a decision refused, the line went quiet): clean up and let the server's state decide what is true
   function abortRound(p, ctx, why, row) {

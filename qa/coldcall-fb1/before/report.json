@@ -1,0 +1,107 @@
+[
+ {
+  "file": "big_win_spin_540x960",
+  "ok": true,
+  "errs": []
+ },
+ {
+  "file": "big_win_spin_360x740",
+  "ok": true,
+  "errs": []
+ },
+ {
+  "file": "big_win_spin_1440x900",
+  "ok": true,
+  "errs": []
+ },
+ {
+  "file": "buy_menu_540x960",
+  "ok": true,
+  "errs": []
+ },
+ {
+  "file": "buy_menu_360x740",
+  "ok": true,
+  "errs": []
+ },
+ {
+  "file": "buy_menu_1440x900",
+  "ok": true,
+  "errs": []
+ },
+ {
+  "file": "buy_menu_540x960_chips",
+  "ok": true,
+  "errs": []
+ },
+ {
+  "file": "buy_menu_360x740_chips",
+  "ok": true,
+  "errs": []
+ },
+ {
+  "file": "buy_menu_1440x900_chips",
+  "ok": true,
+  "errs": []
+ },
+ {
+  "file": "buy_confirm_540x960",
+  "ok": true,
+  "errs": []
+ },
+ {
+  "file": "buy_confirm_360x740",
+  "ok": true,
+  "errs": []
+ },
+ {
+  "file": "buy_confirm_1440x900",
+  "ok": true,
+  "errs": []
+ },
+ {
+  "file": "buy_confirm_540x960_chips",
+  "ok": true,
+  "errs": []
+ },
+ {
+  "file": "buy_confirm_360x740_chips",
+  "ok": true,
+  "errs": []
+ },
+ {
+  "file": "buy_confirm_1440x900_chips",
+  "ok": true,
+  "errs": []
+ },
+ {
+  "file": "gain_540x960",
+  "ok": true,
+  "errs": []
+ },
+ {
+  "file": "gain_360x740",
+  "ok": true,
+  "errs": []
+ },
+ {
+  "file": "gain_1440x900",
+  "ok": true,
+  "errs": []
+ },
+ {
+  "file": "gain_540x960_chips",
+  "ok": true,
+  "errs": []
+ },
+ {
+  "file": "gain_360x740_chips",
+  "ok": true,
+  "errs": []
+ },
+ {
+  "file": "gain_1440x900_chips",
+  "ok": true,
+  "errs": []
+ }
+]

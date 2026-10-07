@@ -1,0 +1,1 @@
+{"padinfo":"Pick a number. At the start of a bonus you press a number key to place the call. The number is set before you press: any key shows the same number, and it decides nothing.","count":1}

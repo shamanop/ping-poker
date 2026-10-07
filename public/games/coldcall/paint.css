@@ -1,0 +1,120 @@
+/* COLD CALL painted UI (chris 10-06 FB4): GPT-painted blanks for every piece that was a CSS box. Loaded LAST (after ui.css and keypad.css), CSS only: no markup or JS reads it.
+   Art: assets/img/ui/ui_*.webp, registered in assets/symbols.json pieces (so CSS has --img-ui_<name> and the splash preloads them). Masters: cold-call/art/paint/<sheet>/, how: cold-call/art/PAINT-NOTES.md.
+   Rule: the art sits on a pseudo-element (or an existing art slot) so NO box changes size (layout is identical with and without this file); live text stays HTML on top.
+   Test switch: a build with this file blanked must have the same boxes (qa/coldcall-fb1/paint_shift.js). */
+
+/* ---- S1 (chris 10-06 FB4): the status bar above the tile drop. Rule bar = painted red / gold bar, art box = the old box + its 3 px outline (inset -3), 1060 x 76 = 2x of 530 x 38. ---- */
+#ribbon::before,.bonus #ribbon::before{inset:-3px;border:0;outline:0;background:var(--img-ui_bar_red) center/100% 100% no-repeat;filter:drop-shadow(0 2px 0 rgba(0,0,0,.35))}
+.bonus #ribbon::before,#ribbon.gold::before{background-image:var(--img-ui_bar_gold)}
+/* PICK YOUR LEAD / ONE MORE CALL countdown: the same red bar, the part already drained is darkened by a layer over its right end (the old bar drained a gradient) */
+#ribbon.ask::before,#ribbon.ask.late::before{background:var(--img-ui_bar_red) center/100% 100% no-repeat}
+#ribbon.ask.late::before{filter:brightness(1.22) saturate(1.15) drop-shadow(0 2px 0 rgba(0,0,0,.35))}
+#ribbon.ask::after{content:"";position:absolute;z-index:3;top:4px;bottom:4px;right:4px;left:var(--left,100%);border-radius:0 3px 3px 0;background:rgba(18,5,3,.74);pointer-events:none}
+/* leads strip: ui.css gave it one art slot (#plNote::before reads --note-art): a painted yellow sticky strip, 1032 x 60 = 2x of 516 x 30. The 5 px fill meter stays live CSS on its bottom edge. */
+#plNote{--note-art:var(--img-ui_strip_note);box-shadow:none}
+#plNote .bar{left:5px;right:9px;bottom:3px}
+
+/* ---- S2 (chris 10-06 FB4): buttons. Painted blanks (cream / red / gold / navy key, keypad key + plate) as 9-slice border-images: the box keeps its own border width (3 px, now transparent),
+   the art is drawn by border-image-width inside the same border box, so no box changes size. Text stays live HTML. The chunky lip is part of the painting.
+   States come from ONE blank per colour: rest = painted; pressed = the existing translateY(3px) plus a darker filter; disabled = desaturated filter; lit = the gold blank. ---- */
+.sq,.btns button,.dec2 .hang,.buyopt,.btn.alt,.btn.alt:active{background:none;border-color:transparent;box-shadow:none;border-image:var(--img-ui_key_cream) 20 26 36 26 fill/var(--bw,6px 6px 8px 6px)/0 stretch}
+#buy,.dec2 .more,.btn{background:none;border-color:transparent;box-shadow:none;border-image:var(--img-ui_key_red) 20 26 36 26 fill/var(--bw,6px 6px 8px 6px)/0 stretch}
+.btns button.on,.btns button.on:active{background:none;box-shadow:0 0 10px rgba(255,208,88,.6);border-image:var(--img-ui_key_gold) 20 26 36 26 fill/var(--bw,6px 6px 8px 6px)/0 stretch}
+.btns button:not(#buy),.sq{padding-bottom:3px}
+.sq:active,.btns button:active,.dec2 .k:active,.buyopt:active,.btn:active{box-shadow:none;filter:brightness(.9)}
+.btns button.on:active{box-shadow:0 0 10px rgba(255,208,88,.6)}
+.sq:disabled,.btns button:disabled,.dec2 .k[disabled],.buyopt[disabled],.btn[disabled]{filter:saturate(.45) brightness(.82)}
+.dec2 .hang,.dec2 .more{--bw:11px 16px 20px 16px}
+.buyopt,.btn,.btn.alt{--bw:9px 14px 16px 14px}
+/* mode tabs: only the lit tab is painted (the gold blank); the 24 px bar is too small for the navy 9-slice (it read as a dotted line), so the pill stays CSS */
+#modebar button.on{background:var(--img-ui_key_gold) center/100% 100% no-repeat}
+/* keypad (keypad.css art slots): key face, lit key = the same face through a gold filter (sepia + saturate), plate = the navy brass blank as a 9-slice on the ::before layer */
+.dial{--key-art:var(--img-ui_key_pad);border-color:transparent;box-shadow:0 10px 14px rgba(0,0,0,.55)}
+.dial::before{inset:0;border:solid transparent;border-width:7px 14px 14px 14px;border-radius:0;background:none;border-image:var(--img-ui_pad_plate) 36 36 36 36 fill/18px/0 stretch}
+.dial .key{border-color:transparent;border-radius:0;box-shadow:none;background:none;border-image:var(--img-ui_key_pad) 22 24 44 24 fill/8px 10px 15px 10px/0 stretch;padding-bottom:6px}
+.dial .key:active,.dial .key.lit{transform:translateY(3px);box-shadow:none}
+.dial .key.lit{background:none;filter:sepia(1) saturate(3.4) hue-rotate(-6deg) brightness(1.12) drop-shadow(0 0 8px rgba(255,208,88,.8))}
+/* the painted key's face is narrower than the old CSS key (outline + lip are art): the label steps down so ♪ MUSIC and TURBO keep clear of the outline (chris 10-06 FB4) */
+.btns button{font-size:11.5px;letter-spacing:.3px}.btns button.tog{gap:3px}.tog svg{width:13px;height:13px}.tog em{font-size:10px;letter-spacing:.02em}
+#buy b{font-size:12.5px}
+
+/* ---- S3 (chris 10-06 FB4): speech bubble, toast, panels, plates. Same rule: 9-slice art inside the existing border box (border-image-width), nothing resizes. ---- */
+/* hero caption: painted cream body on #cap::before (its own ink outline), the painted tail replaces the clip-path triangle (captions.js still aims and rotates it). The old 4-way ink drop-shadow outline goes, a soft shadow stays. One 9-slice body serves all three widths (short / medium / 250 px max). */
+#cap{background:none;filter:drop-shadow(0 7px 4px rgba(0,0,0,.45))}
+#cap::before{content:"";position:absolute;inset:0;z-index:0;border:solid transparent;border-width:13px;border-image:var(--img-ui_bubble_body) 34 fill/13px/0 stretch}
+#capTail{width:34px;height:30px;clip-path:none;background:var(--img-ui_bubble_tail) center/100% 100% no-repeat}
+.toast{background:none;border-color:transparent;box-shadow:none;border-image:var(--img-ui_toast) 36 40 36 40 fill/12px 14px 12px 14px/0 stretch;filter:drop-shadow(0 4px 6px rgba(0,0,0,.5))}
+/* modal cards (info, buy menu, confirm, ...) */
+.card{background:none;border-color:transparent;outline:0;box-shadow:none;border-image:var(--img-ui_card_panel) 40 fill/16px/0 stretch;filter:drop-shadow(0 12px 14px rgba(0,0,0,.6))}
+/* readout plates: WIN, POT, SPINS LEFT / BONUS TOTAL, the pick-a-number result windows */
+#winbox{background:none;border-color:transparent;box-shadow:none;border-image:var(--img-ui_plate_win) 36 fill/12px/0 stretch}
+#plPot,.chip{background:none;border-color:transparent;box-shadow:none;border-image:var(--img-ui_plate_chip) 30 fill/10px/0 stretch}
+.chip.set{box-shadow:0 0 14px 2px rgba(255,208,88,.7)}
+/* sticky banners (+N LEADS, ONE MORE CALL result): the S1 sticky as a 9-slice (its curled corner is the bottom-right slice), the CSS fold triangle goes. Stage cards (.scn: pot win, bonus cards) take the modal panel. */
+#plBn,#plmo{background:none;box-shadow:none;border:solid transparent;border-width:0;border-image:var(--img-ui_sticky) 64 fill/20px/0 stretch;filter:drop-shadow(0 6px 8px rgba(0,0,0,.55))}
+#plBn::after,#plmo::after{content:none}
+.scn{border-color:transparent;outline:0;background:none;box-shadow:none;border-image:var(--img-ui_card_panel) 40 fill/16px/0 stretch}
+
+/* ---- S4 (chris 10-06 FB4): big-win backdrop. The painted sunburst (centre at 50% 45% like the conic one it replaces) is the #tierbg layer, no box changes. ---- */
+#tierbg{background:var(--img-ui_burst) 50% 45%/cover no-repeat}
+
+/* ---- FIX ROUND r1 (chris 10-06 FB4), critic r0 text-fit quotes. Padding only moves the live text inside the same boxes; nothing here sets a size. ---- */
+/* (r1) critic r0: 'HANG UP: keep it sits on the plate's bottom bevel line, struck through' / 'ONE MORE CALL: last line lies on the bottom bevel; the title touches the top edge' */
+/* the box must keep its size: padding + content shrink are traded 1:1 (the text gets smaller by what the padding adds), measured with _scratch/r1/probe.js */
+.dec2 .hang,.dec2 .more{--bw:10px 14px 13px 14px;padding:8px 5px 10.6px;gap:2px}
+.dec2 .more b{line-height:1.04}.dec2 .more span{font-size:12.5px;line-height:1.06}.dec2.s .more span{font-size:12px}.dec2 .hang small{line-height:1}
+.dec2.s .hang b{font-size:24px}.dec2.xs .hang b{font-size:20px}.dec2.s .more b{font-size:15px}.dec2.xs .more b{font-size:13.5px}.dec2.xs .hang small{font-size:11px}
+@media (max-width:420px){.dec2 .hang,.dec2 .more{--bw:8px 12px 9px 12px;padding:7.5px 4px 16.5px}.dec2 .more span,.dec2.xs .more span{font-size:11.5px;line-height:1.12}.dec2.xs .more b{font-size:12.5px}}
+/* (r1) critic r0: 'BUY BONUS: label pokes above the top of the painted pill; the greyed sub-label (n/a, Callback first) is unreadable' */
+#buy{padding:2px 3px 3px}
+#buy b{font-size:12px;line-height:1}#buy span{font-size:9px;margin-top:1px;line-height:1;color:#fff0c0;text-shadow:0 1px 0 #3a0a04}
+#buy:disabled{filter:saturate(.6) brightness(.95)}
+#buy:disabled b{color:#f4e6c0}#buy:disabled span{color:#fff6d8;text-shadow:0 1px 0 #000,0 0 3px #000}
+/* (r1) critic r0: 'i reads as 1, bet minus/plus are dark blobs, MUSIC touches the pill's right edge' */
+#info{font-family:Georgia,"Times New Roman",serif;font-style:italic;font-weight:700;font-size:19px;line-height:14px;letter-spacing:0;color:#1d1408}
+.sq{--bw:5px 8px 8px 8px;font-size:26px;line-height:22px;padding:0 0 4px;color:#1d1408;text-shadow:0 1px 0 rgba(255,244,214,.8)}
+@media (max-width:420px){.btns button{padding-left:4px;padding-right:4px}.btns button.tog{gap:2px}.tog svg{width:11px;height:11px}.tog em{font-size:9px;letter-spacing:0}}
+
+/* ---- r1 paint sheet S5 (chris 10-06 FB4): memo strip, blotter bar, brass-rimmed readout plates, panel frame, trough. Same rule: art inside the existing boxes, nothing resizes. ---- */
+/* (r1) critic r0: 'Leads strip: flat yellow bar with a flat red line, reads as a CSS box; 312 / 450 rise above its top edge' */
+#plNote{--note-art:var(--img-ui_strip_memo)}
+#plNote b{font-size:21px}
+#plNote .bar{height:4px;border-top:0;background:rgba(36,26,10,.25);border-radius:2px}
+#plNote .bar i{background:linear-gradient(#e8533d,#b8301f)}
+/* (r1) critic r0: 'Mode tabs Play $ / Chips and the top bar: 1 px outlined pill with flat gold fill on a flat navy bar; plain CSS' */
+#modebar{background:var(--img-ui_blotter) center/100% 100% no-repeat;border-bottom:2px solid transparent}
+#modebar .mb{border-color:transparent;background:var(--img-ui_key_navy) center/100% 100% no-repeat}
+#modebar button{text-shadow:0 1px 0 rgba(0,0,0,.6)}
+/* (r1) critic r0: 'WIN, POT, SPINS LEFT and BONUS TOTAL plates: flat navy with a thin gold line' */
+#winbox{border-image:var(--img-ui_rim_win) 22 fill/9px/0 stretch}
+#plPot,.chip{border-image:var(--img-ui_rim_chip) 22 fill/8px/0 stretch}
+/* (r1) critic r0: 'Flat CSS bars: the countdown block inside the red status bar and the progress line above HANG UP' */
+#ribbon.ask::after{top:5px;bottom:5px;right:5px;border-radius:0 3px 3px 0;background:var(--img-ui_blotter) right center/auto 100% no-repeat;border-left:2px solid #e3b34a;box-shadow:inset 0 2px 5px rgba(0,0,0,.6)}
+.dec2 .dr{border-color:transparent;border-radius:0;background:var(--img-ui_trough) center/100% 100% no-repeat;box-shadow:none}
+/* (r1) critic r0: 'Keypad screen: outer panel frame and the YOU DIALED / FREE SPINS boxes are thin-line CSS boxes; the corner phone ornaments are mud at 360' */
+.scn,.card{border-image:var(--img-ui_rim_panel) 30 fill/18px/0 stretch}
+@media (max-width:420px){.scn .hd i{visibility:hidden}}
+/* (r1) critic r0: 'plates read as CSS boxes' follow-up: the thick brass rim is slimmer on the small HUD plates so labels clear it; the keypad boxes keep the full rim and push the label down */
+#plPot,#bh .chip{border-image-width:6px}
+.scn .chip small{position:relative;top:3px}
+#plNote b{font-size:19px}
+
+/* ---- FIX ROUND r2 (chris 10-06 FB4): CSS only, no new paint, no box changes size ---- */
+/* (r2) critic r1: 'Gold bottom corner ornaments sit on the info content: 202 cut to 20, 143 cut, sticky-note icon covered' / 'NOT NOW overlaps the frame's bottom corners; bottom rail thinner than the sides' */
+.scn,.card{border-image-slice:56 fill;border-image-width:18px}
+/* (r2) critic r1: 'Plate labels pushed onto the brass top lip: SPINS LEFT / BONUS TOTAL labels unreadable at 360' */
+#bh .chip small{position:relative;top:2px;color:#c9d8ee;text-shadow:0 1px 0 #000}
+#bh .chip b{position:relative;top:1px}
+/* (r2) critic r1: 'Faint vertical slice line inside the i and MUSIC pills': the horizontal slice moves past the painted inner line so it is not squeezed into a seam */
+.sq,.btns button,.dec2 .hang,.buyopt,.btn.alt,.btn.alt:active{border-image-slice:20 38 36 38 fill}
+/* (r2) critic r1: 'BUY BONUS label still rides the pill's top rim, greyed n/a still a smear' */
+#buy{padding:6px 3px 1px;gap:0}
+#buy b{font-size:11.5px}#buy span{font-size:8.5px;margin-top:0}
+#buy:disabled{filter:saturate(.55)}
+#buy:disabled span{color:#fff;text-shadow:-1px 0 #3a0a04,1px 0 #3a0a04,0 -1px #3a0a04,0 1px #3a0a04}
+/* (r2) critic r1: '312 still crests the strip's top edge' (the strip is 20 px high at 360) */
+@media (max-width:420px){#plNote b{font-size:14px}#plNote small{font-size:12px}
+/* (r2) critic r1: '50% you leave with 0 runs edge to edge of the red plate' / 'BANK 3,584 chips wraps' */
+.dec2 .more{padding-left:9px;padding-right:9px}.dec2 .more span,.dec2.xs .more span{font-size:10.5px}.dec2 .hang em{font-size:12.5px;letter-spacing:0}}
+/* ... and on the 360 phone the small toggle pills use the blank as ONE image (no 9-slice, so no seam to show) */
+@media (max-width:420px){.btns button:not(#buy){border-image:none;background:var(--img-ui_key_cream) center/100% 100% no-repeat}.btns button.on:not(#buy){background-image:var(--img-ui_key_gold)}}
