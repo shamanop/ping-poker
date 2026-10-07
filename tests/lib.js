@@ -18,7 +18,7 @@ async function startServer(port, seed = {}) {
   fs.writeFileSync(path.join(dir, 'tables.json'), JSON.stringify({ version: 1, tables: [], legacyBlinds: { sb: 10, bb: 20 } })); // v2: POKERPING defaults to 25/50, the old server started at 10/20 (BLIND_SCHEDULE[0]) and the old suites assume it
   const out = fs.openSync(path.join(dir, 'server.log'), 'w');
   const proc = spawn('node', ['server.js'], { cwd: ROOT, stdio: ['ignore', out, out],
-    env: { ...process.env, PORT: String(port), BANK_FILE: path.join(dir, 'bank.json'), LEDGER_FILE: path.join(dir, 'ledger.json') } });
+    env: { SIGNUP_PLAY_CENTS: '1000000', ...process.env, PORT: String(port), BANK_FILE: path.join(dir, 'bank.json'), LEDGER_FILE: path.join(dir, 'ledger.json') } });
   for (let i = 0; i < 60; i++) { await sleep(50); if (fs.readFileSync(path.join(dir, 'server.log'), 'utf8').includes('running')) break; }
   return { port, dir, proc, clients: [],
     bank: () => JSON.parse(fs.readFileSync(path.join(dir, 'bank.json'), 'utf8')),

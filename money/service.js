@@ -34,6 +34,8 @@ function needFund(fund, tableCur) {
 
 function createService(ledger, opts = {}) {
   const now = opts.now || Date.now;
+  // Play $ minted at signup. server.js passes 0: Play $ is real money and the admin sets it (Chris 10/7).
+  const signupPlay = opts.signupPlay != null ? opts.signupPlay : START_PLAY;
 
   // ---- derived indexes, rebuilt incrementally from the ledger (never a second source of truth) ----
   const known = { chips: new Set(), play: new Set() };     // keys that have ever had a bank:/play: account
@@ -139,7 +141,8 @@ function createService(ledger, opts = {}) {
     const minted = { chips: 0, play: 0 };
     for (const cur of CURS) {
       if (known[cur].has(key)) continue;
-      const amount = cur === 'chips' ? START_CHIPS : START_PLAY;
+      const amount = cur === 'chips' ? START_CHIPS : signupPlay;
+      if (amount === 0) continue;   // nothing to mint (live: Play $ starts at 0); the account reads 0 until the admin sets it
       ledger.transfer('mint:signup', store(cur, key), amount, cur, 'signup', `signup:${cur === 'chips' ? 'bank' : 'play'}:${key}`);
       known[cur].add(key); minted[cur] = amount;
     }

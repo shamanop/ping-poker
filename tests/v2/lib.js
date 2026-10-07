@@ -35,7 +35,7 @@ async function startServer(portArg = 0, opts = {}) {
   fs.mkdirSync(dir, { recursive: true });
   const f = n => path.join(dir, n);
   if (!opts.keepFiles) { fs.writeFileSync(f('b.json'), JSON.stringify(opts.bank || {})); fs.writeFileSync(f('l.json'), '[]'); }
-  const env = { ...process.env, PORT: String(port), DATA_DIR: dir, BANK_FILE: f('b.json'), LEDGER_FILE: f('l.json'), ACCOUNTS_FILE: f('a.json'), TABLES_FILE: f('t.json'),
+  const env = { SIGNUP_PLAY_CENTS: '1000000', ...process.env, PORT: String(port), DATA_DIR: dir, BANK_FILE: f('b.json'), LEDGER_FILE: f('l.json'), ACCOUNTS_FILE: f('a.json'), TABLES_FILE: f('t.json'),
     WALLET_FILE: f('w.json'), STACKS_FILE: f('s.json'), BIGWINS_FILE: f('bw.json'), BENDER_CFG_FILE: f('bender-cfg.json'), MONEY_FILE: f('money.jsonl'),
     RIG: opts.rig === false ? '' : '1',
     AUTO_START_MS: String(opts.autoStartMs || 300), HAND_DELAY_MS: String(opts.handDelayMs || 150), TURN_MS: String(opts.turnMs || 30000),

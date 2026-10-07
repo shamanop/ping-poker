@@ -526,6 +526,15 @@ t('balances(): everything a key holds', () => {
   eq(b.chips, START_CHIPS - 100); eq(b.play, START_PLAY - 40); eq(b.atTable.chips, 100); eq(b.atTable.play, 40); eq(b.seats.length, 2);
 });
 
+t('signupPlay 0 (live): a new account gets Chips only, Play $ reads 0, a second call mints nothing', () => {
+  const f = path.join(dir, 'signup0.jsonl'); const ledger = open(f, { fsync: 'none', log: () => {} });
+  const svc = createService(ledger, { signupPlay: 0 });
+  const r = svc.ensureAccount('newbie');
+  ok(r.created); eq(r.minted.play, 0); eq(ledger.balance('bank:newbie', 'chips'), START_CHIPS); eq(ledger.balance('play:newbie', 'play'), 0);
+  const n = ledger.lastId; ok(!svc.ensureAccount('newbie').created); eq(ledger.lastId, n, 'nothing written on the second call');
+  eq(ledger.balance('mint:signup', 'play'), 0);
+});
+
 try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
 console.log(`money-service: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

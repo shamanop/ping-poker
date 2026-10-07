@@ -4,7 +4,7 @@
 
 const MESSAGES = {
   auth: 'Sign in first', forbidden: 'Not allowed', not_found: 'No such table', ended: 'That table has ended', permanent: 'That table cannot be ended',
-  one_seat: 'You already have a seat at a table', range: 'Amount is out of range', bank: 'Not enough funds', fund_mismatch: 'Use the same funds as your seat',
+  one_seat: 'You already have a seat at a table', range: 'Amount is out of range', bank: 'Not enough funds', fund_mismatch: 'Use the same funds as your seat', wrong_fund: 'Play $ tables take Play $, Chips tables take Chips',
   rebuy_off: 'No more buy-ins at this table', in_hand: 'You are still in the hand', have_chips: 'You still have chips', no_seat: 'You are not seated',
   table_full: 'The table is full', seat_taken: 'That seat is taken', not_host: 'Only the host can do that', bad_request: 'Bad request',
   preselect: 'Pre-select not accepted', taken_over: 'Your seat was taken over by another session', money_down: 'Money service is unavailable',

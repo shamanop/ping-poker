@@ -336,7 +336,7 @@ function settingsCard(t) {
 // ── buy-in picker (AmountInput: the number is the truth, the text is a view) ──
 function buyInPicker(t, mySettled) {
   const unit = t.unit || unitOf(t.mode), bi = t.buyIn;
-  let fund = t.mode;
+  const fund = t.mode;
   const bankOf = (f) => { const v = f === 'chips' ? (S.user && (S.user.bankChips ?? S.user.chips)) : (S.wallet ? S.wallet.play : null); return Number.isFinite(v) ? v : null; };
   const hiOf = (bk) => (bk != null ? Math.min(bi.max, bk) : bi.max);
   const presetsFor = (hi) => [{ label: 'Min', units: bi.min }, { label: 'Default', units: bi.default }, { label: 'Max', units: hi }];
@@ -351,18 +351,10 @@ function buyInPicker(t, mySettled) {
       + (short() ? '. Not enough for the minimum buy-in of ' + fm(bi.min, unit) + '.' : '')
       + (cross && v != null ? '. This buy-in costs ' + (fund === 'play' ? fm(v, 'cents') : fm(v, 'chips')) + ' (1 chip = $0.01).' : '');
   };
-  const fundBtn = (k, label) => h('button', { type: 'button', class: fund === k ? 'on' : '', 'aria-pressed': fund === k ? 'true' : 'false', id: 'lb-fund-' + k, onclick: () => {
-    if (fund === k) return; fund = k; bank = bankOf(fund); hi = hiOf(bank);
-    const top = Math.max(bi.min, hi), cur = f.value();
-    f.setBounds({ min: bi.min, max: top, presets: presetsFor(top) });
-    f.set(cur == null ? bi.default : Math.min(top, Math.max(bi.min, cur)), { source: 'fund' });
-    fundRow.replaceChildren(fundBtn('chips', 'Chips'), fundBtn('play', 'Play $')); drawBal();
-  } }, label);
-  const fundRow = h('div', { class: 'seg seg--block', id: 'lb-fund' }, fundBtn('chips', 'Chips'), fundBtn('play', 'Play $'));
   drawBal();
   const night = mySettled != null ? h('div', { class: 'lb-muted' }, 'Your night so far: ', h('b', { class: mySettled > 0 ? 'up' : mySettled < 0 ? 'down' : '' }, fm(mySettled, unit, { signed: true }))) : null;
-  // the fund picker sits above the slider so the modal footer can never hide it (ui 11)
-  const el = h('div', { class: 'lb-stack', style: 'gap:var(--p14)' }, fundRow, balLine, h('div', { class: 'lb-field' }, h('label', null, 'Buy-in'), f.el), night);
+  // Chips are fake, Play $ is real (Chris 10/7): a table is bought into with its own currency only, so there is no fund picker.
+  const el = h('div', { class: 'lb-stack', style: 'gap:var(--p14)' }, balLine, h('div', { class: 'lb-field' }, h('label', null, 'Buy-in'), f.el), night);
   // get(): integer units or null. Out of range, unparsable or unaffordable never seats (S1-3); the message stays visible.
   const get = () => { if (short()) return null; const v = f.value(); if (v === null) { f.submit(); try { f.el.scrollIntoView({ block: 'center' }); } catch (e) {} } return v; };
   return { el, get, getFund: () => fund, field: f, short };
@@ -576,7 +568,7 @@ function achTile(a) {
     h('img', { src: 'images/fx2/sticker-' + ACH_ICON[a.tier] + '.png', alt: '' }),
     h('b', null, a.name),
     h('small', null, a.done ? ACH_TIER_LABEL[a.tier] : a.desc),
-    h('i', null, a.done ? '+' + fm(a.rewardCents, 'cents') : (a.unit === 'cents' ? fm(a.progress || 0, 'cents') + ' / ' + fm(a.target, 'cents') : (a.progress || 0).toLocaleString('en-US') + '/' + a.target.toLocaleString('en-US'))));
+    h('i', null, a.done ? (a.rewardCents > 0 ? '+' + fm(a.rewardCents, 'chips') : 'Done') : (a.unit === 'cents' ? fm(a.progress || 0, 'cents') + ' / ' + fm(a.target, 'cents') : (a.progress || 0).toLocaleString('en-US') + '/' + a.target.toLocaleString('en-US'))));
 }
 function drawAch() {
   const el = $('lb-ach'); if (!el) return;

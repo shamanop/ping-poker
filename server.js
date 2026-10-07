@@ -24,7 +24,8 @@ function start(env = process.env) {
   const presLedger = createLedger({ file: paths.LEDGER_FILE, keyOf: k => accounts.keyForName(k), displayOf: k => (accounts.get(k) ? accounts.get(k).display : null), onWrite: () => { if (ctx.pushBank) ctx.pushBank(); } });
   accounts.migrateLegacy({ bank: boot.readJson(paths.BANK_FILE, {}), ledgerEntries: presLedger.entries() });
   boot.migrateIfNeeded({ ledger, paths, migrate, log });
-  const service = createService(ledger);
+  // Play $ is real money: new accounts start at 0 and the admin sets it (Chris 10/7). Test harnesses set SIGNUP_PLAY_CENTS for their old fixtures.
+  const service = createService(ledger, { signupPlay: process.env.SIGNUP_PLAY_CENTS != null ? Number(process.env.SIGNUP_PLAY_CENTS) : 0 });
   for (const a of Object.values(accounts.all())) service.ensureAccount(a.key);
   const bootId = Date.now().toString(36);
   const report = service.bootRecover(bootId);
@@ -54,7 +55,7 @@ function start(env = process.env) {
   const registryRef = { current: null };
   const safe = ctx.safe = createSafe({ registry: { seatOf: k => registryRef.current.seatOf(k), tables: { get: id => registryRef.current.tables.get(id) }, pauseAll: () => registryRef.current.pauseAll(), voidAll: r => registryRef.current.voidAll(r) } });
   const viewlog = createViewlog({ presLedger, accounts, social: ctx.social, bankOf: k => ledger.balance('bank:' + k, 'chips'), profileOf, nightNets: t => registryRef.current.nightOf(t) });
-  ctx.money = createMoneyPort({ service, ledger, bootId, afterWrite: k => ctx.afterWrite(k), onFence: e => { console.error('[v2] MONEY FENCED', e && e.code); registryRef.current.pauseAll(); }, onWrite: w => viewlog.onWrite(w) });
+  ctx.money = createMoneyPort({ service, ledger, bootId, sameFundOnly: true, afterWrite: k => ctx.afterWrite(k), onFence: e => { console.error('[v2] MONEY FENCED', e && e.code); registryRef.current.pauseAll(); }, onWrite: w => viewlog.onWrite(w) });
   ctx.rig = env.RIG === '1' ? createRig(ctx) : null;
   const clock = { now: () => Date.now(), setTimeout: (f, ms) => setTimeout(f, ms), clearTimeout: h => clearTimeout(h) };
   const rngSource = () => crypto.randomBytes(6).readUIntBE(0, 6) / 2 ** 48;

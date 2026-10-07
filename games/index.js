@@ -44,14 +44,8 @@ module.exports = function games(ctx) {
 
   function onConnection(socket) {
     socket.on('wallet_get', guard(socket, () => socket.emit('wallet', wallet.get(acctKey(socket)))));
-    socket.on('wallet_topup', guard(socket, () => {
-      try { wallet.topUp(acctKey(socket)); }
-      catch (e) {
-        if (e.code === 'cooldown' || e.code === 'not_needed') return socket.emit('error', { message: e.message, code: e.code, retryMs: e.retryMs });
-        throw e;
-      }
-      pushWallet(acctKey(socket));
-    }));
+    // Play $ is real money (Chris 10/7): no free Play $ top-up. Only the admin sets Play $.
+    socket.on('wallet_topup', guard(socket, () => socket.emit('error', { message: 'Play $ is set by the admin', code: 'topup_off' })));
     for (const m of mods) {
       for (const [ev, fn] of Object.entries(m.handlers || {})) {
         socket.on(`g:${m.id}:${ev}`, guard(socket, (payload) => fn.call(m, socket, payload, ctxOf.get(m))));

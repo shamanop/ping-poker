@@ -329,9 +329,9 @@
       bonusSt = b; renderBonusBtn();
       if (!window.PingJuice || (!reopenBonus && (!b.available || bonusShown))) { reopenBonus = false; return; }
       bonusShown = true; reopenBonus = false;
-      PingJuice.streakCalendar(b, { targetEl: $('sh-wallet'), format: dollars, onClaim: () => s.emit('bonus:claim') });
+      PingJuice.streakCalendar(b, { targetEl: $('sh-chips') || $('sh-wallet'), format: chipAmt, onClaim: () => s.emit('bonus:claim') });
     });
-    s.on('bonus:claimed', (r) => { if (r && r.ok && r.wallet) setWallet(r.wallet); if (r && r.ok && window.PingJuice) PingJuice.toast('Day **' + (r.day || r.streak) + '** bonus **' + dollars(r.amountCents) + '** claimed. Streak **' + r.streak + '**', { sticker: 'vp-chip' }); });
+    s.on('bonus:claimed', (r) => { if (r && r.ok && r.wallet) setWallet(r.wallet); if (r && r.ok && window.PingJuice) PingJuice.toast('Day **' + (r.day || r.streak) + '** bonus **' + chipAmt(r.amountCents) + '** claimed. Streak **' + r.streak + '**', { sticker: 'vp-chip' }); });
     s.on('g:bender:state', (st) => { benderReady = true; if (st && st.balances) setWallet(st.balances); toBender({ type: 'init', wallet: Object.assign({}, wallet), mode: wmode, bets: (st && (st.bets || st.betLevels)) || undefined, cfg: st && st.cfg }); });
     s.on('g:bender:cfg', (c) => { if (c && c.cfg) toBender({ type: 'cfg', cfg: c.cfg }); });
     s.on('g:bender:result', (p) => {
@@ -375,7 +375,7 @@
     b.classList.toggle('ready', av);
     const dn = bonusSt ? (bonusSt.day || bonusSt.streak || 1) : 1;
     b.title = 'Daily streak calendar';
-    b.innerHTML = bonusSt ? (av ? 'Day ' + dn + ' <em>' + dollars(bonusSt.amountCents) + '</em>' : 'Day ' + dn + ' <em>' + untilReset() + '</em>') : '';
+    b.innerHTML = bonusSt ? (av ? 'Day ' + dn + ' <em>' + chipAmt(bonusSt.amountCents) + '</em>' : 'Day ' + dn + ' <em>' + untilReset() + '</em>') : '';
     b.hidden = !bonusSt;
   }
   setInterval(renderBonusBtn, 30000);
@@ -390,7 +390,7 @@
   function onAchv(a) {
     if (!a || !window.PingJuice) return;
     const tier = String(a.tier || 'bronze'), nm = String(a.name || '').replace(/\*/g, '');
-    PingJuice.toast(`Achievement: **${nm}** (${tier[0].toUpperCase() + tier.slice(1)}) **+${dollars(a.rewardCents || 0)}**`, { sticker: ACH_STICKER[tier] || 'vp-chip', ms: 3800 });
+    PingJuice.toast(`Achievement: **${nm}** (${tier[0].toUpperCase() + tier.slice(1)})${a.rewardCents > 0 ? ` **+${chipAmt(a.rewardCents)}**` : ''}`, { sticker: ACH_STICKER[tier] || 'vp-chip', ms: 3800 });
     try { PingJuice.sfx(tier === 'gold' ? 'big' : 'claim'); } catch (e) { /* sound is optional */ }
     if (tier === 'gold') { try { PingJuice.stickerPop('boba-crown', $('sh-lvl') || null, { dy: 40, hold: 1800 }); } catch (e) { /* optional */ } }
   }

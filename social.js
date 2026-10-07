@@ -11,7 +11,7 @@ const dayNum = (d) => Math.round(Date.parse(d + 'T00:00:00Z') / 86400000);
 const levelOf = (xp) => Math.floor(Math.sqrt(Math.max(0, xp) / 10)) + 1;
 const fs = require('fs'), path = require('path');
 const DAY_MS = 86400000, BIGWIN_KEEP = 40;
-const TIER_REWARD = { bronze: 2500, silver: 7500, gold: 25000 }; // Play $ cents, paid once
+const TIER_REWARD = { bronze: 0, silver: 0, gold: 0 }; // badges only since 10/7: no money mid-game (Chris: balances must not go up while playing). Was 2500/7500/25000 Play $ cents
 const TIER_XP = { bronze: 20, silver: 50, gold: 150 };
 // v: where progress comes from. s = stats field, c = achv counter, lvl = level. t = target.
 const ACHIEVEMENTS = [
@@ -144,7 +144,7 @@ function createSocial({ io, accounts, now = Date.now, file = null } = {}) {
   const pushAchv = (key) => { const v = achvView(key); if (!v) return; for (const s of sockets()) if (acctKey(s) === key) s.emit('achv:state', v); };
   function unlockAchv(key, a) {
     // Ledger first: the reward mint (ref achv:<key>:<id>) is written before the flag, so a crash between the two leaves a payment with no flag, which checkAchv mends without a second reward.
-    try { wallet.credit(key, 'play', TIER_REWARD[a.tier], { game: 'achv', round: a.id }); } catch (e) { return false; }
+    try { wallet.credit(key, 'chips', TIER_REWARD[a.tier], { game: 'achv', round: a.id }); } catch (e) { return false; }
     accounts.social(key, (rec) => { const x = counters(rec); x.u[a.id] = now(); x.unseen = (x.unseen || 0) + 1; });
     mutateStats(key, (st) => { st.xp += TIER_XP[a.tier]; });
     const payload = { id: a.id, name: a.name, desc: a.desc, tier: a.tier, rewardCents: TIER_REWARD[a.tier], xp: TIER_XP[a.tier] };
@@ -265,7 +265,7 @@ function createSocial({ io, accounts, now = Date.now, file = null } = {}) {
     const info = bonusInfo(key);
     if (!info.available) return { ok: false, code: 'claimed', ...info };
     // Ledger first: the mint (ref bonus:<key>:<day>) pays once and is what bonusInfo reads; the account record follows (claim and day 7 counter in one write). A credit that throws wrote nothing, so there is nothing to undo.
-    wallet.credit(key, 'play', info.amountCents, { game: 'bonus', round: info.today });
+    wallet.credit(key, 'chips', info.amountCents, { game: 'bonus', round: info.today });
     accounts.social(key, claimRecord(info.today, info.streak));
     pushFeed('bonus', key, { day: info.day, streak: info.streak });
     checkAchv(key);

@@ -46,7 +46,7 @@ function world() {
   };
   w.signup = (name) => { const a = w.accounts.signup(name, '1234', 'a01', { ip: 't-' + name }).account; w.service.ensureAccount(a.key); w.accounts.flush(); return a.key; };
   w.mints = (kind) => [...w.ledger.entries((e) => e.ref && e.ref.startsWith(kind + ':'))];
-  w.play = (key) => w.ledger.balance('play:' + key, 'play');
+  w.play = (key) => w.ledger.balance('bank:' + key, 'chips');   // rewards pay Chips since 10/7 (Play $ is real money)
   w.today = () => require('../../social.js').dayOf(w.clock);
   return w.boot();
 }
@@ -54,7 +54,7 @@ function world() {
 // ---- A2: the daily bonus ----
 t('A2: the mint is in the ledger but accounts.json never got the claim (crash): status says claimed, claim answers claimed, pays nothing, the streak is not counted twice', () => {
   const w = world(); const key = w.signup('Ann');
-  w.service.mint('bonus', key, 10000, 'play', `bonus:${key}:${w.today()}`);     // the payment landed; the record write did not
+  w.service.mint('bonus', key, 10000, 'chips', `bonus:${key}:${w.today()}`);     // the payment landed; the record write did not
   const before = w.play(key), lines = [...w.ledger.entries()].length;
   w.boot();                                                                      // restart: the record on disk has no bonus
   eq(w.accounts.social(key).bonus, undefined, 'the record really is behind');
@@ -78,12 +78,12 @@ t('A2: a claim writes the mint first; a crash right after it (before the record 
   w.accounts.social = (k, fn) => { if (fn) { const probe = {}; fn(probe); if (probe.bonus) throw new Error('crash: the process died before accounts.json was written'); } return real(k, fn); };
   const s = w.sock(key);
   s.fire('bonus:claim');                                                         // the handler guard turns the throw into an error event
-  eq(w.mints('bonus').length, 1, 'the ledger line is there'); eq(w.play(key), w.service.START_PLAY + 10000);
+  eq(w.mints('bonus').length, 1, 'the ledger line is there'); eq(w.play(key), w.service.START_CHIPS + 10000);
   w.boot();
   const s2 = w.sock(key);
   s2.fire('bonus:status'); eq(s2.last('bonus:status').available, false);
   s2.fire('bonus:claim'); eq(s2.last('bonus:claimed').ok, false);
-  eq(w.mints('bonus').length, 1); eq(w.play(key), w.service.START_PLAY + 10000);
+  eq(w.mints('bonus').length, 1); eq(w.play(key), w.service.START_CHIPS + 10000);
 });
 
 t('A2: a normal claim still pays once, answers ok, and a second claim the same day is refused', () => {
@@ -104,7 +104,7 @@ const fullWeek = (w, key) => w.social.achvView(key).list.find((x) => x.id === 'd
 function claimsTo(n, crashOn) {
   const w = world(), key = w.signup('Ann'); let s = w.sock(key);
   for (let d = 1; d <= n; d++) {
-    if (d === crashOn) { w.accounts.flush(); const i = w.social.bonusInfo(key); w.service.mint('bonus', key, i.amountCents, 'play', `bonus:${key}:${w.today()}`); w.boot(); s = w.sock(key); }
+    if (d === crashOn) { w.accounts.flush(); const i = w.social.bonusInfo(key); w.service.mint('bonus', key, i.amountCents, 'chips', `bonus:${key}:${w.today()}`); w.boot(); s = w.sock(key); }
     else s.fire('bonus:claim');
     if (d < n) w.clock += DAY;
   }
@@ -114,7 +114,7 @@ const state = (w, key) => ({ bal: w.play(key), bonus: w.accounts.social(key).bon
 
 t('D1: the day-7 claim dies after the mint (record unwritten), restart, the player asks: claimed, no second payment, and the day7 counter, Full Week and its reward are exactly what an uncrashed day 7 gives', () => {
   const c = claimsTo(7), ctl = state(c.w, c.key);
-  eq([ctl.day7, ctl.full, ctl.achvMints], [1, true, 1], 'the control unlocked Full Week');
+  eq([ctl.day7, ctl.full, ctl.achvMints], [1, true, 0], 'the control unlocked Full Week (a badge: no reward mint since 10/7)');
   const x = claimsTo(7, 7); x.s.fire('bonus:status'); x.s.fire('bonus:claim');
   eq(x.s.last('bonus:claimed'), { ok: false, code: 'claimed' }, 'claimed, nothing paid again');
   eq(state(x.w, x.key), ctl, 'the player holds what an uncrashed claim gives');
@@ -153,14 +153,14 @@ t('D2: the same crash and the player comes back two days later (the streak broke
 t('D2: the crash on day 6, the player comes back on day 7 and is asked nothing before: Full Week is paid at day 7 as in the uncrashed run (100000 for the claim, the achievement once)', () => {
   const c = claimsTo(6); c.w.clock += DAY; c.s.fire('bonus:claim'); const ctl = state(c.w, c.key);
   const x = claimsTo(6, 6); x.w.clock += DAY; x.s.fire('bonus:claim');
-  eq(x.s.last('bonus:claimed').amountCents, 100000); eq(state(x.w, x.key), ctl); eq([ctl.day7, ctl.full, ctl.achvMints], [1, true, 1]);
+  eq(x.s.last('bonus:claimed').amountCents, 100000); eq(state(x.w, x.key), ctl); eq([ctl.day7, ctl.full, ctl.achvMints], [1, true, 0]);
 });
 
 // ---- A3: achievements ----
 t('A3: the reward mint is in the ledger but the account has no flag (crash): no second achv:unlocked, no second mint, the view shows it unlocked', () => {
   const w = world(); const key = w.signup('Dee');
   w.accounts.social(key, (rec) => { rec.stats = { hands: 1 }; });                 // the progress that earns first_hand
-  w.service.mint('achv', key, 2500, 'play', `achv:${key}:first_hand`);            // the reward landed; the flag write did not
+  w.service.mint('achv', key, 2500, 'chips', `achv:${key}:first_hand`);            // the reward landed; the flag write did not
   w.accounts.flush();
   const before = w.play(key);
   w.boot();
@@ -179,28 +179,15 @@ t('A3: the reward mint is in the ledger but the account has no flag (crash): no 
   eq(s.all('achv:unlocked').filter((x) => x.id === 'first_hand'), []);
 });
 
-t('A3: a normal unlock pays once, sends achv:unlocked once, and the ledger line is written before the flag', () => {
+t('A3: an unlock is a badge only (10/7): one achv:unlocked, the flag and xp set, NO money ledger line, a second check changes nothing', () => {
   const w = world(); const key = w.signup('Eve'); const s = w.sock(key);
   w.accounts.social(key, (rec) => { rec.stats = { hands: 1 }; });
-  const real = w.accounts.social; let flagWrites = 0, mintsAtFlag = null;
-  w.accounts.social = (k, fn) => { if (fn) { const probe = { achv: { u: {}, c: {} } }; fn(probe); if (probe.achv.u.first_hand) { flagWrites++; mintsAtFlag = w.mints('achv').length; } } return real(k, fn); };
+  const lines = [...w.ledger.entries()].length, chips = w.ledger.balance('bank:' + key, 'chips'), play = w.ledger.balance('play:' + key, 'play');
   w.social.checkAchv(key);
-  eq(s.all('achv:unlocked').filter((x) => x.id === 'first_hand').length, 1);
-  eq(w.mints('achv').filter((e) => e.ref === `achv:${key}:first_hand`).map((e) => e.amount), [2500]);
-  eq([flagWrites, mintsAtFlag], [1, 1], 'the flag was written after the mint line existed');
-  w.social.checkAchv(key); eq(s.all('achv:unlocked').filter((x) => x.id === 'first_hand').length, 1); eq(w.mints('achv').filter((e) => e.ref === `achv:${key}:first_hand`).length, 1);
-});
-
-t('A3: a mint that throws leaves no flag, no event and no xp (the next check tries again)', () => {
-  const w = world(); const key = w.signup('Fay'); const s = w.sock(key);
-  w.accounts.social(key, (rec) => { rec.stats = { hands: 1 }; });
-  const real = w.service.mint; let n = 0;
-  w.service.mint = (...a) => { if (!n++) throw new Error('disk'); return real(...a); };
-  w.social.checkAchv(key);
-  eq(s.all('achv:unlocked').length, 0); eq(w.mints('achv').length, 0);
-  eq(((w.accounts.social(key).achv || {}).u || {}).first_hand, undefined);
-  w.social.checkAchv(key);
-  eq(s.all('achv:unlocked').filter((x) => x.id === 'first_hand').length, 1); eq(w.mints('achv').length, 1);
+  eq(s.all('achv:unlocked').filter((x) => x.id === 'first_hand').length, 1); eq(s.last('achv:unlocked').rewardCents, 0);
+  ok(((w.accounts.social(key).achv || {}).u || {}).first_hand, 'flag set');
+  eq([...w.ledger.entries()].length, lines, 'no ledger line'); eq(w.ledger.balance('bank:' + key, 'chips'), chips); eq(w.ledger.balance('play:' + key, 'play'), play);
+  w.social.checkAchv(key); eq(s.all('achv:unlocked').filter((x) => x.id === 'first_hand').length, 1); eq([...w.ledger.entries()].length, lines);
 });
 
 console.log(`${pass} passed, ${fail} failed`);

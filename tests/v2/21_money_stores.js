@@ -1,5 +1,5 @@
 'use strict';
-// Mixed session: a chips night table + a Play $ night table + POKERPING, buy-ins from both funds, rebuys, cash-outs, slot spins, daily bonus,
+// Mixed session: a chips night table + a Play $ night table + POKERPING, buy-ins in each table's own currency (cross-currency seats are refused since 10/7), rebuys, cash-outs, slot spins, daily bonus,
 // one SIGTERM restart in the middle of live hands and one SIGKILL right after a showdown. Every snapshot compares true holdings
 // (bank + wallet + stacks + live bets) and the night settle-ups. Port of audit repro 21 (client-side flow bookkeeping dropped, invariants kept).
 const { startServer, Bot, waitFor, sleep, audit, moneyTotal, suite, expect } = require('./lib');
@@ -53,14 +53,14 @@ async function scenario() {
     const c2 = await boot.Bob.req('table_create', { settings: { name: 'NightPlay', mode: 'play', buyIn: { min: 500, max: 50000, default: 2000 }, blinds: { sb: 25, bb: 50 }, rebuyLimit: 0, autoStart: false, actionTimerSec: 0 } }, 'table_created');
     if (!c1.table || !c2.table) throw new Error('create tables: ' + (c1.__err || c2.__err));
     T1 = c1.table.id; N1 = c1.table.nightId; T2 = c2.table.id; N2 = c2.table.nightId;
-    const s1 = [await seat('Ann', T1, 2000, 'chips'), await seat('Bob', T1, 2000, 'play', true), await seat('Cat', T1, 1500, 'chips')];
-    const s2 = [await seat('Eve', T2, 3000, 'play'), await seat('Fay', T2, 2000, 'chips', true), await seat('Dee', T2, 2500, 'play')];
+    const s1 = [await seat('Ann', T1, 2000, 'chips'), await seat('Bob', T1, 2000, 'chips', true), await seat('Cat', T1, 1500, 'chips')];
+    const s2 = [await seat('Eve', T2, 3000, 'play'), await seat('Fay', T2, 2000, 'play', true), await seat('Dee', T2, 2500, 'play')];
     const s3 = [await seat('Gus', PP, 1000, 'chips'), await seat('Hal', PP, 1500, 'chips', true)];
     s1[0].emit('table_start', { tableId: T1 }); s2[0].emit('table_start', { tableId: T2 });
     for (let i = 0; i < 6; i++) { boot.Ann.emit('g:bender:spin', { bet: 50, mode: 'chips' }); await sleep(60); boot.Dee.emit('g:bender:spin', { bet: 100, mode: 'play' }); await sleep(60); }
     boot.Cat.emit('bonus:claim', {});
     await rebuyLoop([...s1, ...s2, ...s3], 7000);
-    if (s2[2]) { await s2[2].leave(T2); await sleep(200); s2[2] = await seat('Dee', T2, 1800, 'chips'); }
+    if (s2[2]) { await s2[2].leave(T2); await sleep(200); s2[2] = await seat('Dee', T2, 1800, 'play'); }
     if (s1[2]) { await s1[2].leave(T1); await sleep(200); }
     await rebuyLoop([...s1, ...s2, ...s3], 5000);
     for (const b of socks) b.onState = null;
@@ -77,7 +77,7 @@ async function scenario() {
     const o2 = await login('Ann'); await sleep(300);
     await snap('after-sigterm-restart', o2);
     // phase 2: re-seat, play, SIGKILL ~150 ms after a T1 showdown that moved money
-    const t1b = [await seat('Ann', T1, 1000, 'chips'), await seat('Cat', T1, 1000, 'play', true)];
+    const t1b = [await seat('Ann', T1, 1000, 'chips'), await seat('Cat', T1, 1000, 'chips', true)];
     const t2b = [await seat('Bob', T2, 1000, 'play'), await seat('Dee', T2, 1000, 'play', true)];
     const ppb = [await seat('Eve', PP, 800, 'chips', true), await seat('Fay', PP, 800, 'chips')];
     if (t1b[0]) t1b[0].emit('table_start', { tableId: T1 }); if (t2b[0]) t2b[0].emit('table_start', { tableId: T2 });

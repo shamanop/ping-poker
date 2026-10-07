@@ -7,7 +7,7 @@ const { TableError, isFence } = require('./errors');
 
 const seatAcct = (tableId, key) => `seat:${tableId}:${key}`;
 
-function createMoneyPort({ service, ledger, bootId, afterWrite, onFence, onWrite }) {
+function createMoneyPort({ service, ledger, bootId, afterWrite, onFence, onWrite, sameFundOnly }) {
   let counter = 0;
   const boot = bootId || Date.now().toString(36);
   const nextOp = () => `${boot}.${++counter}`;
@@ -38,6 +38,8 @@ function createMoneyPort({ service, ledger, bootId, afterWrite, onFence, onWrite
 
   // Buy in from `fund` ('chips'|'play'|null = the table's own). Returns { id, dup, intent }.
   function buyIn(table, key, amount, fund, it, kind = 'buyin') {
+    // sameFundOnly (live): Chips are fake, Play $ is real, so a seat is bought in its table's own currency only (Chris 10/7).
+    if (sameFundOnly && fund && (fund === 'bank' ? 'chips' : fund) !== table.cur) throw new TableError('wrong_fund', { have: table.cur, want: fund });
     const i = it || intent(kind, table, key, amount);
     const r = wrap(() => service.buyIn(key, table.id, amount, table.cur, fund || null, i.ref));
     if (!r.dup) { touch([key]); wrote(kind, table, key, amount, { fund: fund || table.cur }); }

@@ -69,7 +69,7 @@ function createWalletAdapter({ service, ledger, onChange, schedule, log }) {
     if (!key) throw fail('acct', 'No account');
     try {
       if (game === 'achv' || game === 'bonus') {
-        if (amount > 0) { service.mint(game, key, amount, 'play', `${game}:${key}:${ref.round != null ? ref.round : `${bootTag}.${++opSeq}`}`); note(key); }
+        if (amount > 0) { service.mint(game, key, amount, 'chips', `${game}:${key}:${ref.round != null ? ref.round : `${bootTag}.${++opSeq}`}`); note(key); }
         return view(key);
       }
       if (!GAMES.has(game)) throw fail('mode', 'Bad game');

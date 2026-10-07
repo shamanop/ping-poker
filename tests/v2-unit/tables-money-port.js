@@ -145,5 +145,15 @@ t('afterWrite throwing does not break the money call', () => {
   eq(e.port.seatBalance(e.T, 'ann'), 100);
 });
 
+t('sameFundOnly (live): Chips cannot buy into a Play $ table, Play $ cannot buy into a Chips table, nothing written', () => {
+  const e = env({ sameFundOnly: true }); const before = e.ledger.lastId;
+  throwsTable(() => e.port.buyIn(e.P, 'ann', 500, 'chips'), 'wrong_fund');
+  throwsTable(() => e.port.buyIn(e.P, 'ann', 500, 'bank'), 'wrong_fund');
+  throwsTable(() => e.port.buyIn(e.T, 'ann', 500, 'play'), 'wrong_fund');
+  eq(e.ledger.lastId, before, 'no ledger line');
+  e.port.buyIn(e.P, 'ann', 500, 'play'); e.port.buyIn(e.T, 'bob', 500, null); e.port.buyIn(e.T, 'ann', 500, 'bank');
+  eq(e.port.seatBalance(e.P, 'ann'), 500); eq(e.port.seatBalance(e.T, 'bob'), 500); eq(e.port.seatBalance(e.T, 'ann'), 500); invariant(e);
+});
+
 console.log(`${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
