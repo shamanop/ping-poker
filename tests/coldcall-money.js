@@ -172,8 +172,8 @@ function auditMatches(s) {
     afterEach(s, 'CRASH 2', before, cost, defaultWin);
   });
   for (const take of [false, true]) {
-    await test(`CRASH 3: killed after \`settle\` and before the state flush (the player ${take ? 'took the gamble' : 'banked'}): boot answers ${take ? 'round_closed' : 'dup'}, nothing is paid twice, the record is gone`, async () => {
-      const s = setup({ rng: E.rngFrom(PEND.seed), roundRng: E.rngFrom(5) }); const a = s.sock('ann'); const before = s.bal('ann', 'play');
+    await test(`CRASH 3: killed after \`settle\` and before the state flush (the player ${take ? 'took the gamble' : 'banked'}): boot replays the player\'s own answer, so the ledger answers dup (never round_closed), nothing is paid twice, the record is gone`, async () => {
+      const logs = []; const s = setup({ rng: E.rngFrom(PEND.seed), roundRng: E.rngFrom(5), log: (...x) => logs.push(x.join(' ')) }); const a = s.sock('ann'); const before = s.bal('ann', 'play');
       let r = spin(s, a, { bet: 100, mode: 'play', buyBonus: 'bonus1' }); assert.strictEqual(r.status, 'pending'); const cost = r.cost;
       // answer every decision with the default (first square, bank), except the last one, which is the player's: taken or banked
       let settled = null; s.hooks.after.settle = (args, res) => { settled = args[3]; throw new H.Crash(); };
@@ -187,7 +187,9 @@ function auditMatches(s) {
       assert.ok(settled, 'the ledger call was made'); const paid = settled.win;
       assert.strictEqual(s.bal('ann', 'play'), before - cost + paid, 'the ledger holds the player\'s choice'); assert.strictEqual(all(a, 'g:coldcall:result').filter((x) => x.status === 'done').length, 0, 'but no result reached the client');
       assert.strictEqual(Object.keys(s.disk().open).length, 1, 'the record is still on disk');
-      s.reboot();
+      assert.strictEqual(s.disk().open['ann|play'].decisions.slice(-1)[0].k, 'more', 'the record holds the final answer'); assert.strictEqual(s.disk().open['ann|play'].decisions.slice(-1)[0].take, take);
+      logs.length = 0; s.reboot();
+      assert.ok(!logs.some((l) => /already played/.test(l)), 'boot got a dup, not a round_closed: ' + logs.join(' | '));
       assert.strictEqual(new Set(closeLines(s, r.roundId).map((e) => e.id)).size, 1, 'one :close batch, never two');
       assert.strictEqual(s.bal('ann', 'play'), before - cost + paid, 'the balance is what the first settle made it');
       afterEach(s, 'CRASH 3', before, cost, paid);
@@ -455,6 +457,55 @@ function auditMatches(s) {
     s.reboot();
     assert.strictEqual(s.lastId(), id0, 'boot wrote nothing'); assert.strictEqual(s.bal('ann', 'play'), before - r.cost + paid); assert.strictEqual(s.store().allOpen().length, 0);
     const st = s.store().player('ann', 'play'); assert.ok(st.rounds > st0.rounds, 'the state advanced from the replay of the player\'s choices: ' + st.rounds + ' > ' + st0.rounds);
+  });
+
+  // C2: the player's answer is in the stored record BEFORE the result of that answer reaches the client
+  const CBG = () => ({ ...E.newState(), cb: { bet: 2500, id: 'cbfeedc0ffee01' } });
+  // a seed whose Callback reaches ONE MORE CALL and whose taken gamble pays 0 in total while banking pays W > 0 (mirror engine: take, then bank, the same draws)
+  function gambleSeed() {
+    for (let seed = 1; seed < 6000; seed++) {
+      const mk = (decs) => E.playRound(E.rngFrom(seed), { buy: null, bet: 100, state: CBG(), now: 1000200, day: '1970-01-01', script: false, auto: false, rnd: E.rngFrom(5) }, decs);
+      const decs = []; let r = mk(decs), g = 0; while (r.status === 'pending' && r.pending.k !== 'more' && g++ < 6) { decs.push(pick0(r.pending)); r = mk(decs); }
+      if (r.status !== 'pending' || r.pending.k !== 'more') continue;
+      const take = mk(decs.concat([{ k: 'more', take: true }])), bank = mk(decs.concat([{ k: 'more', take: false }]));
+      if (take.status === 'done' && take.pay.win === 0 && bank.status === 'done' && bank.pay.win > 0) return { seed, bankWin: bank.pay.win };
+    }
+    throw new Error('no seed: a Callback whose taken gamble pays 0');
+  }
+  for (const variant of ['A the process dies after the money call', 'B the game file cannot be written after the money call (the loss is shown), later restart']) {
+    await test(`C2 ${variant}: a Callback gamble that pays 0 writes no ledger line, yet boot replays the TAKEN gamble: it pays 0 (not the banked amount), the Callback is consumed`, async () => {
+      const { seed, bankWin } = gambleSeed();
+      const s = setup({ rng: E.rngFrom(seed), roundRng: E.rngFrom(5) }); const a = s.sock('ann'); s.store().setPlayer('ann', 'play', CBG()); s.flush();
+      const before = s.bal('ann', 'play'); let r = answerTo(s, a, spin(s, a, { bet: 100, mode: 'play', auto: false }), 'more'); assert.strictEqual(r.pending.k, 'more'); assert.strictEqual(r.cost, 0); assert.strictEqual(r.callback, true);
+      const id = r.roundId, id0 = s.lastId(); let seen = null;
+      s.hooks.before.settle = () => { seen = clone(s.disk().open['ann|play']); if (variant[0] === 'B') fs.mkdirSync(s.files.pull + '.tmp'); };
+      if (variant[0] === 'A') s.hooks.after.settle = () => { throw new H.Crash(); };
+      a.send('g:coldcall:decide', { roundId: id, k: 'more', take: true });
+      assert.ok(seen && seen.decisions.length >= 1 && JSON.stringify(seen.decisions[seen.decisions.length - 1]) === JSON.stringify({ k: 'more', take: true }), 'the taken gamble was in the stored record BEFORE the money call: ' + JSON.stringify(seen && seen.decisions));
+      assert.strictEqual(s.lastId(), id0, 'a free round that pays 0 leaves no ledger line');
+      const done = all(a, 'g:coldcall:result').filter((x) => x.status === 'done');
+      if (variant[0] === 'A') assert.strictEqual(done.length, 0, 'no result reached the client'); else { assert.strictEqual(done.length, 1); assert.strictEqual(done[0].totalWin, 0, 'the client was shown the loss'); assert.ok(diskHas(s), 'the record is still on disk'); }
+      if (variant[0] === 'A') s.reboot(); else { s.crash(); fs.rmdirSync(s.files.pull + '.tmp'); s.boot(); }
+      assert.strictEqual(s.lastId(), id0, 'boot wrote nothing: not the banked ' + bankWin); assert.strictEqual(s.bal('ann', 'play'), before, 'balance unchanged'); assert.strictEqual(closeLines(s, id).length, 0);
+      assert.strictEqual(s.store().player('ann', 'play').cb, null, 'the Callback is consumed'); assert.strictEqual(s.store().allOpen().length, 0);
+      const h = (SRV._history.get('ann') || []).find((x) => x.roundId === id); assert.ok(h && h.totalWin === 0 && h.auto === 'restart', 'the boot settlement is the taken gamble: ' + JSON.stringify(h));
+    });
+  }
+  await test('C2 order: on a paid round the final answer is in the stored record before the money call, and a final answer that cannot be stored is REFUSED (error, no result, no ledger line, the round stays open and can be answered again)', async () => {
+    const PE = findSeed({ buy: 'bonus1', bet: 100, auto: false }, (r) => r.status === 'pending');
+    const s = setup({ rng: E.rngFrom(PE.seed), roundRng: E.rngFrom(5) }); const a = s.sock('ann'); const before = s.bal('ann', 'play');
+    let r = answerTo(s, a, spin(s, a, { bet: 100, mode: 'play', buyBonus: 'bonus1' }), 'more'); assert.strictEqual(r.pending.k, 'more'); const cost = r.cost, id = r.roundId;
+    // the disk refuses the write of the final answer
+    fs.mkdirSync(s.files.pull + '.tmp'); const n = all(a, 'error').length, id0 = s.lastId();
+    a.send('g:coldcall:decide', { roundId: id, k: 'more', take: true });
+    assert.strictEqual(all(a, 'error').length, n + 1); assert.strictEqual(last(a, 'error').code, 'internal'); assert.strictEqual(all(a, 'g:coldcall:result').filter((x) => x.status === 'done').length, 0, 'no result');
+    assert.strictEqual(s.lastId(), id0, 'no ledger line'); assert.strictEqual(s.escrowSum('play'), cost, 'the stake is still in escrow'); assert.strictEqual(s.open.size, 1, 'the round is still open'); assert.deepStrictEqual(s.open.get(id).decisions.filter((d) => d.k === 'more'), [], 'the refused answer is not kept');
+    fs.rmdirSync(s.files.pull + '.tmp');
+    let seen = null; s.hooks.before.settle = () => { seen = clone(s.disk().open['ann|play']); };
+    a.send('g:coldcall:decide', { roundId: id, k: 'more', take: true });
+    const done = all(a, 'g:coldcall:result').filter((x) => x.status === 'done'); assert.strictEqual(done.length, 1, 'once the disk works the same round can be answered: ' + JSON.stringify(last(a, 'error')));
+    assert.deepStrictEqual(seen.decisions[seen.decisions.length - 1], { k: 'more', take: true }, 'the final answer was on disk before the money call');
+    assert.strictEqual(s.bal('ann', 'play'), before - cost + done[0].totalWin); assert.deepStrictEqual(s.escrows(), []); assert.ok(!diskHas(s), 'the record is dropped with the state');
   });
 
 

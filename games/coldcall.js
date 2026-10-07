@@ -587,23 +587,24 @@ module.exports = {
       const tl = rec.tape.length, rl = rec.rtape.length;
       let r;
       try { r = runRound(rec, decisions, false); } catch (e) { return err(socket, 'bad_request', 'Invalid decision'); }
+      // The player's answer is in the stored record, flushed, BEFORE anything that follows it (the next prompt, the money call, the result): a restart replays what the player chose, never the
+      // default for a decision already answered (C2: a Callback whose taken gamble pays 0 writes no ledger line, so only the record can tell boot the gamble was taken). A failed flush undoes the answer.
+      const prev = { decisions: rec.decisions, pending: rec.pending, partial: rec.partial };
+      rec.decisions = decisions;
+      if (r.status === 'pending') { rec.pending = r.pending; rec.partial = r.partial; }
+      try { store.putOpen(openRecord(rec)); store.flush(); }
+      catch (e) {
+        logf('coldcall: open record update not flushed, decision refused', rec.id, e && e.message);
+        rec.decisions = prev.decisions; rec.pending = prev.pending; rec.partial = prev.partial; rec.tape.length = tl; rec.rtape.length = rl;
+        try { store.putOpen(openRecord(rec)); } catch {}
+        return err(socket, 'internal', 'Server error');
+      }
       if (r.status === 'pending') {
-        // the record is rewritten (the draws and the decision so far) and flushed BEFORE the client hears the new prompt: a restart replays what the player was shown. A failed flush undoes the decision.
-        const prev = { decisions: rec.decisions, pending: rec.pending, partial: rec.partial };
-        rec.decisions = decisions; rec.pending = r.pending; rec.partial = r.partial;
-        try { store.putOpen(openRecord(rec)); store.flush(); }
-        catch (e) {
-          logf('coldcall: open record update not flushed, decision refused', rec.id, e && e.message);
-          rec.decisions = prev.decisions; rec.pending = prev.pending; rec.partial = prev.partial; rec.tape.length = tl; rec.rtape.length = rl;
-          try { store.putOpen(openRecord(rec)); } catch {}
-          return err(socket, 'internal', 'Server error');
-        }
         armTimer(rec);
         const v = pendingView(rec);
         for (const s of new Set([rec.socket, socket])) if (s) { try { s.emit('g:coldcall:result', v); } catch {} }
         return;
       }
-      rec.decisions = decisions;
       settle(rec, r, null, socket);
     },
     // The prompt is on screen: the open decision gets a full timeoutMs from now, ONCE per decision (the ONE MORE CALL event carries the whole bonus,
