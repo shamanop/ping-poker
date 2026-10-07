@@ -3,9 +3,19 @@
 Branch `v2-core` off origin/master 9440541 (live). Owner: Frank. Contracts: `V2-DESIGN.md`. Bugs from playtests: `QA-FRANK.md`.
 Never push or merge `master`.
 
-## 2026-10-07 00:45, branch `v2-all`: P6 wave 3b, INTERIM head (NOT the hand-off)
+## 2026-10-07 01:45, branch `v2-all`: P6 wave 3b CLOSED, INTERIM head (NOT the hand-off)
 
-Code head 6634db1 (this commit adds only this entry). Still NOT merged to master, NOT deployed. Still to come before the hand-off: the money soak merge (branch `p6-soak`, local), the browser chain result, wave 3c (ledger checkpoints, then `HAND-OFF TO ISABELLE`).
+Product code head 6634db1, unchanged since the 00:45 push; this update adds only tests (`tests/soak/`, soak head 481104b), browser QA files (`qa/p6-w3b/`) and this entry. Still NOT merged to master, NOT deployed. Still to come before the hand-off: wave 3c (ledger checkpoints, then `HAND-OFF TO ISABELLE`).
+
+**Added 01:45: the two results that were still running at 00:45**
+- **Money soak, merged** (`tests/soak/`, how to run: `tests/soak/README.md`). Random play on a real server (poker, Bender, Cold Call in Play $ and Chips, bank and admin moves) with the server killed and restarted mid-round; after every step the ledger is checked against a model (nine invariants). `node tests/soak/prove.js` first runs it clean, then plants twelve money bugs one by one and each must be caught.
+  - My own runs on the merged head (clean export): proof seed 7 and seed 9, each clean PASS and 12 of 12 planted bugs caught; one 8-minute clean run (seed 14: 13,436 steps, 12 kills, 688 poker hands, 2,328 Bender spins, 1,163 slot rounds, 6,677 ledger lines, 0 violations, 0 warnings).
+  - My FIRST proof run on the merge failed 1 of 12: the planted bug `stuck-stake` never fired, because Bender now writes a round as one ledger line and nothing takes the old park-then-credit road. A test-harness matter, not a product defect: the bug was given a shape that fires (soak commit 481104b), then the two runs above passed. The same commit narrowed the planted `stranded-escrow` to closes that hold a stake. No invariant was changed.
+  - Defects found by the soak in the product: none. Builder's numbers, not mine: three 8-minute clean runs (seeds 11 to 13) and eight stress runs on the pre-merge code.
+- **Browser chain, real clicks, on 24fe5cf** (slot code identical to this head; report `qa/p6-w3b/REPORT.md`). Builder's run: six legs (540x960, 1440x900, docked 360x740; Play $ and Chips), 33 rounds each = 198 rounds, 0 fails; every forced bonus (7), every buy (4), a 100x-plus win and five fast-click cases in every leg. Extras: server killed with a decision open (one close, paid once, board free after reload), a broke player (refused by client and by server, nothing written), a second tab on the same account (no second round, no double pay), autoplay 10 rounds: all pass. Office pot win in the browser: not reached.
+  - My own check (`qa/p6-w3b/lead-check-leg.py`, an independent replay of each leg's `money.jsonl` against its JSON): 6 of 6 legs agree round by round (33 ledger rounds each, the same ids, the same deltas, sums 0, no escrow left). I did not drive a browser myself.
+  - U17 (BIG WIN overlay after a lost one-more-call): the builder's reading is a detector artefact (the old check counts the hidden warm-up layer); after two lost gambles nothing was visible. Restated, not fixed; the old `f1_u17.js` was not re-run.
+- Also mine on this head: the short suites again (same counts as below), a real boot on the soak's 6,677-line data dir (`boot recovery: 11 seats, 0 pots returned`, `game recovery: ... coldcall 11 open/11 by game/0 kept, 0 escrows voided`, pages answer 200). NOT re-run on this head: `tests/v2/run.js` (no product or `tests/v2` file changed since the 166 of 166 run on 6634db1).
 
 **What changed** (166beca -> 6634db1; `public/games/coldcall/**` and both engine copies untouched)
 - Bender writes a round as ONE ledger line and answers an error, never a result, when the ledger refuses; a buy whose cost rounds to 0 is refused.
@@ -17,12 +27,14 @@ Code head 6634db1 (this commit adds only this entry). Still NOT merged to master
 **What I tested** (the lead's own runs, clean export of 6634db1)
 - run-money 120/120, run-tables 180/180 (was 151), run-engine 96 (seed 1), `tests/coldcall.js` 47 / 57 / 61 / 28 / 20 / coldcall-money 46 (was 18), bender 19 + 5, `tests/v2/run.js --jobs 1` 166 of 166 (494 s).
 - Builders' and critic's numbers, not mine: every fix shown to fail without its line; the critic's mutants killed; critic pass 2 found no way left to make the ledger pay twice or pay a returned stake.
-- NOT run on this head: any browser (a six-leg real-click chain is running on 24fe5cf, whose slot code is identical; first leg 540x960 Play $ 33 rounds 0 fails, builder's number); the soak's `prove.js` (builder reports clean runs on 166beca, not merged, not re-run by me); a real boot with the recovery line.
+- At 00:45 the browser chain and the soak were still running: see "Added 01:45" above.
 
 **Open bugs**
 - State only, no balance: after a crash between a slot ledger line and the state flush the office pot's `paid` / `last` can miss one prize; an instant spin's leads / daily state reach disk within 50 ms, not before the result.
 - `admin_set_play` with a reused op id AND a hand-typed matching reason reads as a dup (0 money).
-- Seen in the browser by the chain builder, not yet confirmed: a second tab stays busy with a stale balance after the first tab's round closes.
+- Second tab, display only, no money (low): a tab opened while a decision is open in another tab shows BUSY with no prompt, so the decision cannot be taken there. In one of two runs its balance meter was still the old number after the round closed elsewhere (the shell plate and the ledger were right; the next spin or wallet message corrects it). Likely cause, read not proven: `game.js` `applyWallet` does not repaint the meter while busy. Not fixed.
+- A late decision on a round that is already closed is answered `no_round`, not `round_closed` (nothing written, board stays free).
+- The soak cannot reach: the slot's engine-failure voids, a decision timer firing exactly across a restart, a live change of buy prices, an office pot win in the browser.
 - From wave 3a, unchanged: the decision-error toast wording, `/favicon.ico` 404, the showdown banner over the board cards with the slot docked at 1280x800.
 
 **Needs Chris**: nothing new. (Still his: a restart settles an open bonus as its timeout would; the Chips max-bet cap exposure; iOS / touch / sound never tested.)
