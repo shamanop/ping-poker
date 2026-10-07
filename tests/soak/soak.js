@@ -243,7 +243,7 @@ async function main() {
   // opts.marked: the caller already polled and called checker.markKill() just before it started the operation that the kill interrupts
   W.killAndRestart = async (sig, opts = {}) => {
     W.noteLiveHands();
-    if (!opts.marked) { await pollSettled(); W.checker.markKill(); }
+    if (!opts.marked || !W.checker.killMark) { await pollSettled(); W.checker.markKill(); }      // a chaos kind that bailed out early never marked: mark here, or nothing across the kill is classified
     W.counters.kills++; if (sig === 'SIGTERM') W.counters.sigterm++;
     await W.ctl.kill(sig);
     await sleep(150);                                    // answers already on the wire still reach the clients (and the model)
