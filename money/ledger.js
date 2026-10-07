@@ -74,6 +74,12 @@ const sigHash = typeof crypto.hash === 'function'      // one-shot (node >= 21.7
 const RULES = 1;
 const SRC_SHA = crypto.createHash('sha256').update(fs.readFileSync(__filename)).digest('hex');
 const RULES_ID = `${RULES}:${SRC_SHA}`;
+// The exported rule objects are mutable (SOURCE_ACCOUNTS is a Set another file could .add() to at run time, CURS an array): their LIVE
+// content is part of the fingerprint. Untouched, rulesId() is exactly RULES_ID; changed, it differs, so a sidecar written under one
+// content is refused under the other (and vice versa).
+const liveRules = () => JSON.stringify([[...SOURCE_ACCOUNTS].sort(), CURS]);
+const LOAD_RULES = liveRules();
+const rulesId = () => { const x = liveRules(); return x === LOAD_RULES ? RULES_ID : `${RULES_ID}+${crypto.createHash('sha256').update(x).digest('hex')}`; };
 const CKPT_BLOCK = 5000;      // refs / balance pairs per sidecar line
 
 const CHUNK = 1 << 20;        // read size for every streamed read of the journal
@@ -361,7 +367,7 @@ function open(file, opts = {}) {
     });
     if (!c) throw new Error('not readable JSON');
     if (c.v !== 2) throw new Error('version ' + JSON.stringify(c.v));
-    if (c.rules !== RULES_ID) throw new Error('rules changed');
+    if (c.rules !== rulesId()) throw new Error('rules changed');
     if (!ended) throw new Error('wrong shape (no end line)');
     if (!intOk(c.bytes) || !intOk(c.lastId) || !intOk(c.rawLines) || !intOk(c.applied) || typeof c.sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(c.sha256)) throw new Error('wrong shape');
     if (c.nbc !== bal.chips.length / 2 || c.nbp !== bal.play.length / 2 || c.nq !== quar.length) throw new Error('wrong shape (counts)');
@@ -733,7 +739,7 @@ function open(file, opts = {}) {
       wfd = fs.openSync(tmp, 'w');
       const put = (s) => { const b = Buffer.from(s + '\n'); let o = 0; while (o < b.length) o += fs.writeSync(wfd, b, o); };
       const head = JSON.stringify({
-        v: 2, rules: RULES_ID, bytes: size, sha256: S.hash.copy().digest('hex'), lastId: S.lastId, rawLines: S.raw, applied: S.applied,
+        v: 2, rules: rulesId(), bytes: size, sha256: S.hash.copy().digest('hex'), lastId: S.lastId, rawLines: S.raw, applied: S.applied,
         nbc: S.bal.chips.size, nbp: S.bal.play.size, nq: S.quarantined.length, ts: now(),
       });
       put(head);

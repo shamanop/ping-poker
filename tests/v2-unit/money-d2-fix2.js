@@ -55,5 +55,24 @@ t('E10 first asked while fromId is ahead of lastId, then lines with id <= fromId
   eq(live.buyIn, 7); deq(live, boot); l.close();
 });
 
+// ---- E11: the fingerprint covers the live content of SOURCE_ACCOUNTS ----
+t('E11 SOURCE_ACCOUNTS.add() at run time, a sidecar written, a process without it: the sidecar is refused, the answer is the full replay', () => {
+  const f = file(); const l = OPEN(f); l.transfer('mint:signup', 'bank:a', 100, 'chips', 'sign', 's1');
+  New.SOURCE_ACCOUNTS.add('house:newgame');
+  try {
+    l.transfer('bank:a', 'house:newgame', 60, 'chips', 'newgame:spend', 'g1'); l.transfer('house:newgame', 'bank:a', 500, 'chips', 'newgame:win', 'g2');
+    ok(l.checkpoint().ok); l.close();
+  } finally { New.SOURCE_ACCOUNTS.delete('house:newgame'); }
+  const r = OPEN(f); eq(r.stats().ckpt.used, false); eq(ignored(r).length, 1); ok(/rules changed/.test(ignored(r)[0]), ignored(r)[0]);
+  eq(snap(r), fullOf(f)); r.close();
+});
+t('E11 the other way: written without the add, read with it: refused too; unchanged: believed', () => {
+  const f = file(); let l = OPEN(f); l.transfer('mint:signup', 'bank:a', 100, 'chips', 'sign', 's1'); l.checkpoint(); l.close();
+  let r = OPEN(f); eq(r.stats().ckpt.used, true); r.close();
+  New.SOURCE_ACCOUNTS.add('house:newgame');
+  try { r = OPEN(f); eq(r.stats().ckpt.used, false); ok(/rules changed/.test(ignored(r)[0] || '')); eq(snap(r), fullOf(f)); r.close(); } finally { New.SOURCE_ACCOUNTS.delete('house:newgame'); }
+  ok(New.SOURCE_ACCOUNTS instanceof Set && New.SOURCE_ACCOUNTS.has('house:coldcall'));
+});
+
 fs.rmSync(root, { recursive: true, force: true });
 run.done();
