@@ -41,8 +41,8 @@ const keyOf = (socket) => { const a = socket.data && socket.data.acct; return St
 
 function err(socket, code, message) { socket.emit('error', { message, code, game: 'bender' }); }
 
-function walletErr(socket, e) {
-  if (e && e.code === 'funds') return err(socket, 'funds', e.message);
+function walletErr(socket, e, mode) {
+  if (e && e.code === 'funds') return err(socket, 'funds', mode === 'chips' ? 'Not enough chips' : 'Not enough Play $');
   return err(socket, 'bad_request', 'Could not place that bet');
 }
 
@@ -86,9 +86,17 @@ module.exports = {
       const exact = r.totalWinMult * p.bet, floor = Math.floor(exact + 1e-9);
       const totalWin = floor + (exact - floor > 1e-9 && rng() < exact - floor ? 1 : 0);
       const ref = { game: 'bender', round: roundId };
+      // Ledger first (ADD-A-GAME.md rule 4): a money error is an error to the client, never a result. With ctx.money the whole round is ONE
+      // ledger write (ref bender:<key>:<roundId>, the same ref and numbers the wallet adapter's spend + credit pair wrote), so the ledger
+      // holds all of it or none of it. Without ctx.money (the legacy wallet.js tests) it stays spend then credit, and a credit that throws is an error too.
       let w;
-      try { ctx.wallet.spend(key, p.mode, cost, ref); } catch (e) { return walletErr(socket, e); }
-      try { w = ctx.wallet.credit(key, p.mode, totalWin, ref); } catch (e) { w = ctx.wallet.get(key); }
+      if (ctx.money) {
+        try { ctx.money.round(key, p.mode, roundId, { cost, win: totalWin }); } catch (e) { return walletErr(socket, e, p.mode); }
+        w = ctx.wallet.get(key);
+      } else {
+        try { ctx.wallet.spend(key, p.mode, cost, ref); } catch (e) { return walletErr(socket, e, p.mode); }
+        try { w = ctx.wallet.credit(key, p.mode, totalWin, ref); } catch (e) { return walletErr(socket, e, p.mode); }
+      }
 
       const h = history.get(key) || [];
       h.unshift({ roundId, t: t, bet: p.bet, cost, mode: p.mode, buy, totalWin, tier: r.tier });
