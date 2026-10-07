@@ -435,6 +435,7 @@
       if (e.open && st.live) { setBal(walletBal(), true); toast('Finishing your open call.', 2000); return runRound(e.open, e.open.buyBonus || 'spin', true); }   // another tab / a reload left a decision open: play it out
       setBal(st.live ? walletBal() : st.pracBal, true); setBusy(false); drawBet(); syncWarm();
       if (e.server) { toast(e.message || 'Spin refused.', 2400); st.auto = false; $('auto').classList.remove('on'); } else toast('No answer from the server.', 2400);
+      if (st.live) requestState();   // (P6 w3a) a refused or unanswered spin / buy (round_closed, internal, funds): the balance, the Callback and an open round are read again from the server, never kept from this screen's copy
       return;
     }
     return runRound(p, kind, false);
