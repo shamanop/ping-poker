@@ -197,7 +197,7 @@
   function setView(v) { S.view = v; $('app').dataset.state = v; }
   function paint() {
     $('app').dataset.state = S.view; $('app').dataset.busy = S.busy ? '1' : '0'; $('app').dataset.mode = S.mode;
-    paintHeader(); paintPanel(); paintCta(); tickRing(); fitHeader(); document.querySelectorAll('.figs dd').forEach((d) => fitText(d, 16));
+    paintHeader(); paintPanel(); paintCta(); tickRing(); fitHeader(); document.querySelectorAll('.figs dd').forEach((d) => fitText(d, 16)); document.querySelectorAll('.card .nm').forEach((d) => fitText(d, 14));
   }
   function paintHeader() {
     const r = S.run, e = S.lastEnd, v = S.view;
@@ -235,7 +235,8 @@
     $('bar').dataset.ring = v === 'run' ? '1' : '0'; fitMain(main);
   }
 
-  function fitText(n, min) { n.style.fontSize = ''; let fs = parseFloat(getComputedStyle(n).fontSize), guard = 0; while (n.scrollWidth > n.clientWidth + 1 && fs > min && guard++ < 14) { fs -= 1; n.style.fontSize = fs + 'px'; } }
+  const textW = (n) => { const r = document.createRange(); r.selectNodeContents(n); return r.getBoundingClientRect().width; };   // ellipsis boxes report no overflow through scrollWidth
+  function fitText(n, min) { n.style.fontSize = ''; let fs = parseFloat(getComputedStyle(n).fontSize), guard = 0; while (textW(n) > n.clientWidth - 0.2 && fs > min && guard++ < 14) { fs -= 0.5; n.style.fontSize = fs + 'px'; } }
   function fitHeader() {
     const hd = $('hd'), mx = $('mxv'), st = $('stkv'), bal = $('bal'); mx.style.fontSize = ''; st.style.fontSize = ''; bal.style.fontSize = '';
     const nat = (n) => { n.style.width = 'max-content'; const w = n.getBoundingClientRect().width; n.style.width = ''; return w; };
