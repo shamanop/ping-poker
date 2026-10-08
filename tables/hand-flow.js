@@ -110,6 +110,8 @@ const proto = {
       this.setDeadline('phase', 'street', this.K.STREET_MS, { hand: true });
       return;
     }
+    const lev = this.playLeaverTurn();                      // a seat that left: its turn is played at once, no clock
+    if (lev) { this.afterEngine(lev); return; }
     this.setPhase('betting');
     this.turnStartAt = this.now();
     this.armTurn();
@@ -200,19 +202,35 @@ const proto = {
     this.afterEngine(engine.dealNext(h));
   },
 
-  // ---- leave / kick while a hand is live (N1) -----------------------------------------------------------------
+  // ---- leave / kick while a hand is live (N1, K3-1) ------------------------------------------------------------
   // Cash out only what is not committed to this hand now; the committed chips stay in the seat account until the batch.
+  // A kick never changes the result of a live hand: the seat stays in it like a seat that sat out (checks when checking is free, folds
+  // only when it faces a real bet) and is removed when the hand is settled. A seat that is all-in has no decision at all, so its hand
+  // runs out and it is paid what it wins. Only a player who walks out of his own accord with a decision still ahead of him folds.
   leaveInHand(seat, kind) {
     const amount = this.money.leaveAmount(this, seat.key, this.committedOf(seat));
     const r = this.money.cashOut(this, seat.key, amount, kind);
     seat.leaving = true; seat.connected = false; seat.socketId = null; seat.sitOutNext = true; seat.pre = null;
     this.out.event(this, 'left', { key: seat.key, cashedOut: amount, reason: kind === 'kick' ? 'kicked' : kind, pendingHand: true }, seat.key);
     const hs = this.hand.seats[seat.seat];
-    if (hs && !hs.folded) {
-      seat.folded = true;
+    if (hs && !hs.folded && kind !== 'kick' && !hs.allIn) {
+      seat.folded = true;                                   // his own walk-out with chips still to play: the fold he chose
       this.afterEngine(engine.foldOut(this.hand, seat.seat));
+    } else if (hs && !hs.folded && this.hand.phase === 'betting' && this.hand.toAct === seat.seat) {
+      this.afterEngine([]);                                  // afterEngine plays the check / fold for a leaving seat on turn
     } else { this.out.event(this, 'room', {}); this.out.state(this); }
     return { cashedOut: amount, left: false, intent: r.intent };
+  },
+
+  // A seat that left (or was kicked) with a decision still ahead of it checks when that is free and folds only against a real bet.
+  playLeaverTurn() {
+    const h = this.hand; if (!h || h.phase !== 'betting' || h.toAct == null) return null;
+    const seat = this.seats.get(h.toAct);
+    if (!seat || !seat.leaving) return null;
+    const la = engine.legalActions(h, h.toAct);
+    if (!la) return null;
+    seat.pre = null;
+    return engine.apply(h, h.toAct, { type: la.canCheck ? 'check' : 'fold' });
   },
 
   // ---- settle: the commit point -------------------------------------------------------------------------------
