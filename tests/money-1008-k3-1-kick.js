@@ -6,13 +6,13 @@ const { world, rigDeck, quiet, suite, eq, ok } = require('./lib-money-1008-table
 const { t, done } = suite(__filename);
 const DRY = ['3c', '8d', '9h', '4s', 'Jh'];
 
-function table(mode, seats) {
+function table(mode, seats, amounts) {
   const W = world({ keys: ['a', 'b', 'c'], cash: { a: 100000, b: 100000, c: 100000 } });
   const cash = mode === 'play';
   const T = W.registry.create('a', { name: 'Test table', mode, buyIn: cash ? { min: 500, max: 50000, default: 20000 } : { min: 100, max: 50000, default: 2000 }, blinds: cash ? { sb: 50, bb: 100 } : { sb: 25, bb: 50 }, seats, autoStart: false, actionTimerSec: 0 });
   W.cur = cash ? 'play' : 'chips'; W.stack = cash ? 20000 : 2000; W.bb = cash ? 100 : 50;
   for (const k of ['a', 'b', 'c']) if (!cash) W.service.ensureAccount(k);
-  ['a', 'b', 'c'].slice(0, seats).forEach((k, i) => T.sit(k, { amount: W.stack, seat: i }));
+  ['a', 'b', 'c'].slice(0, seats).forEach((k, i) => T.sit(k, { amount: amounts ? amounts[i] * W.stack : W.stack, seat: i }));
   W.before = Object.fromEntries(['a', 'b', 'c'].map(k => [k, W.held(k, W.cur)])); W.total0 = W.total(W.cur);
   return { W, T };
 }
@@ -154,6 +154,20 @@ for (const mode of ['play', 'chips']) {
     ok(T.hand.seats[1].folded === false);
     const d = finish(W, T);
     eq([d.a, d.b], [-W.stack, W.stack]); conserved(W); eq(T.seatOfKey('b'), null); noSeatAccount(W, T, 'b');
+  });
+
+  t(`${tag}: stand-up or kick of the biggest all-in stack in the run-out (his uncalled layer already handed back): his aces still win the main and side pot`, () => {
+    for (const how of ['leave', 'kick']) {
+      const { W, T } = table(mode, 3, [0.5, 1, 0.25]);                       // a KK 1/2 stack, b AA full stack, c QQ 1/4 stack
+      W.decks.push(rigDeck([['Ks', 'Kd'], ['As', 'Ad'], ['Qs', 'Qd']], DRY));
+      quiet(() => T.startHand());
+      T.act('a', { type: 'raise', to: W.stack / 2 }); T.act('b', { type: 'raise', to: W.stack }); T.act('c', { type: 'call' });
+      eq(T.phase, 'runout');
+      if (how === 'leave') quiet(() => T.leave('b', 'leave')); else quiet(() => T.kick('a', 'b', false));
+      ok(T.hand.seats[1].folded === false, how + ' did not fold him');
+      const d = finish(W, T);
+      eq([d.a, d.b, d.c], [-W.stack / 2, W.stack * 0.75, -W.stack / 4], how); conserved(W);
+    }
   });
 
   t(`${tag}: a player who walks out with a decision still ahead of him folds, as before`, () => {

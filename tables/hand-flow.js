@@ -213,7 +213,10 @@ const proto = {
     seat.leaving = true; seat.connected = false; seat.socketId = null; seat.sitOutNext = true; seat.pre = null;
     this.out.event(this, 'left', { key: seat.key, cashedOut: amount, reason: kind === 'kick' ? 'kicked' : kind, pendingHand: true }, seat.key);
     const hs = this.hand.seats[seat.seat];
-    if (hs && !hs.folded && kind !== 'kick' && !hs.allIn) {
+    // A decision is still ahead of him only while betting is open and he is not all-in (the run-out has none, and an uncalled layer handed
+    // back to an all-in seat clears its allIn flag without giving it a decision).
+    const decides = this.hand.phase === 'betting' && !hs.allIn;
+    if (hs && !hs.folded && kind !== 'kick' && decides) {
       seat.folded = true;                                   // his own walk-out with chips still to play: the fold he chose
       this.afterEngine(engine.foldOut(this.hand, seat.seat));
     } else if (hs && !hs.folded && this.hand.phase === 'betting' && this.hand.toAct === seat.seat) {
