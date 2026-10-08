@@ -4,6 +4,74 @@
 // Splitting the bonus out and sampling it directly resolves RTP far tighter than plain spin-by-spin sims.
 const { fork } = require('child_process');
 const E = require('./bender-engine.js');
+
+// ---- the server's payback check (K2-Bcfg): measure(cfg) is the same stratified estimator, in process, in slices that yield to the event loop; the CLI below is unchanged.
+// Two modes. DIRECT (any config): sample the base game and each bonus kind and combine, as the CLI does, with a stated SE; the bonuses have a heavy tail, so the buys come out with a wide SE at a budget a server
+// can spend (see the report). PAIRED (the config differs from the shipped one ONLY in pay / scatterPay / buyCost, which do not steer the game, so the same random numbers give the same boards): the shipped
+// config and the new one are played on identical streams and only the DIFFERENCE is sampled, on top of games/bender-ref.json (the shipped numbers, from a long offline run). A rigged pay table is a huge difference
+// with a tiny SE, the shipped numbers themselves cost nothing and the error is the reference's.
+const CEILING_PCT = 100.0, PB_SEED = 20261008, SLICE_MS = 40, PB_DEADLINE_MS = 300000;
+const PB_PLAN = { base: 700000, e3: 60000, l4: 60000, l5: 4000, l6: 1000, batches: 50 };
+const PB_PLAN_PAIRED = { base: 150000, e3: 20000, l4: 20000, l5: 1500, l6: 300, batches: 50 };
+const mean = (a) => a.reduce((x, y) => x + y, 0) / a.length;
+const varOf = (a) => { const m = mean(a); return a.reduce((x, y) => x + (y - m) ** 2, 0) / Math.max(1, a.length - 1); };
+const stable = (v) => (Array.isArray(v) ? v.map(stable) : v && typeof v === 'object' ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, stable(v[k])])) : v);
+const cfgHash = (c) => require('crypto').createHash('sha256').update(JSON.stringify(stable(c))).digest('hex');
+let REF = null;
+function loadRef() {                     // null when the file is missing or was made for other default numbers (then only the direct mode is used)
+  if (REF !== null) return REF || null;
+  try { const r = JSON.parse(require('fs').readFileSync(require('path').join(__dirname, 'bender-ref.json'), 'utf8')); REF = E.DEFAULT_CFG && r.cfgHash === cfgHash(E.DEFAULT_CFG) ? r : false; } catch { REF = false; }
+  return REF || null;
+}
+const sameDynamics = (a, b) => { const f = (c) => { const x = JSON.parse(JSON.stringify(c)); delete x.pay; delete x.scatterPay; delete x.buyCost; return cfgHash(x); }; return f(a) === f(b); };
+// ways: spin (the base game incl. the scatter-triggered bonus), buyElection, buyLandslide, each in % of its stake. opts: { seed, scale, direct }
+async function measure(cfg, opts = {}) {
+  const seed = (opts.seed === undefined ? PB_SEED : opts.seed) >>> 0, scale = opts.scale === undefined ? 1 : opts.scale, t0 = Date.now(), J = 50;
+  const ref = opts.direct ? null : loadRef(), paired = !!(ref && sameDynamics(cfg, E.DEFAULT_CFG)), PLAN = paired ? PB_PLAN_PAIRED : PB_PLAN;
+  const e = E.createEngine(cfg), eS = paired ? E.createEngine(JSON.parse(JSON.stringify(E.DEFAULT_CFG))) : null, plan = {};
+  for (const k of Object.keys(PLAN)) plan[k] = k === 'batches' ? J : Math.max(J, Math.round(PLAN[k] * scale / J) * J);
+  const rngAt = (stream, k) => E.rngFrom((seed + Math.imul(stream + 1, 0x9E3779B1) + Math.imul(k + 1, 0x85EBCA6B)) >>> 0);
+  const acc = { base: [], e3: [], l4: [], l5: [], l6: [] };           // direct: bonus mean | base batch; paired: the same with the DIFFERENCE to the shipped config
+  let maxStretch = 0, mark = process.hrtime.bigint(), rounds = 0;
+  const lap = () => { const t = process.hrtime.bigint(); maxStretch = Math.max(maxStretch, Number(t - mark) / 1e6); mark = t; };
+  const tick = async () => { if (Number(process.hrtime.bigint() - mark) / 1e6 >= SLICE_MS) { lap(); await new Promise((r) => setImmediate(r)); mark = process.hrtime.bigint(); if (Date.now() - t0 > PB_DEADLINE_MS) throw new Error('payback check did not finish in ' + PB_DEADLINE_MS / 1000 + ' s'); } };
+  const KINDS = { e3: ['election', 3], l4: ['landslide', 4], l5: ['landslide', 5], l6: ['landslide', 6] };
+  const bonusB = async (key, upto) => { const per = plan[key] / J, [kind, n] = KINDS[key]; while (acc[key].length < upto) { const j = acc[key].length, st = 1 + Object.keys(KINDS).indexOf(key), r = rngAt(st, j), rS = paired ? rngAt(st, j) : null; let s = 0; for (let i = 0; i < per; i++) { s += e.playBonus(r, kind, n, E.MAX_WIN_X).total; if (paired) s -= eS.playBonus(rS, kind, n, E.MAX_WIN_X).total; rounds++; await tick(); } acc[key].push(s / per); } };
+  const baseB = async (upto) => { const per = plan.base / J; while (acc.base.length < upto) { const j = acc.base.length, r = rngAt(0, j), rS = paired ? rngAt(0, j) : null, b = { n: per, win: 0, sc: [0, 0, 0, 0] }; for (let i = 0; i < per; i++) { const x = e.playSpin(r, { bonus: false, capLeft: E.MAX_WIN_X }); b.win += x.win; if (paired) b.win -= eS.playSpin(rS, { bonus: false, capLeft: E.MAX_WIN_X }).win; if (x.scatters >= 3) b.sc[Math.min(x.scatters, 6) - 3]++; rounds++; if ((i & 63) === 63) await tick(); } acc.base.push(b); } };
+  const compute = () => {
+    const mu = (key) => ({ m: mean(acc[key]), v: varOf(acc[key]) / acc[key].length }), B = [mu('e3'), mu('l4'), mu('l5'), mu('l6')];
+    if (paired) {
+      const spS = E.DEFAULT_CFG.scatterPay, p = ref.p, dsp = [0, 1, 2, 3].map((i) => (cfg.scatterPay[i + 3] || 0) - (spS[i + 3] || 0));
+      const per = acc.base.map((b) => b.win / b.n + p.reduce((a, pn, i) => a + pn * (dsp[i] + B[i].m), 0));       // the same bonus term in every batch: the spread is the base difference's
+      let se2 = varOf(acc.base.map((b) => b.win / b.n)) / acc.base.length;
+      for (let i = 0; i < 4; i++) se2 += p[i] ** 2 * B[i].v;
+      const sp = { pct: ref.spin.pct + mean(per) * 100, se: Math.hypot(ref.spin.se, Math.sqrt(se2) * 100) };
+      const buy = (i, cost, r) => ({ pct: (ref.B[i].m + B[i].m) / cost * 100, se: Math.hypot(ref.B[i].se, Math.sqrt(B[i].v)) / cost * 100 });
+      return { spin: sp, buyElection: buy(0, cfg.buyCost.election), buyLandslide: buy(1, cfg.buyCost.landslide) };
+    }
+    const c = [0, 1, 2, 3].map((i) => (cfg.scatterPay[i + 3] || 0) + B[i].m);     // scatter pay + the bonus it starts, for 3, 4, 5, 6 scatters
+    const per = acc.base.map((b) => b.win / b.n + b.sc.reduce((a, k, i) => a + (k / b.n) * c[i], 0));
+    let se2 = varOf(per) / per.length;
+    for (let i = 0; i < 4; i++) se2 += mean(acc.base.map((b) => b.sc[i] / b.n)) ** 2 * B[i].v;
+    return { spin: { pct: mean(per) * 100, se: Math.sqrt(se2) * 100 }, buyElection: { pct: B[0].m / cfg.buyCost.election * 100, se: Math.sqrt(B[0].v) / cfg.buyCost.election * 100 }, buyLandslide: { pct: B[1].m / cfg.buyCost.landslide * 100, se: Math.sqrt(B[1].v) / cfg.buyCost.landslide * 100 } };
+  };
+  const worstOf = (ways) => Object.entries(ways).map(([way, x]) => ({ way, pct: x.pct, se: x.se })).sort((a, b) => (b.pct || 0) - (a.pct || 0))[0];
+  let ways = null, early = false;
+  // paired and the config IS the shipped one in every number: nothing to sample, the answer is the reference
+  const identical = paired && cfgHash(cfg) === cfgHash(E.DEFAULT_CFG);
+  if (identical) ways = { spin: { ...ref.spin }, buyElection: { ...ref.buyElection }, buyLandslide: { ...ref.buyLandslide } };
+  else for (const upto of [Math.max(5, Math.round(J / 10)), J]) {
+    await baseB(upto); await bonusB('e3', upto); await bonusB('l4', upto); await bonusB('l5', upto); await bonusB('l6', upto);
+    ways = compute(); const w = worstOf(ways);
+    if (upto < J && w.pct - 6 * w.se > CEILING_PCT) { early = true; break; }
+  }
+  lap();
+  const worst = worstOf(ways), finite = Object.values(ways).every((x) => Number.isFinite(x.pct) && Number.isFinite(x.se));
+  return { ok: finite && worst.pct <= CEILING_PCT, finite, ceilingPct: CEILING_PCT, ways, worst, rounds, ms: Date.now() - t0, maxStretchMs: maxStretch, seed, scale, early, mode: paired ? 'paired' : 'direct' };
+}
+module.exports = { measure, loadRef, cfgHash, CEILING_PCT };
+
+if (require.main === module) {
 // BB_CFG='{"scatterW":1.3,"payScale":1.9}' overrides engine CFG for tuning runs (payScale multiplies pay + scatterPay). Workers inherit the env.
 if (process.env.BB_CFG) {
   const o = JSON.parse(process.env.BB_CFG), k = o.payScale; delete o.payScale;
@@ -56,4 +124,6 @@ function report() {
   console.log(lines.join('\n'));
   console.log(`BASE-GAME RTP ${(rtp * 100).toFixed(3)}% (95% CI +-${(1.96 * Math.sqrt(varSum) * 100).toFixed(3)})`);
   console.log(JSON.stringify({ rtp, ci: 1.96 * Math.sqrt(varSum), buyE: bE.mean, buyL: bL.mean }));
+}
+
 }

@@ -95,37 +95,61 @@ function start(env = process.env) {
     if (!want.length || got.length !== want.length) return false;
     return crypto.timingSafeEqual(got, want);
   };
+  // Wrong tokens: after ADMIN_WRONG_TOKEN_MAX (5) wrong tries from one address inside ADMIN_WRONG_TOKEN_WINDOW_MS (10 minutes) every admin call from it, right token or not, gets 429 until the window has moved on.
+  // One log line per refused try (403 or 429); the token is never logged.
+  const adminFails = new Map();
+  const adminGate = (req, res) => {
+    const max = Number(env.ADMIN_WRONG_TOKEN_MAX) > 0 ? Number(env.ADMIN_WRONG_TOKEN_MAX) : 5, win = Number(env.ADMIN_WRONG_TOKEN_WINDOW_MS) > 0 ? Number(env.ADMIN_WRONG_TOKEN_WINDOW_MS) : 600000;
+    const ip = req.ip || (req.socket && req.socket.remoteAddress) || '?', now = Date.now(), tries = (adminFails.get(ip) || []).filter(t => now - t < win);
+    if (adminFails.size > 5000) for (const [k, v] of adminFails) if (!v.some(t => now - t < win)) adminFails.delete(k);
+    if (tries.length >= max) {
+      adminFails.set(ip, tries);
+      log(`[admin] refused (429): ${tries.length} wrong tokens from ${ip} in the last ${Math.round(win / 60000)} min, ${req.method} ${req.path}`);
+      res.set('Retry-After', String(Math.max(1, Math.ceil((tries[0] + win - now) / 1000)))).status(429).json({ error: 'too many wrong tokens' });
+      return false;
+    }
+    if (benderAdminOk(req)) return true;
+    tries.push(now); adminFails.set(ip, tries);
+    log(`[admin] refused (403): wrong or missing token from ${ip} (${tries.length} of ${max} in the window), ${req.method} ${req.path}`);
+    res.status(403).json({ error: 'forbidden' });
+    return false;
+  };
   const benderMod = () => { try { return require('./games/bender.js'); } catch { return null; } };
   app.get('/api/admin/bender-config', (req, res) => {
-    if (!benderAdminOk(req)) return res.status(403).json({ error: 'forbidden' });
+    if (!adminGate(req, res)) return;
     const m = benderMod(); if (!m) return res.status(404).json({ error: 'no slot' });
     res.json(m.liveInfo());
   });
-  app.post('/api/admin/bender-config', express.json({ limit: '64kb' }), (req, res) => {
-    if (!benderAdminOk(req)) return res.status(403).json({ error: 'forbidden' });
+  // K2-Bcfg / K4-1: a POST is MEASURED before it goes live (the server works out the payback of every way to play under the new numbers and refuses a config above 100%), so it can take about a minute;
+  // the measuring runs in slices that yield to the event loop. Every accepted or refused POST is one audit line (who = token fingerprint + address, old and new measured payback).
+  const adminWho = req => 'admin#' + crypto.createHash('sha256').update(String(req.get('x-admin-token') || '')).digest('hex').slice(0, 8) + '@' + (req.ip || (req.socket && req.socket.remoteAddress) || '?');
+  app.post('/api/admin/bender-config', express.json({ limit: '64kb' }), async (req, res) => {
+    if (!adminGate(req, res)) return;
     const m = benderMod(); if (!m) return res.status(404).json({ error: 'no slot' });
     const b = req.body || {};
     try {
-      const info = m.setLiveConfig(b.reset ? { overrides: {}, note: b.note || 'reset to defaults' } : { overrides: b.overrides || {}, rtpLabel: b.rtpLabel, note: b.note });
+      const info = await m.setLiveConfigChecked(b.reset ? { overrides: {}, note: b.note || 'reset to defaults', who: adminWho(req) } : { overrides: b.overrides || {}, note: b.note, who: adminWho(req) });
       io.emit('g:bender:cfg', { cfg: m.clientCfg(), rtp: info.rtpLabel });
       console.log('[bender] live config updated:', info.note || '(no note)');
-      res.json({ ok: true, ...info });
+      res.json({ ok: true, ...info, ...(b.rtpLabel ? { warning: 'rtpLabel ignored: the label players see is the value the server measured' } : {}) });
     } catch (e) { res.status(400).json({ ok: false, error: e.message }); }
   });
   // Same switch for COLD CALL (same token, same header). GET current; POST {overrides, rtpLabel?, note?} swaps (400 + the reason on a bad config, nothing changes); POST {reset:true} restores the shipped math.
   const coldcallMod = () => { try { return require('./games/coldcall.js'); } catch { return null; } };
   app.get('/api/admin/coldcall-config', (req, res) => {
-    if (!benderAdminOk(req)) return res.status(403).json({ error: 'forbidden' });
+    if (!adminGate(req, res)) return;
     const m = coldcallMod(); if (!m) return res.status(404).json({ error: 'no slot' });
     res.json(m.liveInfo());
   });
-  app.post('/api/admin/coldcall-config', express.json({ limit: '64kb' }), (req, res) => {
-    if (!benderAdminOk(req)) return res.status(403).json({ error: 'forbidden' });
+  app.post('/api/admin/coldcall-config', express.json({ limit: '64kb' }), async (req, res) => {
+    if (!adminGate(req, res)) return;
     const m = coldcallMod(); if (!m) return res.status(404).json({ error: 'no slot' });
     const b = req.body, reset = !!b && b.reset === true;               // only the boolean true resets ("false", 1, "yes" are not a reset and do not drop the overrides sent with them)
     if (!b || typeof b !== 'object' || Array.isArray(b) || (!reset && (!b.overrides || typeof b.overrides !== 'object' || Array.isArray(b.overrides)))) return res.status(400).json({ ok: false, error: 'send {overrides: {...}} or {reset: true}' });
     try {
-      const info = m.setLiveConfig(reset ? { overrides: {}, note: b.note || 'reset to defaults' } : { overrides: b.overrides, rtpLabel: b.rtpLabel, note: b.note });
+      const L = require('./games/coldcall-livecfg.js');                 // measured first (async, in slices), then written and swapped in; the shipped label comes from the game module
+      await L.setLiveConfigChecked(reset ? { overrides: {}, note: b.note || 'reset to defaults', who: adminWho(req) } : { overrides: b.overrides, rtpLabel: b.rtpLabel, note: b.note, who: adminWho(req) });
+      const info = m.liveInfo();
       io.emit('g:coldcall:cfg', m.cfgEvent());
       console.log('[coldcall] live config updated:', info.note || '(no note)');
       res.json({ ok: true, ...info });

@@ -6,31 +6,82 @@ const path = require('path');
 const Eng = require('./bender-engine.js');
 
 // Live math: overrides saved on the data volume, loaded at boot, swappable at runtime (no deploy). See setLiveConfig.
+// K2-Bcfg: a config is live only with a payback MEASUREMENT of its own numbers (games/bender-rtp.js measure: stratified seeded simulation, stated standard error) that is at or under the ceiling for the base
+// game and for both bonus buys. The label players see is that measured value (or the shipped line while the numbers are the shipped ones), never text the admin typed.
+const rtpTool = require('./bender-rtp.js');
 const DATA_DIR = process.env.DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH || path.join(__dirname, '..');
 const CFG_FILE = process.env.BENDER_CFG_FILE || path.join(DATA_DIR, 'bender-config.json');
-let live = { overrides: {}, rtpLabel: null, note: '', updatedAt: null };
+const RTP_LABEL = '98% (long-run, 56M spin stratified sim, +-0.11; bonus about 1 in 100)';
+let live = { overrides: {}, rtpLabel: null, note: '', updatedAt: null, measured: null };
+const clone = (o) => JSON.parse(JSON.stringify(o));
+const deepEq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const hashOf = (cfg) => crypto.createHash('sha256').update(JSON.stringify(cfg)).digest('hex');
+// the full merged config for some overrides (validated by the engine first; same merge rule as the engine's own)
+function mergeOver(over) {
+  Eng.validateConfig(over || {});
+  const next = clone(Eng.DEFAULT_CFG);
+  (function m(b, o) { for (const k of Object.keys(o)) { if (b[k] && typeof b[k] === 'object' && !Array.isArray(b[k])) m(b[k], o[k]); else b[k] = o[k]; } })(next, over || {});
+  return next;
+}
+const isDefaultCfg = (next) => deepEq(next, Eng.DEFAULT_CFG);
 function loadLiveConfig() {
   try {
     const j = JSON.parse(fs.readFileSync(CFG_FILE, 'utf8'));
-    Eng.setConfig(j.overrides || {});
-    live = { overrides: j.overrides || {}, rtpLabel: j.rtpLabel || null, note: j.note || '', updatedAt: j.updatedAt || null };
-  } catch (e) { if (e.code !== 'ENOENT') console.error('[bender] live config not loaded, using defaults:', e.message); }
+    const over = j.overrides || {}, next = mergeOver(over), m = j.measured;
+    // a saved file is trusted only if it is the shipped numbers or carries the passing measurement made for exactly these numbers
+    if (!isDefaultCfg(next) && !(m && m.ok === true && m.hash === hashOf(next) && typeof m.label === 'string')) throw new Error('the saved config has no passing payback measurement; POST it again so the server can measure it');
+    Eng.setConfig(over);
+    live = { overrides: over, rtpLabel: null, note: j.note || '', updatedAt: j.updatedAt || null, measured: isDefaultCfg(next) ? null : m };
+  } catch (e) { if (e.code !== 'ENOENT') console.error('[bender] live config not loaded, using defaults:', e.message); try { Eng.setConfig({}); } catch {} live = { overrides: {}, rtpLabel: null, note: '', updatedAt: null, measured: null }; }
 }
-function setLiveConfig({ overrides, rtpLabel, note } = {}) {
-  Eng.setConfig(overrides || {});                  // throws on a bad config; nothing changes in that case
-  live = { overrides: overrides || {}, rtpLabel: typeof rtpLabel === 'string' && rtpLabel ? rtpLabel.slice(0, 160) : null, note: String(note || '').slice(0, 300), updatedAt: new Date().toISOString() };
+// swap the live config. `measured` = the passing check for these numbers (made by setLiveConfigChecked; the proof must carry the hash of exactly these numbers). There is no way in without one: a rigged
+// pay table cannot be set by calling this directly, only the shipped numbers (reset) need no proof.
+function setLiveConfig({ overrides, rtpLabel, note, measured } = {}) {
+  const over = overrides || {}, next = mergeOver(over), reset = isDefaultCfg(next), proven = !!(measured && measured.ok === true && measured.hash === hashOf(next));
+  if (!reset && !proven) throw new Error('cfg: refused, no passing payback measurement for these numbers (use setLiveConfigChecked)');
+  Eng.setConfig(over);                             // throws on a bad config; nothing changes in that case
+  const rec = { overrides: over, rtpLabel: null, note: String(note || '').slice(0, 300), updatedAt: new Date().toISOString(), measured: !reset && proven ? measured : null };
   const tmp = CFG_FILE + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify(live, null, 2)); fs.renameSync(tmp, CFG_FILE);
+  fs.writeFileSync(tmp, JSON.stringify({ overrides: rec.overrides, note: rec.note, updatedAt: rec.updatedAt, ...(rec.measured ? { measured: rec.measured } : {}) }, null, 2)); fs.renameSync(tmp, CFG_FILE);
+  live = rec;
   return liveInfo();
 }
-const rtpLabel = () => live.rtpLabel || RTP_LABEL;
+const auditFile = () => CFG_FILE + '.audit.log';
+function audit(rec) {                              // one line per accepted or refused change: when, who, old and new measured payback
+  const line = JSON.stringify({ t: new Date().toISOString(), game: 'bender', ...rec });
+  console.log('[cfg-audit] ' + line);
+  try { fs.appendFileSync(auditFile(), line + '\n'); } catch {}
+}
+const round2 = (x) => Math.round(x * 100) / 100;
+const summaryOf = (r) => Object.fromEntries(Object.entries(r.ways).map(([w, x]) => [w, { pct: round2(x.pct), se: round2(x.se) }]));
+let checking = false;
+// The admin path: validate, measure (async, in slices), refuse above the ceiling, then write + swap. `who` names the caller (token fingerprint + address). Every outcome is one audit line.
+async function setLiveConfigChecked({ overrides, rtpLabel, note, who, scale, seed } = {}) {
+  const over = overrides || {}, old = live.measured ? { pct: live.measured.summary.spin.pct, worst: live.measured.worst, source: 'measured when set' } : { pct: 98.0, source: isDefaultCfg(Eng.CFG) ? 'shipped label (56M-spin sim)' : 'unmeasured custom (pre-check file)' };
+  const log = (rec) => audit({ who: who || 'unknown', note: String(note || '').slice(0, 120), old, ...rec });
+  let next;
+  try { next = mergeOver(over); } catch (e) { log({ outcome: 'refused', why: String(e.message).slice(0, 200), new: null }); throw e; }
+  if (isDefaultCfg(next)) { try { const info = setLiveConfig({ overrides: over, note }); log({ outcome: 'accepted', new: { pct: 98.0, source: 'shipped' } }); return info; } catch (e) { log({ outcome: 'refused', why: String(e.message).slice(0, 200), new: null }); throw e; } }
+  if (checking) { const e = new Error('cfg: another payback check is running, try again when it has finished'); log({ outcome: 'refused', why: e.message, new: null }); throw e; }
+  checking = true;
+  let m;
+  try { m = await rtpTool.measure(next, { scale, seed }); } catch (e) { checking = false; log({ outcome: 'refused', why: 'check failed: ' + String(e.message).slice(0, 200), new: null }); throw e; }
+  checking = false;
+  const summary = summaryOf(m), nw = { worst: { way: m.worst.way, pct: round2(m.worst.pct), se: round2(m.worst.se) }, spin: summary.spin, ways: summary, ms: m.ms, maxStretchMs: round2(m.maxStretchMs), seed: m.seed };
+  if (!m.ok) {
+    const why = !m.finite ? 'the payback could not be measured (not a finite number: the symbol weights or pay table are degenerate)' : 'the ' + m.worst.way + ' way pays back ' + round2(m.worst.pct) + '% (+-' + round2(1.96 * m.worst.se) + '), above the ' + rtpTool.CEILING_PCT + '% ceiling';
+    log({ outcome: 'refused', why, new: nw }); throw new Error('cfg: refused, ' + why + (m.early ? ' (stopped early)' : ''));
+  }
+  const measured = { hash: hashOf(next), ok: true, ceilingPct: rtpTool.CEILING_PCT, label: round2(m.ways.spin.pct).toFixed(1) + '% (measured by the server when this was set: base game, +-' + round2(1.96 * m.ways.spin.se).toFixed(1) + '; highest way ' + m.worst.way + ' ' + round2(m.worst.pct).toFixed(1) + '%)', summary, worst: nw.worst, seed: m.seed, at: new Date().toISOString() };
+  try { const info = setLiveConfig({ overrides: over, note, measured }); log({ outcome: 'accepted', new: nw }); return info; } catch (e) { log({ outcome: 'refused', why: String(e.message).slice(0, 200), new: nw }); throw e; }
+}
+const rtpLabel = () => (isDefaultCfg(Eng.CFG) ? RTP_LABEL : live.measured && live.measured.hash === hashOf(Eng.CFG) ? live.measured.label : 'custom settings, not measured');
 function clientCfg() { const c = Eng.currentConfig(); return { weights: c.weights, pay: c.pay, scatterPay: c.scatterPay, spinsFor: c.spinsFor, retrigger: c.retrigger, buyCost: c.buyCost }; }
-function liveInfo() { return { file: CFG_FILE, rtpLabel: rtpLabel(), note: live.note, updatedAt: live.updatedAt, overrides: live.overrides, cfg: Eng.currentConfig() }; }
+function liveInfo() { return { file: CFG_FILE, rtpLabel: rtpLabel(), note: live.note, updatedAt: live.updatedAt, measured: live.measured, overrides: live.overrides, cfg: Eng.currentConfig() }; }
 
 const BET_LEVELS = Eng.BET_LEVELS;
 const RATE_MS = 150;
 const HISTORY_MAX = 20;
-const RTP_LABEL = '98% (long-run, 56M spin stratified sim, +-0.11; bonus about 1 in 100)';
 
 function cryptoRng() {
   return () => crypto.randomBytes(6).readUIntBE(0, 6) / 281474976710656; // 48-bit uniform in [0,1)
@@ -53,7 +104,7 @@ module.exports = {
   betLevels: BET_LEVELS,
   RTP_LABEL,
   init(ctx) { this.rng = ctx.rng || cryptoRng(); loadLiveConfig(); },
-  setLiveConfig, liveInfo, clientCfg, loadLiveConfig,
+  setLiveConfig, setLiveConfigChecked, liveInfo, clientCfg, loadLiveConfig,
   onDisconnect(socket) { if (socket.data) delete socket.data.benderLast; },
   handlers: {
     state(socket, payload, ctx) {
