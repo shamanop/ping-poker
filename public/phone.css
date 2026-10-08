@@ -205,3 +205,5 @@ body.sh-on:has(#game-screen.active) .sh-top { display: none; }
 .bank-row2 { flex: none; height: auto; grid-template-columns: minmax(0, 1fr); }
 .bank-row2 > .bank-card { min-height: 220px; }
 .bank-players { flex: none; }
+.sh-top .sh-plate, .sh-top .btn, .sh-top [data-money-toggle] .seg, .sh-top [data-money-toggle] .seg > * { height: auto; }   /* phone keeps its 44px min-heights */
+.sh-top { --sh-ctl: 44px; }

@@ -10,6 +10,7 @@ const REPO_ROOT = path.resolve(__dirname, '..', '..');
 function argOf(flag) { const i = process.argv.indexOf(flag); return i >= 0 ? process.argv[i + 1] : undefined; }
 const TARGET_DIR = path.resolve(argOf('--target') || process.env.TARGET_DIR || REPO_ROOT);
 const PORT_BASE = Number(process.env.V2_PORT_BASE) || 3500;   // run.js gives every test file its own block inside 3500-3559
+const ADMIN_CLAIM = 'test-admin-claim-1008';   // ADMIN_CLAIM_PASSWORD for every server startServer spawns: the admin `chris` is claimable only with it, never the room word
 const RUN_ROOT = path.join(__dirname, 'runs');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const log = (...a) => console.log(new Date().toISOString().slice(11, 23), ...a);
@@ -35,7 +36,7 @@ async function startServer(portArg = 0, opts = {}) {
   fs.mkdirSync(dir, { recursive: true });
   const f = n => path.join(dir, n);
   if (!opts.keepFiles) { fs.writeFileSync(f('b.json'), JSON.stringify(opts.bank || {})); fs.writeFileSync(f('l.json'), '[]'); }
-  const env = { SIGNUP_PLAY_CENTS: '1000000', ...process.env, PORT: String(port), DATA_DIR: dir, BANK_FILE: f('b.json'), LEDGER_FILE: f('l.json'), ACCOUNTS_FILE: f('a.json'), TABLES_FILE: f('t.json'),
+  const env = { SIGNUP_PLAY_CENTS: '1000000', ADMIN_CLAIM_PASSWORD: ADMIN_CLAIM, ...process.env, PORT: String(port), DATA_DIR: dir, BANK_FILE: f('b.json'), LEDGER_FILE: f('l.json'), ACCOUNTS_FILE: f('a.json'), TABLES_FILE: f('t.json'),
     WALLET_FILE: f('w.json'), STACKS_FILE: f('s.json'), BIGWINS_FILE: f('bw.json'), BENDER_CFG_FILE: f('bender-cfg.json'), MONEY_FILE: f('money.jsonl'),
     RIG: opts.rig === false ? '' : '1',
     AUTO_START_MS: String(opts.autoStartMs || 300), HAND_DELAY_MS: String(opts.handDelayMs || 150), TURN_MS: String(opts.turnMs || 30000),
@@ -111,7 +112,7 @@ class Bot {
   async signup(pin = '1234') { const r = await this.req('auth_signup', { name: this.name, pin, avatar: 'a01' }, 'auth_ok'); if (r.account) this.key = r.account.key; return r; }
   async login(pin = '1234') { const r = await this.req('auth_login', { name: this.name, pin }, 'auth_ok'); if (r.account) this.key = r.account.key; return r; }
   async claim(pin = '1234') { const r = await this.req('auth_claim', { name: this.name, pin, avatar: 'a01', roomPassword: 'ping' }, 'auth_ok'); if (r.account) this.key = r.account.key; return r; }
-  async claimAdmin() { const r = await this.req('auth_claim', { name: this.name, pin: '4321', avatar: 'a01', roomPassword: 'ping' }, 'auth_ok'); if (r.account) this.key = r.account.key; return r; }
+  async claimAdmin() { const r = await this.req('auth_claim', { name: this.name, pin: '4321', avatar: 'a01', roomPassword: process.env.ADMIN_CLAIM_PASSWORD || ADMIN_CLAIM }, 'auth_ok'); if (r.account) this.key = r.account.key; return r; }
   async sit(tableId = this.tableId, buyIn, fund) { this.tableId = tableId; return this.req('table_join', { tableId, buyIn, fund }, 'table_joined'); }
   async leave(tableId = this.tableId) { return this.req('table_leave', { tableId }, 'table_left'); }
   idx() { return this.gs ? this.gs.players.findIndex(p => p.name.toLowerCase() === this.name.toLowerCase()) : -1; }
@@ -343,5 +344,5 @@ function suite(file) {
   return { check, done, rows, NN };
 }
 
-module.exports = { startServer, Bot, waitFor, sleep, log, audit, roomOf, seatOf, moneyTotal, rigDeck, card, tableWith, step, info, P, drive, refSettle,
+module.exports = { ADMIN_CLAIM, startServer, Bot, waitFor, sleep, log, audit, roomOf, seatOf, moneyTotal, rigDeck, card, tableWith, step, info, P, drive, refSettle,
   suite, expect, expectEq, Fail, dealAligned, settleOf, expectTotals, runPot, diffTotals, TARGET_DIR, REPO_ROOT, PORT_BASE, RUN_ROOT };

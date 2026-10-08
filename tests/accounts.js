@@ -4,7 +4,7 @@ const fs = require('fs'), os = require('os'), path = require('path');
 const { io } = require(process.env.SIO_CLIENT || '/home/isabelle/.cache/node_modules/socket.io-client');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ppac-'));
-const PORT = 4801, ROOT = path.join(__dirname, '..');
+const PORT = Number(process.env.TEST_PORT) || 4801, ROOT = path.join(__dirname, '..');
 const F = { bank: path.join(dir, 'bank.json'), ledger: path.join(dir, 'ledger.json'), acc: path.join(dir, 'accounts.json'), tables: path.join(dir, 'tables.json') };
 fs.writeFileSync(F.bank, JSON.stringify({ chris: 5000, Mike: 300, mike: 200 }));
 fs.writeFileSync(F.ledger, JSON.stringify([
@@ -102,6 +102,10 @@ const AUTH = ['auth_ok', 'auth_error'];
     const l2 = client();
     [e, d] = await l2.call('auth_login', { name: 'ann lee', pin: '1357' }, ...AUTH);
     ok(e === 'auth_ok', 'login with new pin');
+
+    // the admin account is never claimable with the room word (ADMIN_CLAIM_PASSWORD unset here); tests/money-1008-adminclaim.js covers the rest
+    [e, d] = await c.call('auth_claim', { name: 'chris', pin: '1234', avatar: 'a02', roomPassword: 'ping' }, ...AUTH);
+    ok(e === 'auth_error' && d.code === 'admin_claim_disabled', 'admin account cannot be claimed with the room word');
 
     // admin reset needs admin
     [e, d] = await l.call('account_reset_pin', { key: 'mike', newPin: '1111' }, 'ok', 'auth_error', 'error');

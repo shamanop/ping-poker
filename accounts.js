@@ -41,7 +41,12 @@ function createAccounts({ file, roomPassword = 'ping' }) {
   let skew = Number(process.env.AUTH_CLOCK_SKEW) || 0;
   const now = () => Date.now() + skew;
   const signupLimit = Number(process.env.AUTH_SIGNUP_LIMIT) || 40;
-  const adminClaim = process.env.ADMIN_CLAIM_PASSWORD || null;
+  // Admin accounts are claimable ONLY with ADMIN_CLAIM_PASSWORD, never with the public room word. Unset, blank, shorter than
+  // ADMIN_CLAIM_MIN, or equal to the room word (any case, trimmed) = treated as unset = admin claim refused (fail closed).
+  const ADMIN_CLAIM_MIN = 8;
+  const rawAdminClaim = process.env.ADMIN_CLAIM_PASSWORD == null ? '' : String(process.env.ADMIN_CLAIM_PASSWORD).trim();
+  const adminClaim = rawAdminClaim.length >= ADMIN_CLAIM_MIN && rawAdminClaim.toLowerCase() !== String(roomPassword).trim().toLowerCase() ? rawAdminClaim : null;
+  const sameSecret = (a, b) => { const x = sha(a), y = sha(b); return crypto.timingSafeEqual(Buffer.from(x), Buffer.from(y)); };
   const listeners = { auth: [] };
 
   let db = { version: 1, accounts: {} };
@@ -172,8 +177,13 @@ function createAccounts({ file, roomPassword = 'ping' }) {
     const a = db.accounts[key];
     if (!a) return err('bad_name', 'No such player to claim');
     if (a.claimed) return err('name_taken', 'That name is taken');
-    const need = (a.isAdmin && adminClaim) ? adminClaim : roomPassword;
-    if (String(password == null ? '' : password).trim().toLowerCase() !== String(need).trim().toLowerCase()) { recordFail(ids); const m = lockedMs(ids); return m ? limited(m) : err('bad_login', 'Wrong table password'); }
+    const given = String(password == null ? '' : password).trim();
+    const fail = (code, message) => { recordFail(ids); const m = lockedMs(ids); return m ? limited(m) : err(code, message); };
+    if (a.isAdmin) {
+      // never the room word; with no valid ADMIN_CLAIM_PASSWORD an admin account cannot be claimed at all. Counted by the same limiter.
+      if (!adminClaim) { burn(pin); return fail('admin_claim_disabled', 'This account cannot be claimed here. The server operator must set ADMIN_CLAIM_PASSWORD.'); }
+      if (!sameSecret(given, adminClaim)) return fail('bad_login', 'Wrong table password');
+    } else if (given.toLowerCase() !== String(roomPassword).trim().toLowerCase()) return fail('bad_login', 'Wrong table password');
     recordOk(ids);
     if (AVATAR_RE.test(String(avatar))) a.avatar = avatar;
     setPin(a, pin);
@@ -330,6 +340,16 @@ function createAccounts({ file, roomPassword = 'ping' }) {
     save();
   }
 
+  // One loud line at boot when an admin account is unclaimed and nobody can claim it (so the operator sees why the admin cannot sign in).
+  function warnAdminClaim() {
+    if (adminClaim) return false;
+    const open = Object.values(db.accounts).filter(a => a.isAdmin && !a.claimed).map(a => a.key);
+    if (!open.length) return false;
+    const why = process.env.ADMIN_CLAIM_PASSWORD ? `the value set is ignored (it must be at least ${ADMIN_CLAIM_MIN} characters and not the room word)` : 'it is not set';
+    console.error(`[SECURITY] Admin account(s) [${open.join(', ')}] are UNCLAIMED and ADMIN_CLAIM_PASSWORD ${why}: admin claim is DISABLED (fail closed). Set ADMIN_CLAIM_PASSWORD (>= ${ADMIN_CLAIM_MIN} chars, not the room word) and restart to claim the admin account.`);
+    return true;
+  }
+
   // ── legacy migration (idempotent) ─────────────────────────────────────────
   function migrateLegacy({ bank = {}, ledgerEntries = [] } = {}) {
     const groups = new Map(); // key -> { display, t, raw[] }
@@ -352,6 +372,7 @@ function createAccounts({ file, roomPassword = 'ping' }) {
     }
     if (!db.accounts.chris) { db.accounts.chris = blank('chris', 'Chris'); created++; }
     if (created) { flush(); console.log(`migrated ${created} accounts, merged ${merged} duplicates`); }
+    warnAdminClaim();
     return { created, merged };
   }
 
