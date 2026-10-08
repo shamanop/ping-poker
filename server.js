@@ -101,15 +101,18 @@ function start(env = process.env) {
     const m = benderMod(); if (!m) return res.status(404).json({ error: 'no slot' });
     res.json(m.liveInfo());
   });
-  app.post('/api/admin/bender-config', express.json({ limit: '64kb' }), (req, res) => {
+  // K2-Bcfg / K4-1: a POST is MEASURED before it goes live (the server works out the payback of every way to play under the new numbers and refuses a config above 100%), so it can take about a minute;
+  // the measuring runs in slices that yield to the event loop. Every accepted or refused POST is one audit line (who = token fingerprint + address, old and new measured payback).
+  const adminWho = req => 'admin#' + crypto.createHash('sha256').update(String(req.get('x-admin-token') || '')).digest('hex').slice(0, 8) + '@' + (req.ip || (req.socket && req.socket.remoteAddress) || '?');
+  app.post('/api/admin/bender-config', express.json({ limit: '64kb' }), async (req, res) => {
     if (!benderAdminOk(req)) return res.status(403).json({ error: 'forbidden' });
     const m = benderMod(); if (!m) return res.status(404).json({ error: 'no slot' });
     const b = req.body || {};
     try {
-      const info = m.setLiveConfig(b.reset ? { overrides: {}, note: b.note || 'reset to defaults' } : { overrides: b.overrides || {}, rtpLabel: b.rtpLabel, note: b.note });
+      const info = await m.setLiveConfigChecked(b.reset ? { overrides: {}, note: b.note || 'reset to defaults', who: adminWho(req) } : { overrides: b.overrides || {}, note: b.note, who: adminWho(req) });
       io.emit('g:bender:cfg', { cfg: m.clientCfg(), rtp: info.rtpLabel });
       console.log('[bender] live config updated:', info.note || '(no note)');
-      res.json({ ok: true, ...info });
+      res.json({ ok: true, ...info, ...(b.rtpLabel ? { warning: 'rtpLabel ignored: the label players see is the value the server measured' } : {}) });
     } catch (e) { res.status(400).json({ ok: false, error: e.message }); }
   });
   // Same switch for COLD CALL (same token, same header). GET current; POST {overrides, rtpLabel?, note?} swaps (400 + the reason on a bad config, nothing changes); POST {reset:true} restores the shipped math.
