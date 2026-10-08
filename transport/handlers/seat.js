@@ -45,6 +45,7 @@ function register(ctx, socket, on) {
     const rec = t.shown[key] || [false, false];
     for (const i of slots) rec[i] = true;
     t.shown[key] = rec;
+    try { if (ctx.recap) ctx.recap.onShown(t, key, rec); } catch (e) { console.error('[v2] recap shown:', e && e.message); }
     ctx.io.to(t.id).emit('cards_shown', { handNum: t.handNo - (t.nightHand0 || 0), name: views.nameOf(key), cards: hole.map((c, i) => (rec[i] ? c : null)) });
     t.pushLog(`${views.nameOf(key)} shows ${rec[0] && rec[1] ? 'both cards' : 'one card'}`);
   });

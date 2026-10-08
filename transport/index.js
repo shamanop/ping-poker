@@ -2,7 +2,7 @@
 // Socket layer: the `out` interface the tables talk through, the push helpers (money, wallet, bank summary, lobby) and
 // io.on('connection'). No rules live here (contract section 1): handlers parse, authorise and call a Table / registry / service.
 
-const HANDLERS = ['auth', 'lobby', 'seat', 'host', 'social', 'admin', 'bank'].map(n => require('./handlers/' + n));
+const HANDLERS = ['auth', 'lobby', 'seat', 'host', 'social', 'admin', 'bank', 'recap'].map(n => require('./handlers/' + n));
 
 function createTransport(ctx) {
   const { io, views } = ctx;

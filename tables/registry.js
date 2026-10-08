@@ -67,6 +67,7 @@ function createRegistry(deps) {
     event(t, kind, data, toKey) {
       try { if (deps.out) deps.out.event(t, kind, data, toKey); } finally {
         if (deps.viewlog) { try { deps.viewlog.onEvent(t, kind, data); } catch (e) { console.error('[v2] viewlog:', kind, e && e.message); } }
+        if (deps.recorder) { try { deps.recorder.onEvent(t, kind, data); } catch (e) { console.error('[v2] recap:', kind, e && e.message); } }
         if (kind !== 'money') { save(); pushLobby(); }
       }
     },
@@ -78,6 +79,7 @@ function createRegistry(deps) {
       money, clock, out, onError: deps.onError ? (e, where) => deps.onError(e, where, t) : null, rng: deps.rng, deckSource: deps.deckSource, constants: deps.constants,
       hooks: { seatOf: key => { const r = seatOf(key); return r && r.tableId !== rec.id ? r : null; }, profileOf },
     });
+    t.recorder = deps.recorder || null;
     t.handNo = Math.max(t.handNo || 0, money.lastHandNo(t.id));      // monotonic across restarts: never reuse hand:<id>:<n>
     tables.set(t.id, t);
     return t;

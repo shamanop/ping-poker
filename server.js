@@ -53,6 +53,7 @@ function start(env = process.env) {
   const { createAuth } = require('./auth'), { createAdmin } = require('./admin'), { createRig } = require('./transport/rig');
   const profileOf = key => { const a = accounts.get(key); return a ? { display: a.display, avatar: a.avatar, pic: accounts.picUrl(a) } : null; };
   const registryRef = { current: null };
+  ctx.recap = require('./recap').createRecap({ file: paths.RECAP_FILE, registry: () => registryRef.current, accounts, now: () => Date.now() });
   const safe = ctx.safe = createSafe({ registry: { seatOf: k => registryRef.current.seatOf(k), tables: { get: id => registryRef.current.tables.get(id) }, pauseAll: () => registryRef.current.pauseAll(), voidAll: r => registryRef.current.voidAll(r) } });
   const viewlog = createViewlog({ presLedger, accounts, social: ctx.social, bankOf: k => ledger.balance('bank:' + k, 'chips'), profileOf, nightNets: t => registryRef.current.nightOf(t) });
   ctx.money = createMoneyPort({ service, ledger, bootId, sameFundOnly: true, afterWrite: k => ctx.afterWrite(k), onFence: e => { console.error('[v2] MONEY FENCED', e && e.code); registryRef.current.pauseAll(); }, onWrite: w => viewlog.onWrite(w) });
@@ -61,7 +62,7 @@ function start(env = process.env) {
   const rngSource = () => crypto.randomBytes(6).readUIntBE(0, 6) / 2 ** 48;
   const transportRef = {};
   ctx.registry = registryRef.current = createRegistry({
-    money: ctx.money, service, ledger, clock, file: paths.TABLES_FILE, rng: rngSource, deckSource: ctx.rig ? ctx.rig.deckSource : null, viewlog, onError: safe.onError,
+    money: ctx.money, service, ledger, clock, file: paths.TABLES_FILE, rng: rngSource, deckSource: ctx.rig ? ctx.rig.deckSource : null, viewlog, recorder: ctx.recap, onError: safe.onError,
     out: { state: t => ctx.out.state(t), event: (t, k, d, to) => ctx.out.event(t, k, d, to) }, onLobby: () => ctx.pushLobby(),
     hooks: { profileOf, isAdmin: k => accounts.isAdmin(k) },
   });
@@ -147,6 +148,7 @@ function start(env = process.env) {
     try { ctx.wallet.flush(); } catch {}
     try { mirror.write(); mirror.stop(); } catch {}
     try { ctx.registry.flush(); } catch {}
+    try { ctx.recap.flush(); } catch {}
     try { accounts.flush(); } catch {}
     try { if (ctx.social.flush) ctx.social.flush(); } catch {}
     try { ledger.checkpoint(); } catch {}

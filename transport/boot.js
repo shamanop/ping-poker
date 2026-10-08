@@ -16,6 +16,7 @@ function resolvePaths(root, env) {
     MONEY_FILE: near('money.jsonl', env.MONEY_FILE), // next to bank.json, so a test that moves only BANK_FILE never writes money.jsonl into the repo root
     STACKS_FILE: near('stacks.json', env.STACKS_FILE), LEDGER_FILE: env.LEDGER_FILE || path.join(DATA_DIR, 'ledger.json'),
     ACCOUNTS_FILE: near('accounts.json', env.ACCOUNTS_FILE), TABLES_FILE: near('tables.json', env.TABLES_FILE),
+    RECAP_FILE: near('recap-hands.jsonl', env.RECAP_FILE),
     WALLET_FILE: near('wallet.json', env.WALLET_FILE), BIGWINS_FILE: near('bigwins.json', env.BIGWINS_FILE),
     COLDCALL_PULL_FILE: near('coldcall-pull.json', env.COLDCALL_PULL_FILE), COLDCALL_CFG_FILE: near('coldcall-config.json', env.COLDCALL_CFG_FILE), // COLD CALL's own state and live config, next to money.jsonl
   };
