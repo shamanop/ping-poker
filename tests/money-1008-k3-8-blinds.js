@@ -88,11 +88,11 @@ for (const mode of ['play', 'chips']) {
     eq(W.total(W.cur), W.total0);
   });
 
-  t(`${tag}: standing up and sitting again with no hand dealt in between owes nothing; a player who never sat here is dealt in at once`, () => {
+  t(`${tag}: standing up and sitting again owes the big blind even with no hand dealt in between (R2A-1: the debt belongs to the player); a player who never sat here is dealt in at once`, () => {
     const { W, T } = table(mode, 3);
     play(T);
     quiet(() => { T.leave('k2', 'leave'); T.sit('k2', { amount: W.stack, seat: 2 }); });
-    eq(T.seatOfKey('k2').missedBlind, false);
+    eq(T.seatOfKey('k2').missedBlind, true, 'standing up and sitting again at once still owes the big blind (R2A-1)');
     quiet(() => T.leave('k2', 'leave'));
     play(T);                                                               // a hand without him
     quiet(() => T.sit('k2', { amount: W.stack, seat: 2 }));
