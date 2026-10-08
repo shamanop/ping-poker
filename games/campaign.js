@@ -46,6 +46,7 @@ const tiersOf = (o) => (o.tiers == null ? E.TIERS : tiersOk(o.tiers) ? o.tiers :
 const mapOf = (o, tiers) => (o.map == null ? E.CUR : tiers && E.mapOk(o.map, tiers) ? o.map : null);
 const validId = (x) => typeof x === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(x);
 const logf = (...a) => { const f = module.exports.log; if (f) f(...a); };
+const alarm = (...a) => { const f = module.exports.log; (f || console.error)(...a); };      // the lines that must be seen: to the log hook if one is set, else stderr (server.js sets none)
 
 let C = null;                    // the games ctx from init (io, money, now, rng)
 let fenced = null;               // the ledger code once a money call showed the ledger refuses writes for good (foreign_write | lost_lock | closed); init() clears it. Poker pauses on this (server.js onFence), the game port has no such hook.
@@ -229,6 +230,7 @@ function keepOpen(rec, usable) {
 }
 function recover(rounds) {
   if (!store) return;
+  if (store.blocked()) { alarm('campaign: recover: the store is BLOCKED (see the line above): no open run is settled, no escrow is refunded, every stake stays in the ledger until a person fixes the file'); return; }
   const escrows = new Map();
   for (const r of rounds || []) escrows.set(`${nkey(r.key)}|${r.cur}|${r.roundId}`, r.amount);
   const seen = new Set();
@@ -238,7 +240,7 @@ function recover(rounds) {
   }
   for (const r of rounds || []) {                                              // an escrow with no record: no step was ever taken, give the stake back
     if (seen.has(`${nkey(r.key)}|${r.cur}|${r.roundId}`)) continue;
-    try { M().void(nkey(r.key), r.cur, r.roundId, 'boot'); logf('campaign: recover: escrow with no record, refunded', r.roundId); }
+    try { M().void(nkey(r.key), r.cur, r.roundId, 'boot'); (store.lost() ? alarm : logf)('campaign: recover: escrow with no record, refunded at the stake' + (store.lost() ? ' (the state file was lost: this run\'s multiplier is unknown)' : ''), r.roundId, nkey(r.key), r.cur, r.amount); }
     catch (e) { if (!(e && e.code === 'round_closed')) logf('campaign: recover: refund of an escrow with no record refused', r.roundId, e && e.message); }
   }
   try { store.flush(); } catch (e) { logf('campaign: store flush failed after recover', e && e.message); }
@@ -246,6 +248,7 @@ function recover(rounds) {
 // from the game's OWN records: every open run with a stake. The soak compares it with the ledger.
 function audit() {
   const openRounds = [];
+  if (store && store.blocked()) throw Object.assign(new Error('campaign store blocked: the open runs are unknown'), { code: 'store_blocked' });   // the registry then leaves this game's escrows alone
   if (store) for (const o of store.allOpen()) if (o && isInt(o.bet) && o.bet > 0 && typeof o.key === 'string' && validId(o.roundId) && MODES.includes(o.cur)) openRounds.push({ key: nkey(o.key), cur: o.cur, roundId: o.roundId, amount: o.bet });
   return { openRounds, pools: {} };
 }
@@ -321,7 +324,7 @@ function step(socket, payload) {
   if (!res.ok || next.done) {                                                             // scandal (settle with win 0: the stake goes to the house) or landslide / dead end (an automatic cash-out at the new multiplier)
     rec.memo = null;
     rec.pend = { run: next, reason: next.done };                                          // the drawn result is final from here: written to the record BEFORE the ledger is asked, so a refused settle,
-    try { store.putOpen(toStored(rec)); store.flush(); }                                  // a restart or a flush error can never turn it into a cash-out, a better result or a new draw
+    try { store.putOpen(toStored(rec)); store.flush(); }                                      // a restart or a flush error can never turn it into a cash-out, a better result or a new draw
     catch (e) { logf('campaign: pended result not flushed (kept in memory, the idle and boot paths still close it as drawn when the record is written)', rec.roundId, e && e.message); }
     closeRun(rec, next, next.done, next.failedAt || null, socket);                        // refused: rec.pend stays, a retry / the idle timer / boot close it as drawn
     return;
@@ -369,7 +372,7 @@ module.exports = {
     if (store) store.close();
     C = ctx;
     const files = ctx.files || {};
-    store = createStore(process.env.CAMPAIGN_FILE || files.campaign || null, { log: logf });
+    store = createStore(process.env.CAMPAIGN_FILE || files.campaign || null, { log: logf, alarm });
   },
   recover, audit,
   handlers: { state, start, step, cash },
