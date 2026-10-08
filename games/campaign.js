@@ -21,7 +21,8 @@ const RTP_LABEL = '96.0%';
 const MAX_WIN_X = E.LANDSLIDE_MX / 100;
 const CAP_X = E.CAP_MX / 100;
 
-// QA hook: a step payload may carry force: 'survive' | 'scandal'. It runs ONLY when the server process was started with CAMPAIGN_TEST=1 and NODE_ENV is not 'production';
+// QA hook: a step payload may carry force: 'survive' | 'scandal'. It runs ONLY when the server process was started with CAMPAIGN_TEST=1 and NODE_ENV is not 'production', and ONLY on a CHIPS run
+// (Money 1008 K5-F: a run whose stored currency is Cash, real money, never honours `force`, whatever the environment says; forceFor below is the only reader of a step's `force`);
 // otherwise `force` (and every other unknown field) is ignored. The engine has no force code: the hook only hands E.step a fixed rng (0 always fails a step, 0.999999 always survives it).
 // CAMPAIGN_IDLE_MS (a shorter idle timer for the tests) honours the same switch.
 const testHookOn = () => process.env.CAMPAIGN_TEST === '1' && process.env.NODE_ENV !== 'production';
@@ -30,6 +31,14 @@ const idleMs = () => {
   return IDLE_MS;
 };
 const FORCE_RNG = { survive: () => 0.999999, scandal: () => 0 };
+let cashForceSeen = 0;
+// the force a step may carry: hook on AND the STORED run's currency is Chips (never the client's say), else null. A Cash run that asks for one is played as an ordinary run and a line is printed (the first 5 per boot).
+function forceFor(rec, payload) {
+  const f = field(payload, 'force');
+  if (!testHookOn() || typeof f !== 'string' || !own(FORCE_RNG, f)) return null;
+  if (rec.cur !== 'chips') { if (cashForceSeen++ < 5) alarm('campaign: QA force ' + JSON.stringify(f) + ' refused on a ' + (rec.cur === 'play' ? 'Cash' : String(rec.cur)) + ' run: the hook is Chips only, the step is played as an ordinary one'); return null; }
+  return f;
+}
 
 const cryptoRng = () => crypto.randomBytes(6).readUIntBE(0, 6) / 281474976710656;   // 48-bit uniform in [0,1)
 const nkey = (k) => String(k).toLowerCase().trim();                                  // same normalisation as ctx.money
@@ -316,8 +325,8 @@ function step(socket, payload) {
   if (rec.memo && rec.memo.n === n && rec.memo.to === to) res = rec.memo.res;             // the same step again after a failed flush: the SAME draw, not a second one
   else {
     rec.memo = null;
-    const force = testHookOn() ? field(payload, 'force') : undefined;
-    const rng = typeof force === 'string' && own(FORCE_RNG, force) ? FORCE_RNG[force] : rngOf();
+    const force = forceFor(rec, payload);
+    const rng = force ? FORCE_RNG[force] : rngOf();
     try { res = E.step(rec.run, to, rng, rec.tiers, rec.map); } catch (e) { return err(socket, e && e.code === 'bad_step' ? 'bad_step' : 'internal', e && e.code === 'bad_step' ? 'You cannot go there' : 'Server error'); }
   }
   const next = res.run;
@@ -375,7 +384,8 @@ module.exports = {
     for (const rec of runs.values()) clearTimer(rec);
     runs.clear(); rateLast.clear(); fenced = null;
     if (store) store.close();
-    C = ctx;
+    C = ctx; cashForceSeen = 0;
+    if (testHookOn()) alarm('campaign: *** QA FORCE HOOK IS ON (CAMPAIGN_TEST=1, NODE_ENV=' + (process.env.NODE_ENV || '(unset)') + '): any signed-in player can force Campaign steps in CHIPS ONLY; Cash runs ignore it. Never set CAMPAIGN_TEST on a real server. ***');
     const files = ctx.files || {};
     store = createStore(process.env.CAMPAIGN_FILE || files.campaign || null, { log: logf, alarm });
   },

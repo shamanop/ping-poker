@@ -1,6 +1,7 @@
 'use strict';
 // Money 1008 hardening of CAMPAIGN TRAIL (plain node, exit 0 on pass, 1 on fail). Runs on the REAL ledger (tests/lib-campaign-ledger.js).
 //   K2-Cdisk  a step whose outcome cannot be written to disk is never shown to the player: the step did not happen (error, run held), never a result that a restart forgets
+//   K5-F  the QA `force` hook is Chips only: a Cash run (the STORED currency of the run) never honours it; one loud boot line when it is on
 //   K5-2  an open run settles on the map it was started on: a deploy that moves a state to another tier or drops a border never changes what a run is worth at boot, and never hands a lost stake back
 const assert = require('assert');
 const fs = require('fs');
@@ -136,6 +137,47 @@ t('K2-Cdisk-e: a surviving step on a full disk: error, the step did not happen, 
   let r = H.start(w, s, 'play', 2500, 'TX'); const id = r.payload.run.roundId; r = H.call(w, s, 'step', { roundId: id, n: 1, to: r.payload.run.options[0].to });
   const run = r.payload.run, to = run.options[0].to, heal = fullDisk({ ledger: true, store: true }); let x; try { x = H.call(w, s, 'step', { roundId: id, n: 2, to }); } finally { heal(); }
   ok(x.error); eq(w.runs.get('ann').run.steps, 1); u = 0; const y = H.call(w, s, 'step', { roundId: id, n: 2, to }); eq(y.ev, 'step', 'the memo of the surviving draw'); eq(y.payload.run.steps, 2);
+});
+
+// ---- K5-F
+const raw = (w, s, ev, p) => { w.clock.advance(200); const n = s.out.length; s.send('g:campaign:' + ev, p); return s.out.slice(n); };     // no force shim: the message goes to the server as it is
+const lastOf = (got) => got.filter((o) => o[0].startsWith('g:campaign:')).map((o) => ({ ev: o[0].slice(11), payload: o[1] })).pop() || { ev: null };
+function forceWorld(rngv, logs) { hook(true); delete process.env.NODE_ENV; const w = H.world({ rng: () => (typeof rngv === 'function' ? rngv() : rngv), keys: ['ann', 'bob'], log: (...a) => logs.push(a.join(' ')) }); for (const k of ['ann', 'bob']) { w.fund(k, 'play', BIG); w.fund(k, 'chips', BIG); } return w; }
+t('K5-F-a: with the hook ON a Cash run ignores force (survive AND scandal), pays what the unforced twin pays, and is told so in the log; a Chips run is still forced', () => {
+  for (const [force, rngv, want] of [['survive', 0, 'end'], ['scandal', 0.999999, 'step']]) {                                  // rng 0 fails every step; rng 0.999999 survives every step
+    const logs = [], w = forceWorld(rngv, logs), s = w.sock('ann'); const pre = w.bal('ann', 'play');
+    const run = H.start(w, s, 'play', 2500, 'TX').payload.run, to = (run.options.find((o) => !o.deadEnd) || run.options[0]).to;
+    const r = lastOf(raw(w, s, 'step', { roundId: run.roundId, n: 1, to, force }));
+    eq(r.ev, want, 'Cash + force ' + force + ': the step is the unforced one'); if (want === 'end') { eq(r.payload.reason, 'scandal'); eq(w.bal('ann', 'play'), pre - 2500); }
+    ok(logs.some((l) => /QA force .* refused on a Cash run/.test(l)), 'a line says the force was refused: ' + logs.join(' | ').slice(0, 300));
+    const c = w.sock('bob'); const rc = H.start(w, c, 'chips', 2500, 'TX'); const cr = rc.payload.run;
+    const forced = lastOf(raw(w, c, 'step', { roundId: cr.roundId, n: 1, to: (cr.options.find((o) => !o.deadEnd) || cr.options[0]).to, force })); eq(forced.ev, force === 'survive' ? 'step' : 'end', 'Chips is forced'); w.crash();
+  }
+});
+t('K5-F-b: the currency is the STORED run\'s: a Cash run whose step message says mode:chips is still Cash; a run restored after a restart is Cash too', () => {
+  const logs = [], w = forceWorld(0, logs), s = w.sock('ann'); const pre = w.bal('ann', 'play');
+  const run = H.start(w, s, 'play', 500, 'TX').payload.run, to = (run.options.find((o) => !o.deadEnd) || run.options[0]).to;
+  const r = lastOf(raw(w, s, 'step', { roundId: run.roundId, n: 1, to, force: 'survive', mode: 'chips', cur: 'chips', currency: 'chips' })); eq(r.ev, 'end'); eq(w.bal('ann', 'play'), pre - 500); w.crash();
+  // a restart in between: the run comes back from the record, still a Cash run
+  let R = 0.999999; const w2 = forceWorld(() => R, logs), s2 = w2.sock('ann'); const pre2 = w2.bal('ann', 'play');
+  let r2 = H.start(w2, s2, 'play', 500, 'TX').payload.run; r2 = H.call(w2, s2, 'step', { roundId: r2.roundId, n: 1, to: (r2.options.find((o) => !o.deadEnd) || r2.options[0]).to }).payload.run;
+  w2.crash(); w2.boot(); eq(w2.bal('ann', 'play'), pre2 - 500 + 500 * r2.mx / 100, 'a restart is a cash-out'); const s3 = w2.sock('ann');
+  r2 = H.start(w2, s3, 'play', 500, 'TX').payload.run; const r3 = lastOf(raw(w2, s3, 'step', { roundId: r2.roundId, n: 1, to: (r2.options.find((o) => !o.deadEnd) || r2.options[0]).to, force: 'scandal' })); eq(r3.ev, 'step', 'force scandal on a Cash run (rng survives) does not fail it'); w2.crash();
+});
+t('K5-F-c: one loud boot line when the hook is on (to the log hook, or stderr when none is set); none when it is off or under production', () => {
+  const count = (setup) => { const logs = []; setup(); const w = H.world({ rng: () => 0.5, keys: ['ann'], log: (...a) => logs.push(a.join(' ')) }); w.crash(); return logs.filter((l) => /QA FORCE HOOK IS ON/.test(l)).length; };
+  eq(count(() => { hook(true); delete process.env.NODE_ENV; }), 1); eq(count(() => { hook(false); delete process.env.NODE_ENV; }), 0); eq(count(() => { hook(true); process.env.NODE_ENV = 'production'; }), 0); eq(count(() => { hook(true); process.env.NODE_ENV = 'test'; }), 1);
+  delete process.env.NODE_ENV; hook(false);
+  const w = H.world({ rng: () => 0.5, keys: ['ann'], log: (...a) => { throw new Error('boom'); } }); w.crash();                           // a log hook is never what hides the line from stderr when it is absent:
+  const errs = []; const ce = console.error; console.error = (...a) => errs.push(a.join(' ')); const SRVm = H.SRV; const keep = SRVm.log;
+  try { hook(true); const w2 = H.world({ rng: () => 0.5, keys: ['ann'] }); SRVm.log = undefined; SRVm.init({ rng: () => 0.5, files: {} }); } finally { console.error = ce; SRVm.log = keep; hook(false); }
+  eq(errs.filter((l) => /QA FORCE HOOK IS ON/.test(l)).length, 1, 'stderr gets it when no log hook is set');
+});
+t('K5-F-d: the refusal line is printed for the first 5 only', () => {
+  const logs = [], w = forceWorld(0.999999, logs), s = w.sock('ann'); w.fund('ann', 'play', BIG);
+  let run = H.start(w, s, 'play', 100, 'TX').payload.run;
+  for (let i = 0; i < 8; i++) { const r = lastOf(raw(w, s, 'step', { roundId: run.roundId, n: run.steps + 1, to: (run.options.find((o) => !o.deadEnd) || run.options[0]).to, force: 'scandal' })); if (r.ev === 'step') run = r.payload.run; else break; }
+  const n = logs.filter((l) => /QA force .* refused/.test(l)).length; ok(n >= 1 && n <= 5, 'lines: ' + n);
 });
 
 (async () => {
