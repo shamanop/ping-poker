@@ -3,7 +3,7 @@
 // the gate itself is tests/money-1008-cfg-bender.js. Needs games/bender-ref.json (the shipped numbers) for the paired mode, which keeps this file's measurements short.
 const assert = require('assert');
 const fs = require('fs'), os = require('os'), path = require('path');
-const dir = fs.mkdtempSync(path.join(os.homedir(), '.bender-livecfg-'));
+const dir = fs.mkdtempSync(path.join(os.tmpdir(), '.bender-livecfg-'));
 process.env.BENDER_CFG_FILE = path.join(dir, 'bender-config.json');
 const E = require('../games/bender-engine.js');
 const B = require('../games/bender.js');
