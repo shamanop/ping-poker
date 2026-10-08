@@ -8,11 +8,11 @@ const fs = require('fs'), path = require('path');
 
 const EXPECT = {
   'win-dropped': ['I7', 'I2'],
-  'paid-twice': ['I7', 'I2'],
+  'paid-twice': ['I7', 'I2', 'I12'],
   'skim': ['I7', 'I4'],
   'mirror-stale': ['I5'],
   'boot-skip': ['I4'],
-  'ghost-mint': ['I2', 'I7'],
+  'ghost-mint': ['I2', 'I7', 'I11'],
   'view-lies': ['I6'],
   'stuck-stake': ['I8', 'I6'],
   'neg-holder': ['I1', 'I3'],
@@ -26,6 +26,11 @@ const EXPECT = {
   'camp-record-kept': ['I4'],
   'camp-recover-pays-zero': ['I9', 'I7', 'I2'],
   'camp-step-credit': ['I2'],
+  // Cash and Chips never mix, Cash is never created (I10-I13, ledger-only; the older invariants may name the same bug too, see README "Ablation")
+  'fx-mix': ['I10'],
+  'cash-bonus': ['I11', 'I2', 'I7'],
+  'cash-topup-signup': ['I11', 'I13', 'I2', 'I7'],
+  'chips-round-paid-in-cash': ['I10', 'I12', 'I7', 'I2'],
 };
 // extra soak.js arguments a bug needs to be reachable at all (prove.js appends them): the boot-recovery bug only fires on a kill with a run open at 0 steps.
 const ARGS = { 'camp-recover-pays-zero': ['--kill-kinds', 'campopen0,campopen0,campopen0,campopen0'] };
@@ -97,6 +102,34 @@ const SERVICE = {
           ledger.batch([{ from: 'house:coldcall', to: (cur === 'chips' ? 'bank:' : 'play:') + key, amount: o.win, cur, reason: 'coldcall:credit' }], `coldcall:${key}:${roundId}v:close`, 'coldcall:settle');
           return { id: w.id, dup: false, noop: false };
         }
+      }
+      return orig.apply(this, arguments);
+    };
+  },
+  // The daily bonus (Chips) is paid in Cash now and then: the client is told the same amount, the ledger mints it into play:.
+  'cash-bonus'(svc) {
+    const fire = every(2), orig = svc.mint;
+    svc.mint = function (kind, key, amount, cur, ref) {
+      if (kind === 'bonus' && cur === 'chips' && fire()) { say('paid the daily bonus in Cash', key, amount); return orig.call(this, kind, key, amount, 'play', ref); }
+      return orig.apply(this, arguments);
+    };
+  },
+  // A "welcome top-up" of Cash for a new account (the top-up is off since bb298d2; signup pays 0 Cash).
+  'cash-topup-signup'(svc) {
+    const fire = every(3), orig = svc.ensureAccount; let n = 0;
+    svc.ensureAccount = function (key) {
+      const r = orig.apply(this, arguments);
+      if (fire()) { say('minted 2500 Cash as a welcome top-up to', key); try { svc.mint('topup', key, 2500, 'play', `topup:${key}:welcome${++n}`); } catch (e) { say('welcome top-up refused', e.code); } }
+      return r;
+    };
+  },
+  // A Bender round opened in Chips pays its win in Cash now and then: the stake leaves bank:, the win lands in play: (two currencies in one line, a Cash credit with no Cash stake).
+  'chips-round-paid-in-cash'(svc, ledger) {
+    const fire = every(4), orig = svc.houseRound;
+    svc.houseRound = function (game, key, cost, win, cur, ref, pool) {
+      if (game === 'bender' && cur === 'chips' && win > 0 && fire()) {
+        say('paid a Chips round in Cash', key, ref, win);
+        return ledger.batch([{ from: 'bank:' + key, to: 'house:bender', amount: cost, cur: 'chips', reason: 'bender:spend' }, { from: 'house:bender', to: 'play:' + key, amount: win, cur: 'play', reason: 'bender:credit' }], ref, 'bender:round');
       }
       return orig.apply(this, arguments);
     };
@@ -241,6 +274,11 @@ if (bug === 'camp-record-kept') {
     st.delOpen = function (key) { if (fire()) { say('kept the record of a closed run', key); return false; } return del.apply(this, arguments); };
     return st;
   };
+}
+if (bug === 'fx-mix') {
+  // The seat funding rule is switched off again (what bb298d2 removed): a Cash holder can buy into a Chips table through fx:, and the other way round.
+  const mp = req('tables/money-port.js'), orig = mp.createMoneyPort;
+  mp.createMoneyPort = function (o) { say('cross-currency seats allowed (sameFundOnly off)'); return orig.call(this, { ...o, sameFundOnly: false }); };
 }
 if (SERVICE[bug]) {
   const m = req('money/service.js'), orig = m.createService;

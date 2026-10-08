@@ -50,7 +50,7 @@ async function scenario() {
     const boot = {}; for (const n of NAMES) boot[n] = await login(n, true);
     const obs = boot.Ann;
     const c1 = await obs.req('table_create', { settings: { name: 'NightChips', mode: 'chips', buyIn: { min: 500, max: 20000, default: 2000 }, blinds: { sb: 25, bb: 50 }, rebuyLimit: 0, autoStart: false, actionTimerSec: 0 } }, 'table_created');
-    const c2 = await boot.Bob.req('table_create', { settings: { name: 'NightPlay', mode: 'play', buyIn: { min: 500, max: 50000, default: 2000 }, blinds: { sb: 25, bb: 50 }, rebuyLimit: 0, autoStart: false, actionTimerSec: 0 } }, 'table_created');
+    const c2 = await boot.Bob.req('table_create', { settings: { name: 'NightPlay', mode: 'play', buyIn: { min: 500, max: 50000, default: 2000 }, blinds: { sb: 25, bb: 50 }, rebuyLimit: 0, autoStart: false, actionTimerSec: 60 } }, 'table_created');
     if (!c1.table || !c2.table) throw new Error('create tables: ' + (c1.__err || c2.__err));
     T1 = c1.table.id; N1 = c1.table.nightId; T2 = c2.table.id; N2 = c2.table.nightId;
     const s1 = [await seat('Ann', T1, 2000, 'chips'), await seat('Bob', T1, 2000, 'chips', true), await seat('Cat', T1, 1500, 'chips')];

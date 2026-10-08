@@ -574,20 +574,22 @@ const potOk = (p, s, mode) => { assert.strictEqual(p.fed, p.paid + p.bal, 'pot s
     assert.strictEqual(all(b, 'floor:feed').length, 0); assert.deepStrictEqual(Object.keys(s.store()._data().players), []); assert.deepStrictEqual(Object.keys(s.store()._data().pot), []);
   });
 
-  await test('QA hook with pull on: force plays that feature as a normal paid spin (state and Callback untouched, pot fed), ignored without COLDCALL_TEST', async () => {
+  await test('QA hook with pull on: force plays that feature as a normal paid spin in CHIPS (state and Callback untouched, pot fed), ignored without COLDCALL_TEST, never honoured in Cash (MONEY 1008 K4-3)', async () => {
     const env0 = { t: process.env.COLDCALL_TEST, n: process.env.NODE_ENV };
     try {
       process.env.COLDCALL_TEST = '1'; delete process.env.NODE_ENV;
       const s = setup({ rng: E.rngFrom(75) }); const a = s.sock('ann');
-      s.store().setPlayer('ann', 'play', { ...E.newState(), cb: { bet: 100 }, lt: 100 });
-      const w0 = s.bal('ann', 'play');
-      const r = spin(s, a, { bet: 200, mode: 'play', force: 'big' });
+      s.store().setPlayer('ann', 'chips', { ...E.newState(), cb: { bet: 100 }, lt: 100 });
+      s.setBal('ann', 'chips', 1000000);
+      const w0 = s.bal('ann', 'chips');
+      const r = spin(s, a, { bet: 200, mode: 'chips', force: 'big' });
       assert.strictEqual(r.status, 'done'); assert.strictEqual(r.forced, 'big'); assert.ok(r.totalWinMult >= 25); assert.strictEqual(r.cost, 200); assert.strictEqual(r.callback, false); assert.strictEqual(r.betCents, 200);
-      assert.strictEqual(r.wallet.play, w0 - 200 + r.totalWin);
-      assert.deepStrictEqual(s.store().player('ann', 'play').cb, { bet: 100 }, 'the Callback is still waiting'); assert.strictEqual(s.store().player('ann', 'play').lt, 100);
-      assert.strictEqual(s.potOf('play').fed * 10000 + s.potOf('play').rem, 200 * E.CFG.pull.pot.feedBps);
+      assert.strictEqual(r.wallet.chips, w0 - 200 + r.totalWin);
+      assert.deepStrictEqual(s.store().player('ann', 'chips').cb, { bet: 100 }, 'the Callback is still waiting'); assert.strictEqual(s.store().player('ann', 'chips').lt, 100);
+      assert.strictEqual(s.potOf('chips').fed * 10000 + s.potOf('chips').rem, 200 * E.CFG.pull.pot.feedBps);
+      const c = spin(s, a, { bet: 200, mode: 'play', force: 'big' }); assert.strictEqual(c.forced, undefined, 'hook on, Cash: never forced'); assert.strictEqual(c.cost, 200);
       delete process.env.COLDCALL_TEST;
-      const q = spin(s, a, { bet: 200, mode: 'play', force: 'big' }); assert.strictEqual(q.forced, undefined); assert.strictEqual(q.callback, true, 'without the hook the Callback plays');
+      const q = spin(s, a, { bet: 200, mode: 'chips', force: 'big' }); assert.strictEqual(q.forced, undefined); assert.strictEqual(q.callback, true, 'without the hook the Callback plays');
     } finally { if (env0.t == null) delete process.env.COLDCALL_TEST; else process.env.COLDCALL_TEST = env0.t; if (env0.n == null) delete process.env.NODE_ENV; else process.env.NODE_ENV = env0.n; }
   });
 

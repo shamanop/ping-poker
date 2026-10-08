@@ -356,16 +356,34 @@ t('F1: a fenced ledger -> no new step is drawn (an error, no rng use), no new st
   const e3 = H.call(w, s, 'step', { roundId: runA.roundId, n: runA.steps + 1, to: runA.options[0].to }); ok(e3.error, 'a step on the pended run is refused'); eq(draws, 0);
 });
 
-t('F1: the record flush fails too -> the drawn scandal is kept in memory, step / cash on that run are refused and never pay; the idle path closes it as a loss', () => {
+t('F1: the settle is refused, the record is on disk -> the drawn scandal is pended on disk, step / cash on that run are refused and never pay; the idle path closes it as a loss', () => {
   const w = world(85), s = w.sock('ann'); hook(true); const pre = w.bal('ann', 'play');
   let run = advance(w, s, H.start(w, s, 'play', 500, 'OH').payload.run, 2);
-  const store = w.store(), realFlush = store.flush; store.flush = () => { throw new Error('disk full'); }; w.hooks.before.settle = refuse;
-  H.call(w, s, 'step', stepOf(run, run.options[0].to, 'scandal')); const rec = w.runs.get('ann'); ok(rec.pend, 'pended in memory');
+  w.hooks.before.settle = refuse;
+  H.call(w, s, 'step', stepOf(run, run.options[0].to, 'scandal')); const rec = w.runs.get('ann'); ok(rec.pend, 'pended in memory'); ok(w.disk().open.ann.pend, 'and on disk');
   let draws = 0; w.RNG.fn = () => { draws++; return 0.999999; };
   const a = H.call(w, s, 'step', stepOf(run, run.options[0].to, 'survive')); ok(a.error, 'step refused'); const b = H.call(w, s, 'cash', { roundId: run.roundId }); ok(b.error, 'cash refused'); eq(draws, 0);
   eq(w.escrows().length, 1, 'the stake is still in escrow, nothing was paid'); eq(H.all(s, 'g:campaign:end').length, 0);
-  store.flush = realFlush; w.hooks.before = {}; SRV._test.autoClose(rec, 'timeout');
+  w.hooks.before = {}; SRV._test.autoClose(rec, 'timeout');
   const e = H.last(s, 'g:campaign:end'); eq(e.reason, 'scandal'); eq(e.win, 0); eq(w.bal('ann', 'play'), pre - 500); eq(w.escrows().length, 0);
+});
+
+t('F1b: the record flush fails too (nothing durable) -> the step did not happen: error, no result, run and record unchanged; the same step again gets the SAME draw; a restart pays the run as it stood', () => {
+  for (const via of ['retry', 'cash', 'restart']) {
+    const w = world(85), s = w.sock('ann'); hook(true); const pre = w.bal('ann', 'play');
+    let run = advance(w, s, H.start(w, s, 'play', 500, 'OH').payload.run, 2); const diskBefore = JSON.stringify(w.disk().open.ann);
+    const store = w.store(), realFlush = store.flush; store.flush = () => { throw new Error('disk full'); }; w.hooks.before.settle = refuse;
+    const x = H.call(w, s, 'step', stepOf(run, run.options[0].to, 'scandal')); ok(x.error && x.error.code === 'internal', 'an error, not a result'); eq(H.all(s, 'g:campaign:end').length, 0);
+    const rec = w.runs.get('ann'); ok(rec && !rec.pend, 'nothing pended in memory'); eq(rec.run.steps, run.steps, 'the run did not move'); eq(w.escrows().length, 1);
+    store.flush = realFlush; w.hooks.before = {}; deq(JSON.parse(JSON.stringify(store._data().open.ann.run)), JSON.parse(diskBefore).run, 'the store holds the step before');
+    ok(!store._data().open.ann.pend, 'a later write cannot persist the lost step');
+    if (via === 'retry') {                                                             // the same step again: the SAME draw (a scandal), not a second one
+      let draws = 0; w.RNG.fn = () => { draws++; return 0.999999; };
+      const r = H.call(w, s, 'step', { roundId: run.roundId, n: run.steps + 1, to: run.options[0].to }); eq(r.ev, 'end'); eq(r.payload.reason, 'scandal'); eq(r.payload.win, 0); eq(draws, 0); eq(w.bal('ann', 'play'), pre - 500);
+    } else if (via === 'cash') { const r = H.call(w, s, 'cash', { roundId: run.roundId }); eq(r.ev, 'end'); eq(r.payload.win, 500 * run.mx / 100); eq(w.bal('ann', 'play'), pre - 500 + 500 * run.mx / 100); }
+    else { w.reboot(); eq(w.bal('ann', 'play'), pre - 500 + 500 * run.mx / 100, 'cashed out at the stored multiplier'); }
+    eq(w.escrows().length, 0);
+  }
 });
 
 for (const mode of ['landslide', 'deadend']) {

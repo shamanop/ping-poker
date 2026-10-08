@@ -97,12 +97,12 @@ t('bad arguments map to codes', () => {
   eq(code(() => e.wallet.spend('ann', 'gold', 5, { game: 'bender', round: 'z' })), 'mode');
   eq(code(() => e.wallet.spend('ann', 'play', 1.5, { game: 'bender', round: 'z' })), 'amount');
 });
-t('topUp: not_needed carries code, success writes a mint', () => {
+t('topUp is off (Money 1008 SVC-1b): refused with code disabled, with or without need, nothing minted', () => {
   const e = env();
-  let c = null; try { e.wallet.topUp('ann'); } catch (x) { c = x.code; }
-  eq(c, 'not_needed');
+  const codeOf = () => { try { e.wallet.topUp('ann'); return null; } catch (x) { return x.code; } };
+  eq(codeOf(), 'disabled');
   e.wallet.spend('ann', 'play', e.service.START_PLAY - 100, { game: 'bender', round: 'tu' }); e.wallet.credit('ann', 'play', 0, { game: 'bender', round: 'tu' });
-  const v = e.wallet.topUp('ann'); eq(v.play, e.service.START_PLAY);
+  const id = e.ledger.lastId; eq(codeOf(), 'disabled'); eq(e.ledger.lastId, id, 'no ledger line'); eq(e.ledger.balance('mint:topup', 'play'), 0);
 });
 
 for (const [name, fn] of jobs) { try { fn(); pass++; } catch (x) { fail++; console.log('FAIL ' + name + ': ' + (x && x.stack ? x.stack.split('\n').slice(0, 3).join(' | ') : x)); } }

@@ -21,7 +21,8 @@ const RTP_LABEL = '96.0%';
 const MAX_WIN_X = E.LANDSLIDE_MX / 100;
 const CAP_X = E.CAP_MX / 100;
 
-// QA hook: a step payload may carry force: 'survive' | 'scandal'. It runs ONLY when the server process was started with CAMPAIGN_TEST=1 and NODE_ENV is not 'production';
+// QA hook: a step payload may carry force: 'survive' | 'scandal'. It runs ONLY when the server process was started with CAMPAIGN_TEST=1 and NODE_ENV is not 'production', and ONLY on a CHIPS run
+// (Money 1008 K5-F: a run whose stored currency is Cash, real money, never honours `force`, whatever the environment says; forceFor below is the only reader of a step's `force`);
 // otherwise `force` (and every other unknown field) is ignored. The engine has no force code: the hook only hands E.step a fixed rng (0 always fails a step, 0.999999 always survives it).
 // CAMPAIGN_IDLE_MS (a shorter idle timer for the tests) honours the same switch.
 const testHookOn = () => process.env.CAMPAIGN_TEST === '1' && process.env.NODE_ENV !== 'production';
@@ -30,6 +31,14 @@ const idleMs = () => {
   return IDLE_MS;
 };
 const FORCE_RNG = { survive: () => 0.999999, scandal: () => 0 };
+let cashForceSeen = 0;
+// the force a step may carry: hook on AND the STORED run's currency is Chips (never the client's say), else null. A Cash run that asks for one is played as an ordinary run and a line is printed (the first 5 per boot).
+function forceFor(rec, payload) {
+  const f = field(payload, 'force');
+  if (!testHookOn() || typeof f !== 'string' || !own(FORCE_RNG, f)) return null;
+  if (rec.cur !== 'chips') { if (cashForceSeen++ < 5) alarm('campaign: QA force ' + JSON.stringify(f) + ' refused on a ' + (rec.cur === 'play' ? 'Cash' : String(rec.cur)) + ' run: the hook is Chips only, the step is played as an ordinary one'); return null; }
+  return f;
+}
 
 const cryptoRng = () => crypto.randomBytes(6).readUIntBE(0, 6) / 281474976710656;   // 48-bit uniform in [0,1)
 const nkey = (k) => String(k).toLowerCase().trim();                                  // same normalisation as ctx.money
@@ -41,8 +50,12 @@ const isInt = (n) => Number.isSafeInteger(n);
 const tiersNow = () => { const t = {}; for (const k of Object.keys(E.TIERS)) t[k] = { g100: E.TIERS[k].g100 }; return t; };
 const tiersOk = (t) => !!t && typeof t === 'object' && Object.keys(E.TIERS).every((k) => own(t, k) && t[k] && isInt(t[k].g100) && t[k].g100 >= 100 && t[k].g100 <= 1000);
 const tiersOf = (o) => (o.tiers == null ? E.TIERS : tiersOk(o.tiers) ? o.tiers : null);   // a record from before the snapshot existed uses the current table; an unusable snapshot = null
+// the map a run is opened with (borders, every state's tier, step limit, LANDSLIDE, cap): stored with the run like the growth table, so a deploy that moves a state to another tier or drops a border
+// never changes what an open run is worth (Money 1008 K5-2). A record from before the snapshot existed uses the current map; a stored map that is not usable = null (the record cannot be vouched for).
+const mapOf = (o, tiers) => (o.map == null ? E.CUR : tiers && E.mapOk(o.map, tiers) ? o.map : null);
 const validId = (x) => typeof x === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(x);
 const logf = (...a) => { const f = module.exports.log; if (f) f(...a); };
+const alarm = (...a) => { const f = module.exports.log; (f || console.error)(...a); };      // the lines that must be seen: to the log hook if one is set, else stderr (server.js sets none)
 
 let C = null;                    // the games ctx from init (io, money, now, rng)
 let fenced = null;               // the ledger code once a money call showed the ledger refuses writes for good (foreign_write | lost_lock | closed); init() clears it. Poker pauses on this (server.js onFence), the game port has no such hook.
@@ -77,7 +90,7 @@ function runView(rec) {
   return {
     roundId: rec.roundId, mode: rec.cur, bet: rec.bet, home: run.home, at: run.at, trail: run.trail.slice(), steps: run.steps, mx: run.mx,
     cashout: units(rec.bet, run.mx), canCash: true,                  // at 0 steps cashout = the stake: it is a refund (void), not a win
-    options: E.options(run, rec.tiers).map((o) => ({ to: o.to, name: name(o.to), tier: o.tier, g100: o.g100, nextMx: o.nextMx, nextCashout: units(rec.bet, o.nextMx), pFail: round4(o.pFail), deadEnd: !!o.deadEnd, landslide: !!o.landslide })),
+    options: E.options(run, rec.tiers, rec.map).map((o) => ({ to: o.to, name: name(o.to), tier: o.tier, g100: o.g100, nextMx: o.nextMx, nextCashout: units(rec.bet, o.nextMx), pFail: round4(o.pFail), deadEnd: !!o.deadEnd, landslide: !!o.landslide })),
     idleMs: rec.idleMs, expiresAt: rec.expiresAt,
   };
 }
@@ -93,6 +106,7 @@ function endView(rec, run, reason, win, failedAt) {
 const toStored = (rec) => {
   const o = { roundId: rec.roundId, key: rec.nk, cur: rec.cur, bet: rec.bet, run: rec.run, startedAt: rec.startedAt, lastAt: rec.lastAt };
   if (rec.tiers) o.tiers = rec.tiers;
+  if (rec.map) o.map = rec.map;
   if (rec.pend) o.pend = rec.pend;                                    // the drawn result of a terminal step (scandal / dead end / LANDSLIDE) whose settle is not done yet: final, durable
   return o;
 };
@@ -178,26 +192,26 @@ function autoClose(rec, reason) {
 //   escrow, no record                            -> void (the crash fell between the ledger open and the record: no step was taken)
 // A ledger call that is refused for another reason keeps the record and the run (audit() lists it, an idle timer tries again).
 // A pend pairs with its run: same home, same trail up to the last live step, one step further for a win, the same step count for a scandal.
-function pendOk(p, run, tiers) {
+function pendOk(p, run, tiers, map) {
   if (!p || typeof p !== 'object' || !p.run || typeof p.run !== 'object') return false;
   const r = p.run;
-  try { E.check(r, tiers); } catch { return false; }
+  try { E.check(r, tiers, map); } catch { return false; }
   if (r.done !== p.reason || !['scandal', 'deadend', 'landslide'].includes(r.done)) return false;
   if (r.home !== run.home || !run.trail.every((x, i) => r.trail[i] === x)) return false;
   return r.done === 'scandal' ? r.steps === run.steps : r.steps === run.steps + 1;
 }
 function recoverOne(o, escrows) {
   const nk = o && typeof o.key === 'string' ? nkey(o.key) : '';
-  const tiers = o ? tiersOf(o) : null;
-  const rec = o && { roundId: o.roundId, nk, cur: o.cur, bet: o.bet, run: o.run, startedAt: o.startedAt, lastAt: o.lastAt, tiers: tiers || undefined, pend: o.pend || undefined, timer: null, closed: false };
+  const tiers = o ? tiersOf(o) : null, map = o ? mapOf(o, tiers) : null;
+  const rec = o && { roundId: o.roundId, nk, cur: o.cur, bet: o.bet, run: o.run, startedAt: o.startedAt, lastAt: o.lastAt, tiers: tiers || undefined, map: o.map != null && map ? map : undefined, pend: o.pend || undefined, timer: null, closed: false };
   const dropIt = () => { try { store.delOpen(o && o.key); store.flush(); } catch (e) { logf('campaign: recover: record not dropped', o && o.roundId, e && e.message); } };
   if (!rec || !nk || !validId(rec.roundId) || !MODES.includes(rec.cur)) { logf('campaign: recover: unusable record dropped', o && o.roundId); return dropIt(); }
   const esc = escrows.get(`${nk}|${rec.cur}|${rec.roundId}`);
   if (esc == null) { logf('campaign: recover: stale record (no escrow), dropped, nothing paid', rec.roundId); return dropIt(); }
-  let valid = !!tiers;                                                           // the run is consistent with the growth table it was opened with (not the table of this build)
-  if (valid) { try { E.check(rec.run, tiers); } catch { valid = false; } }
+  let valid = !!tiers && !!map;                                                  // the run is consistent with the growth table and the map it was opened with (not those of this build)
+  if (valid) { try { E.check(rec.run, tiers, map); } catch { valid = false; } }
   if (valid && rec.run.done) valid = false;                                      // a stored live run is never a finished one (a finished one is the `pend`)
-  if (valid && o.pend != null && !pendOk(o.pend, rec.run, tiers)) valid = false;
+  if (valid && o.pend != null && !pendOk(o.pend, rec.run, tiers, map)) valid = false;
   const good = valid && isInt(rec.bet) && rec.bet === esc;
   if (!good) {
     logf('campaign: recover: record fails its check or does not match the escrow, voiding it', rec.roundId);
@@ -225,6 +239,7 @@ function keepOpen(rec, usable) {
 }
 function recover(rounds) {
   if (!store) return;
+  if (store.blocked()) { alarm('campaign: recover: the store is BLOCKED (see the line above): no open run is settled, no escrow is refunded, every stake stays in the ledger until a person fixes the file'); return; }
   const escrows = new Map();
   for (const r of rounds || []) escrows.set(`${nkey(r.key)}|${r.cur}|${r.roundId}`, r.amount);
   const seen = new Set();
@@ -234,7 +249,7 @@ function recover(rounds) {
   }
   for (const r of rounds || []) {                                              // an escrow with no record: no step was ever taken, give the stake back
     if (seen.has(`${nkey(r.key)}|${r.cur}|${r.roundId}`)) continue;
-    try { M().void(nkey(r.key), r.cur, r.roundId, 'boot'); logf('campaign: recover: escrow with no record, refunded', r.roundId); }
+    try { M().void(nkey(r.key), r.cur, r.roundId, 'boot'); (store.lost() ? alarm : logf)('campaign: recover: escrow with no record, refunded at the stake' + (store.lost() ? ' (the state file was lost: this run\'s multiplier is unknown)' : ''), r.roundId, nkey(r.key), r.cur, r.amount); }
     catch (e) { if (!(e && e.code === 'round_closed')) logf('campaign: recover: refund of an escrow with no record refused', r.roundId, e && e.message); }
   }
   try { store.flush(); } catch (e) { logf('campaign: store flush failed after recover', e && e.message); }
@@ -242,6 +257,7 @@ function recover(rounds) {
 // from the game's OWN records: every open run with a stake. The soak compares it with the ledger.
 function audit() {
   const openRounds = [];
+  if (store && store.blocked()) throw Object.assign(new Error('campaign store blocked: the open runs are unknown'), { code: 'store_blocked' });   // the registry then leaves this game's escrows alone
   if (store) for (const o of store.allOpen()) if (o && isInt(o.bet) && o.bet > 0 && typeof o.key === 'string' && validId(o.roundId) && MODES.includes(o.cur)) openRounds.push({ key: nkey(o.key), cur: o.cur, roundId: o.roundId, amount: o.bet });
   return { openRounds, pools: {} };
 }
@@ -274,7 +290,7 @@ function start(socket, payload) {
   catch (e) { noteFence(e); return e && e.code === 'funds' ? err(socket, 'funds', fundsMsg(cur)) : err(socket, 'internal', 'Server error'); }
   // ---- state second: the record is on disk before the client hears of the run. A crash between the two leaves an escrow with no record: recover() refunds it (no step was taken).
   const t = now();
-  const rec = { roundId, nk, cur, bet, run, tiers: tiersNow(), startedAt: t, lastAt: t, timer: null, closed: false, idleMs: 0, expiresAt: 0 };
+  const rec = { roundId, nk, cur, bet, run, tiers: tiersNow(), map: E.snapshot(), startedAt: t, lastAt: t, timer: null, closed: false, idleMs: 0, expiresAt: 0 };
   try { store.putOpen(toStored(rec)); store.flush(); }
   catch (e) {
     logf('campaign: record not flushed, refunding the stake', roundId, e && e.message);
@@ -304,22 +320,27 @@ function step(socket, payload) {
   if (fenced) return err(socket, 'money_down', MONEY_DOWN);                               // the ledger refuses writes for good: nothing is drawn against a dead ledger
   const n = field(payload, 'n'), to = field(payload, 'to');
   if (!isInt(n) || n !== rec.run.steps + 1) return err(socket, 'bad_step', 'That step is not next');
-  if (typeof to !== 'string' || !E.options(rec.run, rec.tiers).some((o) => o.to === to)) return err(socket, 'bad_step', 'You cannot go there');
+  if (typeof to !== 'string' || !E.options(rec.run, rec.tiers, rec.map).some((o) => o.to === to)) return err(socket, 'bad_step', 'You cannot go there');
   let res;
   if (rec.memo && rec.memo.n === n && rec.memo.to === to) res = rec.memo.res;             // the same step again after a failed flush: the SAME draw, not a second one
   else {
     rec.memo = null;
-    const force = testHookOn() ? field(payload, 'force') : undefined;
-    const rng = typeof force === 'string' && own(FORCE_RNG, force) ? FORCE_RNG[force] : rngOf();
-    try { res = E.step(rec.run, to, rng, rec.tiers); } catch (e) { return err(socket, e && e.code === 'bad_step' ? 'bad_step' : 'internal', e && e.code === 'bad_step' ? 'You cannot go there' : 'Server error'); }
+    const force = forceFor(rec, payload);
+    const rng = force ? FORCE_RNG[force] : rngOf();
+    try { res = E.step(rec.run, to, rng, rec.tiers, rec.map); } catch (e) { return err(socket, e && e.code === 'bad_step' ? 'bad_step' : 'internal', e && e.code === 'bad_step' ? 'You cannot go there' : 'Server error'); }
   }
   const next = res.run;
   if (!res.ok || next.done) {                                                             // scandal (settle with win 0: the stake goes to the house) or landslide / dead end (an automatic cash-out at the new multiplier)
     rec.memo = null;
+    const old = toStored(rec);
     rec.pend = { run: next, reason: next.done };                                          // the drawn result is final from here: written to the record BEFORE the ledger is asked, so a refused settle,
-    try { store.putOpen(toStored(rec)); store.flush(); }                                  // a restart or a flush error can never turn it into a cash-out, a better result or a new draw
-    catch (e) { logf('campaign: pended result not flushed (kept in memory, the idle and boot paths still close it as drawn when the record is written)', rec.roundId, e && e.message); }
-    closeRun(rec, next, next.done, next.failedAt || null, socket);                        // refused: rec.pend stays, a retry / the idle timer / boot close it as drawn
+    let durable = false;                                                                  // a restart or a flush error can never turn it into a cash-out, a better result or a new draw
+    try { store.putOpen(toStored(rec)); store.flush(); durable = true; }
+    catch (e) { logf('campaign: pended result not flushed (the ledger settle is tried; if that fails too the step did not happen)', rec.roundId, e && e.message); try { store.putOpen(old); } catch {} }
+    if (closeRun(rec, next, next.done, next.failedAt || null, socket) || durable || rec.closed || runs.get(rec.nk) !== rec) return;   // closed; or refused with the drawn result on disk: rec.pend stays, a retry / the idle timer / boot close it as drawn
+    // refused AND the result is on neither disk: the client was told an error, never the result, and a restart would forget it. The step did not happen: the run is back at the step before (disk = memory),
+    // and the retry of this same step gets the SAME draw (memo), so the failure is no re-roll. Record first, client last.
+    rec.pend = null; rec.memo = { n, to, res };
     return;
   }
   // survived and the run goes on: the new record is flushed BEFORE the client hears of the step; a crash before the flush = the step never happened. No ledger line (nothing moved).
@@ -363,9 +384,10 @@ module.exports = {
     for (const rec of runs.values()) clearTimer(rec);
     runs.clear(); rateLast.clear(); fenced = null;
     if (store) store.close();
-    C = ctx;
+    C = ctx; cashForceSeen = 0;
+    if (testHookOn()) alarm('campaign: *** QA FORCE HOOK IS ON (CAMPAIGN_TEST=1, NODE_ENV=' + (process.env.NODE_ENV || '(unset)') + '): any signed-in player can force Campaign steps in CHIPS ONLY; Cash runs ignore it. Never set CAMPAIGN_TEST on a real server. ***');
     const files = ctx.files || {};
-    store = createStore(process.env.CAMPAIGN_FILE || files.campaign || null, { log: logf });
+    store = createStore(process.env.CAMPAIGN_FILE || files.campaign || null, { log: logf, alarm });
   },
   recover, audit,
   handlers: { state, start, step, cash },

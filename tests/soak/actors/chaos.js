@@ -148,7 +148,7 @@ async function step(W, kind, sig) {
     W.mute.camp = true;
     const n0 = W.checker.lines.length;
     if (kind === 'campstep') {
-      const live = o.options.filter(x => !x.deadEnd), to = W.rng.pick(live.length ? live : o.options).to, force = W.rng.pick(['survive', 'survive', 'scandal', undefined]);
+      const live = o.options.filter(x => !x.deadEnd), to = W.rng.pick(live.length ? live : o.options).to, force0 = W.rng.pick(['survive', 'survive', 'scandal', undefined]), force = o.cur === 'chips' ? force0 : undefined;     // `force` is Chips only (K4-3 / K5-F)
       o.pend = { kind: 'step', to, n: o.steps + 1, opt: o.options.find(x => x.to === to), force: force || null };
       bot.emit('g:campaign:step', { roundId: o.rid, n: o.steps + 1, to, ...(force ? { force } : {}) });
       note = `step into ${to} (${force || 'natural'}) from ${o.steps} steps ${o.mx}x, answer dropped`;

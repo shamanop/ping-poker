@@ -38,17 +38,19 @@ async function pokerping(srv) {
     await waitFor(() => loser.me() && loser.me().chips === want, 2500);
     expect(loser.me() && loser.me().chips === want, `rebuy of the advertised minimum ${want} was refused: ${loser.errors.slice(-1)[0]}`);
   });
-  await T.check('queued-checkfold-does-not-fire-while-the-table-is-paused', ['M3'], async () => {
+  // K3-4 (money hardening 1008): a pause asked for during a live hand is pending and takes effect when the hand has settled, so it no longer freezes
+  // the hand (a host could hold another player's Cash in a seat by pausing). The queued check/fold is part of the live hand and still fires.
+  await T.check('queued-checkfold-still-fires-while-a-pause-is-pending', ['M3', 'K3-4'], async () => {
     const S = await dealAligned(srv, ['Wes', 'Xan', 'Yul'], [2000, 2000, 2000], { want: 0 });
     const [wes, xan, yul] = S.bots;
     await step(S.bots, 'raise', 300, wes);
     yul.emit('preselect', { roomId: S.id, mode: 'checkfold' }); await sleep(60);
-    xan.act('call'); await sleep(40);
-    wes.emit('table_pause', { tableId: S.id, paused: true });
-    await sleep(900);
-    const folded = yul.gs.players.find(p => p.name === 'Yul').folded;
+    wes.emit('table_pause', { tableId: S.id, paused: true }); await sleep(60);
+    xan.act('call'); await sleep(900);
+    const folded = yul.gs.players.find(p => p.name === 'Yul').folded, paused = yul.gs.paused;
     S.bots.forEach(b => b.close());
-    expect(!folded, 'the queued check/fold acted while the table was paused');
+    expect(folded, 'the queued check/fold did not act: the live hand was frozen by a pause');
+    expect(!paused, 'the table paused in the middle of a live hand');
   });
   await T.check('action-timer-checks-a-player-who-can-check-for-free', ['M2'], async () => {
     const S = await dealAligned(srv, ['Zed', 'Abe', 'Bea'], [2000, 2000, 2000], { want: 0, settings: { actionTimerSec: 15 } });

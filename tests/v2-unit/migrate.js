@@ -7,7 +7,10 @@ const crypto = require('crypto');
 const { spawnSync } = require('child_process');
 const { open } = require('../../money/ledger');
 const { createService } = require('../../money/service');
-const { migrate, apply, needsMigration, accountKeys } = require('../../tools/migrate-v2');
+const mig = require('../../tools/migrate-v2');
+const { apply, needsMigration, accountKeys } = mig;
+// Money 1008 S-1: the migration mints no Cash by default. These fixtures model the OLD lazy default (1,000,000 for an account with no wallet row), so they opt in; the default (0) is tested in tests/money-1008-migrate.js.
+const migrate = (inputs) => mig.migrate(inputs, { signupPlay: 1000000 });
 const gen = require('./fixtures/gen-fixtures');
 
 let pass = 0, fail = 0;

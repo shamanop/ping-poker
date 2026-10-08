@@ -68,12 +68,12 @@ t('A4: the same op id with other numbers is refused, nothing written', () => {
   eq([r.ok, r.code], [false, 'ref_conflict']); eq(e.bank(), b0 + 100); eq(e.adjLines().length, 1);
 });
 
-t('A4: a request without an op id works as before: every call writes', () => {
-  const e = env(); const b0 = e.bank();
+t('K1-2: a request without an op id is refused (op_required), nothing written, however often it is sent', () => {
+  const e = env(); const b0 = e.bank(); const id = e.ledger.lastId;
   const a = e.send('admin_adjust', { key: 'ann', delta: 100, cur: 'chips', reason: 'x' });
-  eq(a, { op: 'adjust', key: 'ann', ok: true, message: 'Adjusted' }, 'no opId in the answer');
+  eq([a.op, a.key, a.ok, a.code], ['adjust', 'ann', false, 'op_required']);
   e.send('admin_adjust', { key: 'ann', delta: 100, cur: 'chips', reason: 'x' });
-  eq(e.bank(), b0 + 200); eq(e.adjLines().length, 2);
+  eq(e.bank(), b0); eq(e.adjLines().length, 0); eq(e.ledger.lastId, id);
 });
 
 t('A4: a malformed op id is refused and writes nothing', () => {
@@ -92,16 +92,17 @@ t('A4: admin_set_play with an op id: a resend writes nothing and answers the sam
   eq([a.ok, a.message, a.opId], [true, 'Play set', 'op-set']); eq(e.play(), 5000); eq(e.adjLines().length, 1);
   e.service.adminAdjust('ann', 700, 'play', 'won something', 'test:other');   // the balance moves before the resend arrives
   const b = e.send('admin_set_play', msg);
-  eq(b, a, 'the same answer'); eq(e.play(), 5700, 'the resend did not set it again'); eq(e.adjLines().length, 2, 'only the unrelated line was added');
+  // the resend is the same answer; the where-the-Cash-sits numbers (K1-3 msg) are today's, not a copy of the first answer's
+  eq([b.op, b.key, b.ok, b.message, b.opId], [a.op, a.key, a.ok, a.message, a.opId], 'the same answer'); eq([a.wallet, a.total, b.wallet, b.total], [5000, 5000, 5700, 5700], 'the numbers are current');
+  eq(e.play(), 5700, 'the resend did not set it again'); eq(e.adjLines().length, 2, 'only the unrelated line was added');
   // a new op id sets it again
   e.send('admin_set_play', { key: 'ann', cents: 5000, opId: 'op-set-2' }); eq(e.play(), 5000);
 });
 
-t('A4: admin_set_play without an op id works as before', () => {
-  const e = env();
+t('K1-2: admin_set_play without an op id is refused (op_required), nothing written', () => {
+  const e = env(); const id = e.ledger.lastId;
   const a = e.send('admin_set_play', { key: 'ann', cents: 4321 });
-  eq(a, { op: 'set_play', key: 'ann', ok: true, message: 'Play set' }); eq(e.play(), 4321);
-  e.send('admin_set_play', { key: 'ann', cents: 4321 }); eq(e.adjLines().length, 1, 'setting the same value again is a noop, as before');
+  eq([a.op, a.key, a.ok, a.code], ['set_play', 'ann', false, 'op_required']); eq(e.ledger.lastId, id); eq(e.adjLines().length, 0);
 });
 
 // ---- P6 W3b fix round 2 ----
@@ -123,7 +124,8 @@ t('D7: the same op id with the SAME request is still an ok dup (even when the ba
   const e = env(); const a = e.send('admin_set_play', { key: 'ann', cents: 500, opId: 'Y1' }); eq(a.ok, true);
   e.service.adminAdjust('ann', 250, 'play', 'won something', 'test:other');
   const b = e.send('admin_set_play', { key: 'ann', cents: 500, opId: 'Y1' });
-  eq(b, a, 'same answer'); eq(e.play(), 750, 'not set again'); eq(e.adjLines().length, 2);
+  eq([b.op, b.key, b.ok, b.message, b.opId], [a.op, a.key, a.ok, a.message, a.opId], 'same answer'); eq([a.total, b.total], [500, 750], 'the numbers are current');
+  eq(e.play(), 750, 'not set again'); eq(e.adjLines().length, 2);
 });
 
 t('D5: the op id names the edit of ONE player: the same op id on two players writes both (refs carry the key)', () => {

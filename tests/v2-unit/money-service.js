@@ -340,25 +340,25 @@ t('topUpEligible sees seat money (H7) and the cooldown', () => {
   svc.buyIn('a', 'PT', START_PLAY - 5000, 'play', 'play', 'bi1');      // wallet 5,000 (< 10,000), seat 995,000
   let e = svc.topUpEligible('a');
   eq(e.wallet, 5000); eq(e.seats, START_PLAY - 5000); eq(e.total, START_PLAY); eq(e.eligible, false, 'H7: seat money counts');
-  throwsCode(() => svc.topUp('a', 'tu0'), 'not_needed');
+  throwsCode(() => svc.topUp('a', 'tu0'), 'disabled');   // SVC-1b: the refill is off (eligibility below is still a read-only question)
   // lose it at the table: cash out 50, rest lost to b
   svc.ensureAccount('b'); svc.buyIn('b', 'PT', 1000, 'play', 'play', 'bi2');
   svc.settleHand('PT', 1, 'play', { committed: { a: START_PLAY - 5050, b: 1000 }, payouts: { b: START_PLAY - 5050 + 1000 }, returned: {} });
   svc.cashOut('a', 'PT', 50, 'play', 'play', 'co1');
   e = svc.topUpEligible('a'); eq(e.total, 5000 + 50); eq(e.eligible, true);
   const before = totals(ledger);
-  const r = svc.topUp('a', 'tu1'); eq(r.dup, false);
+  throwsCode(() => svc.topUp('a', 'tu1'), 'disabled'); eq(totals(ledger).play, before.play, 'off: nothing minted');
+  ledger.transfer('mint:topup', 'play:a', START_PLAY - 5050, 'play', 'topup', 'tu1');   // a top-up line written before the refill was switched off: it still sets the cooldown
   eq(svc.balances('a').play, START_PLAY - 0, 'back to START_PLAY');
   eq(ledger.balance('mint:topup', 'play'), -(START_PLAY - 5050));
-  eq(svc.topUp('a', 'tu1').dup, true, 'retry with the same ref'); eq(totals(ledger).play, before.play + START_PLAY - 5050);
   // spend it, and the cooldown (1h) blocks an immediate second top-up
   svc.buyIn('a', 'PT', START_PLAY, 'play', 'play', 'bi3');
   e = svc.topUpEligible('a'); eq(e.total, START_PLAY, 'seat money still counts'); eq(e.eligible, false);
   svc.settleHand('PT', 2, 'play', { committed: { a: START_PLAY }, payouts: { b: START_PLAY }, returned: {} });
   e = svc.topUpEligible('a'); eq(e.total, 0); eq(e.eligible, false); eq(e.why, 'cooldown'); ok(e.retryMs > 0 && e.retryMs <= 3600000);
-  throwsCode(() => svc.topUp('a', 'tu2'), 'cooldown');
+  throwsCode(() => svc.topUp('a', 'tu2'), 'disabled');
   clock += 3600001;
-  eq(svc.topUpEligible('a').eligible, true); svc.topUp('a', 'tu2'); eq(svc.balances('a').play, START_PLAY);
+  eq(svc.topUpEligible('a').eligible, true); throwsCode(() => svc.topUp('a', 'tu2'), 'disabled'); eq(svc.balances('a').play, 0);
   booksOk(ledger);
 });
 
