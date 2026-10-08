@@ -81,14 +81,14 @@ t('chips mode uses the bank and houseRound in chips', () => {
   e.wallet.credit('ann', 'chips', 3000, { game: 'bender', round: 'c1' });
   eq(bal(e, 'bank:ann', 'chips'), e.service.START_CHIPS + 2000); ok(e.ledger.check().chips.ok);
 });
-t('achv and bonus credits are Chips mints (never Play $), bonus double claim is dup at the ledger', () => {
+t('achv and bonus credits are Chips mints (never Cash), bonus double claim is dup at the ledger', () => {
   const e = env();
-  e.wallet.credit('ann', 'play', 700, { game: 'achv', round: 'first' });       // a caller asking for Play $ still gets Chips
+  e.wallet.credit('ann', 'play', 700, { game: 'achv', round: 'first' });       // a caller asking for Cash still gets Chips
   e.wallet.credit('ann', 'chips', 900, { game: 'bonus', round: '2026-10-06' });
   const after = e.ledger.lastId;
   e.wallet.credit('ann', 'chips', 900, { game: 'bonus', round: '2026-10-06' });
   eq(e.ledger.lastId, after); eq(bal(e, 'bank:ann', 'chips'), e.service.START_CHIPS + 1600); ok(e.ledger.check().chips.ok);
-  eq(bal(e, 'play:ann', 'play'), e.service.START_PLAY, 'Play $ untouched by rewards');
+  eq(bal(e, 'play:ann', 'play'), e.service.START_PLAY, 'Cash untouched by rewards');
 });
 t('bad arguments map to codes', () => {
   const e = env();

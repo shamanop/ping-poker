@@ -18,7 +18,7 @@ All choices come from one seeded PRNG (`lib/prng.js`, mulberry32). The same `--s
 
 | actor | what |
 |---|---|
-| `poker` | the permanent POKERPING table plus created chips and Play $ tables; join with random buy-ins and funds (own and cross-currency), LEGAL actions from `legalActions`, leave (also mid-hand), rebuy, host kick, sit out, drop and reconnect a socket, end the night |
+| `poker` | the permanent POKERPING table plus created chips and Cash tables; join with random buy-ins and funds (own and cross-currency), LEGAL actions from `legalActions`, leave (also mid-hand), rebuy, host kick, sit out, drop and reconnect a socket, end the night |
 | `bank` | signups mid-run, `wallet_topup` (and its refusals), `bonus:claim` twice, admin plus / minus / minus-too-big / set-play, a non-admin trying an admin event |
 | `bender` | `g:bender:spin` in both currencies, every bet level, with and without buyBonus, an unaffordable spin, two spins back to back |
 | `coldcall` | `g:coldcall:spin` in both currencies at every bet level: plain spins, every buy (call / bonus1 / bonus2 / hunt), QA-forced rounds (`COLDCALL_TEST=1`), a decision answered, a decision left to its 3 s timer (`ready`), a decision left open, the free Callback, the office pot won while another player's round is open (`poolrace`), a live config change while a round is open (`cfg`), a socket dropped while a round is open (`drop`), a spin the player cannot afford, back-to-back spins, a spin while a decision is open |
@@ -87,8 +87,8 @@ Each fires rarely from its own counter (the soak has to find it) and logs `[soak
 | `skim` | `ledger.batch` of a hand moves 1 unit of one winner's payout to another seat (sums to zero) | I7 (showdown nets), I4 (seat drift) |
 | `mirror-stale` | `service.mirror()` returns a frozen copy after 12 calls (the files stop changing) | I5 |
 | `boot-skip` | `service.bootRecover` leaves every second seat | I4 after a restart |
-| `ghost-mint` | every 4th `ensureAccount` also mints 500 Play $ under a `bonus:` ref nobody asked for | I2 (`mint:bonus`), I7 |
-| `view-lies` | the wallet adapter's `get()` says 100 more Play $ than the ledger | I6 |
+| `ghost-mint` | every 4th `ensureAccount` also mints 500 Cash under a `bonus:` ref nobody asked for | I2 (`mint:bonus`), I7 |
+| `view-lies` | the wallet adapter's `get()` says 100 more Cash than the ledger | I6 |
 | `stuck-stake` | on every 6th Bender round booked through `ctx.money.round` (one ledger write), the wallet adapter ALSO parks a 1-unit stake through its real `spend` and the tick flush that would settle it is dropped: "some code path took the old park-then-credit road and the flush never ran" | I8 (and I6) |
 | `neg-holder` | a line appended straight to `money.jsonl` behind the ledger's back takes `bank:chris` below zero | I1 / I3 |
 | `stranded-escrow` | now and then a `settleRound` / `voidRound` of the slot is swallowed after `open`: the game forgets the round, the escrow stays; only a close with a stake in escrow is swallowed, a free round has none to strand | I4 (escrow with no open round) |
@@ -116,7 +116,7 @@ A bug that is not caught is printed as FAILED PROOF, never hidden.
 
 ## Campaign notes
 
-- bb298d2 ("Chips and Play $ fully separate", the commit the Campaign branch starts from) had changed the product after the soak last ran green, so three soak pieces were stale and are adapted here (not a Campaign change): `wallet_topup` is always refused with `topup_off` and mints nothing (the bank actor checks that; the old cooldown / not_needed rule is gone); the daily bonus pays Chips (model `applyMint('bonus')` and the `mint:bonus` expectation are in chips); achievements are badges (reward 0).
+- bb298d2 ("Chips and Cash fully separate", the commit the Campaign branch starts from) had changed the product after the soak last ran green, so three soak pieces were stale and are adapted here (not a Campaign change): `wallet_topup` is always refused with `topup_off` and mints nothing (the bank actor checks that; the old cooldown / not_needed rule is gone); the daily bonus pays Chips (model `applyMint('bonus')` and the `mint:bonus` expectation are in chips); achievements are badges (reward 0).
 - Campaign: `CAMPAIGN_IDLE_MS=2500` and `CAMPAIGN_TEST=1` are set for the server (soak.js), so a run left alone closes by the idle timer within a few seconds and QA-forced outcomes are available. A `--kill-kinds a,b,c` argument replaces the seeded choice of the chaos kinds (cycled in order).
 
 ## Not covered

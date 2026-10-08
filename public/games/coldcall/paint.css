@@ -81,7 +81,7 @@
 #plNote b{font-size:21px}
 #plNote .bar{height:4px;border-top:0;background:rgba(36,26,10,.25);border-radius:2px}
 #plNote .bar i{background:linear-gradient(#e8533d,#b8301f)}
-/* (r1) critic r0: 'Mode tabs Play $ / Chips and the top bar: 1 px outlined pill with flat gold fill on a flat navy bar; plain CSS' */
+/* (r1) critic r0: 'Mode tabs Cash / Chips and the top bar: 1 px outlined pill with flat gold fill on a flat navy bar; plain CSS' */
 #modebar{background:var(--img-ui_blotter) center/100% 100% no-repeat;border-bottom:2px solid transparent}
 #modebar .mb{border-color:transparent;background:var(--img-ui_key_navy) center/100% 100% no-repeat}
 #modebar button{text-shadow:0 1px 0 rgba(0,0,0,.6)}

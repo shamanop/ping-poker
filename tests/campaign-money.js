@@ -1,5 +1,5 @@
 'use strict';
-// CAMPAIGN TRAIL money test: Play $ and Chips, every bet level, on the REAL ledger (tests/lib-campaign-ledger.js). Exit 0 on pass, 1 on fail.
+// CAMPAIGN TRAIL money test: Cash and Chips, every bet level, on the REAL ledger (tests/lib-campaign-ledger.js). Exit 0 on pass, 1 on fail.
 //   A  >= 400 seeded runs per currency: balance before - stake + win = balance after; the win in `end` = what the ledger credited; the other currency never moves; no ledger line between :open and :close;
 //      exact ledger shape; house:campaign = minus the players' net; audit() = the ledger at every point; a forced run for every `reason`
 //   B  a fast double start / step / cash (same tick and 1 ms apart) = one effect; a cash against the idle timer = one close; `funds` and `state` write nothing

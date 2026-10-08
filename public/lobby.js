@@ -52,8 +52,8 @@ function ladder(unit, min, max, extra = []) {
 }
 const nearIdx = (vals, v) => { let bi = 0, bd = Infinity; vals.forEach((x, i) => { const d = Math.abs(x - v); if (d < bd) { bd = d; bi = i; } }); return bi; };
 const unitOf = (mode) => (mode === 'chips' ? 'chips' : 'cents');
-const modeLabel = (m) => ({ play: 'Play $', chips: 'Chips' }[m] || m);
-const modeNote = (m) => ({ play: 'Buy-ins come out of your Play $ balance and cash back into it when you stand up.', chips: 'Chips come from your bank balance.' }[m] || '');
+const modeLabel = (m) => ({ play: 'Cash', chips: 'Chips' }[m] || m);
+const modeNote = (m) => ({ play: 'Buy-ins come out of your Cash balance and cash back into it when you stand up.', chips: 'Chips come from your bank balance.' }[m] || '');
 const avSrc = (e) => (e && e.pic) || avUrl(e && e.avatar);
 const avUrl = (a) => { let s = String(a ?? 'a01'); if (/^\d+$/.test(s)) s = 'a' + s.padStart(2, '0'); s = s.replace(/\.png$/, ''); return 'images/avatars/' + s + '.png'; };
 const code6 = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
@@ -348,13 +348,13 @@ function buyInPicker(t, mySettled) {
   const balLine = h('div', { class: 'lb-muted', id: 'lb-fund-bal' });
   const drawBal = () => {
     const cross = fund !== t.mode, v = f.value();
-    balLine.textContent = bank == null ? '' : (fund === 'play' ? 'Your Play $: ' + fm(bank, 'cents') : 'Your bank: ' + fm(bank, 'chips'))
+    balLine.textContent = bank == null ? '' : (fund === 'play' ? 'Your Cash: ' + fm(bank, 'cents') : 'Your bank: ' + fm(bank, 'chips'))
       + (short() ? '. Not enough for the minimum buy-in of ' + fm(bi.min, unit) + '.' : '')
       + (cross && v != null ? '. This buy-in costs ' + (fund === 'play' ? fm(v, 'cents') : fm(v, 'chips')) + ' (1 chip = $0.01).' : '');
   };
   drawBal();
   const night = mySettled != null ? h('div', { class: 'lb-muted' }, 'Your night so far: ', h('b', { class: mySettled > 0 ? 'up' : mySettled < 0 ? 'down' : '' }, fm(mySettled, unit, { signed: true }))) : null;
-  // Chips are fake, Play $ is real (Chris 10/7): a table is bought into with its own currency only, so there is no fund picker.
+  // Chips are fake, Cash is real (Chris 10/7): a table is bought into with its own currency only, so there is no fund picker.
   const el = h('div', { class: 'lb-stack', style: 'gap:var(--p14)' }, balLine, h('div', { class: 'lb-field' }, h('label', null, 'Buy-in'), f.el), night);
   // get(): integer units or null. Out of range, unparsable or unaffordable never seats (S1-3); the message stays visible.
   const get = () => { if (short()) return null; const v = f.value(); if (v === null) { f.submit(); try { f.el.scrollIntoView({ block: 'center' }); } catch (e) {} } return v; };
@@ -463,7 +463,7 @@ function seg(opts, cur, onPick, id) {
 function formBody(f, redraw, sum) {
   const u = f.unit, g = (label, ...k) => h('div', { class: 'grp' }, h('span', { class: 'lb-label' }, label), ...k);
   const set = (k) => (v) => { f[k] = v; redraw(); };
-  const modeSeg = seg([['play', 'Play $', 'fake money'], ['chips', 'Chips', 'bank chips']], f.mode, (m) => { if (m !== f.mode) { S.form = Object.assign(f, freshForm(m, f)); } redraw(); }, 'lb-mode');
+  const modeSeg = seg([['play', 'Cash', 'real money'], ['chips', 'Chips', 'free play']], f.mode, (m) => { if (m !== f.mode) { S.form = Object.assign(f, freshForm(m, f)); } redraw(); }, 'lb-mode');
   const name = h('input', { class: 'field', id: 'lb-tname', maxlength: 24, value: f.name, oninput: (e) => { f.name = e.target.value; sum(); } });
   // buy-in range: the three typed boxes are AmountInputs (the number is the truth); the dual slider only drives them.
   // The slider span always covers what is typed (S3-2), the server accepts 1..MAX_UNITS.

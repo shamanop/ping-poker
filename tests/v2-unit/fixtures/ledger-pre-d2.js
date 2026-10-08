@@ -16,7 +16,7 @@ class MoneyError extends Error {
 }
 
 const CURS = ['chips', 'play'];
-// Player-facing accounts can never go below zero. `bank` is chips only, `play` is Play $ only.
+// Player-facing accounts can never go below zero. `bank` is chips only, `play` is Cash only.
 // `escrow:<game>:<key>:<roundId>` holds one open round's stake, `pool:<game>:<name>` a game's shared pot; both hold either currency.
 const PLAYER_KINDS = { bank: 2, play: 2, seat: 3, pot: 3, orphan: 2, escrow: 4, pool: 3 };
 const SOURCE_ACCOUNTS = new Set([

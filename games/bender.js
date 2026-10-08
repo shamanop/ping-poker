@@ -42,7 +42,7 @@ const keyOf = (socket) => { const a = socket.data && socket.data.acct; return St
 function err(socket, code, message) { socket.emit('error', { message, code, game: 'bender' }); }
 
 function walletErr(socket, e, mode) {
-  if (e && e.code === 'funds') return err(socket, 'funds', mode === 'chips' ? 'Not enough chips' : 'Not enough Play $');
+  if (e && e.code === 'funds') return err(socket, 'funds', mode === 'chips' ? 'Not enough chips' : 'Not enough Cash');
   return err(socket, 'bad_request', 'Could not place that bet');
 }
 
@@ -72,7 +72,7 @@ module.exports = {
       socket.data.benderLast = t;
       const p = payload && typeof payload === 'object' ? payload : {};
       if (!Number.isSafeInteger(p.bet) || !BET_LEVELS.includes(p.bet)) return err(socket, 'bad_bet', 'Pick a listed bet');
-      if (p.mode !== 'play' && p.mode !== 'chips') return err(socket, 'bad_mode', 'Pick Play $ or Chips');
+      if (p.mode !== 'play' && p.mode !== 'chips') return err(socket, 'bad_mode', 'Pick Cash or Chips');
       const buy = p.buyBonus == null || p.buyBonus === false ? null : p.buyBonus;
       if (buy !== null && buy !== 'election' && buy !== 'landslide') return err(socket, 'bad_request', 'Bad bonus');
 

@@ -35,7 +35,7 @@ with sync_playwright() as pw:
                     hdr = p.evaluate("[document.getElementById('sh-chips').innerText, document.getElementById('sh-play').innerText]")
                     shown_chips = nums(hdr[0])[0]; shown_play = nums(hdr[1])[0]
                     c.eq('%s spin %d: header chips == server bank' % (fund, i), shown_chips, after['bank'][key])
-                    c.ok('%s spin %d: header Play $ == server wallet (%s vs %s)' % (fund, i, hdr[1], after['wallet'][key]), abs(shown_play * 100 - after['wallet'][key]) < 1 or abs(shown_play * 100 - after['wallet'][key]) < 100 and after['wallet'][key] % 100 != 0, str(hdr))
+                    c.ok('%s spin %d: header Cash == server wallet (%s vs %s)' % (fund, i, hdr[1], after['wallet'][key]), abs(shown_play * 100 - after['wallet'][key]) < 1 or abs(shown_play * 100 - after['wallet'][key]) < 100 and after['wallet'][key] % 100 != 0, str(hdr))
             print(s.shot('s09_bender_%s_%s' % (fund, view)))
         c.eq('drift', audit().get('drift'), [])
         print('page errors', s.errors[:4])

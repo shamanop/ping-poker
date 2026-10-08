@@ -356,7 +356,7 @@ module.exports = {
     if (kind === 'unaffordable') {
       const bot = W.rng.pick(all); if (B.hasOpen(bot.key)) return null;
       let h = have(W, bot, mode), bet = W.camp.betLevels.slice().reverse().find((b) => b > h), restore = null;
-      if (!bet && mode === 'play' && !bot.tableId && !W.model.slot.hasOpen(bot.key) && bot.spinsInFlight === 0 && W.admin.connected()) {      // nobody is poor: make one player poor in Play $ through the admin (same book-keeping as the bank actor), then give it back
+      if (!bet && mode === 'play' && !bot.tableId && !W.model.slot.hasOpen(bot.key) && bot.spinsInFlight === 0 && W.admin.connected()) {      // nobody is poor: make one player poor in Cash through the admin (same book-keeping as the bank actor), then give it back
         const cents = W.rng.range(0, 99), r = await W.admin.req('admin_set_play', { key: bot.key, cents }, 'admin_result', 4000, { pred: (d) => d.op === 'set_play' });
         if (!(r.data && r.data.ok)) return null;
         W.model.applyAdmin(bot.key, 'play', cents - h); restore = h; h = cents; bet = 100;

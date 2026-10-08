@@ -58,13 +58,13 @@ def create_refusals():
             c.eq('seats stepper stops at 2', seats(), '2')
             for _ in range(10): p.click('#lb-seats button[aria-label="More seats"]'); time.sleep(.05)
             c.eq('seats stepper stops at 8', seats(), '8')
-            # Q07 Play $: min buy-in $0.10 with $0.25/$0.50 blinds
+            # Q07 Cash: min buy-in $0.10 with $0.25/$0.50 blinds
             p.fill('#lb-bmin', '0.10'); p.press('#lb-bmin', 'Tab'); time.sleep(.3)
             p.click('#lb-create-submit'); time.sleep(1.8)
             e = p.evaluate("[...document.querySelectorAll('#lb-createerr')].map(x => x.textContent.trim()).filter(Boolean).concat([...document.querySelectorAll('#toasts > *, .toast')].map(x => x.innerText.trim()))")
-            print('Play $ refusal:', e)
+            print('Cash refusal:', e)
             refs = [x for x in e if 'you have' in x]   # the form's error line and any toast
-            c.ok('Play $ create refusal reads dollars (every message)', bool(refs) and all('at least $0.50' in x and 'you have $0.10' in x for x in refs), str(e))
+            c.ok('Cash create refusal reads dollars (every message)', bool(refs) and all('at least $0.50' in x and 'you have $0.10' in x for x in refs), str(e))
             print(s.shot('fix_b_create_play'))
             # Q07 Chips: min buy-in 10 chips with 25/50 blinds
             p.locator('#lb-form button', has_text='Chips').first.click(); time.sleep(.4)

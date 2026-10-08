@@ -46,7 +46,7 @@ const readyLast = new Map(); // the same limit for `ready`, kept apart so a spin
 function err(socket, code, message, extra) { socket.emit('error', { message, code, game: 'coldcall', ...(extra || {}) }); }
 
 // a refused bet: `funds` is told as it always was; any other refusal of the ledger is the generic one
-const fundsMsg = (mode) => (mode === 'chips' ? 'Not enough chips' : 'Not enough Play $');
+const fundsMsg = (mode) => (mode === 'chips' ? 'Not enough chips' : 'Not enough Cash');
 function walletErr(socket, e, mode) {
   if (e && e.code === 'funds') return err(socket, 'funds', fundsMsg(mode));
   return err(socket, 'bad_request', 'Could not place that bet');
@@ -632,7 +632,7 @@ module.exports = {
       rateLast.set(rk, t);
       const p = payload && typeof payload === 'object' ? payload : {};
       if (!Number.isSafeInteger(p.bet) || !BET_LEVELS.includes(p.bet)) return err(socket, 'bad_bet', 'Pick a listed bet');
-      if (p.mode !== 'play' && p.mode !== 'chips') return err(socket, 'bad_mode', 'Pick Play $ or Chips');
+      if (p.mode !== 'play' && p.mode !== 'chips') return err(socket, 'bad_mode', 'Pick Cash or Chips');
       const buy = p.buyBonus == null || p.buyBonus === false ? null : p.buyBonus;
       if (buy !== null && !BUYS.includes(buy)) return err(socket, 'bad_request', 'Bad bonus');
       if (pullOn() && store) return pullSpin(socket, p, buy, t);

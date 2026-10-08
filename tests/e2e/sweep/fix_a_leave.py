@@ -91,7 +91,7 @@ with sync_playwright() as pw:
         c.ok('(c) back in the lobby', sc.p.evaluate("document.getElementById('lobby-root').classList.contains('on')"))
         a2 = audit(); print('(c) after leave:', bal(a2, k), 'seat', seat_bal(a2, k))
         c.eq('(c) seat account emptied', seat_bal(a2, k), 0)
-        extra = bal(a2, k) - pre - hp['chips']      # Play $: the one-off bronze tier reward (social.js TIER_REWARD 2500) can land in the same window
+        extra = bal(a2, k) - pre - hp['chips']      # Cash: the one-off bronze tier reward (social.js TIER_REWARD 2500) can land in the same window
         c.ok('(c) bank = bank + stack (committed chips stay in the pot)', extra == 0 or (mode == 'play' and extra == 2500), 'extra %s' % extra)
         c.eq('(c) drift', a2.get('drift'), [])
     finally:

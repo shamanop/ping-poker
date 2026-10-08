@@ -4,12 +4,12 @@
  "covered": [
   "tests/e2e/*.py re-run on the merged build: 10 pass, rebuy_v2 and raise fail for stale-script reasons (see PROGRESS.md)",
   "s01 sign-up / daily bonus / header vs audit / sign out (desk)",
-  "s02 hands vs the server in the browser: fold win, fold lose, showdown, split pot, side pots with a short all-in, all-in run-out, in Chips and Play $ (desk)",
+  "s02 hands vs the server in the browser: fold win, fold lose, showdown, split pot, side pots with a short all-in, all-in run-out, in Chips and Cash (desk)",
   "s03 create form: every field vs the table the server made, limits",
   "s05 reload mid-hand, second tab take-over, transport drop and return",
   "s06 bust, rebuy default / limit reached / refused with chips, leave from the bust panel; s06b sit out, leave mid-hand and cash-out; s06c disconnect on turn, turn clock, return, 2 minute cash-out",
   "s07 host tools: pause/resume, blinds change mid-hand, kick mid-hand, end night and settle-up screen vs the server",
-  "s08 admin console: columns vs audit, bank adjust by delta, over-draw refused, Play $ set",
+  "s08 admin console: columns vs audit, bank adjust by delta, over-draw refused, Cash set",
   "s09 Ballot Bender: spins in both funds, balances vs audit",
   "s10 login lockout message, /api/admin/bender-config token gate"
  ],

@@ -27,7 +27,7 @@ Ports 3500-3559: run.js gives file number k the block 3500+2k (+0, +1). The targ
 | 04, 20 | side pots, odd chip (L1), uncalled returns, folds, stand-up/kick/disconnect with an uncalled layer (H1, N1), L3 |
 | 05 | M1 stall, short blind all-in (stacks are made short by losing a rigged hand, so it is valid under stricter table validation) |
 | 06 | H1 disconnect |
-| 07 | restart mid-hand, SIGTERM/SIGKILL x POKERPING/chips/Play $ (C3, C4) |
+| 07 | restart mid-hand, SIGTERM/SIGKILL x POKERPING/chips/Cash (C3, C4) |
 | 08, 09 | legacy events: unauthenticated attacks (C1, C5), and v2 removal of join_game/start_game/create_demo/check_balance/set_pause/reset_table/bank_set (H5, H8, M5) |
 | 10 | fuzz with the money invariant (about 90 s; `--long` 8 min; `--seed N`) |
 | 11 | M2, M3, M4, L2 |
@@ -35,7 +35,7 @@ Ports 3500-3559: run.js gives file number k the block 3500+2k (+0, +1). The targ
 | 13 | M7 validation, H6 one seat per account, H5 admin set-money, end night mid-hand |
 | 14 | M5 blind schedule (takes about 70 s: the server's minimum interval is 60 s) |
 | 15 | H7 top-up, M10 rebuy limit |
-| 17, 25 | M6 night results across restarts, chips and Play $ |
+| 17, 25 | M6 night results across restarts, chips and Cash |
 | 21 | mixed session with SIGTERM mid-hand and SIGKILL after showdown |
 | 22 | M9 show cards |
 | 23 | N3 SIGKILL within 2 s of a showdown |
@@ -152,7 +152,7 @@ Reported bugs by what the checks see on 9440541:
 | 15 | play-topup-counts-money-parked-at-a-table | H7 | FAIL |  |
 | 15 | rebuy-limit-is-not-bypassed-by-leave-and-sit | M10 | FAIL |  |
 | 17 | night-results-survive-sigkill-restart-chips | M6 | FAIL |  |
-| 17 | night-results-survive-sigterm-restart-chips | M6 | pass | the SIGTERM path writes the cash-out rows with night metadata, so a chips night survives a deploy; only a crash (SIGKILL) and Play $ nights break |
+| 17 | night-results-survive-sigterm-restart-chips | M6 | pass | the SIGTERM path writes the cash-out rows with night metadata, so a chips night survives a deploy; only a crash (SIGKILL) and Cash nights break |
 | 17 | night-results-survive-sigterm-restart-play | M6 | FAIL |  |
 | 17 | night-results-survive-sigkill-restart-play | M6 | FAIL |  |
 | 20 | S1-three-way-split-odd-chip-goes-left-of-button | L1 | FAIL |  |

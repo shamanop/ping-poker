@@ -82,7 +82,7 @@ const potOk = (p, s, mode) => { assert.strictEqual(p.fed, p.paid + p.bal, 'pot s
     const file = path.join(s.dir, 'coldcall-pull.json');
     assert.ok(fs.existsSync(file) && !fs.existsSync(file + '.tmp'), 'store file next to the wallet, no temp left');
     const j = JSON.parse(fs.readFileSync(file, 'utf8'));
-    assert.strictEqual(j.v, 1); assert.ok(j.players.ann.play && !j.players.ann.chips, 'chips state untouched by Play $ spins'); assert.ok(j.pot.play && typeof j.pot.play.bal === 'number');
+    assert.strictEqual(j.v, 1); assert.ok(j.players.ann.play && !j.players.ann.chips, 'chips state untouched by Cash spins'); assert.ok(j.pot.play && typeof j.pot.play.bal === 'number');
     assert.deepStrictEqual(j.open, {});
     const potBefore = clone(j.pot.play);
     const s2 = setup({ dir: s.dir, bank: s.bank, rng: E.rngFrom(32), t: 1000000 + 60000 }); const a2 = s2.sock('ann');
@@ -97,7 +97,7 @@ const potOk = (p, s, mode) => { assert.strictEqual(p.fed, p.paid + p.bal, 'pot s
     finally { delete process.env.COLDCALL_PULL_FILE; }
   });
 
-  await test('settlement, Play $ and Chips: every bet level and every buy incl. pot slice, pot prizes and taken gambles: before - cost + win + prize = after, pot invariant, slice exact, purses apart', async () => {
+  await test('settlement, Cash and Chips: every bet level and every buy incl. pot slice, pot prizes and taken gambles: before - cost + win + prize = after, pot invariant, slice exact, purses apart', async () => {
     const buys = [null, null, 'call', 'hunt', 'bonus1', 'bonus2', null, 'bonus1'];
     for (const mode of ['play', 'chips']) {
       const other = mode === 'play' ? 'chips' : 'play';
@@ -320,7 +320,7 @@ const potOk = (p, s, mode) => { assert.strictEqual(p.fed, p.paid + p.bal, 'pot s
     await sleep(60); assert.strictEqual(s3.bal('ann', 'play'), spent + bank);
   });
 
-  await test('restart (D1): the same for Chips (the payout goes to the bank account), alongside a Play $ decision at the same time', async () => {
+  await test('restart (D1): the same for Chips (the payout goes to the bank account), alongside a Cash decision at the same time', async () => {
     const s = setup({ rng: E.rngFrom(56) }); const a = s.sock('ann'); rich(s, 'ann'); rich(s, 'ann', 'chips');
     const p = toPending(s, a, 'more', 'play'); const c = toPending(s, a, 'more', 'chips');
     assert.strictEqual(s.store().allOpen().length, 2); assert.strictEqual(s.escrows().length, 2);
@@ -331,7 +331,7 @@ const potOk = (p, s, mode) => { assert.strictEqual(p.fed, p.paid + p.bal, 'pot s
   });
 
   // FIX M1 (money critic 2): a buy (call, bonus1, bonus2, hunt) is priced at 98.0 with no pot, so it feeds no slice, moves no remainder, rolls no pot and can win none. Only a plain paid spin feeds and rolls.
-  await test('FIX M1: every buy (call, bonus1, bonus2, hunt) at 1c, $1 and $25, Play $ and Chips, on a pot of $50+ with the roll forced to hit: no prize, pot bal / fed / paid / rem / seeded unchanged, wallet moves by win - cost only, no pot in the result, the history row, the feed or floor:pot', async () => {
+  await test('FIX M1: every buy (call, bonus1, bonus2, hunt) at 1c, $1 and $25, Cash and Chips, on a pot of $50+ with the roll forced to hit: no prize, pot bal / fed / paid / rem / seeded unchanged, wallet moves by win - cost only, no pot in the result, the history row, the feed or floor:pot', async () => {
     for (const mode of ['play', 'chips']) for (const buy of ['call', 'bonus1', 'bonus2', 'hunt']) for (const bet of [1, 100, 2500]) {
       const s = setup({ rng: E.rngFrom(700 + bet), potRng: () => 0, roundRng: E.rngFrom(bet + 9) }); const a = s.sock('ann'), b = s.sock('bo'); rich(s, 'ann', mode); E.CFG.pull.pot.capCents = 5000;
       s.seedPool(mode, 7000); const pot = s.potOf(mode); pot.rem = 4321; s.store().potChanged();   // the pot's money is a pool balance in the ledger; `rem` is the game's own remainder
@@ -386,7 +386,7 @@ const potOk = (p, s, mode) => { assert.strictEqual(p.fed, p.paid + p.bal, 'pot s
     assert.ok(hitsPlain >= 5 && buysDone >= 500, [hitsPlain, buysDone].join());
   });
 
-  await test('pot: two players racing for it in one tick, the hit roll forced: exactly one takes it, the other gets nothing, invariant and wallet sums hold (Play $ and Chips)', async () => {
+  await test('pot: two players racing for it in one tick, the hit roll forced: exactly one takes it, the other gets nothing, invariant and wallet sums hold (Cash and Chips)', async () => {
     for (const mode of ['play', 'chips']) {
       const s = setup({ rng: E.rngFrom(61), potRng: () => 0 }); const a = s.sock('ann'), b = s.sock('bo');
       rich(s, 'ann', mode); rich(s, 'bo', mode);
@@ -462,7 +462,7 @@ const potOk = (p, s, mode) => { assert.strictEqual(p.fed, p.paid + p.bal, 'pot s
     }
   });
 
-  await test('callback: the list fills, arms at the list size, the next spin is the free Callback, pays at cb.bet; Play $ and Chips lists are separate', async () => {
+  await test('callback: the list fills, arms at the list size, the next spin is the free Callback, pays at cb.bet; Cash and Chips lists are separate', async () => {
     const s = setup({ rng: E.rngFrom(66) }); const a = s.sock('ann'); rich(s, 'ann'); rich(s, 'ann', 'chips');
     E.CFG.pull.list = 5;
     let armedAt = -1, cb = null;
@@ -470,7 +470,7 @@ const potOk = (p, s, mode) => { assert.strictEqual(p.fed, p.paid + p.bal, 'pot s
     assert.ok(armedAt >= 0 && armedAt <= 20, 'armed after ' + armedAt); assert.deepStrictEqual(cb, { bet: 100 });
     a.send('g:coldcall:state'); const st = last(a, 'g:coldcall:state'); assert.deepStrictEqual(st.pull.play.cb, { bet: 100 }); assert.strictEqual(st.pull.chips.cb, null); assert.strictEqual(st.pull.chips.lt, 0, 'chips list untouched');
     const w0 = s.balances('ann');
-    const cr = spin(s, a, { bet: 10, mode: 'chips', auto: true }); assert.strictEqual(cr.callback, false, 'the Play $ Callback is not used by a Chips spin'); assert.ok(cr.cost === 10);
+    const cr = spin(s, a, { bet: 10, mode: 'chips', auto: true }); assert.strictEqual(cr.callback, false, 'the Cash Callback is not used by a Chips spin'); assert.ok(cr.cost === 10);
     const r = spin(s, a, { bet: 10, mode: 'play', auto: true }); assert.strictEqual(r.callback, true); assert.strictEqual(r.cost, 0); assert.strictEqual(r.bet, 100);
     assert.strictEqual(r.wallet.play, w0.play + r.totalWin); assert.ok(r.script.callback === true);
     assert.strictEqual(r.pull.state.cb, null);
@@ -518,7 +518,7 @@ const potOk = (p, s, mode) => { assert.strictEqual(p.fed, p.paid + p.bal, 'pot s
     assert.ok(evs.every((e) => e.kind !== 'win'), 'under the threshold: no win events'); assert.ok(n0 <= before);
   });
 
-  await test('state: Play $ and Chips state never leak into each other; state event carries pull view, pot, feed, open', async () => {
+  await test('state: Cash and Chips state never leak into each other; state event carries pull view, pot, feed, open', async () => {
     const s = setup({ rng: E.rngFrom(69) }); const a = s.sock('ann'); rich(s, 'ann'); rich(s, 'ann', 'chips');
     for (let i = 0; i < 25; i++) spin(s, a, { bet: 10, mode: 'play', auto: true });
     a.send('g:coldcall:state'); let st = last(a, 'g:coldcall:state');
@@ -707,13 +707,13 @@ const potOk = (p, s, mode) => { assert.strictEqual(p.fed, p.paid + p.bal, 'pot s
 
   await test('N1-CARRY (c, server): the carry is stored per currency and is not in the client view; a garbage stored carry reads as 0 without resetting the rest of the state or locking the account', async () => {
     const stored = (s, mode) => s.store().player('ann', mode);
-    // per currency: Play $ and Chips lists arm at their own pace, each keeps its own carry
+    // per currency: Cash and Chips lists arm at their own pace, each keeps its own carry
     const s = setup({ rng: E.rngFrom(66) }); const a = s.sock('ann'); rich(s, 'ann'); rich(s, 'ann', 'chips');
     E.CFG.pull.list = 5; E.CFG.pull.daily.base = 0; E.CFG.pull.daily.perStreak = 0;
     const seedSt = (carry, avg) => Object.assign(E.newState(), { lt: 40, avg, carry, day: '2026-10-06' });
     s.store().setPlayer('ann', 'play', seedSt(3.5, 99.96)); s.store().setPlayer('ann', 'chips', seedSt(8.25, 19.99));
     let n = 0; while (!stored(s, 'play').cb && n++ < 60) { const r = spin(s, a, { bet: 100, mode: 'play', auto: true }); assert.ok(!r.error, JSON.stringify(r.error)); }
-    assert.ok(stored(s, 'play').cb, 'play armed'); assert.strictEqual(stored(s, 'chips').carry, 8.25, 'the chips carry did not move when the Play $ list armed');
+    assert.ok(stored(s, 'play').cb, 'play armed'); assert.strictEqual(stored(s, 'chips').carry, 8.25, 'the chips carry did not move when the Cash list armed');
     assert.strictEqual(stored(s, 'play').cb.bet, 100, 'avg 99.96 + carry 3.5 = 103.46: the Callback plays at $1, the 3.46c left over is carried'); assert.ok(Math.abs(stored(s, 'play').carry - 3.46) < 0.01, 'play carry ' + stored(s, 'play').carry);
     n = 0; while (!stored(s, 'chips').cb && n++ < 60) { const r = spin(s, a, { bet: 10, mode: 'chips', auto: true }); assert.ok(!r.error, JSON.stringify(r.error)); }
     assert.ok(stored(s, 'chips').cb && stored(s, 'chips').cb.bet % 10 === 0 && stored(s, 'chips').carry < 10 && stored(s, 'chips').carry >= 0);
@@ -1041,7 +1041,7 @@ const potOk = (p, s, mode) => { assert.strictEqual(p.fed, p.paid + p.bal, 'pot s
   const SMALL = [1, 2, 5];
   const exactOf = (r) => r.totalWinTenths * r.pay.num / r.pay.den;
 
-  await test('DENOMS settlement to the cent, Play $ and Chips, 1c / 2c / 5c, thousands of rounds with every buy and decisions: before - cost + win + prize = after, whole cents, pot fed = paid + left with remainders carried, nothing negative, rounding noise only', async () => {
+  await test('DENOMS settlement to the cent, Cash and Chips, 1c / 2c / 5c, thousands of rounds with every buy and decisions: before - cost + win + prize = after, whole cents, pot fed = paid + left with remainders carried, nothing negative, rounding noise only', async () => {
     const buys = [null, null, 'call', 'hunt', 'bonus1', 'bonus2', null, 'bonus1'];
     let rounds = 0, takes = 0, picks = 0, callbacks = 0, prizes = 0, ups = 0, downs = 0;
     for (const mode of ['play', 'chips']) for (const bet of SMALL) {

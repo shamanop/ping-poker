@@ -15,7 +15,7 @@ c = Checks()
 with sync_playwright() as p:
     b = p.chromium.launch(); pg = b.new_page(viewport={'width': 1280, 'height': 900}); fr = Frames(pg)
     sign_in(pg, NAME)
-    pg.click('#lb-create-btn'); pg.wait_for_selector('#lb-form'); pg.click('#lb-create-submit')   # Play $ table, buy-in 500..50000 default 10000
+    pg.click('#lb-create-btn'); pg.wait_for_selector('#lb-form'); pg.click('#lb-create-submit')   # Cash table, buy-in 500..50000 default 10000
     pg.wait_for_selector('#lb-sit'); pg.click('#lb-sit'); pg.wait_for_selector('#host-btn', timeout=10000)
     for pref, typed, want in [('usd', '30', 3000), ('chips', '4500', 4500)]:
         set_pref(pg, pref)

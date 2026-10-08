@@ -1,5 +1,5 @@
 'use strict';
-// Money-conservation fuzz. 7 bots roam POKERPING, a chips night table and a Play $ night table, playing random actions (random raise sizes, all-ins,
+// Money-conservation fuzz. 7 bots roam POKERPING, a chips night table and a Cash night table, playing random actions (random raise sizes, all-ins,
 // junk amounts), leaving/rejoining with random funding, dropping their socket and coming back, rebuying, sitting out, preselecting, spinning Ballot
 // Bender in both modes, claiming the daily bonus, while the host changes blinds, pauses and kicks. Every 200 ms the server is audited:
 //   bank + wallet + all human stacks + human bets in live pots - (achievement/bonus credits + slot net)  must stay constant.

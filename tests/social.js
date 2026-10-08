@@ -20,7 +20,7 @@ const g = games({ io, accounts, social, wallet, now, rng: () => 0.5 });
 social.setWallet(wallet);
 const join = (name) => { const a = accounts.signup(name, '1234', 'a01', { ip: 't-' + name }).account; const s = mkSock(a.key); socks.set(name, s); handlers.forEach(f => f(s)); return s; };
 const A = join('Ana'), B = join('Bo'), C = join('Cy');
-const rw = (k) => social.achvView(k).list.filter(x => x.done).reduce((a, x) => a + x.rewardCents, 0); // achievement Play $ paid so far
+const rw = (k) => social.achvView(k).list.filter(x => x.done).reduce((a, x) => a + x.rewardCents, 0); // achievement Cash paid so far
 const rxp = (k) => social.achvView(k).list.filter(x => x.done).reduce((a, x) => a + x.xp, 0);
 const pl = (k) => wallet.get(k).play - rw(k);
 const anon = mkSock(null); socks.set('anon', anon);
@@ -54,7 +54,7 @@ const p0 = wallet.get('bo');
 B.fire('bonus:status'); let st = B.last('bonus:status')[1];
 ok(st.available && st.amountCents === 10000 && st.streak === 1, 'status: available $100 streak 1');
 B.fire('bonus:claim'); const cl = B.last('bonus:claimed')[1];
-ok(cl.ok && wallet.get('bo').play === p0.play + 10000, 'claim credits Play $');
+ok(cl.ok && wallet.get('bo').play === p0.play + 10000, 'claim credits Cash');
 B.fire('bonus:claim'); ok(B.last('bonus:claimed')[1].ok === false && wallet.get('bo').play === p0.play + 10000, 'second claim same day refused');
 clock += 3600000 * 3; ok(!social.bonusInfo('bo').available, 'still claimed later same Chicago day');
 const cityMidnight = Date.parse('2026-10-06T05:00:00Z'); clock = cityMidnight - 1000; ok(!social.bonusInfo('bo').available, 'not available 1s before Chicago midnight');
@@ -81,7 +81,7 @@ clock += 86400000 * 6;
 clock = Date.parse(dayOf(clock) + 'T18:00:00Z');
 const E = C; for (let i = 0; i < 6; i++) { social.claimBonus('cy'); clock += 86400000; }
 const e0 = pl('cy'); E.fire('bonus:claim'); const d7 = E.last('bonus:claimed')[1];
-ok(d7.ok && d7.day === 7 && d7.amountCents === 100000 && pl('cy') === e0 + 100000, 'day 7 claim pays $1,000 Play $');
+ok(d7.ok && d7.day === 7 && d7.amountCents === 100000 && pl('cy') === e0 + 100000, 'day 7 claim pays $1,000 Cash');
 accounts.flush(); const acc2 = createAccounts({ file: path.join(dir, 'accounts.json') });
 ok(acc2.social('bo').bonus && acc2.social('bo').bonus.streak >= 1, 'bonus persisted in account record');
 const un = mkSock(null); handlers.forEach(f => f(un)); un.fire('bonus:claim'); ok(un.last('error') && un.last('error')[1].code === 'auth', 'claim requires sign-in');
@@ -130,7 +130,7 @@ social.onHandEnd(FH());
 const unl = F.all('achv:unlocked').map(x => x[1].id);
 ok(unl.includes('first_hand') && unl.includes('win_pot') && unl.length === 2, 'first hand + win a pot unlock once each');
 ok(F.all('achv:unlocked').every(x => x[1].name && x[1].tier && x[1].rewardCents > 0), 'unlock payload has name, tier, reward');
-ok(wallet.get('fay').play === fw0 + 2500 + 2500, 'two bronze unlocks pay $25 each in Play $');
+ok(wallet.get('fay').play === fw0 + 2500 + 2500, 'two bronze unlocks pay $25 each in Cash');
 social.checkAchv('fay'); social.checkAchv('fay'); social.onHandEnd(FH());
 ok(F.all('achv:unlocked').filter(x => x[1].id === 'first_hand').length === 1 && wallet.get('fay').play === fw0 + 5000, 'reward idempotent: re-check and more hands pay nothing again');
 const xp1 = social.statsView('fay').xp; social.checkAchv('fay'); ok(social.statsView('fay').xp === xp1, 'xp not re-awarded on re-check');

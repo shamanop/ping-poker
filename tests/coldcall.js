@@ -166,7 +166,7 @@ function replayRound(s, cfg) {
 }
 
 (async () => {
-  await test('ledger: a new account starts at 10,000.00 Play $ and the chips bank balance', () => {
+  await test('ledger: a new account starts at 10,000.00 Cash and the chips bank balance', () => {
     const w = setup(); w.addKey('ann');
     assert.deepStrictEqual(w.balances('ann'), { play: 1000000, chips: 10000 });
     assert.strictEqual(w.money.balance('ann', 'play'), 1000000); assert.strictEqual(w.money.balance('ann', 'chips'), 10000);   // ctx.money reads the same ledger accounts
@@ -706,7 +706,7 @@ function replayRound(s, cfg) {
     }
   });
 
-  await test('settlement, Play $ and Chips: on every spin and buy at every bet level balance before - cost + win = balance after, whole units only, the other purse never moves, the wallet push equals the result, a fast double click is charged once', async () => {
+  await test('settlement, Cash and Chips: on every spin and buy at every bet level balance before - cost + win = balance after, whole units only, the other purse never moves, the wallet push equals the result, a fast double click is charged once', async () => {
     const plays = [null, null, null, null, null, 'call', null, 'hunt', 'bonus1', 'bonus2'];
     for (const mode of ['play', 'chips']) {
       const other = mode === 'play' ? 'chips' : 'play';
@@ -802,7 +802,7 @@ function replayRound(s, cfg) {
         if (mode === 'play') { bal += -r.cost + r.totalWin; assert.strictEqual(w.play, bal); assert.strictEqual(r.wallet.play, bal); }
         else assert.strictEqual(w.chips, r.wallet.chips);
       }
-      assert.strictEqual(new Set(s.lines((e) => e.cur === 'play' && /^coldcall:ann:/.test(e.ref)).map((e) => e.ref)).size, 7, 'seven forced Play $ rounds, one ledger ref each');
+      assert.strictEqual(new Set(s.lines((e) => e.cur === 'play' && /^coldcall:ann:/.test(e.ref)).map((e) => e.ref)).size, 7, 'seven forced Cash rounds, one ledger ref each');
     });
   });
 

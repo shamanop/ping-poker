@@ -55,7 +55,7 @@ function createWalletAdapter({ service, ledger, onChange, schedule, log }) {
     const key = keyOf(acct), cur = curOf(mode), game = ref && ref.game;
     if (!key) throw fail('acct', 'No account');
     if (!GAMES.has(game)) throw fail('mode', 'Bad game');
-    if (view(key)[cur] < amount) throw fail('funds', cur === 'chips' ? 'Not enough chips' : 'Not enough Play $');
+    if (view(key)[cur] < amount) throw fail('funds', cur === 'chips' ? 'Not enough chips' : 'Not enough Cash');
     const refStr = refOf(game, key, ref.round);
     if (parked.has(refStr) || flushed.has(refStr)) throw fail('internal', 'Server error');
     parked.set(refStr, { key, mode, cur, game, cost: amount });

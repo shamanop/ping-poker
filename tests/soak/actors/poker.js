@@ -1,5 +1,5 @@
 'use strict';
-// Actor: poker. POKERPING (chips, permanent) plus created tables so a chips table and a Play $ table are both in play. Players join with a random
+// Actor: poker. POKERPING (chips, permanent) plus created tables so a chips table and a Cash table are both in play. Players join with a random
 // legal buy-in from their own currency or the other one, act with a random LEGAL action (taken from legalActions in their game_state), leave
 // (also mid-hand), rebuy after busting, get kicked by the host (also mid-hand), sit out, drop and reconnect their socket, and the host ends the night.
 const { sleep } = require('../lib/bot');

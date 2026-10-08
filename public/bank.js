@@ -8,14 +8,14 @@
   let data = null, isOpen = false, pollTimer = null, adminHost = null;
   let view = (() => { try { return localStorage.getItem('pp-bank-view') === 'play' ? 'play' : 'chips'; } catch (e) { return 'chips'; } })();
   const isPlay = () => view === 'play';
-  // The view (Chips / Play $) can differ from this table's currency: then at-table figures are not zero, they do not exist (S3-4).
+  // The view (Chips / Cash) can differ from this table's currency: then at-table figures are not zero, they do not exist (S3-4).
   const viewIsTableCurrency = () => ((state.unit === 'cents') === isPlay());
   const startRef = () => (state.gameState && state.gameState.startChips) || 0;
 
   const $ = id => document.getElementById(id);
   // one id per confirmed click: a resend of the same click carries the same id and the server writes nothing twice (admin_adjust / admin_set_play opId)
   const newOpId = () => (window.crypto && crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + '.' + Math.random().toString(36).slice(2, 12));
-  // Mode is per view: the Play $ view reads cents, the Chips view reads chips; pref decides $ vs chips for 'auto'.
+  // Mode is per view: the Cash view reads cents, the Chips view reads chips; pref decides $ vs chips for 'auto'.
   const bankMode = () => Money.modeFor(Money.pref, isPlay() ? 'cents' : 'chips');
   const fmt = n => Money.format(n, bankMode());
   const signed = n => Money.format(n, bankMode(), { signed: true }).replace('-', '−');
@@ -60,7 +60,7 @@
       <div class="bank-head">
         <div class="bank-title">THE <em>BANK</em></div>
         <div class="bank-sub" id="bank-sub">Buy-ins, balances and chips over time</div>
-        <div class="bank-view seg" id="bank-view" role="group" aria-label="Currency"><button type="button" data-v="chips">Chips</button><button type="button" data-v="play">Play $</button></div>
+        <div class="bank-view seg" id="bank-view" role="group" aria-label="Currency"><button type="button" data-v="chips">Chips</button><button type="button" data-v="play">Cash</button></div>
         <div class="bank-total" id="bank-total"></div>
         <button type="button" class="bank-close panel__close" id="bank-close" aria-label="Close bank">&#x2715;</button>
       </div>
@@ -93,7 +93,7 @@
 
   function paintView() {
     document.querySelectorAll('#bank-view button').forEach(b => b.classList.toggle('on', b.dataset.v === view));
-    const t = $('bank-chart-title'); if (t) t.firstChild.nodeValue = (isPlay() ? 'Play $' : 'Chips') + ' at the table, hand by hand';
+    const t = $('bank-chart-title'); if (t) t.firstChild.nodeValue = (isPlay() ? 'Cash' : 'Chips') + ' at the table, hand by hand';
   }
   function setView(v) {
     if (v !== 'chips' && v !== 'play') return;
@@ -243,7 +243,7 @@
     const hands = new Set();
     names.forEach(n => data.series[n].forEach(pt => hands.add(pt[0])));
     $('bank-hcount').textContent = hands.size ? (isPlay() || !startRef() ? '' : 'Dashed line = starting stack \u00b7 ') + hands.size + ' hand' + (hands.size === 1 ? '' : 's') : '';
-    if (!hands.size) { lineGeo = null; setHTML(host, !viewIsTableCurrency() ? emptyNote('Not played at this table', 'This table uses ' + (state.unit === 'cents' ? 'Play $' : 'Chips') + '. Switch the view above to see its hands.') : emptyNote('Nothing to plot yet', 'Chips are recorded at the end of every hand. Play one and the lines appear.')); return; }
+    if (!hands.size) { lineGeo = null; setHTML(host, !viewIsTableCurrency() ? emptyNote('Not played at this table', 'This table uses ' + (state.unit === 'cents' ? 'Cash' : 'Chips') + '. Switch the view above to see its hands.') : emptyNote('Nothing to plot yet', 'Chips are recorded at the end of every hand. Play one and the lines appear.')); return; }
     const W = host.clientWidth, H = host.clientHeight; if (!W || !H) return;
     const u = U();
     const m = { l: 52 * u, r: 92 * u, t: 16 * u, b: 28 * u };

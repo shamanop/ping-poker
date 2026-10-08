@@ -14,7 +14,7 @@ fix_b_labels.py: 22 checks, 10 failed:
     FAIL bonus window claim button, pref chips got 'CLAIM 10,000' want 'CLAIM $100'
     FAIL seats stepper after 3 presses of + from the default got '9' want '8'
     FAIL seats stepper stops at 8 got '9' want '8'
-    FAIL Play $ create refusal reads dollars (every message) ['Minimum buy-in is below the big blind (at least 50, you have 10)', 'Minimum buy-in is below the big blind (at least 50, you have 10)']
+    FAIL Cash create refusal reads dollars (every message) ['Minimum buy-in is below the big blind (at least 50, you have 10)', 'Minimum buy-in is below the big blind (at least 50, you have 10)']
     FAIL busted seat is labelled Out of chips 'Joining'
     FAIL busted seat is not labelled Joining 'Joining'
     fix_b_labels: 22 checks, 10 failed
@@ -25,7 +25,7 @@ fix_b_labels.py: 22 checks, 10 failed:
 
 ## Fixes
 - Q01 transport/views.js seatRow: additive `blind: 'SB'|'BB'|null` from engine hand.sbSeat/bbSeat (live hand, dealt seats only); public/game.js prints p.blind, nextActiveSeat deleted.
-- Q04 public/juice.js streakCalendar takes o.format (cents -> text), shell.js passes dollars(): $100 .. $1,000 in every pref (it is Play $).
+- Q04 public/juice.js streakCalendar takes o.format (cents -> text), shell.js passes dollars(): $100 .. $1,000 in every pref (it is Cash).
 - Q07 public/lobby.js error handler words a create-form error in the form's unit. Also public/game.js: its own error listener toasted the same error in chips mode while not at a table (second, wrong message); it now only toasts inside a table.
 - Q06 lobby.js seats stepper max 8.
 - Q05 game.js seatStatus: 0 chips -> "Out of chips"; "Joining" kept for a seat with chips waiting for the deal. No per-seat rebuy flag in game_state, so no "Rebuying" label.

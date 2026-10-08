@@ -1,5 +1,5 @@
 """Step H proof (v2 server): bust_out -> rebuy panel -> the server charges exactly what the box promised.
-Runs on the POKERPING-style chips table (fund chips) and a created Play $ table (fund play): sit at the minimum, shove every
+Runs on the POKERPING-style chips table (fund chips) and a created Cash table (fund play): sit at the minimum, shove every
 hand against a calling bot until busted, then check: the panel shows the descriptor's bounds/default, the `rebuy` frame carries
 the typed amount + fund, the server seats exactly that stack (next game_state) and the bank/wallet drops by exactly that amount
 (`money` event), and an over-limit amount sends nothing."""
@@ -69,7 +69,7 @@ def run(pg, fr, label, create):
 
 with sync_playwright() as p:
     b = p.chromium.launch()
-    for label, create in [('chips table', False), ('Play $ table', True)]:
+    for label, create in [('chips table', False), ('Cash table', True)]:
         pg = b.new_page(viewport={'width': 1440, 'height': 900}); fr = Frames(pg)
         sign_in(pg, 'chris'); set_pref(pg, 'chips')
         run(pg, fr, label, create)

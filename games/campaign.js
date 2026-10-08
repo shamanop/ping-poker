@@ -56,7 +56,7 @@ const rngOf = () => (module.exports.rng || cryptoRng);
 
 function err(socket, code, message, extra) { socket.emit('error', { message, code, game: 'campaign', ...(extra || {}) }); }
 const MONEY_DOWN = 'Money is unavailable right now, please try again later';
-const fundsMsg = (cur) => (cur === 'chips' ? 'Not enough chips' : 'Not enough Play $');
+const fundsMsg = (cur) => (cur === 'chips' ? 'Not enough chips' : 'Not enough Cash');
 const balances = (nk) => ({ play: M().balance(nk, 'play'), chips: M().balance(nk, 'chips') });
 const safeBalances = (nk) => { try { return balances(nk); } catch { return null; } };
 
@@ -259,7 +259,7 @@ function start(socket, payload) {
   const nk = keyOf(socket);
   if (limited(socket, nk, 'start')) return;
   const cur = field(payload, 'mode'), bet = field(payload, 'bet'), home = field(payload, 'home');
-  if (cur !== 'play' && cur !== 'chips') return err(socket, 'bad_mode', 'Pick Play $ or chips');
+  if (cur !== 'play' && cur !== 'chips') return err(socket, 'bad_mode', 'Pick Cash or chips');
   if (typeof bet !== 'number' || !E.BET_LEVELS.includes(bet)) return err(socket, 'bad_bet', 'Pick a bet level');
   if (typeof home !== 'string' || !own(E.MAP.states, home)) return err(socket, 'bad_home', 'Pick a home state');
   const open = runs.get(nk);

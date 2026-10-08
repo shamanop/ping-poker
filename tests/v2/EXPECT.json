@@ -369,7 +369,7 @@
   "bugs": [
    "M6"
   ],
-  "reason": "the SIGTERM path writes the cash-out rows with night metadata, so a chips night survives a deploy; only a crash (SIGKILL) and Play $ nights break"
+  "reason": "the SIGTERM path writes the cash-out rows with night metadata, so a chips night survives a deploy; only a crash (SIGKILL) and Cash nights break"
  },
  "17/night-results-survive-sigterm-restart-play": {
   "baseline": "fail",

@@ -46,7 +46,7 @@ function world() {
   };
   w.signup = (name) => { const a = w.accounts.signup(name, '1234', 'a01', { ip: 't-' + name }).account; w.service.ensureAccount(a.key); w.accounts.flush(); return a.key; };
   w.mints = (kind) => [...w.ledger.entries((e) => e.ref && e.ref.startsWith(kind + ':'))];
-  w.play = (key) => w.ledger.balance('bank:' + key, 'chips');   // rewards pay Chips since 10/7 (Play $ is real money)
+  w.play = (key) => w.ledger.balance('bank:' + key, 'chips');   // rewards pay Chips since 10/7 (Cash is real money)
   w.today = () => require('../../social.js').dayOf(w.clock);
   return w.boot();
 }

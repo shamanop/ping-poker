@@ -29,7 +29,7 @@
   const money = { wallet: { play: 0, chips: 0 } };
   const bet = () => st.bets[st.betIdx];
   const usd = (c) => { const n = Math.round(c), a = Math.abs(n); return (n < 0 ? '-' : '') + '$' + Math.floor(a / 100).toLocaleString('en-US') + '.' + String(a % 100).padStart(2, '0'); };
-  // every amount on screen goes through dollars(): Play $ and practice show dollars, Chips mode shows whole chips (1 chip = 1 cent), as Ballot Bender does
+  // every amount on screen goes through dollars(): Cash and practice show dollars, Chips mode shows whole chips (1 chip = 1 cent), as Ballot Bender does
   // Chips follow the shell's money preference like Ballot Bender (9d5f578): chips by default, dollars when the player picked USD (then no ' chips' unit is added: unit())
   const chipsUsd = () => { try { const M = window.parent && window.parent !== window ? window.parent.Money : null; return !!(M && M.getPref && M.getPref() === 'usd'); } catch (e) { return false; } };
   const chipsFmt = (c) => { try { const M = window.parent && window.parent !== window ? window.parent.Money : null; if (M && M.getPref && M.getPref() === 'usd') return M.fmt(c, { mode: 'usd' }); } catch (e) { /* standalone */ } return Math.round(c).toLocaleString('en-US'); };
@@ -622,7 +622,7 @@
     setBal(walletBal(), true); setBusy(false); wake(); syncWarm(); syncView();
     if (open) adopt(open);
   }
-  function onFloor(kind, ev) {                                  // floor:feed / floor:pot. Play $ events never show in Chips mode and the reverse.
+  function onFloor(kind, ev) {                                  // floor:feed / floor:pot. Cash events never show in Chips mode and the reverse.
     if (!st.live || !ev) return;
     if (kind === 'feed') {
       if (ev.id != null) { if (st.feedAll.some((x) => x.id === ev.id)) return; st.feedAll.push(ev); if (st.feedAll.length > 50) st.feedAll.shift(); }   // the state's last 20 and the live events overlap: each id once
@@ -709,7 +709,7 @@
   }
   function initTransport() {
     const bar = document.createElement('div'); bar.id = 'modebar';
-    bar.innerHTML = '<div class="mb"><button data-m="play">Play $</button><button data-m="chips">Chips</button></div><span id="modenote"></span>'; stage.appendChild(bar);
+    bar.innerHTML = '<div class="mb"><button data-m="play">Cash</button><button data-m="chips">Chips</button></div><span id="modenote"></span>'; stage.appendChild(bar);
     bar.addEventListener('click', (e) => { const x = e.target.closest('button'); if (!x || !st.live || st.busy) return; st.mode = x.dataset.m; SFX_.click(); resetWin(); setBal(walletBal(), false); modeUi(); feedReplay(); syncView(); toParent({ type: 'mode', mode: st.mode }); });
     modeUi();
     if (BRIDGE) {
@@ -798,7 +798,7 @@
         <p><b>The Call.</b> When the cascade ends and a <b>rotary phone</b> is on the board, every hot lead is dialed and flips to a <b>quote bubble</b> (bronze ${range(C.bubbles.bronze)}, silver ${range(C.bubbles.silver)}, gold ${range(C.bubbles.gold)}), an <b>UPSELL</b> (${C.upsell.map((u) => 'x' + u[0]).join(' ')}, multiplies the bubbles and closes next to it) or <b>THE CLOSE</b>, which collects every bubble on the board. After a close the other leads are dialed again. The bubbles and closes on the board pay.</p>
         <p><b>Bells.</b> The desk bells that landed in a spin: 3 = DIALING FOR DOLLARS (${C.spins.bonus1} free spins, leads stay lit until a phone calls them), 4 = ALWAYS BE CLOSING (${C.spins.bonus2} free spins, leads stay lit the whole bonus), 5 or more = QUOTE ACCEPTED (${C.spins.bonus3} free spins, a phone on every spin, no bronze bubbles). In a bonus 2 bells add 2 spins, 3 add 4; 4 or more in DIALING FOR DOLLARS upgrades it to ALWAYS BE CLOSING. Up to ${C.maxSpins} spins.</p>
         ${buys}${small}<p class="tl">Pay for a cluster, x bet</p><div class="pt"><table><tr><th></th>${head}</tr>${rows}</table></div>
-        <p><small>Max win ${maxX().toLocaleString('en-US')}x. ${label} Play money only: no deposits, no payouts.</small></p>
+        <p><small>Max win ${maxX().toLocaleString('en-US')}x. ${label} No deposits, no payouts.</small></p>
         <button class="btn" data-v="x">Close</button><div class="cue">SCROLL FOR THE PAY TABLE</div></div>`;
   }
   const infoCue = (cd) => { const cue = cd.querySelector('.cue'), chk = () => cue.classList.toggle('end', cd.scrollTop + cd.clientHeight >= cd.scrollHeight - 6); cd.addEventListener('scroll', chk); chk(); };

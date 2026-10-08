@@ -6,7 +6,7 @@ const { MoneyError } = require('./ledger');
 
 const START_CHIPS = 10000;        // today's lazy bank default (server.js BANK_DEFAULT)
 const START_PLAY = 1000000;       // today's wallet default, 10,000.00 in cents (wallet.js START_PLAY)
-const TOPUP_BELOW = 10000;        // wallet.js: top-up only when Play $ is under 100.00
+const TOPUP_BELOW = 10000;        // wallet.js: top-up only when Cash is under 100.00
 const TOPUP_COOLDOWN_MS = 3600000;
 const CURS = ['chips', 'play'];
 const MINT_KINDS = ['bonus', 'achv', 'topup'];
@@ -34,7 +34,7 @@ function needFund(fund, tableCur) {
 
 function createService(ledger, opts = {}) {
   const now = opts.now || Date.now;
-  // Play $ minted at signup. server.js passes 0: Play $ is real money and the admin sets it (Chris 10/7).
+  // Cash minted at signup. server.js passes 0: Cash is real money and the admin sets it (Chris 10/7).
   const signupPlay = opts.signupPlay != null ? opts.signupPlay : START_PLAY;
 
   // ---- derived indexes, rebuilt incrementally from the ledger (never a second source of truth) ----
@@ -142,7 +142,7 @@ function createService(ledger, opts = {}) {
     for (const cur of CURS) {
       if (known[cur].has(key)) continue;
       const amount = cur === 'chips' ? START_CHIPS : signupPlay;
-      if (amount === 0) continue;   // nothing to mint (live: Play $ starts at 0); the account reads 0 until the admin sets it
+      if (amount === 0) continue;   // nothing to mint (live: Cash starts at 0); the account reads 0 until the admin sets it
       ledger.transfer('mint:signup', store(cur, key), amount, cur, 'signup', `signup:${cur === 'chips' ? 'bank' : 'play'}:${key}`);
       known[cur].add(key); minted[cur] = amount;
     }
@@ -410,7 +410,7 @@ function createService(ledger, opts = {}) {
       : ledger.transfer(store(cur, key), 'admin:adjust', -delta, cur, why, ref);
   }
 
-  // Play $ held by this key: wallet, every seat at a Play table, and every open Play escrow (a stake in a round is still theirs).
+  // Cash held by this key: wallet, every seat at a Play table, and every open Play escrow (a stake in a round is still theirs).
   function playHeld(key) {
     const wallet = ledger.balance('play:' + key, 'play');
     let seats = 0, escrow = 0;

@@ -1,4 +1,4 @@
-"""Step C proof, caller 4: admin console amounts (accounts tab chips / Play $, table tab blinds).
+"""Step C proof, caller 4: admin console amounts (accounts tab chips / Cash, table tab blinds).
 Asserts the units that arrive at the server for usd / chips / auto prefs. The bank edit is `admin_adjust {key, delta, cur:'chips'}`
 with delta = typed - the BANK balance shown in the row (read from the row). Frames only: a legacy server ignores admin_adjust.
 Setup as buyin.py (chris + by1..by6)."""

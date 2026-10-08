@@ -663,7 +663,7 @@ function showBust(balance, rebuy) {
   if ($('bust-panel').classList.contains('hidden') && state.rebuyField) { state.rebuyField.destroy(); state.rebuyField = null; $('bust-amt').replaceChildren(); } // a new bust starts from the default again
   $('bust-panel').classList.remove('hidden');
   const rbd = rebuy || state.lastRebuy || {};
-  $('bust-balance').textContent = `${rbd.fund === 'play' ? 'Play $' : 'Bank'} ${fmt(balance)}`;
+  $('bust-balance').textContent = `${rbd.fund === 'play' ? 'Cash' : 'Bank'} ${fmt(balance)}`;
   const rebuyBtn = $('btn-rebuy');
   const brokeMsg = $('bust-broke-msg');
   const slot = $('bust-amt');
@@ -691,7 +691,7 @@ function showBust(balance, rebuy) {
   } else {
     if (state.rebuyField) { state.rebuyField.destroy(); state.rebuyField = null; slot.replaceChildren(); }
     rebuyBtn.classList.add('hidden');
-    brokeMsg.textContent = rb.allowed === false && balance >= lo ? 'Rebuys are closed at this table.' : (rb.fund === 'play' ? 'Your Play $ is empty. Top up from the wallet.' : 'Your bank is empty. GG.');
+    brokeMsg.textContent = rb.allowed === false && balance >= lo ? 'Rebuys are closed at this table.' : (rb.fund === 'play' ? 'Your Cash is empty. Ask the admin to add more.' : 'Your bank is empty. GG.');
     brokeMsg.classList.remove('hidden');
   }
 }

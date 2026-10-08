@@ -66,7 +66,7 @@ with sync_playwright() as pw:
         a_k2 = audit()
         b2_final = bal(a_k2, keys[2]) + seat_bal(a_k2, keys[2])
         print('b2 final', b2_final, 'lost at most hand-2 committed', start_bal[keys[2]] - b2_final)
-        if mode == 'chips': c.ok('kicked player holds everything except what they put in the pot', 0 <= start_bal[keys[2]] - b2_final <= 400, str(b2_final))   # (Play $ wallets also receive achievement mints, so only chips are exact)
+        if mode == 'chips': c.ok('kicked player holds everything except what they put in the pot', 0 <= start_bal[keys[2]] - b2_final <= 400, str(b2_final))   # (Cash wallets also receive achievement mints, so only chips are exact)
         # ---- end night
         drawer_open(sc); sc.p.click('#host-end'); sc.p.wait_for_selector('#host-end-confirm'); sc.ev_clear(); sc.p.click('#host-end-confirm'); 
         c.ok('settle-up screen appears', wait_for(lambda: sc.p.evaluate("!!document.querySelector('.lb-settle')"), 25))

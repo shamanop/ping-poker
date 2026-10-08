@@ -236,7 +236,7 @@ class Checker {
     for (const [a, v] of this.bal[cur]) if (a.startsWith('escrow:') && a.split(':')[2] === key) n += v;       // a stake in an open round is still the player's
     return n;
   }
-  // The top-up rule (H7): Play $ held = wallet + every seat at a Play table (by the seat's table currency).
+  // The top-up rule (H7): Cash held = wallet + every seat at a Play table (by the seat's table currency).
   playHeldRule(key) {
     let n = this.balance('play', 'play:' + key);
     for (const [a, v] of this.bal.play) if ((a.startsWith('seat:') && seatParts(a).key === key) || (a.startsWith('escrow:') && a.split(':')[2] === key)) n += v;
@@ -482,7 +482,7 @@ class Checker {
     const out = [];
     for (const v of views || []) {
       const play = this.balance('play', 'play:' + v.key), chips = this.balance('chips', 'bank:' + v.key);
-      if (v.play !== play) out.push({ id: 'I6', message: `${v.key}: the wallet answer says Play $ ${v.play}, the ledger says ${play}`, accounts: { key: v.key }, expected: play, got: v.play });
+      if (v.play !== play) out.push({ id: 'I6', message: `${v.key}: the wallet answer says Cash ${v.play}, the ledger says ${play}`, accounts: { key: v.key }, expected: play, got: v.play });
       if (v.chips !== chips) out.push({ id: 'I6', message: `${v.key}: the wallet answer says chips ${v.chips}, the ledger says ${chips}`, accounts: { key: v.key }, expected: chips, got: v.chips });
     }
     for (const r of rows || []) {

@@ -191,7 +191,7 @@ class Scene:
             p.fill('#lb-code', self.tid); p.click('#lb-join-btn')
         p.wait_for_selector('#lb-buyin-input', timeout=8000)
         amt = amount if amount is not None else self.hero_stack
-        p.fill('#lb-buyin-input', ('%.2f' % (amt / 100)) if self.mode == 'play' else str(amt))   # a Play $ table is typed in dollars
+        p.fill('#lb-buyin-input', ('%.2f' % (amt / 100)) if self.mode == 'play' else str(amt))   # a Cash table is typed in dollars
         p.click('#lb-sit'); p.wait_for_selector('#player-seats .seat', timeout=15000)
         p.evaluate("PingSocket.on('game_state', gs => { window.__gs = gs }); PingSocket.on('showdown_result', d => { (window.__sd = window.__sd || []).push(d) }); PingSocket.on('bust_out', d => { window.__bust = d })")
     def bots_sit(self, funds=None):

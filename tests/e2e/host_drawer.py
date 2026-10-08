@@ -12,7 +12,7 @@ c = Checks()
 with sync_playwright() as p:
     b = p.chromium.launch(); pg = b.new_page(viewport={'width': 1280, 'height': 900}); fr = Frames(pg)
     sign_in(pg, NAME); set_pref(pg, 'usd')
-    # create a Play $ table as host, sit down
+    # create a Cash table as host, sit down
     pg.click('#lb-create-btn'); pg.wait_for_selector('#lb-form'); pg.click('#lb-create-submit')
     pg.wait_for_selector('#lb-sit', timeout=8000); pg.click('#lb-sit')
     pg.wait_for_selector('#host-btn', timeout=10000); pg.click('#host-btn'); pg.wait_for_selector('#host-sb')

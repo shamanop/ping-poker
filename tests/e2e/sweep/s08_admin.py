@@ -1,4 +1,4 @@
-"""S08: admin console. A seated bot player: the Bank / At table / Play $ columns vs __audit; bank adjust by delta (seat untouched); Play $ set touches the wallet only.
+"""S08: admin console. A seated bot player: the Bank / At table / Cash columns vs __audit; bank adjust by delta (seat untouched); Cash set touches the wallet only.
 Usage: python3 s08_admin.py [desk|phone]"""
 import sys; sys.path.insert(0, __import__('os').path.dirname(__import__('os').path.abspath(__file__)))
 from lib import *
@@ -40,11 +40,11 @@ with sync_playwright() as pw:
         p.evaluate("PingSocket.emit('admin_adjust', {key: '%s', delta: -99999999, cur: 'chips', reason: 'sweep'})" % key); time.sleep(1.0)
         res = [d for e, d in p.evaluate('window.__ev') if e == 'admin_result']; print('over-draw ->', res[-1:])
         a3 = audit(); c.eq('over-draw changed nothing', a3['bank'][key], a2['bank'][key]); c.ok('over-draw refused', res and res[-1].get('ok') is False)
-        # Play $ set only touches the wallet
+        # Cash set only touches the wallet
         p.click(row + ' [data-a=play]'); p.wait_for_selector('#adm-edit'); p.fill('#adm-edit', '123'); p.click(row + ' [data-a=play-ok]'); time.sleep(1.5)
         a4 = audit(); print('wallet after set', a4['wallet'][key], 'seat', seat_bal(a4, key))
-        c.ok('Play $ set: wallet moved to a figure matching the typed 123 in the console\'s unit', a4['wallet'][key] in (123, 12300), str(a4['wallet'][key]))
-        c.eq('Play $ set: seat and bank untouched', (seat_bal(a4, key), a4['bank'][key]), (seat_bal(a3, key), a3['bank'][key]))
+        c.ok('Cash set: wallet moved to a figure matching the typed 123 in the console\'s unit', a4['wallet'][key] in (123, 12300), str(a4['wallet'][key]))
+        c.eq('Cash set: seat and bank untouched', (seat_bal(a4, key), a4['bank'][key]), (seat_bal(a3, key), a3['bank'][key]))
         cols2 = row_cols(p, key); print('row after', cols2)
         # the table pane
         p.click('.adm-tab[data-t=tables]') if p.locator('.adm-tab[data-t=tables]').count() else None; time.sleep(.8)

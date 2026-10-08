@@ -18,9 +18,9 @@ with sync_playwright() as pw:
     try:
         s.sign_up('cr' + tag); s.dismiss_modals(); time.sleep(.5)
         p.evaluate("window.__ev = []; PingSocket.onAny((e, d) => { window.__ev.push([e, d]) })")
-        # ---- variant 1: Play $, preset $1/$2, 10/40/300 dollars, 6 seats, 45 s clock, blinds rise On, rebuys Off, Listed
+        # ---- variant 1: Cash, preset $1/$2, 10/40/300 dollars, 6 seats, 45 s clock, blinds rise On, rebuys Off, Listed
         p.click('#lb-create-btn'); p.wait_for_selector('#lb-form'); s.dismiss_modals()
-        btn(p, 'Play $\nfake money').click() if False else None
+        btn(p, 'Cash\nfake money').click() if False else None
         p.fill('#lb-tname', 'Sweep Play 1')
         btn(p, '$1/$2').click()
         fill_amt(p, '#lb-bmin', '10'); fill_amt(p, '#lb-bdef', '40'); fill_amt(p, '#lb-bmax', '300')

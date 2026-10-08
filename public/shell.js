@@ -11,7 +11,6 @@
   let L = { games: {} };
   let signedIn = false, focusId = 'poker', zTop = 20, inResize = false;
   const wallet = { play: null, chips: null };
-  let chipsTotal = null;
   let wmode = 'play', lastWin = 0, sessNet = 0;
   const $ = (id) => document.getElementById(id);
   const sock = () => window.PingSocket || null;
@@ -49,7 +48,7 @@
       <header class="sh-top">
         <img class="sh-logo" src="/images/ui/vp-mark.png" alt=""><span class="sh-brand">THE PING</span>
         <span class="sh-lvl" id="sh-lvl"><span id="sh-flame"></span><span id="sh-xp"></span></span>
-        <div class="sh-wallet" id="sh-wallet" title="Play $ is pretend money. Chips are your poker bank."><span class="plate plate--row sh-plate" id="sh-chips" title="Chips: your poker bank plus what you have at the table"><small class="plate__label">Chips</small><b class="plate__value">--</b></span><span class="plate plate--row sh-plate" id="sh-play"><small class="plate__label">Play $</small><b class="plate__value">--</b></span></div>
+        <div class="sh-wallet" id="sh-wallet" title="Cash is real money. Chips are free play money. Both show what you can bet right now: a bet, a run or a table buy-in comes off here and comes back when it ends."><span class="plate plate--row sh-plate" id="sh-chips" title="Chips you can bet right now (not counting chips at a table or in a game)"><small class="plate__label">Chips</small><b class="plate__value">--</b></span><span class="plate plate--row sh-plate" id="sh-play"><small class="plate__label">Cash</small><b class="plate__value">--</b></span></div>
         <span data-money-toggle></span>
         <button class="sh-bonus btn btn--secondary btn--sm" id="sh-bonus" type="button" title="Daily bonus"></button>
         <button class="sh-acct btn btn--ghost btn--sm" id="sh-acct" type="button"></button>
@@ -281,8 +280,8 @@
   if (window.Money && window.Money.onPrefChange) window.Money.onPrefChange(() => { try { refreshTop(); } catch (e) {} try { if (ccReady) toCC({ type: 'pref' }); } catch (e) {} try { if (campReady) toCamp({ type: 'pref' }); } catch (e) {} });   // Chips shown as chips or dollars: the slot repaints its idle amounts
   function refreshTop() {
     const p = $('sh-play'); if (!p) return;
-    const c = $('sh-chips'); if (c) c.innerHTML = '<small class="plate__label">Chips</small><b class="plate__value">' + (chipsTotal == null ? '--' : chipAmt(chipsTotal)) + '</b>';
-    p.innerHTML = '<small class="plate__label">Play $</small><b class="plate__value">' + (wallet.play == null ? '--' : dollars(wallet.play)) + '</b>';
+    const c = $('sh-chips'); if (c) c.innerHTML = '<small class="plate__label">Chips</small><b class="plate__value">' + (wallet.chips == null ? '--' : chipAmt(wallet.chips)) + '</b>';
+    p.innerHTML = '<small class="plate__label">Cash</small><b class="plate__value">' + (wallet.play == null ? '--' : dollars(wallet.play)) + '</b>';
     const u = user(); $('sh-acct').textContent = u ? (u.display || u.key || '') : '';
   }
   function needsAction() {
@@ -319,9 +318,9 @@
     const s = sock(); if (!s || bound.has(s)) return !!s;
     bound.add(s);
     s.on('wallet', (w) => { setWallet(w); });
-    s.on('money', (m) => { if (!m) return; chipsTotal = typeof m.chips === 'number' ? m.chips : null; if (m.wallet) setWallet(m.wallet); else refreshTop(); });
+    s.on('money', (m) => { if (!m) return; if (m.wallet) setWallet(m.wallet); else if (typeof m.bank === 'number') setWallet({ chips: m.bank }); });
     s.on('auth_ok', () => { setSignedIn(true); refreshTop(); s.emit('wallet_get'); bonusShown = false; s.emit('bonus:status'); });
-    s.on('auth_out', () => { chipsTotal = null; setSignedIn(false); bonusShown = false; if (window.PingJuice) { PingJuice.streakFlame($('sh-flame'), 0); } const x = $('sh-xp'); if (x) x.textContent = ''; lastXp = null; lastStats = null; bonusSt = null; renderBonusBtn(); });
+    s.on('auth_out', () => { wallet.chips = null; wallet.play = null; setSignedIn(false); bonusShown = false; if (window.PingJuice) { PingJuice.streakFlame($('sh-flame'), 0); } const x = $('sh-xp'); if (x) x.textContent = ''; lastXp = null; lastStats = null; bonusSt = null; renderBonusBtn(); });
     s.on('social:event', onSocialEvent);
     s.on('account:stats', onStats);
     s.on('achv:unlocked', onAchv);

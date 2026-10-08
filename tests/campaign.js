@@ -84,7 +84,7 @@ t('start: hostile mode / bet / home / payload', () => {
 
 t('start: unaffordable (funds) writes nothing; the other currency does not pay', () => {
   const w = setup(), s = w.sock('ann'); w.setBal('ann', 'play', 400); const b = snap(w);
-  let r = H.start(w, s, 'play', 500, 'OH'); eq(r.error.code, 'funds'); eq(r.error.message, 'Not enough Play $'); noEffect(w, b); eq(w.runs.size, 0); eq(w.bal('ann', 'play'), 400); eq(Object.keys((w.disk() || { open: {} }).open).length, 0);
+  let r = H.start(w, s, 'play', 500, 'OH'); eq(r.error.code, 'funds'); eq(r.error.message, 'Not enough Cash'); noEffect(w, b); eq(w.runs.size, 0); eq(w.bal('ann', 'play'), 400); eq(Object.keys((w.disk() || { open: {} }).open).length, 0);
   w.setBal('ann', 'chips', 99); r = H.start(w, s, 'chips', 100, 'OH'); eq(r.error.code, 'funds'); eq(r.error.message, 'Not enough chips'); eq(w.bal('ann', 'play'), 400);
   w.setBal('ann', 'play', 500); r = H.start(w, s, 'play', 500, 'OH'); eq(r.ev, 'run'); eq(w.bal('ann', 'play'), 0);
 });

@@ -37,7 +37,7 @@
   const walletBal = () => (money.mode === 'chips' ? money.wallet.chips : money.wallet.play);
   const avail = () => (money.live ? walletBal() : st.bal);
   const fmtBal = (n) => fmt(n);
-  const unitWord = () => (money.live ? (money.mode === 'chips' ? 'chips' : 'Play $') : 'VOTES');
+  const unitWord = () => (money.live ? (money.mode === 'chips' ? 'chips' : 'Cash') : 'VOTES');
 
   const stage = $('stage'), cellsEl = $('cells'), floatsEl = $('floats'), ov = $('ov'), boardEl = $('board'), mascot = $('mascot'), mimg = $('mimg'), dump = $('dump');
   const els = new Map();
@@ -886,7 +886,7 @@
   if (P.Money && P.Money.onPrefChange) P.Money.onPrefChange(() => { if (money.live) fmt = liveFmt(); if (!st.busy) setBal(money.live ? walletBal() : st.bal, false); drawBet(); });
   function initBridge() {
     const bar = document.createElement('div'); bar.id = 'modebar';
-    bar.innerHTML = '<div class="mb"><button data-m="play">Play $</button><button data-m="chips">Chips</button></div><span id="modenote"></span>';
+    bar.innerHTML = '<div class="mb"><button data-m="play">Cash</button><button data-m="chips">Chips</button></div><span id="modenote"></span>';
     $('stage').appendChild(bar);
     bar.addEventListener('click', (e) => {
       const b = e.target.closest('button'); if (!b || !money.live || st.busy) return;

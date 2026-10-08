@@ -47,7 +47,7 @@ t('A4: a resend of the same op id writes nothing and gets the same answer (adjus
   eq(e.hand.length, 1, 'the hand log got one adjust row');
 });
 
-t('A4: a resend of a negative adjust in Play $ does not burn twice', () => {
+t('A4: a resend of a negative adjust in Cash does not burn twice', () => {
   const e = env(); const p0 = e.play();
   const msg = { key: 'ann', delta: -1234, cur: 'play', reason: 'admin console', opId: 'op-burn' };
   e.send('admin_adjust', msg); e.send('admin_adjust', msg);

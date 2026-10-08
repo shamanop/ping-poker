@@ -467,7 +467,7 @@
   PJ.streakCalendar = function (info, o) {
     o = o || {}; info = info || {};
     if (calOpen) return calOpen.promise;
-    var fmt = typeof o.format === 'function' ? o.format : money;   // the shell passes its Play $ formatter: the schedule is cents
+    var fmt = typeof o.format === 'function' ? o.format : money;   // the shell passes its Cash formatter: the schedule is cents
     var sched = Array.isArray(info.schedule) && info.schedule.length === 7 ? info.schedule : [10000, 12500, 15000, 20000, 25000, 35000, 100000];
     var day = Math.min(7, Math.max(1, info.day | 0 || 1)), streak = Math.max(1, info.streak | 0 || day), avail = !!info.available;
     var m = document.createElement('div');

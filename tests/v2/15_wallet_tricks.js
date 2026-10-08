@@ -1,5 +1,5 @@
 'use strict';
-// H7 the Play $ top-up ignored money parked at a table (sit with almost everything, top up, stand up: +$9,9xx per hour).
+// H7 the Cash top-up ignored money parked at a table (sit with almost everything, top up, stand up: +$9,9xx per hour).
 // M10 the rebuy limit was bypassed by leave + sit. Audit repro 15.
 const { startServer, Bot, sleep, suite, expect } = require('./lib');
 const T = suite(__filename);
@@ -15,7 +15,7 @@ const T = suite(__filename);
     await a.leave(t.id); await sleep(200);
     const w1 = (await a.req('wallet_get', {}, 'wallet')).play;
     a.close();
-    expect(w1 === w0, `Play $ went ${w0} -> ${w1} (+${w1 - w0}) after sit, top-up (${tu.__err || 'granted'}) and stand-up`);
+    expect(w1 === w0, `Cash went ${w0} -> ${w1} (+${w1 - w0}) after sit, top-up (${tu.__err || 'granted'}) and stand-up`);
   });
   await T.check('rebuy-limit-is-not-bypassed-by-leave-and-sit', ['M10'], async () => {
     const b = await new Bot(srv, 'Milo').connect(); await b.signup();

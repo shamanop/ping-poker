@@ -80,7 +80,7 @@ const ledgerRows = () => JSON.parse(fs.readFileSync(F.ledger, 'utf8'));
 
     // ── create + lobby ──
     [e, d] = await A.call('table_create', { settings: settings() }, 'table_created', 'error');
-    ok(e === 'table_created' && /^[A-HJ-NP-Z2-9]{6}$/.test(d.table.id) && d.table.hostKey === A.key && d.table.mode === 'play' && d.table.unit === 'cents', 'Play $ table created, 6-char code, host is creator');
+    ok(e === 'table_created' && /^[A-HJ-NP-Z2-9]{6}$/.test(d.table.id) && d.table.hostKey === A.key && d.table.mode === 'play' && d.table.unit === 'cents', 'Cash table created, 6-char code, host is creator');
     const T = d.table.id; A.tid = B.tid = C.tid = D.tid = T;
     [e, d] = await B.call('lobby_list', {}, 'lobby_tables');
     ok(e === 'lobby_tables' && !d.tables.some(t => t.id === T), 'private table hidden from other users lobby');
@@ -101,8 +101,8 @@ const ledgerRows = () => JSON.parse(fs.readFileSync(F.ledger, 'utf8'));
     await sleep(150);
     const ru = B.last('room_update');
     ok(ru && ru.unit === 'cents' && ru.moneyMode === 'play' && ru.mode === 'play' && ru.players.length === 3, 'room_update carries unit/mode/moneyMode');
-    { const ab = JSON.parse(fs.readFileSync(F.bank, 'utf8')).alice; ok(ab === undefined || ab === 10000, 'Play $ join never touches the chips bank (v2: the mirror lists every account at its 10000 start)'); }
-    ok(ledgerRows().filter(r => r.tableId === T).length === 0, 'Play $ join writes no ledger rows');
+    { const ab = JSON.parse(fs.readFileSync(F.bank, 'utf8')).alice; ok(ab === undefined || ab === 10000, 'Cash join never touches the chips bank (v2: the mirror lists every account at its 10000 start)'); }
+    ok(ledgerRows().filter(r => r.tableId === T).length === 0, 'Cash join writes no ledger rows');
     await sleep(700);
     ok(A.gs && A.gs.status === 'waiting', 'autoStart false: table does not start itself');
     [e, d] = await D.call('table_join', { tableId: T, buyIn: 1000 }, 'table_joined', 'error');
@@ -181,7 +181,7 @@ const ledgerRows = () => JSON.parse(fs.readFileSync(F.ledger, 'utf8'));
     [e, d] = await loser.call('rebuy', { tableId: T2, amount: 50 }, 'balance_update', 'error', 'game_state');
     ok(e === 'error' && d.code === 'range', 'rebuy below min -> range');
     [e, d] = await loser.call('rebuy', { tableId: T2, amount: 700 }, 'game_state', 'error');
-    ok(e === 'game_state', 'rebuy with amount succeeds from the Play $ wallet');
+    ok(e === 'game_state', 'rebuy with amount succeeds from the Cash wallet');
     await sleep(2500);
     loser.auto = null;
     const lp = loser.gs.players.find(p => p.name === loser.display);

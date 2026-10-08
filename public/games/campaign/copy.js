@@ -43,7 +43,7 @@
   }
   // the LANDSLIDE step is the one card whose odds are quoted as a WIN chance: say so in words that cannot be read as a scandal chance
   const oddsFinal = (pFail) => (pFail > 0.5 ? 'all or nothing: ' + oddsWords(pFail) : oddsWords(pFail));
-  // ---- money formats: Play $ = dollars and cents, Chips = whole chips; mx in hundredths
+  // ---- money formats: Cash = dollars and cents, Chips = whole chips; mx in hundredths
   const group = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   // the site's own display preference (Money.pref in the shell page): Chips may be shown as dollars when the player chose that; default is whole chips
   function chipsAsUsd() { try { const M = window.parent && window.parent !== window ? window.parent.Money : null; return !!(M && (M.pref === 'usd' || (M.getPref && M.getPref() === 'usd'))); } catch (e) { return false; } }
@@ -59,7 +59,7 @@
     money_down: { cash: 'Cash-out refused: money is unavailable.' + SAFE, step: 'Step refused: money is unavailable.' + SAFE, start: 'Could not start: money is unavailable. Nothing was taken. Try again.', def: 'Money is unavailable right now.' + SAFE },
     internal: { cash: 'Cash-out refused: money is unavailable.' + SAFE, step: 'That step did not go through.' + SAFE, start: 'Could not start the run. Nothing was taken. Try again.', def: 'Something went wrong on our side. Try again.' },
     funds: { def: 'Not enough funds for that stake.' }, auth: { def: 'Sign in again to play.' }, rate: { def: 'Easy. One tap at a time.' },
-    round_closed: { def: 'That run was already settled.' }, bad_bet: { def: 'That stake is not available. Pick another.' }, bad_home: { def: 'Pick a home state first.' }, bad_mode: { def: 'Pick Play $ or Chips first.' },
+    round_closed: { def: 'That run was already settled.' }, bad_bet: { def: 'That stake is not available. Pick another.' }, bad_home: { def: 'Pick a home state first.' }, bad_mode: { def: 'Pick Cash or Chips first.' },
     run_open: { def: 'A run is already open. Picking it up.' }
   };
   function errorText(code, ctx, serverMsg) {

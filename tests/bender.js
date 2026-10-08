@@ -47,7 +47,7 @@ function setup(opts = {}) {
 }
 
 (async () => {
-  await test('wallet: new account starts at 10,000.00 Play $ and the chips bank balance', () => {
+  await test('wallet: new account starts at 10,000.00 Cash and the chips bank balance', () => {
     const { wallet } = setup();
     assert.deepStrictEqual(wallet.get('ann'), { play: 1000000, chips: 10000 });
   });
@@ -247,7 +247,7 @@ function setup(opts = {}) {
     a.send('g:bender:history'); const h = last(a, 'g:bender:history');
     assert.strictEqual(h.rounds.length, 20);
     assert.strictEqual(h.rounds[0].roundId, all(a, 'g:bender:result').slice(-1)[0].roundId);
-    a.send('wallet_topup'); assert.strictEqual(last(a, 'error').code, 'topup_off');   // no free Play $ since 10/7
+    a.send('wallet_topup'); assert.strictEqual(last(a, 'error').code, 'topup_off');   // no free Cash since 10/7
     a.send('wallet_get'); assert.strictEqual(last(a, 'wallet').play, s.wallet.get('ann').play);
   });
 

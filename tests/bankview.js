@@ -1,4 +1,4 @@
-// Bank charts: Chips / Play $ views stay separate. Throwaway server, port 4877.
+// Bank charts: Chips / Cash views stay separate. Throwaway server, port 4877.
 const { spawn } = require('child_process');
 const fs = require('fs'), os = require('os'), path = require('path');
 const { io } = require(process.env.SIO_CLIENT || '/home/isabelle/.cache/node_modules/socket.io-client');
@@ -37,12 +37,12 @@ const cl = () => { const c = { ev: [] }; c.s = io(`http://localhost:${PORT}`, { 
     const ps = a.last('bank_summary');
     ok(ps && ps.view === 'play' && ps.unit === 'cents', 'play view is labelled play / cents');
     const me = ps && ps.players.find(p => /alice/i.test(p.name));
-    ok(me && me.atTable === 2000 && me.bank > 0, 'play view shows the Play $ stack and wallet only (' + JSON.stringify(me && [me.atTable, me.bank]) + ')');
+    ok(me && me.atTable === 2000 && me.bank > 0, 'play view shows the Cash stack and wallet only (' + JSON.stringify(me && [me.atTable, me.bank]) + ')');
     a.ev.length = 0;
     a.s.emit('get_bank_summary', { roomId: pt.table.id, view: 'chips' }); await sleep(300);
     const cs = a.last('bank_summary');
     ok(cs && cs.view === 'chips' && cs.unit === 'chips', 'chips view is labelled chips');
-    ok(!cs.players.some(p => p.atTable === 2000), 'chips view does not include the Play $ stack');
+    ok(!cs.players.some(p => p.atTable === 2000), 'chips view does not include the Cash stack');
   } catch (e) { console.log('ERR', e); fails++; }
   proc.kill(); console.log(fails ? 'FAILED' : 'ALL PASS'); process.exit(fails ? 1 : 0);
 })();

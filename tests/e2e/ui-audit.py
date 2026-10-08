@@ -78,10 +78,10 @@ try:
     pg.wait_for_timeout(500)
     c.eq('no player_action/emote with the bank panel open', [e for (e, _) in fr.sent if e in ('player_action', 'emote')], [])
     c.ok('overlay guard says open', pg.evaluate("PingUI.isOverlayOpen()"))
-    # S3-4: the Play $ view at a chips table shows no zeros for at-table figures
+    # S3-4: the Cash view at a chips table shows no zeros for at-table figures
     pg.click('#bank-view [data-v=play]'); pg.wait_for_timeout(1800)
     cells = pg.evaluate("[...document.querySelectorAll('#bank-players .bp-stats > div')].filter(d => d.querySelector('label').textContent === 'At table').map(d => d.querySelector('b').textContent.trim())")
-    c.ok('Play $ view at a chips table: at-table cells are dashes, not zeros', all(t == '\u2013' for t in cells) and not pg.evaluate("/\\$0(\\.00)?(?![\\d,])/.test(document.getElementById('bank-players').innerText)"))
+    c.ok('Cash view at a chips table: at-table cells are dashes, not zeros', all(t == '\u2013' for t in cells) and not pg.evaluate("/\\$0(\\.00)?(?![\\d,])/.test(document.getElementById('bank-players').innerText)"))
     pg.click('#bank-view [data-v=chips]'); pg.wait_for_timeout(500)
     pg.click('#bank-close'); pg.wait_for_function("!PingUI.isOverlayOpen()")
     c.eq('overlay guard says closed after close', pg.evaluate("PingUI.isOverlayOpen()"), False)

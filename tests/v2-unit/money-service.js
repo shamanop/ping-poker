@@ -54,7 +54,7 @@ t('buyIn / cashOut conserve per currency, same-currency and through fx', () => {
   svc.ensureAccount('a'); svc.ensureAccount('b');
   const before = totals(ledger);
   svc.buyIn('a', 'CT', 2000, 'chips', 'chips', 'bi:a');     // chips table from the bank
-  svc.buyIn('b', 'CT', 3000, 'chips', 'play', 'bi:b');      // chips table from Play $ (fx)
+  svc.buyIn('b', 'CT', 3000, 'chips', 'play', 'bi:b');      // chips table from Cash (fx)
   svc.buyIn('a', 'PT', 5000, 'play', 'chips', 'bi:a2');     // Play table from the bank (fx)
   svc.buyIn('b', 'PT', 7000, 'play', 'play', 'bi:b2');      // Play table from the wallet
   eq(ledger.balance('seat:CT:a', 'chips'), 2000); eq(ledger.balance('seat:CT:b', 'chips'), 3000);
@@ -62,14 +62,14 @@ t('buyIn / cashOut conserve per currency, same-currency and through fx', () => {
   eq(ledger.balance('bank:a', 'chips'), START_CHIPS - 2000 - 5000); eq(ledger.balance('play:b', 'play'), START_PLAY - 3000 - 7000);
   eq(ledger.balance('bank:b', 'chips'), START_CHIPS); eq(ledger.balance('play:a', 'play'), START_PLAY);
   booksOk(ledger);
-  // fx legs: b's chips seat from Play $ (fx:play +3000, fx:chips -3000), a's Play seat from the bank (fx:play -5000, fx:chips +5000)
+  // fx legs: b's chips seat from Cash (fx:play +3000, fx:chips -3000), a's Play seat from the bank (fx:play -5000, fx:chips +5000)
   eq(ledger.balance('fx:play', 'play'), -2000, 'fx:play leg'); eq(ledger.balance('fx:chips', 'chips'), 2000, 'fx:chips leg');
   // table results move value between seats of one table (stand-in for a hand), then cash out to each seat's fund
   svc.settleHand('CT', 1, 'chips', { committed: { a: 500, b: 500 }, payouts: { b: 1000 }, returned: {} });
   svc.cashOut('a', 'CT', 1500, 'chips', 'chips', 'co:a');
   svc.cashOut('b', 'CT', 3500, 'chips', 'play', 'co:b');
   eq(ledger.balance('bank:a', 'chips'), START_CHIPS - 2000 - 5000 + 1500);
-  eq(ledger.balance('play:b', 'play'), START_PLAY - 3000 - 7000 + 3500, 'b comes back to Play $ with the net result');
+  eq(ledger.balance('play:b', 'play'), START_PLAY - 3000 - 7000 + 3500, 'b comes back to Cash with the net result');
   eq(ledger.balance('seat:CT:a', 'chips') + ledger.balance('seat:CT:b', 'chips'), 0);
   svc.cashOut('a', 'PT', 5000, 'play', 'chips', 'co:a2'); svc.cashOut('b', 'PT', 7000, 'play', 'play', 'co:b2');
   booksOk(ledger);
@@ -128,7 +128,7 @@ t('one fund per seat while it holds chips: fund_mismatch writes nothing; a 0 sea
   // same-fund rebuy unchanged, 'bank' alias and a missing fund both mean chips on a chips table
   eq(svc.buyIn('a', 'T', 100, 'chips', 'chips', 'a3').dup, false); svc.buyIn('a', 'T', 100, 'chips', 'bank', 'a4'); svc.buyIn('a', 'T', 100, 'chips', null, 'a5');
   eq(ledger.balance('seat:T:a', 'chips'), 1300);
-  // a seat funded from Play $: a bank (or default) rebuy is the mismatch
+  // a seat funded from Cash: a bank (or default) rebuy is the mismatch
   svc.buyIn('b', 'T', 400, 'chips', 'play', 'b1'); svc.buyIn('b', 'T', 100, 'chips', 'play', 'b2');
   const e2 = throwsCode(() => svc.buyIn('b', 'T', 100, 'chips', null, 'b3'), 'fund_mismatch'); eq(e2.details.have, 'play'); eq(e2.details.want, 'chips');
   throwsCode(() => svc.buyIn('b', 'T', 100, 'chips', 'chips', 'b4'), 'fund_mismatch');
@@ -150,7 +150,7 @@ t('one fund per seat while it holds chips: fund_mismatch writes nothing; a 0 sea
   svc.buyIn('b', 'T', 250, 'chips', 'play', 'b8'); eq(svc.seatFund('T', 'b', 'chips'), 'play');
   const playBefore = ledger.balance('play:b', 'play');
   const rep = svc.bootRecover('boot-x');
-  eq(ledger.balance('play:b', 'play'), playBefore + 250, 'recovered to Play $, the new fund');
+  eq(ledger.balance('play:b', 'play'), playBefore + 250, 'recovered to Cash, the new fund');
   ok(rep.seats.some(x => x.key === 'b' && x.fund === 'play'));
   booksOk(ledger);
 });
@@ -168,7 +168,7 @@ t('a switched fund survives a restart (read from the ledger)', () => {
 t('cashOut: the seat\'s fund is the truth, the caller cannot redirect it', () => {
   const { svc, ledger } = env();
   svc.ensureAccount('a'); svc.ensureAccount('b'); svc.ensureAccount('c');
-  svc.buyIn('a', 'T', 1000, 'chips', 'play', 'a1');       // chips seat funded from Play $
+  svc.buyIn('a', 'T', 1000, 'chips', 'play', 'a1');       // chips seat funded from Cash
   svc.buyIn('b', 'T', 1000, 'chips', 'chips', 'b1');
   const id = ledger.lastId, snap = JSON.stringify([ledger.list('', 'chips'), ledger.list('', 'play')]);
   const e = throwsCode(() => svc.cashOut('a', 'T', 400, 'chips', 'chips', 'x1'), 'fund_mismatch');
@@ -178,7 +178,7 @@ t('cashOut: the seat\'s fund is the truth, the caller cannot redirect it', () =>
   eq(ledger.lastId, id, 'nothing written'); eq(JSON.stringify([ledger.list('', 'chips'), ledger.list('', 'play')]), snap); ok(!ledger.has('x1') && !ledger.has('x2'));
   // null / missing fund = the seat's own fund
   svc.cashOut('a', 'T', 400, 'chips', null, 'ok1');
-  eq(ledger.balance('play:a', 'play'), START_PLAY - 1000 + 400, 'back to Play $'); eq(ledger.balance('bank:a', 'chips'), START_CHIPS);
+  eq(ledger.balance('play:a', 'play'), START_PLAY - 1000 + 400, 'back to Cash'); eq(ledger.balance('bank:a', 'chips'), START_CHIPS);
   svc.cashOut('a', 'T', 100, 'chips', undefined, 'ok2'); svc.cashOut('a', 'T', 100, 'chips', 'play', 'ok3');
   svc.cashOut('b', 'T', 100, 'chips', null, 'ok4'); svc.cashOut('b', 'T', 100, 'chips', 'bank', 'ok5'); svc.cashOut('b', 'T', 100, 'chips', 'chips', 'ok6');
   eq(ledger.balance('bank:b', 'chips'), START_CHIPS - 1000 + 300); eq(ledger.balance('play:b', 'play'), START_PLAY);
@@ -270,7 +270,7 @@ t('bootRecover after a crash mid-hand returns everything, idempotent on a second
   const start = {}; for (const k of keys) start[k] = svc.balances(k);
   const total0 = totals(ledger);
   svc.buyIn('a', 'CT', 2000, 'chips', 'chips', 'bi:a');
-  svc.buyIn('b', 'CT', 2500, 'chips', 'play', 'bi:b');       // chips seat funded from Play $
+  svc.buyIn('b', 'CT', 2500, 'chips', 'play', 'bi:b');       // chips seat funded from Cash
   svc.buyIn('c', 'PT', 4000, 'play', 'play', 'bi:c');
   svc.buyIn('d', 'PT', 3000, 'play', 'chips', 'bi:d');       // Play seat funded from the bank
   // one finished hand, then the process dies mid-hand: bets were in memory only, so the ledger holds just the stacks
@@ -281,7 +281,7 @@ t('bootRecover after a crash mid-hand returns everything, idempotent on a second
   eq(rep.errors.length, 0); eq(rep.seats.length, 4);
   eq(e2.ledger.list('seat:', 'chips').length + e2.ledger.list('seat:', 'play').length, 0, 'no seat money left');
   eq(e2.ledger.balance('bank:a', 'chips'), START_CHIPS + 100, 'a won 100 and is back in the bank');
-  eq(e2.ledger.balance('play:b', 'play'), START_PLAY - 100, 'b was funded from Play $ and returns to Play $ with the loss');
+  eq(e2.ledger.balance('play:b', 'play'), START_PLAY - 100, 'b was funded from Cash and returns to Cash with the loss');
   eq(e2.ledger.balance('bank:b', 'chips'), START_CHIPS);
   eq(e2.ledger.balance('play:c', 'play'), START_PLAY); eq(e2.ledger.balance('bank:d', 'chips'), START_CHIPS); eq(e2.ledger.balance('play:d', 'play'), START_PLAY);
   const t1 = totals(e2.ledger);
@@ -526,7 +526,7 @@ t('balances(): everything a key holds', () => {
   eq(b.chips, START_CHIPS - 100); eq(b.play, START_PLAY - 40); eq(b.atTable.chips, 100); eq(b.atTable.play, 40); eq(b.seats.length, 2);
 });
 
-t('signupPlay 0 (live): a new account gets Chips only, Play $ reads 0, a second call mints nothing', () => {
+t('signupPlay 0 (live): a new account gets Chips only, Cash reads 0, a second call mints nothing', () => {
   const f = path.join(dir, 'signup0.jsonl'); const ledger = open(f, { fsync: 'none', log: () => {} });
   const svc = createService(ledger, { signupPlay: 0 });
   const r = svc.ensureAccount('newbie');

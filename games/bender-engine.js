@@ -212,7 +212,7 @@
 /* ---- SERVER ADDITIONS (everything above is the vp-slot/bender engine, byte-for-byte; CommonJS only below) ---- */
 if (typeof module === 'object' && module.exports) {
   const Eng = module.exports;
-  const BET_LEVELS = [1, 2, 10, 20, 50, 100, 200, 500, 1000, 2500];   // cents (1 = 1c Play $ / 1 chip)
+  const BET_LEVELS = [1, 2, 10, 20, 50, 100, 200, 500, 1000, 2500];   // cents (1 = 1c Cash / 1 chip)
   let engine = Eng.createEngine();
   // Live-tunable math: overrides are deep-merged onto the shipped defaults, validated, smoke-tested, then swapped in
   // between rounds (a round resolves synchronously, so no spin ever sees half a config). Eng.CFG is mutated in place

@@ -24,7 +24,7 @@ function start(env = process.env) {
   const presLedger = createLedger({ file: paths.LEDGER_FILE, keyOf: k => accounts.keyForName(k), displayOf: k => (accounts.get(k) ? accounts.get(k).display : null), onWrite: () => { if (ctx.pushBank) ctx.pushBank(); } });
   accounts.migrateLegacy({ bank: boot.readJson(paths.BANK_FILE, {}), ledgerEntries: presLedger.entries() });
   boot.migrateIfNeeded({ ledger, paths, migrate, log });
-  // Play $ is real money: new accounts start at 0 and the admin sets it (Chris 10/7). Test harnesses set SIGNUP_PLAY_CENTS for their old fixtures.
+  // Cash is real money: new accounts start at 0 and the admin sets it (Chris 10/7). Test harnesses set SIGNUP_PLAY_CENTS for their old fixtures.
   const service = createService(ledger, { signupPlay: process.env.SIGNUP_PLAY_CENTS != null ? Number(process.env.SIGNUP_PLAY_CENTS) : 0 });
   for (const a of Object.values(accounts.all())) service.ensureAccount(a.key);
   const bootId = Date.now().toString(36);

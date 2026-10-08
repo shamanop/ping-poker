@@ -20,11 +20,11 @@ Cold Call: not in v2-core (origin/coldcall), games_shell coldcall not run. radio
 - s02_hands: foldwin foldlose showdown split sidepots allin: desk chips 56/0 (seat stacks count up for up to 0.3 s), desk play 56/0. Phone not playable.
 - s03_create: form summary vs server table: pass; limits: Q06, Q07.
 - s05_session: reload mid-hand, second tab take-over, transport drop and return: 13/0.
-- s06_bust: bust, rebuy default, limit reached, refused while holding chips: chips 16/0, play 16/0 (conservation check relaxed for Play $ because achievement mints land in the wallet).
+- s06_bust: bust, rebuy default, limit reached, refused while holding chips: chips 16/0, play 16/0 (conservation check relaxed for Cash because achievement mints land in the wallet).
 - s06b_leave: sit out, leave mid-hand, cash-out: chips 17/0. (Leave works only through a hidden button, Q08.)
 - s06c_disconnect: disconnect on turn, clock acts, return, 2 min cash-out: see Q03 (RESUME shows a buy-in form).
 - s07_host: pause/resume, blinds change mid-hand, kick mid-hand, end night + settle-up: chips 22/0; play needs the rerun with the relaxed script (net compared with the hands' own nets).
-- s08_admin: bank adjust by delta, over-draw refused, Play $ set, row vs audit: 12/0.
+- s08_admin: bank adjust by delta, over-draw refused, Cash set, row vs audit: 12/0.
 - s09_bender: 3 spins per fund, wallet/bank/header vs audit: 43/0.
 - s10_misc: bender-config verified by curl on 4702 (no/wrong token 403, right token GET 200, POST override 200, reset 200, POST without token 403); login: wrong PIN "Wrong name or PIN", lockout after 5 tries "Too many tries. Try again in 30s." (per name, escalates); reload resumes the session. The browser half of the script stops after the lockout step on a slow sign-up wait (script issue, not triaged); radio and recap do not exist in v2-core.
 - s06c_disconnect (chips): turn clock acted for the absent hero at 32 s, seat kept, cashed out after 124 s with the right amount; only failure = Q03 (RESUME shows a buy-in form).

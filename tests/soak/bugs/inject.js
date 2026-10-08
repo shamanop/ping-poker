@@ -59,7 +59,7 @@ const SERVICE = {
       return r;
     };
   },
-  // A free ghost bonus: every 4th ensureAccount also mints 500 Play $ under a bonus: ref nobody asked for.
+  // A free ghost bonus: every 4th ensureAccount also mints 500 Cash under a bonus: ref nobody asked for.
   'ghost-mint'(svc) {
     const fire = every(4), orig = svc.ensureAccount; let n = 0;
     svc.ensureAccount = function (key) {
@@ -188,7 +188,7 @@ const LEDGER = {
 
 // ---- wallet adapter bugs ----
 const ADAPTER = {
-  // The wallet answer says 100 more Play $ than the ledger holds.
+  // The wallet answer says 100 more Cash than the ledger holds.
   'view-lies'(opts, make) {
     const a = make(opts), get = a.get;
     a.get = function () { const v = get.apply(this, arguments); return { ...v, play: v.play + 100 }; };

@@ -19,7 +19,7 @@
   const nameOf = (c) => (mapStates()[c] && mapStates()[c].name) || c;
   const tierOf = (c) => (mapStates()[c] && mapStates()[c].tier) || 'safe';
   const partyOf = (c) => (mapStates()[c] && mapStates()[c].party) || 'R';
-  const modeLabel = (m) => (m === 'chips' ? 'CHIPS' : 'PLAY $');
+  const modeLabel = (m) => (m === 'chips' ? 'CHIPS' : 'CASH');
   const fmt = (n, m) => C.money(n, m || S.mode);
   let map = null;
 
@@ -77,7 +77,7 @@
 
   function adopt(run, quiet) {
     const isNew = !S.run || S.run.roundId !== run.roundId;
-    rememberOdds(run); S.run = run; S.mode = run.mode || S.mode; S.bet = run.bet; S.home = run.home; S.again = { home: run.home, bet: run.bet, mode: run.mode };
+    rememberOdds(run); S.run = run; if (run.mode && run.mode !== S.mode) toParent({ type: 'mode', mode: run.mode }); S.mode = run.mode || S.mode;   // keep the shell's mode on the run's currency, or a resync after a reload flips the game to the other one S.bet = run.bet; S.home = run.home; S.again = { home: run.home, bet: run.bet, mode: run.mode };
     S.lastEnd = null; setView('run'); if (isNew) { S.tk = []; S.whole = false; }
     if (isNew && !quiet) tick(C.news('open', { S: nameOf(run.home) }, run.roundId));
     else if (isNew) tick(run.steps ? 'Back on the trail in ' + nameOf(run.at) + '.' : 'Polls are open in ' + nameOf(run.home) + '.', true);
@@ -221,16 +221,16 @@
     if (v === 'setup') {
       act = 'start'; label = S.home ? 'START CAMPAIGN' : 'PICK A HOME STATE'; note = S.home ? fmt(S.bet) + ' on ' + nameOf(S.home) : 'tap the map, or search above';
       const have = S.wallet[S.mode]; const short = typeof have === 'number' && S.bet != null && have < S.bet;
-      dis = !S.home || !S.bet || S.busy || S.offline || short; if (short && S.home) note = 'not enough ' + (S.mode === 'chips' ? 'chips' : 'Play $');
+      dis = !S.home || !S.bet || S.busy || S.offline || short; if (short && S.home) note = 'not enough ' + (S.mode === 'chips' ? 'chips' : 'Cash');
     } else if (v === 'run' && r) {
       act = 'cash'; dis = !r.canCash || S.busy || S.offline;
       if (r.steps === 0) { label = 'WITHDRAW, stake back'; note = fmt(r.cashout, r.mode) + ' returned'; }
       else { label = 'DECLARE VICTORY  ' + fmt(r.cashout, r.mode); note = 'cash out at ' + C.mxText(r.mx); }
     } else if (v === 'ended') {
       act = 'again'; const a = S.again || {}; label = 'PLAY AGAIN'; note = a.bet != null ? fmt(a.bet, a.mode) + ' from ' + nameOf(a.home) : '';
-      const have = S.wallet[a.mode || S.mode]; dis = S.busy || S.offline || !a.home || (typeof have === 'number' && have < a.bet); if (typeof have === 'number' && have < a.bet) note = 'not enough ' + ((a.mode || S.mode) === 'chips' ? 'chips' : 'Play $');
+      const have = S.wallet[a.mode || S.mode]; dis = S.busy || S.offline || !a.home || (typeof have === 'number' && have < a.bet); if (typeof have === 'number' && have < a.bet) note = 'not enough ' + ((a.mode || S.mode) === 'chips' ? 'chips' : 'Cash');
     }
-    const unit = (m) => (m === 'chips' ? 'Chips' : 'Play $'); let warn = '';
+    const unit = (m) => (m === 'chips' ? 'Chips' : 'Cash'); let warn = '';
     if (v === 'setup' && S.home && !S.busy && typeof S.wallet[S.mode] === 'number' && S.bet != null && S.wallet[S.mode] < S.bet) warn = 'Not enough ' + unit(S.mode) + ' for this stake. Pick a smaller stake.';
     if (v === 'ended' && S.again && !S.busy && typeof S.wallet[S.again.mode || S.mode] === 'number' && S.wallet[S.again.mode || S.mode] < S.again.bet) warn = 'Not enough ' + unit(S.again.mode || S.mode) + ' for the same stake. Use Change home or stake.';
     const bn = $('barNote'); bn.hidden = !warn; bn.textContent = warn;
@@ -360,7 +360,7 @@
       '<ol class="steps"><li><b>Pick a home state</b> and a stake. You start at 1.00x.</li><li><b>Pick the next state</b> from the unvisited states that border where you stand. Each state has a risk tier.</li><li>A step that survives <b>multiplies your multiplier</b>. A step that fails is a <b>SCANDAL</b> and the stake is lost.</li><li>After any surviving step you may <b>declare victory</b> and be paid stake x multiplier. Before the first step, withdrawing gives the stake back.</li><li>A state counts once per run. Carry all 50 and it is a <b>LANDSLIDE</b>.</li></ol>' +
       '<table class="odds"><thead><tr><th>TIER</th><th>GROWTH</th><th>FIRST STEP</th><th>LATER STEPS</th></tr></thead><tbody>' + row('safe') + row('lean') + row('swing') + '</tbody></table>' +
       '<p>Every option card shows its own exact odds in words. The table fills in from the cards you have seen this session; until then it says "see the card". <b>The first step carries the house edge</b>: it is worse than fair. Every step after it is exactly fair.</p>' +
-      '<ul class="facts"><li>Return to player <b>' + esc(st.rtp || '96.0%') + '</b>, on every route and every stop point.</li><li>Largest win <b>' + (st.maxWinX || 1000).toLocaleString('en-US') + 'x</b> (the LANDSLIDE step). Hard cap ' + (st.capX || 10000).toLocaleString('en-US') + 'x.</li><li>Idle for <b>' + idle + ' seconds</b> and you are cashed out automatically at your current multiplier.</li><li>If the server restarts, an open run is <b>cashed out at your current multiplier</b>.</li><li>Alaska and Hawaii are reached by the dashed air links: Washington, Hawaii and California.</li><li>Play $ and Chips never mix. Play money only, no deposits, no payouts.</li></ul>' +
+      '<ul class="facts"><li>Return to player <b>' + esc(st.rtp || '96.0%') + '</b>, on every route and every stop point.</li><li>Largest win <b>' + (st.maxWinX || 1000).toLocaleString('en-US') + 'x</b> (the LANDSLIDE step). Hard cap ' + (st.capX || 10000).toLocaleString('en-US') + 'x.</li><li>Idle for <b>' + idle + ' seconds</b> and you are cashed out automatically at your current multiplier.</li><li>If the server restarts, an open run is <b>cashed out at your current multiplier</b>.</li><li>Alaska and Hawaii are reached by the dashed air links: Washington, Hawaii and California.</li><li>Cash and Chips never mix. No deposits, no payouts.</li></ul>' +
       '<div class="key"><span><i class="lg safeR"></i><i class="lg safeD"></i> SAFE deep red / blue</span><span><i class="lg leanR"></i><i class="lg leanD"></i> LEAN lighter</span><span><i class="lg swing"></i> SWING gold and violet</span></div>' +
       '</div></div>';
     $('sheet').hidden = false; $('sheet').querySelector('.ibtn').focus();

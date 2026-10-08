@@ -1,5 +1,5 @@
 'use strict';
-// Mixed session: a chips night table + a Play $ night table + POKERPING, buy-ins in each table's own currency (cross-currency seats are refused since 10/7), rebuys, cash-outs, slot spins, daily bonus,
+// Mixed session: a chips night table + a Cash night table + POKERPING, buy-ins in each table's own currency (cross-currency seats are refused since 10/7), rebuys, cash-outs, slot spins, daily bonus,
 // one SIGTERM restart in the middle of live hands and one SIGKILL right after a showdown. Every snapshot compares true holdings
 // (bank + wallet + stacks + live bets) and the night settle-ups. Port of audit repro 21 (client-side flow bookkeeping dropped, invariants kept).
 const { startServer, Bot, waitFor, sleep, audit, moneyTotal, suite, expect } = require('./lib');

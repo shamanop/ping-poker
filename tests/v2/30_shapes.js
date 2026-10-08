@@ -1,5 +1,5 @@
 'use strict';
-// Payload-shape contract. A scripted session (3 accounts + admin: lobby, preview, chips + Play $ tables, sit, rigged showdown with a bust, rebuy, fold-win,
+// Payload-shape contract. A scripted session (3 accounts + admin: lobby, preview, chips + Cash tables, sit, rigged showdown with a bust, rebuy, fold-win,
 // show cards, chat/emote/sticker/throw, pause/update, night results, leave, admin overview, bank summaries, Bender, bonus) is replayed on the target and
 // every server->client event is reduced to a recursive type skeleton (key names + value types, arrays as element skeleton, unions allowed).
 // The target fails a check when it drops an event, drops a required key or gives a key a disjoint type. Extra keys/events are fine.

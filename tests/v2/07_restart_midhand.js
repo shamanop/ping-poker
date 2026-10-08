@@ -1,6 +1,6 @@
 'use strict';
 // Restart in the middle of a hand: Railway deploy = SIGTERM, crash/OOM = SIGKILL. The hand is void: every player must have exactly what they had
-// before sitting down (stack and bet back), no money created or lost. POKERPING, a chips table and a Play $ table. Audit repro 07.
+// before sitting down (stack and bet back), no money created or lost. POKERPING, a chips table and a Cash table. Audit repro 07.
 const { startServer, Bot, waitFor, sleep, audit, step, moneyTotal, suite, expect } = require('./lib');
 const T = suite(__filename);
 // everything a player owns: bank + wallet + stack and live-pot bet at tables

@@ -110,7 +110,7 @@ function breakLedger(w) {
     const w = world(rng); const s = w.sock('poor');
     const idBefore = w.ledger.lastId;
     w.spin(s, { bet: 100, mode: 'play' }); await tick();
-    const e = evs(s, 'error').pop(); eq([e.code, e.message, e.game], ['funds', 'Not enough Play $', 'bender']);
+    const e = evs(s, 'error').pop(); eq([e.code, e.message, e.game], ['funds', 'Not enough Cash', 'bender']);
     eq(evs(s, 'g:bender:result').length, 0); eq(w.ledger.lastId, idBefore);
   });
 

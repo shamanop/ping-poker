@@ -1,6 +1,6 @@
 'use strict';
 // M6: settle-up (night results) across a restart. Chips nights after a crash showed everyone down their whole stack (zeroSum false);
-// Play $ nights were empty after any deploy. Correct: after the restart the night shows exactly the hand that was played. Audit repro 17.
+// Cash nights were empty after any deploy. Correct: after the restart the night shows exactly the hand that was played. Audit repro 17.
 const { startServer, Bot, waitFor, sleep, step, suite, expect, expectEq } = require('./lib');
 const T = suite(__filename);
 async function run(mode, sig) {

@@ -150,19 +150,19 @@
         acts = `<input class="adm-in pin field field--sm" id="adm-edit" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password" placeholder="New PIN" aria-label="New PIN for ${esc(a.display)}">
           <button type="button" class="btn btn--primary btn--sm" data-a="pin-ok">Reset PIN</button><button type="button" class="btn btn--secondary btn--sm" data-a="cancel">Cancel</button>`;
       } else {
-        acts = `<button type="button" class="btn btn--secondary btn--sm" data-a="bal">Set chips</button><button type="button" class="btn btn--secondary btn--sm" data-a="play">Set Play $</button><button type="button" class="btn btn--secondary btn--sm" data-a="pin">Reset PIN</button>`;
+        acts = `<button type="button" class="btn btn--secondary btn--sm" data-a="bal">Set chips</button><button type="button" class="btn btn--secondary btn--sm" data-a="play">Set Cash</button><button type="button" class="btn btn--secondary btn--sm" data-a="pin">Reset PIN</button>`;
       }
       return `<tr data-k="${k}"><td class="nm"><span class="adm-dot${a.online ? ' on' : ''}" title="${a.online ? 'Connected now' : 'Offline'}"></span><b>${esc(a.display)}</b>${a.isAdmin ? '<i>Owner</i>' : ''}${a.claimed ? '' : '<i>Unclaimed</i>'}</td>
         <td>${a.online ? 'online now' : ago(a.lastSeen)}</td><td class="n adm-bal">${num(bankOf(a))}</td><td class="n adm-at">${atTable}</td><td class="n adm-play">${a.play == null ? "--" : "$" + (a.play / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td><td class="n"><div class="adm-acts">${acts}</div></td></tr>`;
     }).join('');
-    host.innerHTML = `<table class="adm-tbl" id="adm-acct-tbl"><thead><tr><th>Player</th><th>Last seen</th><th class="n">Bank (chips)</th><th class="n">At table</th><th class="n">Play $ wallet</th><th class="n">Actions</th></tr></thead><tbody>${rows}</tbody></table>
-      <p class="adm-empty" style="padding:14px 0 0;text-align:left">Chips (total) is bank plus whatever is at the table. Play $ is the wallet used by the slot and Play tables. Players see changes instantly. Deleting accounts is not offered here: a player's money, history and table seats are tied together, so it needs a deliberate cleanup.</p>`;
+    host.innerHTML = `<table class="adm-tbl" id="adm-acct-tbl"><thead><tr><th>Player</th><th>Last seen</th><th class="n">Bank (chips)</th><th class="n">At table</th><th class="n">Cash wallet</th><th class="n">Actions</th></tr></thead><tbody>${rows}</tbody></table>
+      <p class="adm-empty" style="padding:14px 0 0;text-align:left">Chips (total) is bank plus whatever is at the table. Cash is the real-money wallet used by the slot and Cash tables. Players see changes instantly. Deleting accounts is not offered here: a player's money, history and table seats are tied together, so it needs a deliberate cleanup.</p>`;
     host.querySelectorAll('[data-a]').forEach(b => b.addEventListener('click', () => onAcct(b)));
     const slot = $('adm-edit-slot');
     if (slot && editing && (editing.kind === 'bal' || editing.kind === 'play')) {
       const a = overview.accounts.find(x => x.key === editing.key);
       const play = editing.kind === 'play';
-      if (!editing.field) editing.field = amt(editing.value || 0, play ? 'cents' : 'chips', 0, play ? MAX_PLAY : MAX_CHIPS, (play ? 'New Play $ for ' : 'New bank for ') + (a ? a.display : ''), 'adm-edit');
+      if (!editing.field) editing.field = amt(editing.value || 0, play ? 'cents' : 'chips', 0, play ? MAX_PLAY : MAX_CHIPS, (play ? 'New Cash for ' : 'New bank for ') + (a ? a.display : ''), 'adm-edit');
       slot.appendChild(editing.field.el);
       editing.field.focus(); editing.field.input.select && editing.field.input.select();
       editing.field.input.addEventListener('keydown', e => { if (e.key === 'Enter') { const ok = host.querySelector('[data-a$="-ok"]'); ok && ok.click(); } });
@@ -192,8 +192,8 @@
       setTimeout(refresh, 350);
     } else if (act === 'play-ok') {
       const cents = editing && editing.field ? editing.field.value() : null;
-      if (cents === null) { editing.field.submit(); status('Enter Play $ from 0 to ' + Money.format(MAX_PLAY, editing.field.mode()), 'err'); return; }
-      if (!window.confirm('Set ' + a.display + "'s Play $ to " + Money.format(cents, editing.field.mode()) + '?')) return;
+      if (cents === null) { editing.field.submit(); status('Enter Cash from 0 to ' + Money.format(MAX_PLAY, editing.field.mode()), 'err'); return; }
+      if (!window.confirm('Set ' + a.display + "'s Cash to " + Money.format(cents, editing.field.mode()) + '?')) return;
       editing = null; status('Saving');
       s.emit('admin_set_play', { key, cents, opId: newOpId() });
       setTimeout(refresh, 350);

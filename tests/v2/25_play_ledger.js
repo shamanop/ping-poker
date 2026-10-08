@@ -1,5 +1,5 @@
 'use strict';
-// Play $ movements are recorded (10/6 finding, M6): after a Play $ hand and a restart the night data of that table is not empty and is zero-sum,
+// Cash movements are recorded (10/6 finding, M6): after a Cash hand and a restart the night data of that table is not empty and is zero-sum,
 // and it shows the hand that was played (+2000 / -2000 for a rigged all-in), for SIGTERM (deploy) and SIGKILL (crash).
 const { startServer, Bot, waitFor, sleep, audit, drive, P, tableWith, rigDeck, suite, expect } = require('./lib');
 const T = suite(__filename);

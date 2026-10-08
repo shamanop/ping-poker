@@ -1,4 +1,4 @@
-// Host/admin can edit blinds on POKERPING (mid-hand changes apply next hand); Play $ buy-in at POKERPING costs exactly its dollar value. Port 4874.
+// Host/admin can edit blinds on POKERPING (mid-hand changes apply next hand); Cash buy-in at POKERPING costs exactly its dollar value. Port 4874.
 const { spawn } = require('child_process');
 const fs = require('fs'), os = require('os'), path = require('path');
 const { io } = require(process.env.SIO_CLIENT || '/home/isabelle/.cache/node_modules/socket.io-client');
@@ -22,7 +22,7 @@ const up = async () => { for (let i = 0; i < 60; i++) { try { await fetch(`http:
     b.s.emit('wallet_get'); await sleep(300); const w0 = b.last('wallet');
     b.s.emit('table_join', { tableId: 'POKERPING', buyIn: 2000, fund: 'play' }); await sleep(400);
     b.s.emit('wallet_get'); await sleep(300); const w1 = b.last('wallet');
-    ok(b.has('table_joined') && w1.play === w0.play - 2000 && w1.chips === w0.chips, '$20 Play $ buy-in at POKERPING takes exactly $20 (' + w0.play + ' -> ' + w1.play + ') and sits with 2000 ($20)');
+    ok(b.has('table_joined') && w1.play === w0.play - 2000 && w1.chips === w0.chips, '$20 Cash buy-in at POKERPING takes exactly $20 (' + w0.play + ' -> ' + w1.play + ') and sits with 2000 ($20)');
     ch.s.emit('table_join', { tableId: 'POKERPING', buyIn: 2000 }); await sleep(1500);
     const gs = ch.last('game_state') || {};
     ok(gs.status === 'playing' || gs.street, 'hand running (status ' + gs.status + ')');

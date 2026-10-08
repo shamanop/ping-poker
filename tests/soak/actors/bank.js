@@ -1,5 +1,5 @@
 'use strict';
-// Actor: bank moves. New signups, Play $ top-ups (with the refusal codes), the daily bonus (claimed twice in a row), admin plus / minus /
+// Actor: bank moves. New signups, Cash top-ups (with the refusal codes), the daily bonus (claimed twice in a row), admin plus / minus /
 // minus-too-big / set-play, and a non-admin trying an admin event. Every expectation is computed from the harness' own model.
 const { sleep } = require('../lib/bot');
 const TOPUP_BELOW = 10000, START_PLAY = 1000000, COOLDOWN_MS = 3600000;      // V2-DESIGN "money/" top-up rule
@@ -30,7 +30,7 @@ async function adminCall(W, ev, payload, op) {
 // what the ledger says the player's wallet / bank holds right now (the account an admin edit or a spin acts on)
 const walletOf = (W, key, cur) => { W.checker.poll(); return W.checker.balance(cur, (cur === 'chips' ? 'bank:' : 'play:') + key); };
 
-// bb298d2 ("Play $ is set by the admin"): wallet_topup is refused with topup_off for everybody, always, and mints nothing. The old rule (bring wallet + Play seats back to START_PLAY, hourly cooldown) is gone; a mint:topup
+// bb298d2 ("Cash is set by the admin"): wallet_topup is refused with topup_off for everybody, always, and mints nothing. The old rule (bring wallet + Play seats back to START_PLAY, hourly cooldown) is gone; a mint:topup
 // line would break I2 (mint:topup is expected to stay 0). A `wallet` push that arrives meanwhile is another game's timer credit, not a grant.
 async function topup(W) {
   const cand = unseated(W);
@@ -41,7 +41,7 @@ async function topup(W) {
     if (r.error.code !== 'topup_off') W.violate('I7', `top-up refused with ${r.error.code}, expected topup_off`, { key }, 'topup_off', r.error.code);
     return { what: 'topup', who: key, note: 'refused ' + r.error.code };
   }
-  return { what: 'topup', who: key, note: 'no answer (ok: Play $ top-up is off)' };
+  return { what: 'topup', who: key, note: 'no answer (ok: Cash top-up is off)' };
 }
 
 async function bonus(W) {

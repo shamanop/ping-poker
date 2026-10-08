@@ -52,7 +52,7 @@ class Model {
     return { applied: true };
   }
   hasHand(tableId, handNo) { return this.hands.has(`${tableId}:${handNo}`); }
-  // kind: bonus (Chips, bb298d2) | achv | topup (Play $; both 0 since bb298d2). dedupe: a string unique per mint (ledger ref shape), so a client told twice pays once.
+  // kind: bonus (Chips, bb298d2) | achv | topup (Cash; both 0 since bb298d2). dedupe: a string unique per mint (ledger ref shape), so a client told twice pays once.
   applyMint(kind, key, amount, dedupe) {
     if (this.mints.has(dedupe)) return false;
     this.mints.set(dedupe, { kind, key, amount });
