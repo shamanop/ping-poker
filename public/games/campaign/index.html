@@ -10,7 +10,7 @@
 <body>
 <div id="app" data-state="boot">
   <header id="hd">
-    <div class="hbox mxbox"><small>MULTIPLIER</small><b id="mxv">1.00x</b></div>
+    <div class="hbox mxbox"><small id="mxl">MULTIPLIER</small><b id="mxv">1.00x</b></div>
     <div class="hbox stk"><small>STAKE</small><b id="stkv">&nbsp;</b><em id="stkc">PLAY $</em></div>
     <div class="hbox bal"><small>BALANCE</small><b id="bal">&nbsp;</b></div>
     <button id="infoBtn" class="ibtn" type="button" data-action="rules" aria-label="Rules and odds">i</button>
@@ -21,22 +21,22 @@
       <div id="bug" aria-live="polite"><small>CARRIED</small><b id="carried">0</b><em>/50</em></div>
       <div id="modeSw" class="seg" role="group" aria-label="Playing for"></div>
       <button id="wholeBtn" type="button" data-action="whole" aria-pressed="false">Whole map</button>
-      <div id="legend" aria-hidden="true"><i class="lg safeR"></i><i class="lg safeD"></i><span>SAFE</span><i class="lg leanR"></i><i class="lg leanD"></i><span>LEAN</span><i class="lg swing"></i><span>SWING</span></div>
       <div id="ticker" aria-live="polite"><span class="live"><i></i>LIVE</span><div class="lines"><p id="tkNew">Polls open. Pick a home state. The first step is the risky one.</p><p id="tkOld"></p></div></div>
       <div id="shock"></div>
       <div id="offline" hidden>Reconnecting...</div>
-    </section>
+      <div id="toast" role="status" aria-live="polite"></div>
+        </section>
     <section id="side">
-      <div id="panel"></div>
+      <div id="panelWrap"><div id="panel"></div><div id="more" hidden><button type="button" data-action="more"></button></div></div>
       <div id="log" aria-label="Returns log"><small>RETURNS</small><div id="logList"></div></div>
       <footer id="bar">
         <div id="ring" aria-hidden="true"><svg viewBox="0 0 48 48"><circle class="trk" cx="24" cy="24" r="20"/><circle class="arc" cx="24" cy="24" r="20" transform="rotate(-90 24 24)"/></svg><b id="ringN">60</b></div>
         <button id="cta" type="button" data-action="start" disabled><span class="main">LOADING</span><span class="sub"></span></button>
+        <p id="barNote" role="status" hidden></p>
       </footer>
     </section>
   </main>
   <div id="sheet" role="dialog" aria-modal="true" aria-label="How Campaign Trail works" hidden></div>
-  <div id="toast" role="status" aria-live="polite"></div>
 </div>
 <script src="map-data.js"></script>
 <script src="copy.js"></script>
