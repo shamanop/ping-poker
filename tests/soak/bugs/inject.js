@@ -8,11 +8,11 @@ const fs = require('fs'), path = require('path');
 
 const EXPECT = {
   'win-dropped': ['I7', 'I2'],
-  'paid-twice': ['I7', 'I2'],
+  'paid-twice': ['I7', 'I2', 'I12'],
   'skim': ['I7', 'I4'],
   'mirror-stale': ['I5'],
   'boot-skip': ['I4'],
-  'ghost-mint': ['I2', 'I7'],
+  'ghost-mint': ['I2', 'I7', 'I11'],
   'view-lies': ['I6'],
   'stuck-stake': ['I8', 'I6'],
   'neg-holder': ['I1', 'I3'],

@@ -54,10 +54,11 @@ async function join(W, bot, t, { fund, amount } = {}) {
   const r = await bot.req('table_join', { tableId: t.id, buyIn: amount, fund: fund || undefined }, 'table_joined', 4000);
   if (r.timeout) throw new Error(`table_join by ${key} at ${t.id} got no answer (harness problem)`);
   if (r.error) return { ok: false, code: r.error.code };
-  if (fund && fund !== t.cur) W.violate('I10', `${key} was seated at ${t.id} (${t.cur}) funded from ${fund}: Cash and Chips mixed at a table (the server must answer wrong_fund)`, { key, table: t.id }, 'wrong_fund', 'seated');
   W.checker.poll();
   const after = W.checker.opsOf('buyin', t.id, key).length;
   bot.wantTable = t.id;
+  // a join that finds the player's own seat still there (left mid-hand, not yet gone) is a rejoin: no buy-in line, nothing moves, whatever `fund` said. Only a NEW buy-in from the other currency is mixing.
+  if (after > before && fund && fund !== t.cur) W.violate('I10', `${key} was seated at ${t.id} (${t.cur}) with a buy-in funded from ${fund}: Cash and Chips mixed at a table (the server must answer wrong_fund)`, { key, table: t.id }, 'wrong_fund', 'seated');
   if (after > before) {                       // a new seat was bought
     W.counters.buyIns++;
     bot.seatFund = fundCur; W.fundAt.set(`${t.id}:${key}`, fundCur);
@@ -146,9 +147,9 @@ const ops = {
     const before = W.checker.opsOf('rebuy', t.id, bot.key).length;
     const r = await bot.req('rebuy', { roomId: t.id, amount, fund }, 'game_state', 2500);
     if (r.error) return { what: 'rebuy', who: bot.key, table: t.id, amount, fund, result: r.error.code };
-    if (fund !== t.cur) W.violate('I10', `${bot.key} rebought at ${t.id} (${t.cur}) from ${fund}: Cash and Chips mixed at a table (the server must answer wrong_fund)`, { key: bot.key, table: t.id }, 'wrong_fund', 'rebought');
     W.checker.poll();
     const after = W.checker.opsOf('rebuy', t.id, bot.key).length;
+    if (after > before && fund !== t.cur) W.violate('I10', `${bot.key} rebought at ${t.id} (${t.cur}) from ${fund}: Cash and Chips mixed at a table (the server must answer wrong_fund)`, { key: bot.key, table: t.id }, 'wrong_fund', 'rebought');
     if (after > before) { W.counters.buyIns++; bot.busted = false; bot.seatFund = fund; W.fundAt.set(`${t.id}:${bot.key}`, fund); checkBuyIn(W, 'rebuy', t.id, bot.key, amount, fund, true); }
     return { what: 'rebuy', who: bot.key, table: t.id, amount, fund, result: after > before ? 'ok' : 'no line' };
   },
