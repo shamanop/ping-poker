@@ -42,7 +42,7 @@ module.exports = {
     const bot = W.rng.pick(bots);
     const mode = W.rng.chance(0.5) ? 'play' : 'chips';
     const levels = W.cfg.betLevels;
-    const kind = W.rng.weighted([[60, 'plain'], [14, 'bonus'], [14, 'unaffordable'], [12, 'double']]);
+    const kind = W.rng.weighted([[60, 'plain'], [14, 'bonus'], [14, 'unaffordable'], [12, 'double'], [8, 'switch']]);
     let bet = W.rng.pick(levels), buy = null;
     if (kind === 'bonus') buy = W.rng.pick(['election', 'landslide']);
     if (kind === 'unaffordable') {
@@ -50,6 +50,16 @@ module.exports = {
       let found = null;
       for (const b of [...levels].reverse()) for (const by of ['landslide', 'election', null]) if (!found && costOf(W, b, by) > have) found = { bet: b, buy: by };
       if (found) { bet = found.bet; buy = found.buy; } else { bet = levels[levels.length - 1]; buy = 'landslide'; }
+    }
+    if (kind === 'switch') {
+      // Cash and Chips in one sitting: Chips, Cash, Chips (or the other way round), one plain spin each. Each spin is judged by the model in its own currency, the ledger by I10-I13.
+      const first = mode, second = mode === 'play' ? 'chips' : 'play', seq = [first, second, first], got = [];
+      for (const m of seq) {
+        const b = W.rng.pick(levels.filter(x => x <= 100)), r = await spinOnce(W, bot, { mode: m, bet: b, buy: null });
+        got.push(`${m} ${b}: ${r.kind === 'result' ? 'win ' + r.win : r.code}`);
+      }
+      W.counters.modeSwitches = (W.counters.modeSwitches || 0) + 1;
+      return { actor: 'bender', what: 'mode_switch', who: bot.key, seq, answers: got };
     }
     if (bet <= 10 && !buy && W.rng.chance(0.5)) bet = W.rng.pick(levels.filter(b => b <= 50));
     if (kind === 'double') {

@@ -19,7 +19,8 @@ class ServerCtl {
   }
   env() {
     const f = this.f;
-    const e = { SIGNUP_PLAY_CENTS: '1000000', ...process.env, PORT: String(this.port), DATA_DIR: this.dir, BANK_FILE: f('bank.json'), LEDGER_FILE: f('ledger.json'), ACCOUNTS_FILE: f('accounts.json'),
+    const base = { ...process.env }; delete base.SIGNUP_PLAY_CENTS;                   // the product default (a new account starts with 0 Cash); the admin grants Cash in soak.js setup()
+    const e = { ...base, PORT: String(this.port), DATA_DIR: this.dir, BANK_FILE: f('bank.json'), LEDGER_FILE: f('ledger.json'), ACCOUNTS_FILE: f('accounts.json'),
       TABLES_FILE: f('tables.json'), WALLET_FILE: f('wallet.json'), STACKS_FILE: f('stacks.json'), BIGWINS_FILE: f('bigwins.json'), BENDER_CFG_FILE: f('bender-cfg.json'),
       MONEY_FILE: f('money.jsonl'), RIG: '1', AUTO_START_MS: '250', HAND_DELAY_MS: '120', STREET_MS: '120', TURN_MS: '1500', HOST_GRACE_MS: '3000',
       AUTH_SIGNUP_LIMIT: '100000', ...this.extraEnv };

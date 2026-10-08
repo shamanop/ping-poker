@@ -337,7 +337,7 @@ module.exports = {
     const S = W.slot, B = W.model.slot;
     const bots = W.connectedBots();
     if (!bots.length) return null;
-    const kind = W.rng.weighted([[34, 'plain'], [16, 'buy'], [7, 'forced'], [14, 'decide'], [7, 'ready'], [5, 'unaffordable'], [4, 'double'], [2, 'probe'], [3, 'cfg'], [4, 'poolrace'], [3, 'drop']]);
+    const kind = W.rng.weighted([[34, 'plain'], [16, 'buy'], [7, 'forced'], [14, 'decide'], [7, 'ready'], [5, 'unaffordable'], [4, 'double'], [2, 'probe'], [3, 'cfg'], [4, 'poolrace'], [3, 'drop'], [9, 'switch']]);
     const mode = W.rng.chance(0.5) ? 'play' : 'chips';
     const open = [...B.open.values()].filter(o => bots.some(b => b.key === o.key));
     if (kind === 'decide' || kind === 'ready') {
@@ -360,6 +360,24 @@ module.exports = {
       const a = await bot.resume();
       if (!a.data) throw new Error(`${bot.key} could not resume after dropping its socket: ${JSON.stringify(a.error || a)}`);
       return { actor: 'coldcall', what: 'drop', who: bot.key, round: o.rid, note: 'socket dropped with a decision open' };
+    }
+    if (kind === 'switch') {                  // Cash and Chips in one sitting: a decision is open in one currency, the player plays the OTHER currency, then (half the time) reloads the page with the first round still open
+      const free = bots.filter(x => !x.tableId), bot = W.rng.pick(free.length ? free : bots), a = mode, b = a === 'play' ? 'chips' : 'play';      // a seated player cannot reload here: the poker actor owns that reconnect
+      const o = await openDecision(W, bot, a, 4);
+      if (!o) return null;
+      const bet = B.openOf(bot.key, b) ? null : pickBet(W, bot, b, null);
+      const r = bet ? await spinOnce(W, bot, { mode: b, bet }) : null;
+      let reload = false;
+      if (!bot.tableId && W.rng.chance(0.5)) {
+        bot.close(); S.c.drops++;
+        await sleep(W.rng.range(120, 500));
+        await bot.connect();
+        const x = await bot.resume();
+        if (!x.data) throw new Error(`${bot.key} could not resume after a reload: ${JSON.stringify(x.error || x)}`);
+        reload = true;
+      }
+      W.counters.modeSwitches = (W.counters.modeSwitches || 0) + 1;
+      return { actor: 'coldcall', what: 'mode_switch', who: bot.key, open: `${a} ${o.rid}`, other: bet ? `${b} ${bet}: ${r.kind === 'refused' ? r.code : r.status}` : `${b}: no bet`, reload };
     }
     if (kind === 'poolrace') {                // the office pot is won while another player's round is open
       const a = W.rng.pick(bots);
