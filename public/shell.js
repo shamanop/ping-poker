@@ -7,7 +7,7 @@
   const games = new Map();   // id -> {def, el, di, mounted}
   const screens = new Map(); // id -> {mountFn, el, mounted}
   const ui = {};
-  const cfg = { benderUrl: '/games/bender/index.html?bridge=1', coldcallUrl: '/games/coldcall/index.html?bridge=1' };
+  const cfg = { benderUrl: '/games/bender/index.html?bridge=1', coldcallUrl: '/games/coldcall/index.html?bridge=1', campaignUrl: '/games/campaign/index.html?bridge=1' };
   let L = { games: {} };
   let signedIn = false, focusId = 'poker', zTop = 20, inResize = false;
   const wallet = { play: null, chips: null };
@@ -29,6 +29,7 @@
     spade: '<svg viewBox="0 0 24 24"><path d="M12 2C9 7 4 9.6 4 13.6a4 4 0 0 0 6.4 3.2c-.2 1.6-.9 3-2.4 4.2h8c-1.5-1.2-2.200-2.600-2.400-4.200A4 4 0 0 0 20 13.600C20 9.600 15 7 12 2z"/></svg>',
     box: '<svg viewBox="0 0 24 24"><path d="M3 9h18v11H3zM6 9V6h12v3zM8 13h8v2H8z" fill-rule="evenodd"/><path d="M9 3h6l1 3H8z"/></svg>',
     phone: '<svg viewBox="0 0 24 24"><path d="M6.600 10.800a15 15 0 0 0 6.600 6.600l2.200-2.200a1 1 0 0 1 1-.25 11.400 11.400 0 0 0 3.600.6 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.500a1 1 0 0 1 1 1c0 1.250.2 2.450.6 3.600a1 1 0 0 1-.25 1z"/></svg>',
+    flag: '<svg viewBox="0 0 24 24"><path d="M4 21V3h2v1.5c2.200-1 4.200-.8 6.200.2 2 1 3.800 1.200 5.800.3v9.600c-2 .9-3.800.7-5.800-.3-2-1-4-1.200-6.200-.2V21z"/><path d="M9 7.200l.6 1.300 1.400.2-1 1 .3 1.400-1.300-.7-1.300.7.3-1.400-1-1 1.400-.2z" fill="#150E09"/></svg>',
     soon: '<svg viewBox="0 0 24 24"><path d="M7 10V7a5 5 0 0 1 10 0v3h2v11H5V10zm2 0h6V7a3 3 0 0 0-6 0z" fill-rule="evenodd"/></svg>'
   };
   const WB = {
@@ -358,7 +359,12 @@
     s.on('g:coldcall:voided', (p) => { if (p && p.wallet) setWallet(p.wallet); toCC({ type: 'voided', payload: p }); refreshDock(); });
     s.on('floor:feed', (p) => toCC({ type: 'floor', kind: 'feed', payload: p }));
     s.on('floor:pot', (p) => toCC({ type: 'floor', kind: 'pot', payload: p }));
-    s.on('error', (e) => { if (e && e.game === 'coldcall') return ccErr(e); if (spinQ.length) benderErr(e); });
+    // CAMPAIGN TRAIL: the shell forwards g:campaign:* to the game's iframe untouched; the wallet follows `balances`; a dropped line is re-synced by asking state again
+    s.on('g:campaign:state', (st) => { campReady = true; if (st && st.balances) setWallet(st.balances); toCamp({ type: 'init', wallet: Object.assign({}, wallet), mode: wmode, state: st, name: (user() && (user().display || user().key)) || undefined }); });
+    for (const ev of ['run', 'step', 'end']) s.on('g:campaign:' + ev, (p) => { if (p && p.balances) setWallet(p.balances); toCamp({ type: 'ev', event: ev, payload: p }); });
+    s.on('disconnect', () => { if (campReady) { campDropped = true; toCamp({ type: 'disconnect' }); } });
+    s.on('auth_ok', () => { if (campDropped) { campDropped = false; s.emit('g:campaign:state', {}); } });
+    s.on('error', (e) => { if (e && e.game === 'campaign') return toCamp({ type: 'ev', event: 'error', payload: e }); if (e && e.game === 'coldcall') return ccErr(e); if (spinQ.length) benderErr(e); });
     if (user()) { setSignedIn(true); s.emit('wallet_get'); s.emit('account:stats'); bonusShown = false; s.emit('bonus:status'); }
     return true;
   }
@@ -418,7 +424,7 @@
     if (!w) return;
     if (typeof w.play === 'number') wallet.play = w.play;
     if (typeof w.chips === 'number') wallet.chips = w.chips;
-    refreshTop(); if (benderReady) toBender({ type: 'wallet', wallet: Object.assign({}, wallet) }); if (ccReady) toCC({ type: 'wallet', wallet: Object.assign({}, wallet) });
+    refreshTop(); if (benderReady) toBender({ type: 'wallet', wallet: Object.assign({}, wallet) }); if (ccReady) toCC({ type: 'wallet', wallet: Object.assign({}, wallet) }); if (campReady) toCamp({ type: 'wallet', wallet: Object.assign({}, wallet) });
   }
   const benderFrame = () => { const g = games.get('bender'); return g && g.el ? g.el.querySelector('iframe') : null; };
   function toBender(m) { const f = benderFrame(); if (f && f.contentWindow) f.contentWindow.postMessage(m, '*'); }
@@ -473,6 +479,22 @@
     else if (m.type === 'esc') focus('poker');
   });
 
+  // ---------- Campaign Trail bridge: game -> {hello | req{event,payload} | mode | esc}; shell -> {init | ev{event,payload} | wallet | disconnect} ----------
+  let campReady = false, campDropped = false;
+  const CAMP_EVENTS = ['state', 'start', 'step', 'cash'];
+  const campFrame = () => { const g = games.get('campaign'); return g && g.el ? g.el.querySelector('iframe') : null; };
+  function toCamp(m) { const f = campFrame(); if (f && f.contentWindow) f.contentWindow.postMessage(m, '*'); }
+  window.addEventListener('message', (ev) => {
+    const f = campFrame(); if (!f || ev.source !== f.contentWindow) return;
+    const m = ev.data || {}, s = sock();
+    if (m.type === 'hello') { if (!s || !signedIn) return; campReady = false; s.emit('g:campaign:state', {}); }
+    else if (m.type === 'req') {
+      if (!s || !CAMP_EVENTS.includes(m.event)) return;
+      const p = m.payload && typeof m.payload === 'object' ? m.payload : {}; s.emit('g:campaign:' + m.event, p);
+    } else if (m.type === 'mode') { wmode = m.mode === 'chips' ? 'chips' : 'play'; }
+    else if (m.type === 'esc') focus('poker');
+  });
+
   // ---------- built-in games ----------
   function registerBuiltins() {
     registerGame({ id: 'poker', name: 'Poker', kind: 'stage', icon: IC.spade });
@@ -485,6 +507,10 @@
       id: 'coldcall', name: 'Cold Call', icon: IC.phone,
       mount(el) { const f = document.createElement('iframe'); f.src = cfg.coldcallUrl; f.title = 'Cold Call'; f.setAttribute('allow', 'autoplay'); el.appendChild(f); ccReady = false; },
       badge() { return ccNet > 0 ? '+' + dollars2(ccNet) : ccNet < 0 ? '-' + dollars2(-ccNet) : ''; }
+    });
+    registerGame({
+      id: 'campaign', name: 'Campaign Trail', icon: IC.flag,
+      mount(el) { const f = document.createElement('iframe'); f.src = cfg.campaignUrl; f.title = 'Campaign Trail'; el.appendChild(f); campReady = false; }
     });
     ui.dock.appendChild(Object.assign(document.createElement('i'), { className: 'sh-sep' }));
     for (const n of ['Blackjack', 'Roulette']) {

@@ -1,0 +1,340 @@
+/* Campaign Trail: the client. Talks to the server only through the shell's postMessage bridge (shell.js, "Campaign bridge").
+   No rules, odds, multipliers or outcomes live here: every number on screen is a server field (runView, end, balances). */
+(function () {
+  'use strict';
+  const C = window.CampaignCopy, $ = (id) => document.getElementById(id);
+  const BRIDGE = window.parent !== window && new URLSearchParams(location.search).get('bridge') === '1';
+  const WATCHDOG_MS = 5000;
+
+  // ---------------------------------------------------------------- state
+  const S = {
+    ready: false, st: null, mode: 'play', wallet: { play: null, chips: null }, run: null, view: 'boot', busy: false, pending: null,
+    home: null, bet: null, again: null, lastEnd: null, whole: false, offline: false, skew: 0, tk: [], events: [], q: '', listOpen: false, wd: 0, askedAt: 0
+  };
+  window.__campaign = { get ready() { return S.ready; }, get run() { return S.run; }, get busy() { return S.busy; }, get lastEnd() { return S.lastEnd; }, get events() { return S.events; }, get view() { return S.view; }, S };
+  const log = (dir, event, payload) => { S.events.push({ t: Date.now(), dir, event, payload }); if (S.events.length > 300) S.events.shift(); };
+  const toParent = (m) => { if (BRIDGE) window.parent.postMessage(m, '*'); };
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const mapStates = () => (S.st && S.st.map && S.st.map.states) || {};
+  const nameOf = (c) => (mapStates()[c] && mapStates()[c].name) || c;
+  const tierOf = (c) => (mapStates()[c] && mapStates()[c].tier) || 'safe';
+  const partyOf = (c) => (mapStates()[c] && mapStates()[c].party) || 'R';
+  const modeLabel = (m) => (m === 'chips' ? 'CHIPS' : 'PLAY $');
+  const fmt = (n, m) => C.money(n, m || S.mode);
+  let map = null;
+
+  // ---------------------------------------------------------------- requests: one in flight, a watchdog that re-asks state
+  function send(event, payload) {
+    if (S.busy || S.offline) return false;
+    S.busy = true; S.pending = event; paint(); log('out', event, payload);
+    toParent({ type: 'req', event, payload });
+    clearTimeout(S.wd); S.wd = setTimeout(() => { if (S.busy) { log('out', 'watchdog', {}); askState(); } }, WATCHDOG_MS);
+    return true;
+  }
+  function askState() { S.askedAt = Date.now(); log('out', 'state', {}); toParent({ type: 'req', event: 'state', payload: {} }); }
+  function release() { S.busy = false; S.pending = null; clearTimeout(S.wd); }
+
+  // ---------------------------------------------------------------- incoming
+  addEventListener('message', (ev) => {
+    if (ev.source !== window.parent) return; const m = ev.data || {};
+    if (m.type === 'init') onInit(m);
+    else if (m.type === 'wallet') { applyWallet(m.wallet); paint(); }
+    else if (m.type === 'ev') { log('in', m.event, m.payload); onEvent(m.event, m.payload || {}); }
+    else if (m.type === 'disconnect') { S.offline = true; $('offline').hidden = false; paint(); }
+    else if (m.type === 'mode') { if (!S.run && (m.mode === 'play' || m.mode === 'chips')) { S.mode = m.mode; paint(); } }
+  });
+  addEventListener('keydown', (e) => { if (e.key === 'Escape') { if (!$('sheet').hidden) closeSheet(); else toParent({ type: 'esc' }); } });
+
+  function applyWallet(w) { if (!w) return; if (typeof w.play === 'number') S.wallet.play = w.play; if (typeof w.chips === 'number') S.wallet.chips = w.chips; }
+  function noteFresh(run) { if (run && typeof run.expiresAt === 'number' && run.idleMs) S.skew = (run.expiresAt - run.idleMs) - Date.now(); }
+
+  function onInit(m) {
+    S.offline = false; $('offline').hidden = true;
+    if (m.mode === 'play' || m.mode === 'chips') S.mode = m.mode;
+    applyWallet(m.wallet); log('in', 'init', { mode: m.mode });
+    if (m.state) onState(m.state);
+  }
+  function onState(st) {
+    release(); S.st = st; applyWallet(st.balances);
+    if (!map) buildMap();
+    if (!S.bet || !(st.betLevels || []).includes(S.bet)) S.bet = pickDefaultBet(st.betLevels || []);
+    S.ready = true;
+    if (st.run) { adopt(st.run, true); return; }
+    if (S.run) { S.run = null; toast('Your run ended while you were away.'); }       // the end was missed: the wallet already holds the result
+    if (S.view !== 'ended') setView('setup');
+    paint(); redrawMap(false);
+  }
+  function pickDefaultBet(levels) { return levels.includes(100) ? 100 : levels[0] || null; }
+
+  function onEvent(event, p) {
+    if (event === 'state') return onState(p);
+    if (event === 'run') { release(); applyWallet(p.balances); noteFresh(p.run); adopt(p.run, false); return; }
+    if (event === 'step') return onStep(p);
+    if (event === 'end') return onEnd(p);
+    if (event === 'error') return onError(p);
+  }
+
+  function adopt(run, quiet) {
+    const isNew = !S.run || S.run.roundId !== run.roundId;
+    S.run = run; S.mode = run.mode || S.mode; S.bet = run.bet; S.home = run.home; S.again = { home: run.home, bet: run.bet, mode: run.mode };
+    S.lastEnd = null; setView('run'); if (isNew) { S.tk = []; S.whole = false; }
+    if (isNew && !quiet) tick(C.news('open', { S: nameOf(run.home) }, run.roundId));
+    else if (isNew) tick(run.steps ? 'Back on the trail in ' + nameOf(run.at) + '.' : 'Polls are open in ' + nameOf(run.home) + '.', true);
+    release(); paint(); redrawMap(false);
+    if (run.steps === 0) bump('mx');
+  }
+
+  function onStep(p) {
+    if (!S.run || p.roundId !== S.run.roundId) { askState(); return; }
+    if (!p.run || p.run.steps <= S.run.steps) { log('in', 'ignored_step', { n: p.n }); return; }   // an answer for an old n
+    const prev = S.run, op = (prev.options || []).find((o) => o.to === p.to);
+    S.run = p.run; noteFresh(p.run); release();
+    tick(C.news(p.tier || (op && op.tier) || tierOf(p.to), { S: nameOf(p.to), P: C.pctOf(op ? op.g100 : (p.run.mx > prev.mx ? Math.round(p.run.mx * 100 / prev.mx) : 100)) }, p.roundId + ':' + p.run.steps));
+    paint(); redrawMap(true); bump('mx'); bump('cards');
+  }
+
+  function onEnd(p) {
+    release(); applyWallet(p.balances);
+    if (S.run && p.roundId !== S.run.roundId) { paint(); return; }
+    if (!S.run && S.view !== 'run') { paint(); return; }               // nothing of ours is open: just the wallet
+    S.lastEnd = p; S.run = null; S.again = { home: (p.trail && p.trail[0]) || S.home, bet: p.bet, mode: p.mode };
+    S.mode = p.mode || S.mode; S.bet = p.bet; setView('ended');
+    const R = p.reason;
+    if (R === 'scandal') tick(C.news('scandal', { S: nameOf(p.failedAt) }, p.roundId));
+    else if (R === 'deadend') tick(C.news('deadend', { S: nameOf(p.at) }, p.roundId));
+    else if (R === 'landslide') tick(C.news('landslide', { S: nameOf(p.at) }, p.roundId));
+    else tick(C.news(R === 'cashout' ? 'cashout' : R === 'withdrawn' ? 'withdrawn' : R === 'timeout' ? 'timeout' : 'boot', { S: nameOf(p.at) }, p.roundId));
+    paint(); redrawMap(true);
+    if (R === 'scandal') scandalFx(p.failedAt); else if (p.win > 0 && R !== 'withdrawn') winFx(R === 'landslide');
+  }
+
+  function onError(e) {
+    const code = e && e.code;
+    if (code === 'run_open') { release(); if (e.run) { noteFresh(e.run); adopt(e.run, true); } else askState(); toast('A run is already open. Picking it up.'); return; }
+    if (code === 'rate') { release(); paint(); toast('Easy. One tap at a time.'); return; }
+    if (code === 'bad_step' || code === 'no_run') { release(); askState(); return; }
+    release(); paint();
+    toast(code === 'funds' ? 'Not enough funds for that stake.' : code === 'auth' ? 'Sign in again to play.' : (e && e.message) || 'Something went wrong.');
+    if (code === 'internal') askState();
+  }
+
+  // ---------------------------------------------------------------- actions
+  function pick(to) {
+    if (S.view !== 'run' || !S.run || S.busy || S.offline) return;
+    if (!(S.run.options || []).some((o) => o.to === to)) return;
+    S.pendingTo = to; send('step', { roundId: S.run.roundId, n: S.run.steps + 1, to });
+  }
+  function cash() { if (S.view === 'run' && S.run && S.run.canCash && !S.busy) send('cash', { roundId: S.run.roundId }); }
+  function start() {
+    if (S.view !== 'setup' || !S.home || !S.bet || S.busy) return;
+    S.again = { home: S.home, bet: S.bet, mode: S.mode }; send('start', { mode: S.mode, bet: S.bet, home: S.home });
+  }
+  function again() {
+    if (S.view !== 'ended' || S.busy) return; const a = S.again; if (!a) return;
+    S.home = a.home; S.bet = a.bet; S.mode = a.mode || S.mode; send('start', { mode: S.mode, bet: S.bet, home: S.home });
+  }
+  function toSetup() { if (S.busy || S.run) return; S.lastEnd = null; setView('setup'); paint(); redrawMap(true); }
+  function setHome(code) {
+    if (S.view !== 'setup' || !mapStates()[code]) return; S.home = code; S.q = ''; S.listOpen = false; paint(); redrawMap(false);
+  }
+  function setMode(m) { if (S.run || S.busy || (m !== 'play' && m !== 'chips')) return; S.mode = m; toParent({ type: 'mode', mode: m }); paint(); }
+  function setBet(n) { if (S.view === 'setup') { S.bet = n; paint(); } }
+  function toggleWhole() { S.whole = !S.whole; $('wholeBtn').setAttribute('aria-pressed', S.whole); redrawMap(true); }
+
+  $('app').addEventListener('click', (e) => {
+    const t = e.target.closest('[data-action]'); if (!t || t.disabled || t.getAttribute('aria-disabled') === 'true') return;
+    const a = t.dataset.action;
+    if (a === 'pick') pick(t.dataset.to);
+    else if (a === 'cta') { const v = S.view; if (v === 'setup') start(); else if (v === 'run') cash(); else if (v === 'ended') again(); }
+    else if (a === 'cash') cash(); else if (a === 'start') start(); else if (a === 'again') again();
+    else if (a === 'setup') toSetup();
+    else if (a === 'home') setHome(t.dataset.s);
+    else if (a === 'mode') setMode(t.dataset.m);
+    else if (a === 'bet') setBet(+t.dataset.b);
+    else if (a === 'whole') toggleWhole();
+    else if (a === 'rules') openSheet();
+    else if (a === 'close') closeSheet();
+  });
+
+  // ---------------------------------------------------------------- map
+  function buildMap() {
+    const m = S.st.map || {};
+    map = CampaignMap($('board'), window.CAMPAIGN_GEO, { states: m.states || {}, air: m.air || [] }, { pick: (c) => { if (S.view === 'setup') setHome(c); else pick(c); } });
+  }
+  function redrawMap(animate) {
+    if (!map) return;
+    const r = S.run, e = S.lastEnd;
+    if (S.view === 'run' && r) map.draw({ mode: 'run', home: r.home, at: r.at, trail: r.trail, options: r.options.map((o, i) => Object.assign({ n: i + 1 }, o)), whole: S.whole }, { animate, animateLast: animate && r.steps > 0 });
+    else if (S.view === 'ended' && e) map.draw({ mode: 'end', trail: e.trail, at: e.at, failedAt: e.failedAt }, { animate });
+    else map.draw({ mode: 'setup', home: S.home, trail: [] }, { animate });
+  }
+
+  // ---------------------------------------------------------------- effects
+  function scandalFx(code) {
+    const b = $('board'); b.classList.remove('shake'); void b.offsetWidth; b.classList.add('shake');
+    const sh = $('shock'); sh.className = ''; void sh.offsetWidth; sh.className = 'bad';
+    if (map) map.flash(code, 'bad');
+  }
+  function winFx(big) { const sh = $('shock'); sh.className = ''; void sh.offsetWidth; sh.className = big ? 'ls' : 'good'; }
+  function bump(what) {
+    const n = what === 'mx' ? $('mxv') : $('panel'); if (!n) return;
+    const cls = what === 'mx' ? 'bump' : 'deal'; n.classList.remove(cls); void n.offsetWidth; n.classList.add(cls);
+  }
+  let toastT = 0;
+  function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 2600); }
+  function tick(text, quiet) {
+    S.tk.unshift(text); paintLog(); const nw = $('tkNew'), old = $('tkOld'); old.textContent = S.tk[1] || ''; nw.innerHTML = '<span>' + esc(text) + '</span>';
+    nw.classList.remove('in', 'marq'); nw.style.removeProperty('--dist'); nw.style.removeProperty('--dur');
+    if (!quiet) { void nw.offsetWidth; nw.classList.add('in'); }
+    requestAnimationFrame(() => { const sp = nw.firstChild, over = sp ? sp.scrollWidth - nw.clientWidth : 0; if (over > 4) { nw.style.setProperty('--dist', -(over + 12) + 'px'); nw.style.setProperty('--dur', Math.max(3.5, over / 28) + 's'); nw.classList.add('marq'); } });
+  }
+
+  function paintLog() { $('logList').innerHTML = S.tk.slice(0, 12).map((t, i) => '<p' + (/^SCANDAL/.test(t) ? ' class="bad"' : i === 0 ? ' class="new"' : '') + '>' + esc(t) + '</p>').join(''); }
+
+  // ---------------------------------------------------------------- view
+  function setView(v) { S.view = v; $('app').dataset.state = v; }
+  function paint() {
+    $('app').dataset.state = S.view; $('app').dataset.busy = S.busy ? '1' : '0'; $('app').dataset.mode = S.mode;
+    paintHeader(); paintPanel(); paintCta(); tickRing();
+  }
+  function paintHeader() {
+    const r = S.run, e = S.lastEnd, v = S.view;
+    const mx = r ? r.mx : e ? e.mx : 100;
+    $('mxv').textContent = C.mxText(mx); $('mxv').dataset.dead = v === 'ended' && e && e.reason === 'scandal' ? '1' : '0';
+    const bet = r ? r.bet : e ? e.bet : S.bet, mode = r ? r.mode : e ? e.mode : S.mode;
+    $('stkv').textContent = bet != null ? fmt(bet, mode) : '--'; $('stkc').textContent = modeLabel(mode);
+    const w = S.wallet[mode]; $('bal').textContent = typeof w === 'number' ? fmt(w, mode) : '--';
+    const carried = r ? r.trail.length : e ? (e.reason === 'scandal' ? e.trail.length : e.trail.length) : 0; $('carried').textContent = String(v === 'setup' || v === 'boot' ? 0 : carried);
+    paintModeSw(); $('wholeBtn').hidden = v !== 'run'; $('wholeBtn').textContent = S.whole ? 'Follow' : 'Whole map';
+    $('legend').hidden = false;
+  }
+  function paintModeSw() {
+    const sw = $('modeSw'), modes = (S.st && S.st.modes) || ['play', 'chips'];
+    if (!sw.dataset.built) { sw.innerHTML = modes.map((m) => '<button type="button" class="segb" data-action="mode" data-m="' + m + '">' + modeLabel(m) + '</button>').join(''); sw.dataset.built = '1'; }
+    for (const b of sw.children) { b.classList.toggle('on', b.dataset.m === S.mode); b.setAttribute('aria-pressed', b.dataset.m === S.mode); b.disabled = S.busy; }
+  }
+  function paintCta() {
+    const b = $('cta'), main = b.querySelector('.main'), sub = b.querySelector('.sub'), v = S.view, r = S.run, bet = S.bet;
+    let act = 'start', label = 'LOADING', note = '', dis = true;
+    if (v === 'setup') {
+      act = 'start'; label = S.home ? 'START CAMPAIGN' : 'PICK A HOME STATE'; note = S.home ? fmt(S.bet) + ' on ' + nameOf(S.home) : 'tap the map or search below';
+      const have = S.wallet[S.mode]; const short = typeof have === 'number' && S.bet != null && have < S.bet;
+      dis = !S.home || !S.bet || S.busy || S.offline || short; if (short && S.home) note = 'not enough ' + (S.mode === 'chips' ? 'chips' : 'Play $');
+    } else if (v === 'run' && r) {
+      act = 'cash'; dis = !r.canCash || S.busy || S.offline;
+      if (r.steps === 0) { label = 'WITHDRAW, stake back'; note = fmt(r.cashout, r.mode) + ' returned'; }
+      else { label = 'DECLARE VICTORY  ' + fmt(r.cashout, r.mode); note = 'cash out at ' + C.mxText(r.mx); }
+    } else if (v === 'ended') {
+      act = 'again'; const a = S.again || {}; label = 'PLAY AGAIN'; note = a.bet != null ? fmt(a.bet, a.mode) + ' from ' + nameOf(a.home) : '';
+      const have = S.wallet[a.mode || S.mode]; dis = S.busy || S.offline || !a.home || (typeof have === 'number' && have < a.bet); if (typeof have === 'number' && have < a.bet) note = 'not enough ' + ((a.mode || S.mode) === 'chips' ? 'chips' : 'Play $');
+    }
+    if (S.busy) note = S.pending === 'step' ? 'counting the votes...' : S.pending === 'cash' ? 'calling it...' : 'working...';
+    b.dataset.action = act; b.disabled = dis; main.textContent = label; sub.textContent = note; b.dataset.act = act;
+    $('bar').dataset.ring = v === 'run' ? '1' : '0'; fitMain(main);
+  }
+
+  function fitMain(n) {                                    // a long label (big amounts) shrinks to fit the button instead of being cut
+    const max = parseFloat(getComputedStyle(document.body).getPropertyValue('--cta-fs')) || 0; n.style.fontSize = '';
+    let fs = parseFloat(getComputedStyle(n).fontSize), guard = 0; while (n.scrollWidth > n.clientWidth + 1 && fs > 15 && guard++ < 14) { fs -= 1; n.style.fontSize = fs + 'px'; }
+  }
+  // ---- idle ring (driven by expiresAt)
+  const CIRC = 2 * Math.PI * 20; let ringState = '';
+  function tickRing() {
+    const arc = document.querySelector('#ring .arc'), n = $('ringN'), r = S.run;
+    if (S.view !== 'run' || !r) { $('ring').dataset.low = '0'; return; }
+    const left = Math.max(0, r.expiresAt - S.skew - Date.now()), frac = Math.min(1, left / (r.idleMs || 60000)), sec = Math.ceil(left / 1000);
+    arc.style.strokeDasharray = CIRC.toFixed(1); arc.style.strokeDashoffset = (CIRC * (1 - frac)).toFixed(1);
+    n.textContent = String(sec); $('ring').dataset.low = left < 10000 ? '1' : '0';
+    const sub = $('cta').querySelector('.sub');
+    if (!S.busy) sub.textContent = (left > 0 ? 'auto cash-out in ' + sec + 's' : 'auto cash-out now') + (r.steps ? '  -  ' + C.mxText(r.mx) : '');
+    if (left <= 0 && Date.now() - S.askedAt > 3000 && !S.busy) askState();   // the server should have closed it: make sure we heard
+  }
+  setInterval(tickRing, 250);
+
+  // ---------------------------------------------------------------- panel
+  function tierChip(t) { return '<i class="chip c-' + t + '">' + t.toUpperCase() + '</i>'; }
+  function paintPanel() {
+    const p = $('panel'), v = S.view; p.dataset.view = v;
+    if (v === 'boot') { p.innerHTML = '<div class="boot">' + (BRIDGE ? 'Dialing the studio...' : 'Open Campaign Trail from The Ping.') + '</div>'; return; }
+    if (v === 'setup') return paintSetup(p);
+    if (v === 'run') return paintCards(p);
+    if (v === 'ended') return paintResult(p);
+  }
+  function homeList() {
+    const q = S.q.trim().toLowerCase(), st = mapStates();
+    return Object.keys(st).filter((c) => !q || st[c].name.toLowerCase().includes(q) || c.toLowerCase() === q).sort((a, b) => st[a].name.localeCompare(st[b].name)).slice(0, 50);
+  }
+  function paintSetup(p) {
+    const lv = (S.st && S.st.betLevels) || [];
+    const prevQ = document.getElementById('homeQ'), hadFocus = prevQ && document.activeElement === prevQ;
+    const list = S.listOpen ? homeList() : [];
+    p.innerHTML =
+      '<div class="setup">' +
+      '<div class="homeRow"><div class="homeline"><label for="homeQ">HOME</label>' + (S.home ? '<b>' + esc(nameOf(S.home)) + '</b>' + tierChip(tierOf(S.home)) + '<span class="pty p-' + partyOf(S.home) + '"></span>' : '<b class="ph">tap the map, or search</b>') + '</div>' +
+        '<input id="homeQ" class="find" type="search" inputmode="search" autocomplete="off" spellcheck="false" placeholder="Search 50 states" value="' + esc(S.q) + '" aria-label="Search for a home state">' +
+        (S.listOpen ? '<div id="homeList" class="hlist" role="listbox">' + (list.length ? list.map((c) => '<button type="button" class="hrow" data-action="home" data-s="' + c + '" role="option">' + '<b>' + esc(nameOf(c)) + '</b>' + tierChip(tierOf(c)) + '</button>').join('') : '<p class="none">No such state.</p>') + '</div>' : '') +
+      '</div>' +
+      '<div class="seg bets" role="radiogroup" aria-label="Stake"><span class="legend">STAKE</span>' + lv.map((n) => '<button type="button" class="segb' + (n === S.bet ? ' on' : '') + '" data-action="bet" data-b="' + n + '" role="radio" aria-checked="' + (n === S.bet) + '">' + fmt(n) + '</button>').join('') + '</div>' +
+      '</div>';
+    const q = document.getElementById('homeQ');
+    q.addEventListener('focus', () => { if (!S.listOpen) { S.listOpen = true; paintSetup($('panel')); const n = document.getElementById('homeQ'); n.focus(); } });
+    q.addEventListener('input', () => { S.q = q.value; S.listOpen = true; const pos = q.selectionStart; paintSetup($('panel')); const n = document.getElementById('homeQ'); n.focus(); try { n.setSelectionRange(pos, pos); } catch (e) { /* ignore */ } });
+    q.addEventListener('keydown', (e) => { if (e.key === 'Enter') { const l = homeList(); if (l.length) setHome(l[0]); q.blur(); } if (e.key === 'Escape') { S.listOpen = false; S.q = ''; q.blur(); paintSetup($('panel')); } });
+    if (hadFocus && S.listOpen) q.focus();
+  }
+  function optCard(o, i, run) {
+    const gain = C.pctOf(o.g100), tags = [];
+    if (o.deadEnd) tags.push('<i class="tag dead">DEAD END</i>'); if (o.landslide) tags.push('<i class="tag ls">LANDSLIDE</i>');
+    const pend = S.pendingTo === o.to && S.busy;
+    return '<button type="button" class="card t-' + o.tier + ' p-' + partyOf(o.to) + (o.landslide ? ' ls' : '') + (o.deadEnd ? ' dead' : '') + (pend ? ' pend' : '') + '" data-action="pick" data-to="' + o.to + '" data-n="' + (i + 1) + '" data-tier="' + o.tier + '"' + (S.busy ? ' aria-disabled="true"' : '') + '>' +
+      '<i class="num">' + (i + 1) + '</i>' + (o.landslide ? '<i class="sheen"></i>' : '') +
+      '<span class="nm">' + esc(o.name) + '</span>' + tierChip(o.tier) +
+      '<span class="gr">' + (o.landslide ? '<b>FINAL</b> pays ' : '<b>' + gain + '</b> to ') + C.mxText(o.nextMx) + '</span>' +
+      '<span class="pay">' + fmt(o.nextCashout, run.mode) + '</span>' +
+      '<span class="od">' + C.oddsWords(o.pFail) + '</span>' + (tags.length ? '<span class="tags">' + tags.join('') + '</span>' : '') + '</button>';
+  }
+  function paintCards(p) {
+    const r = S.run; if (!r) { p.innerHTML = ''; return; }
+    const opts = r.options || [];
+    const first = r.steps === 0 ? '<p class="first"><b>First step:</b> the risky one (house edge).</p>' : '';
+    p.innerHTML = first + '<div class="cards" data-n="' + opts.length + '">' + (opts.length ? opts.map((o, i) => optCard(o, i, r)).join('') : '<p class="none">No states left to pick.</p>') + '</div>';
+  }
+  const REASON = {
+    scandal: ['SCANDAL', 'bad'], cashout: ['VICTORY DECLARED', 'good'], withdrawn: ['WITHDRAWN', 'neutral'], timeout: ['TIME\'S UP', 'good'],
+    deadend: ['OUT OF ROAD', 'good'], landslide: ['LANDSLIDE', 'ls'], boot: ['COUNT INTERRUPTED', 'good']
+  };
+  function paintResult(p) {
+    const e = S.lastEnd; if (!e) { p.innerHTML = ''; return; }
+    const t = REASON[e.reason] || ['RESULT', 'neutral'];
+    const sub = e.reason === 'scandal' ? 'in ' + nameOf(e.failedAt) : e.reason === 'timeout' ? 'auto cash-out' : e.reason === 'deadend' ? 'victory declared in ' + nameOf(e.at) : e.reason === 'landslide' ? 'all 50 states' : e.reason === 'withdrawn' ? 'stake back' : e.reason === 'boot' ? 'cashed out at your standing' : 'in ' + nameOf(e.at);
+    const route = (e.trail || []).map((c) => '<i>' + c + '</i>').join('');
+    p.innerHTML = '<div class="result k-' + t[1] + '"><div class="stamp"><b>' + t[0] + '</b><span>' + esc(sub) + '</span></div>' +
+      '<dl class="figs"><div><dt>STAKE</dt><dd>' + fmt(e.bet, e.mode) + '</dd></div><div><dt>' + (e.reason === 'scandal' ? 'WAS AT' : 'MULTIPLIER') + '</dt><dd>' + C.mxText(e.mx) + '</dd></div><div class="paid"><dt>PAID</dt><dd>' + fmt(e.win, e.mode) + '</dd></div><div><dt>STATES</dt><dd>' + (e.trail || []).length + '</dd></div></dl>' +
+      '<div class="route" aria-label="Route"><small>ROUTE</small><div>' + route + (e.reason === 'scandal' ? '<i class="x">' + e.failedAt + '</i>' : '') + '</div></div>' +
+      '<button type="button" class="link" data-action="setup">Change home or stake</button></div>';
+  }
+
+  // ---------------------------------------------------------------- rules sheet
+  function nominal(g100, first) {   // display only, from the server's numbers: the exact odds of every option arrive with the option
+    const rtp = parseFloat((S.st && S.st.rtp) || '96') / 100, p = first ? 1 - rtp * 100 / g100 : 1 - 100 / g100;
+    return Math.round(p * 1000) / 10;
+  }
+  function openSheet() {
+    const st = S.st || {}, tiers = (st.map && st.map.tiers) || {}, row = (t) => tiers[t] ? '<tr><th>' + tierChip(t) + '</th><td>+' + (tiers[t].g100 - 100) + '%</td><td>about ' + nominal(tiers[t].g100, true) + '%</td><td>about ' + nominal(tiers[t].g100, false) + '%</td></tr>' : '';
+    const idle = Math.round((st.idleMs || 60000) / 1000);
+    $('sheet').innerHTML = '<div class="sh-card"><header><h2>HOW IT WORKS</h2><button type="button" class="ibtn" data-action="close" aria-label="Close">x</button></header><div class="sh-body">' +
+      '<ol class="steps"><li><b>Pick a home state</b> and a stake. You start at 1.00x.</li><li><b>Pick the next state</b> from the unvisited states that border where you stand. Each state has a risk tier.</li><li>A step that survives <b>multiplies your multiplier</b>. A step that fails is a <b>SCANDAL</b> and the stake is lost.</li><li>After any surviving step you may <b>declare victory</b> and be paid stake x multiplier. Before the first step, withdrawing gives the stake back.</li><li>A state counts once per run. Carry all 50 and it is a <b>LANDSLIDE</b>.</li></ol>' +
+      '<table class="odds"><thead><tr><th>TIER</th><th>GROWTH</th><th>FIRST STEP SCANDAL</th><th>LATER STEPS</th></tr></thead><tbody>' + row('safe') + row('lean') + row('swing') + '</tbody></table>' +
+      '<p>Every option card shows its exact odds in words. <b>The first step carries the house edge</b>: it is worse than fair. Every step after it is exactly fair.</p>' +
+      '<ul class="facts"><li>Return to player <b>' + esc(st.rtp || '96.0%') + '</b>, on every route and every stop point.</li><li>Largest win <b>' + (st.maxWinX || 1000).toLocaleString('en-US') + 'x</b> (the LANDSLIDE step). Hard cap ' + (st.capX || 10000).toLocaleString('en-US') + 'x.</li><li>Idle for <b>' + idle + ' seconds</b> and you are cashed out automatically at your current multiplier.</li><li>If the server restarts, an open run is <b>cashed out at your current multiplier</b>.</li><li>Alaska and Hawaii are reached by the dashed air links: Washington, Hawaii and California.</li><li>Play $ and Chips never mix. Play money only, no deposits, no payouts.</li></ul>' +
+      '<div class="key"><span><i class="lg safeR"></i><i class="lg safeD"></i> SAFE deep red / blue</span><span><i class="lg leanR"></i><i class="lg leanD"></i> LEAN lighter</span><span><i class="lg swing"></i> SWING gold and violet</span></div>' +
+      '</div></div>';
+    $('sheet').hidden = false; $('sheet').querySelector('.ibtn').focus();
+  }
+  function closeSheet() { $('sheet').hidden = true; }
+  $('sheet').addEventListener('click', (e) => { if (e.target === $('sheet')) closeSheet(); });
+
+  // ---------------------------------------------------------------- go
+  setView('boot'); paint(); if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => paintCta()); addEventListener('resize', () => paintCta());
+  if (BRIDGE) { toParent({ type: 'hello' }); setInterval(() => { if (!S.ready && !S.offline) toParent({ type: 'hello' }); }, 3000); }
+})();
