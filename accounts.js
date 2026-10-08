@@ -257,6 +257,7 @@ function createAccounts({ file, roomPassword = 'ping' }) {
     if (prefs && typeof prefs === 'object') {
       if (['auto', 'usd', 'chips'].includes(prefs.currency)) a.prefs.currency = prefs.currency;
       if (typeof prefs.sound === 'boolean') a.prefs.sound = prefs.sound;
+      if (prefs.radio && typeof prefs.radio === 'object' && typeof prefs.radio.on === 'boolean' && /^[a-z0-9-]{0,40}$/.test(String(prefs.radio.station || ''))) a.prefs.radio = { on: prefs.radio.on, station: String(prefs.radio.station || '') };
       if (prefs.layout && typeof prefs.layout === 'object' && JSON.stringify(prefs.layout).length < 2000) a.prefs.layout = prefs.layout;
     }
     save();

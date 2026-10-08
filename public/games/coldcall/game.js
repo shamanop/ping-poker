@@ -759,7 +759,15 @@
     $('auto').addEventListener('click', () => { SFX_.init(); st.auto = !st.auto; $('auto').classList.toggle('on', st.auto); SFX_.click(); if (st.auto && !st.busy) play('spin'); });
     tog($('sfxBtn'), SFX_.isSfx()); tog($('musicBtn'), SFX_.isMusic());
     $('sfxBtn').addEventListener('click', () => { SFX_.init(); const on = SFX_.setSfx(!SFX_.isSfx()); tog($('sfxBtn'), on); if (on) SFX_.click(); });
-    $('musicBtn').addEventListener('click', () => { SFX_.init(); const on = SFX_.setMusic(!SFX_.isMusic()); tog($('musicBtn'), on); if (on) SFX_.music(stage.classList.contains('bonus') ? 'bonus' : 'base'); });
+    const postMusicPref = () => { if (window.parent !== window) window.parent.postMessage({ type: 'cc-music-pref', value: SFX_.isMusic() }, '*'); };
+    $('musicBtn').addEventListener('click', () => { SFX_.init(); const on = SFX_.setMusic(!SFX_.isMusic()); tog($('musicBtn'), on); if (on) SFX_.music(stage.classList.contains('bonus') ? 'bonus' : 'base'); postMusicPref(); });
+    // the shell radio shares this MUSIC switch ('music-enabled' in, 'cc-music-pref' out) and, while it is audible ('radio-active'), the synthesized hold music is held
+    addEventListener('message', (ev) => {
+      const m = ev.data; if (!m || (window.parent !== window && ev.source !== window.parent)) return;
+      if (m.type === 'music-enabled') { SFX_.setMusic(!!m.value); tog($('musicBtn'), SFX_.isMusic()); if (SFX_.isMusic()) SFX_.music(stage.classList.contains('bonus') ? 'bonus' : 'base'); }
+      else if (m.type === 'radio-active') SFX_.holdBed(!!m.value);
+    });
+    postMusicPref();
     stage.addEventListener('click', (e) => { if (e.target.closest('#tier, .scn')) st.tap++; });
     addEventListener('keydown', (e) => {
       const sc = ov.querySelector('.scrim');

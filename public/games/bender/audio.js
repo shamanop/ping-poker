@@ -3,7 +3,7 @@
    Public events are wrapped: logged (SFX.log), throttled, random pitch +-4%, no-ops when muted or no context. Internal composition uses R.* (raw) with at(delay, fn) so nothing relies on setTimeout. */
 const SFX = (() => {
   let ctx, master, sfxG, musG, noiseBuf, comp, shaper, analyser, unlockOn = false;
-  let on = readPref(), musicOn = readMusicPref(), musicTimer = null, musicMode = null, step = 0, nextT = 0, duckTimer = 0;
+  let on = readPref(), musicOn = readMusicPref(), bedHeld = false, musicTimer = null, musicMode = null, step = 0, nextT = 0, duckTimer = 0;
   let off = 0, pv = 1; // schedule offset (s) and per-event pitch variation, both set around an event call
   const log = [], last = {};
   const CEIL = 1.4; // shaper: y = CEIL*tanh(x/CEIL) over [-1,1] -> hard ceiling 0.858 = -1.33 dBFS
@@ -345,7 +345,7 @@ const SFX = (() => {
     },
 
     music(mode) {
-      if (!ctx || !musicOn) { musicMode = mode; return; }
+      if (!ctx || !musicOn || bedHeld) { musicMode = mode; return; }
       if (musicMode === mode && musicTimer) return;
       api.musicStop(); musicMode = mode; step = 0; nextT = ctx.currentTime + 0.1;
       const bonus = mode === 'bonus', bpm = bonus ? 124 : 110, sixteenth = 60 / bpm / 4;
@@ -373,10 +373,16 @@ const SFX = (() => {
       };
       musicTimer = setInterval(sched, 60); sched();
     },
+    // the shell radio is audible: hold the synthesized bed (mode is remembered) and resume it when the radio stops
+    holdBed(v) {
+      bedHeld = !!v;
+      if (bedHeld) api.musicStop(); else if (musicOn && musicMode && ctx) { const m = musicMode; musicMode = null; api.music(m); }
+    },
     musicStop() { if (musicTimer) { clearInterval(musicTimer); musicTimer = null; } },
     // duck music under big wins; a watchdog always restores it
     duck(on_) {
       if (!musG || !ctx) return;
+      if (on_) try { const PM = window.parent !== window && window.parent.PingMusic; if (PM) PM.duck(2500, 0.5); } catch (e) { /* cross-origin */ }
       clearTimeout(duckTimer); const t = ctx.currentTime;
       musG.gain.cancelScheduledValues(t); musG.gain.setTargetAtTime(!musicOn ? 0 : on_ ? 0.18 : 0.55, t, 0.1);
       if (on_) duckTimer = setTimeout(() => api.duck(false), 20000);
