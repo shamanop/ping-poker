@@ -195,7 +195,7 @@
   function setView(v) { S.view = v; $('app').dataset.state = v; }
   function paint() {
     $('app').dataset.state = S.view; $('app').dataset.busy = S.busy ? '1' : '0'; $('app').dataset.mode = S.mode;
-    paintHeader(); paintPanel(); paintCta(); tickRing();
+    paintHeader(); paintPanel(); paintCta(); tickRing(); fitHeader(); document.querySelectorAll('.figs dd').forEach((d) => fitText(d, 16));
   }
   function paintHeader() {
     const r = S.run, e = S.lastEnd, v = S.view;
@@ -233,6 +233,17 @@
     $('bar').dataset.ring = v === 'run' ? '1' : '0'; fitMain(main);
   }
 
+  function fitText(n, min) { n.style.fontSize = ''; let fs = parseFloat(getComputedStyle(n).fontSize), guard = 0; while (n.scrollWidth > n.clientWidth + 1 && fs > min && guard++ < 14) { fs -= 1; n.style.fontSize = fs + 'px'; } }
+  function fitHeader() {
+    const hd = $('hd'), mx = $('mxv'), st = $('stkv'), bal = $('bal'); mx.style.fontSize = ''; st.style.fontSize = ''; bal.style.fontSize = '';
+    const nat = (n) => { n.style.width = 'max-content'; const w = n.getBoundingClientRect().width; n.style.width = ''; return w; };
+    const cs = getComputedStyle(hd), gap = parseFloat(cs.columnGap) || 0, avail = hd.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - 44 - 3 * gap;
+    let guard = 0;
+    while (nat(mx) + Math.max(nat(st), nat($('stkc'))) + nat(bal) > avail && guard++ < 30) {
+      const m = parseFloat(getComputedStyle(mx).fontSize);
+      if (m > 28) mx.style.fontSize = (m - 2) + 'px'; else { const s = parseFloat(getComputedStyle(bal).fontSize); if (s <= 15) break; bal.style.fontSize = (s - 1) + 'px'; st.style.fontSize = (s - 1) + 'px'; }
+    }
+  }
   function fitMain(n) {                                    // a long label (big amounts) shrinks to fit the button instead of being cut
     const max = parseFloat(getComputedStyle(document.body).getPropertyValue('--cta-fs')) || 0; n.style.fontSize = '';
     let fs = parseFloat(getComputedStyle(n).fontSize), guard = 0; while (n.scrollWidth > n.clientWidth + 1 && fs > 15 && guard++ < 14) { fs -= 1; n.style.fontSize = fs + 'px'; }
@@ -309,9 +320,8 @@
     const sub = e.reason === 'scandal' ? 'in ' + nameOf(e.failedAt) : e.reason === 'timeout' ? 'auto cash-out' : e.reason === 'deadend' ? 'victory declared in ' + nameOf(e.at) : e.reason === 'landslide' ? 'all 50 states' : e.reason === 'withdrawn' ? 'stake back' : e.reason === 'boot' ? 'cashed out at your standing' : 'in ' + nameOf(e.at);
     const route = (e.trail || []).map((c) => '<i>' + c + '</i>').join('');
     p.innerHTML = '<div class="result k-' + t[1] + '"><div class="stamp"><b>' + t[0] + '</b><span>' + esc(sub) + '</span></div>' +
-      '<dl class="figs"><div><dt>STAKE</dt><dd>' + fmt(e.bet, e.mode) + '</dd></div><div><dt>' + (e.reason === 'scandal' ? 'WAS AT' : 'MULTIPLIER') + '</dt><dd>' + C.mxText(e.mx) + '</dd></div><div class="paid"><dt>PAID</dt><dd>' + fmt(e.win, e.mode) + '</dd></div><div><dt>STATES</dt><dd>' + (e.trail || []).length + '</dd></div></dl>' +
-      '<div class="route" aria-label="Route"><small>ROUTE</small><div>' + route + (e.reason === 'scandal' ? '<i class="x">' + e.failedAt + '</i>' : '') + '</div></div>' +
-      '<button type="button" class="link" data-action="setup">Change home or stake</button></div>';
+      '<dl class="figs"><div><dt>STAKE</dt><dd>' + fmt(e.bet, e.mode) + '</dd></div><div><dt>' + (e.reason === 'scandal' ? 'WAS AT' : 'MULTIPLIER') + '</dt><dd>' + C.mxText(e.mx) + '</dd></div><div class="paid"><dt>PAID</dt><dd>' + fmt(e.win, e.mode) + '</dd></div></dl>' +
+      '<div class="route" aria-label="Route"><div class="rh"><small>ROUTE: ' + (e.trail || []).length + ' STATE' + ((e.trail || []).length === 1 ? '' : 'S') + '</small><button type="button" class="link" data-action="setup">Change home or stake</button></div><div class="rl">' + route + (e.reason === 'scandal' ? '<i class="x">' + e.failedAt + '</i>' : '') + '</div></div></div>';
   }
 
   // ---------------------------------------------------------------- rules sheet
