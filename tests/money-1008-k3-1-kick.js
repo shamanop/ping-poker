@@ -118,6 +118,33 @@ for (const mode of ['play', 'chips']) {
     ok(d.c === 2 * W.stack, JSON.stringify(d)); conserved(W);
   });
 
+  t(`${tag}: kicking the same seat twice changes nothing; a server restart in the middle of a kicked all-in hand refunds both exactly`, () => {
+    const { W, T } = table(mode, 2);
+    W.decks.push(rigDeck([['7c', '2d'], ['As', 'Ad']], DRY));
+    quiet(() => T.startHand());
+    T.act('a', { type: 'raise', to: W.stack }); T.act('b', { type: 'call' });
+    quiet(() => { T.kick('a', 'b', false); T.kick('a', 'b', false); });
+    eq(W.ledger.balance('seat:' + T.id + ':b', W.cur), W.stack, 'the committed chips are still in the seat account, once');
+    W.restart();                                                          // the hand never committed: void, both get their stack back
+    eq(net(W), { a: 0, b: 0, c: 0 }); eq(W.total(W.cur), W.total0);
+    eq(W.ledger.list('seat:', W.cur).length, 0);
+  });
+
+  t(`${tag}: a kicked seat that wins the pot is paid exactly once (one hand batch, seat account empty after)`, () => {
+    const { W, T } = table(mode, 2);
+    W.decks.push(rigDeck([['7c', '2d'], ['As', 'Ad']], DRY));
+    quiet(() => T.startHand());
+    T.act('a', { type: 'raise', to: W.stack }); T.act('b', { type: 'call' });
+    const lines0 = W.ledger.lastId;
+    quiet(() => T.kick('a', 'b', false));
+    const afterKick = W.ledger.lastId;
+    finish(W, T);
+    ok(W.ledger.has('hand:' + T.id + ':1'));
+    const hands = [...W.ledger.entries(e => typeof e.ref === 'string' && e.ref.startsWith('hand:'))].map(e => e.ref);
+    eq([...new Set(hands)].length, 1, 'one ledger write for the hand');
+    ok(afterKick >= lines0);
+  });
+
   t(`${tag}: a player who leaves of his own accord while all-in is paid what he wins, then the seat goes`, () => {
     const { W, T } = table(mode, 2);
     W.decks.push(rigDeck([['7c', '2d'], ['As', 'Ad']], DRY));
