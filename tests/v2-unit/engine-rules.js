@@ -469,8 +469,8 @@ module.exports = function register(t) {
 
   t.case('S7c heads-up SB all-in from the blind: BB (button) keeps its unmatched 25', () => {
     const h = mk({ stacks: [1000, 25], button: 0, holes: [['7c', '2d'], ['As', 'Ad']], board: DRY });
-    // button posts SB 25 and must complete to 50; seat 1 posted its whole stack as BB
-    play(h, [[0, 'call']]);
+    // button posts SB 25; seat 1 posted its whole stack (25) as BB. K3-3: the button is not asked to complete to a bb nobody posted
+    assert.strictEqual(h.phase, 'runout');
     finish(h);
     assert.deepStrictEqual(stacksOf(h), [975, 50]);
   });

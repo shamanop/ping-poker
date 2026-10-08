@@ -16,6 +16,54 @@ const t = (name, fn) => cases.push({ name, fn });
 const ROYAL = ['As', 'Ks', 'Qs', 'Js', 'Ts'];
 const DRY = ['3c', '8d', '9h', '4s', 'Jh'];
 
+// ─── K3-3 ────────────────────────────────────────────────────────────────────
+t('K3-3 heads-up: big blind all-in for less than the small blind -> nobody is asked to call, the rest of the small blind comes back', () => {
+  const h = mk({ stacks: { 0: 10000, 1: 2 }, button: 0, sb: 20, bb: 40, holes: [['Ks', 'Kd'], ['As', 'Ad']], board: DRY });
+  assert.notStrictEqual(h.phase, 'betting', 'the small blind must not be asked to call a bet nobody made');
+  assert.strictEqual(h.toAct, null);
+  const r = finish(h);
+  assert.strictEqual(r.returned[0], 18);
+  assert.deepStrictEqual(r.net, { 0: -2, 1: 2 });
+  assert.strictEqual(h.seats[0].stack, 10000 - 2);
+});
+
+t('K3-3 3-handed: the button is asked to call what the small blind put in (not the full blind); a fold loses at most the short big blind', () => {
+  const h = mk({ stacks: { 0: 10000, 1: 10000, 2: 2 }, button: 0, sb: 20, bb: 40, holes: [['Ks', 'Kd'], ['Qs', 'Qd'], ['As', 'Ad']], board: DRY });
+  assert.strictEqual(h.toAct, 0);
+  assert.strictEqual(H.legalActions(h, 0).toCall, 20, 'to call is the small blind, a bet that exists');
+  play(h, [[0, 'fold']]);
+  assert.strictEqual(h.phase, 'runout', 'the small blind has nothing left to call');
+  const r = finish(h);
+  assert.strictEqual(r.returned[1], 18);
+  assert.deepStrictEqual(r.net, { 0: 0, 1: -2, 2: 2 });
+});
+
+t('K3-3 the turn clock cannot fold anyone into a loss: the small blind against a short big blind is never to act', () => {
+  const h = mk({ stacks: { 0: 10000, 1: 10 }, button: 0, sb: 20, bb: 40 });
+  assert.strictEqual(h.toAct, null);
+  for (const s of [0, 1]) assert.strictEqual(H.legalActions(h, s), null);
+});
+
+t('K3-3 a big blind all-in for MORE than the small blind but less than bb: to call is what he put in', () => {
+  const h = mk({ stacks: { 0: 10000, 1: 30 }, button: 0, sb: 20, bb: 40 });
+  assert.strictEqual(h.currentBet, 30);
+  assert.strictEqual(H.legalActions(h, 0).toCall, 10);
+});
+
+t('K3-3 normal blinds are unchanged (to call is the big blind)', () => {
+  const h = mk({ stacks: [1000, 1000, 1000], button: 0, sb: 25, bb: 50 });
+  assert.strictEqual(h.currentBet, 50);
+  assert.strictEqual(H.legalActions(h, h.toAct).toCall, 50);
+});
+
+t('K3-3 a short small blind calling all-in: the part of the big blind above it goes back to the big blind', () => {
+  const h = mk({ stacks: { 0: 1000, 1: 30, 2: 1000 }, button: 0, sb: 20, bb: 40, holes: [['2c', '3d'], ['As', 'Ad'], ['7c', '8d']], board: DRY });
+  play(h, [[0, 'fold'], [1, 'call']]);
+  const r = finish(h);
+  assert.strictEqual(r.returned[2], 10, 'the 10 above the all-in call goes back to the big blind');
+  assert.deepStrictEqual(r.net, { 0: 0, 1: 30, 2: -30 });
+});
+
 // ─── K3-2 ────────────────────────────────────────────────────────────────────
 function k32Hand(shortBest) {
   const holes = shortBest ? [['Ks', 'Kd'], ['As', 'Ad'], ['7c', '2d']] : [['Ks', 'Kd'], ['7c', '2d'], ['As', 'Ad']];
@@ -88,6 +136,68 @@ t('K3-2 pots.js: a live seat that is the only one in a layer takes it', () => {
 t('K3-2 pots.js: the old walk-over case still pays the live seat the dead money', () => {
   assert.deepStrictEqual(sidePots({ 0: 5, 1: 10 }, [0, 1]).length, 0);
   assert.deepStrictEqual(sidePots({ 0: 5, 1: 10, 2: 0 }, [0, 1]), [{ amount: 15, eligible: [2] }]);
+});
+
+// ─── fuzz: short blinds, forced and voluntary folds, 2-9 seats ───────────────
+function fuzz(hands, seed) {
+  const rng = mulberry32(seed);
+  const stat = { hands: 0, short: 0, forced: 0, orphan: 0, allin: 0, walk: 0 };
+  for (let it = 0; it < hands; it++) {
+    const setup = randomSetup(rng, {});
+    // lots of short stacks so blinds are often posted short
+    if (rng() < 0.5) for (const s of setup.seats) if (rng() < 0.4) s.stack = 1 + Math.floor(rng() * Math.max(1, setup.sb * 2));
+    const h = H.createHand({ handNo: it + 1, ...setup });
+    const ctx = `seed ${seed} hand ${it + 1}`;
+    const liveMax = () => Math.max(0, ...Object.keys(h.seats).map(Number).filter(s => !h.seats[s].folded).map(s => h.seats[s].bet));
+    if (Object.values(h.seats).some(s => s.committed < setup.sb && s.allIn)) stat.short++;
+    let guard = 0;
+    while (h.phase === 'betting' && guard++ < 400) {
+      assert(h.currentBet <= liveMax(), `${ctx}: currentBet ${h.currentBet} is above every live seat's bet ${liveMax()}`);
+      const toAct = h.toAct;
+      const la = H.legalActions(h, toAct);
+      assert(la, `${ctx}: no legal actions for the seat to act`);
+      assert(la.toCall <= liveMax() - h.seats[toAct].bet || la.toCall === 0, `${ctx}: asked to call more than another live seat has put in`);
+      const r = rng();
+      if (r < 0.08) {                                                  // someone is kicked / leaves (not necessarily the seat to act)
+        const live = Object.keys(h.seats).map(Number).filter(s => !h.seats[s].folded);
+        H.foldOut(h, live[Math.floor(rng() * live.length)]);
+        stat.forced++;
+      } else if (r < 0.12 && la.canCheck) H.apply(h, toAct, { type: 'fold' }); // a voluntary fold with nothing to call
+      else H.apply(h, toAct, legalPick(la, rng, { shove: 0.25 }));
+    }
+    if (h.phase === 'runout' && rng() < 0.2) { const live = Object.keys(h.seats).map(Number).filter(s => !h.seats[s].folded); if (live.length > 1) H.foldOut(h, live[0]); }
+    runOut(h);
+    if (h.phase !== 'showdown') continue;
+    const committed = {}, sum = o => Object.values(o).reduce((a, b) => a + b, 0);
+    for (const s of Object.keys(h.seats)) committed[s] = h.seats[s].committed;
+    const r = H.settle(h);
+    stat.hands++;
+    if (Object.values(h.seats).some(s => s.allIn)) stat.allin++;
+    assert.strictEqual(sum(r.payouts) + sum(r.returned), sum(committed), `${ctx}: payouts + returned != committed`);
+    const net = {};
+    for (const s of Object.keys(h.seats)) {
+      assert(h.seats[s].stack >= 0, `${ctx}: negative stack`);
+      net[s] = committed[s] - r.returned[s];
+      assert(net[s] >= 0 && r.returned[s] >= 0 && r.payouts[s] >= 0, `${ctx}: negative amount`);
+    }
+    assert.strictEqual(sum(r.net), 0, `${ctx}: net does not sum to 0`);
+    // a seat can win at most what it put in from each seat (the walk-over of a live seat that put in nothing is exempt)
+    for (const s of Object.keys(h.seats)) {
+      let cap = 0;
+      for (const o of Object.keys(h.seats)) cap += Math.min(net[o], net[s]);
+      if (net[s] === 0 && !h.seats[s].folded) { stat.walk++; continue; }
+      assert(r.payouts[s] <= cap, `${ctx}: seat ${s} (in for ${net[s]}) was paid ${r.payouts[s]} but matched only ${cap}: ${JSON.stringify(r.pots)}`);
+    }
+    for (const p of r.pots) for (const w of p.winners) assert(p.eligible.includes(w) || p.refund, `${ctx}: winner ${w} not eligible`);
+    if (r.pots.some(p => p.refund)) stat.orphan++;
+  }
+  return stat;
+}
+
+t('fuzz: 6000 hands, short blinds + forced folds + folds mid-hand: conserved, no negative stack, no seat paid beyond what it matched', () => {
+  const s = fuzz(Number(process.env.MONEY_FUZZ_HANDS || 6000), Number(process.env.MONEY_FUZZ_SEED || 1008));
+  console.log('    fuzz coverage ' + JSON.stringify(s));
+  assert(s.hands > 3000 && s.short > 100 && s.forced > 300 && s.allin > 1000, 'the fuzz did not reach the cases it is for: ' + JSON.stringify(s));
 });
 
 let pass = 0, fail = 0;

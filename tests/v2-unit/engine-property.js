@@ -88,7 +88,7 @@ function junkAction(rng, la) {
 
 // Independent check of the uncalled-bet return (E1). `pre` = snapBets(hand) taken before the step. When a step closes
 // the betting round the top bettor (live, or removed by foldOut) gets back top - second of the round's bets, unless
-// that would empty the pot. A top bettor that folded by its own action gets nothing back.
+// that would empty the pot. A top bettor that folded still gets it back (K3-3).
 function snapBets(hand) {
   const o = {};
   for (const s of seatsOf(hand)) { const x = hand.seats[s]; o[s] = { bet: x.bet, committed: x.committed, returned: x.returned }; }
@@ -109,8 +109,8 @@ function checkReturn(pre, hand, events, ctx) {
   const second = bets.length > 1 ? bets[1].bet : 0;
   const back = bets[0].bet - second;
   const top = hand.seats[bets[0].s];
-  const forfeits = top.folded && !top.forced; // a voluntary fold forfeits the bet; only a foldOut seat is refunded
-  const want = back > 0 && pot - back > 0 && !forfeits ? { seat: bets[0].s, amount: back } : null;
+  void top; // K3-3: the unmatched part goes back whoever the top bettor is, folded or not
+  const want = back > 0 && pot - back > 0 ? { seat: bets[0].s, amount: back } : null;
   if (want) {
     assert.strictEqual(got.length, 1, `${ctx}: expected a returned event ${J(want)}, got ${J(got)}`);
     assert.strictEqual(got[0].seat, want.seat, `${ctx}: returned to the wrong seat ${J(got)} vs ${J(want)}`);
@@ -143,6 +143,7 @@ function checkInvariants(hand, total, ctx) {
     let liveMax = 0;
     for (const s of all) if (!hand.seats[s].folded) liveMax = Math.max(liveMax, hand.seats[s].bet);
     assert(hand.currentBet >= liveMax, `${ctx}: currentBet below a bet`);
+    assert(hand.currentBet <= liveMax, `${ctx}: currentBet ${hand.currentBet} is above every live seat's bet ${liveMax} (a bet nobody holds)`);
     assert(hand.lastFullRaise >= 1, `${ctx}: lastFullRaise`);
   } else {
     assert.strictEqual(hand.toAct, null, `${ctx}: toAct set outside betting`);

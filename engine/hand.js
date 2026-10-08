@@ -104,6 +104,9 @@ function createHand(opts) {
   }
   postBlind(hand, hand.sbSeat, sb);
   postBlind(hand, hand.bbSeat, bb);
+  // K3-3: the bet to call is what was actually put in. A big blind all-in for less than the small blind (or than bb) does not
+  // make a bet of `bb` that nobody posted, and nobody is asked to call more than a seat still in has put in.
+  hand.currentBet = Math.max(hand.seats[hand.sbSeat].bet, hand.seats[hand.bbSeat].bet);
 
   const first = nextToAct(hand, hand.bbSeat);
   if (first === null) closeBetting(hand, []);
@@ -232,9 +235,7 @@ function returnUncalled(hand, events) {
   const second = bets.length > 1 ? bets[1].bet : 0;
   if (bets[0].bet <= second) return;
   const x = hand.seats[bets[0].s];
-  // A seat that folded by its own action forfeits its whole bet (dead money, same as the old server's showdown).
-  // E1: a seat removed by foldOut (kicked, stood up) still gets the uncalled layer back.
-  if (x.folded && !x.forced) return;
+  // K3-3: the part of a bet nobody matched goes back to its owner whatever happened to the owner (folded, timed out, kicked, left).
   const back = bets[0].bet - second;
   // Only skip when handing it back would leave the pot empty (nothing for the live seat to play for).
   if (totalPot(hand) - back <= 0) return;
