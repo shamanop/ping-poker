@@ -92,7 +92,9 @@ t('A4: admin_set_play with an op id: a resend writes nothing and answers the sam
   eq([a.ok, a.message, a.opId], [true, 'Play set', 'op-set']); eq(e.play(), 5000); eq(e.adjLines().length, 1);
   e.service.adminAdjust('ann', 700, 'play', 'won something', 'test:other');   // the balance moves before the resend arrives
   const b = e.send('admin_set_play', msg);
-  eq(b, a, 'the same answer'); eq(e.play(), 5700, 'the resend did not set it again'); eq(e.adjLines().length, 2, 'only the unrelated line was added');
+  // the resend is the same answer; the where-the-Cash-sits numbers (K1-3 msg) are today's, not a copy of the first answer's
+  eq([b.op, b.key, b.ok, b.message, b.opId], [a.op, a.key, a.ok, a.message, a.opId], 'the same answer'); eq([a.wallet, a.total, b.wallet, b.total], [5000, 5000, 5700, 5700], 'the numbers are current');
+  eq(e.play(), 5700, 'the resend did not set it again'); eq(e.adjLines().length, 2, 'only the unrelated line was added');
   // a new op id sets it again
   e.send('admin_set_play', { key: 'ann', cents: 5000, opId: 'op-set-2' }); eq(e.play(), 5000);
 });
@@ -122,7 +124,8 @@ t('D7: the same op id with the SAME request is still an ok dup (even when the ba
   const e = env(); const a = e.send('admin_set_play', { key: 'ann', cents: 500, opId: 'Y1' }); eq(a.ok, true);
   e.service.adminAdjust('ann', 250, 'play', 'won something', 'test:other');
   const b = e.send('admin_set_play', { key: 'ann', cents: 500, opId: 'Y1' });
-  eq(b, a, 'same answer'); eq(e.play(), 750, 'not set again'); eq(e.adjLines().length, 2);
+  eq([b.op, b.key, b.ok, b.message, b.opId], [a.op, a.key, a.ok, a.message, a.opId], 'same answer'); eq([a.total, b.total], [500, 750], 'the numbers are current');
+  eq(e.play(), 750, 'not set again'); eq(e.adjLines().length, 2);
 });
 
 t('D5: the op id names the edit of ONE player: the same op id on two players writes both (refs carry the key)', () => {
