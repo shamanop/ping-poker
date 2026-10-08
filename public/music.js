@@ -159,15 +159,16 @@
     if (S.status !== 'blocked') setStatus('loading');
     const ok = await ready(v.el, g);
     if (g !== S.gen) return;
-    if (!ok) { setStatus('error'); setTimeout(() => { if (g === S.gen && S.wantPlay && S.signedIn) start(); }, 5000); return; }
+    if (!ok) { setStatus('error'); setTimeout(() => { if (g === S.gen && S.wantPlay && S.signedIn) start(); }, 5000); return; }   // load error: one timed retry per failure, as before
     p = posOf(st);
     if (p.index !== v.idx) { if (!retry) return begin(v, g, true); }
     v.el.playbackRate = 1;
     v.el.currentTime = Math.min(p.offsetMs + 80, p.durMs - 50) / 1000;
     applyVolume();
+    if (!hasGesture()) { setStatus('blocked'); return; }   // (r2) critic r1 #3: never call play() before a user gesture
     try { await v.el.play(); } catch (e) {
       if (g !== S.gen) return;
-      if (e && e.name === 'NotAllowedError') { setStatus('blocked'); armGesture(); return; }
+      if (e && e.name === 'NotAllowedError') { setStatus('blocked'); return; }   // (r2) critic r1 #3: next gesture retries (onGesture)
       setStatus('error'); return;
     }
     if (g !== S.gen) { v.el.pause(); return; }
@@ -185,7 +186,7 @@
     const left = Math.max(0, p.trackEndMs - serverNow());
     boundaryTimer = setTimeout(() => {
       if (g !== S.gen || !S.wantPlay) return;
-      begin(otherVoice(), g);
+      begin(otherVoice(), g).catch(beginFailed);
     }, left + 5);
     // fetch the next mp3 only ~20 s before the hand-off so a quick station hop never wastes a download
     clearTimeout(preloadTimer);
@@ -229,11 +230,13 @@
     else { const r = Clock.nudgeRate(drift); if (r !== v.el.playbackRate) { v.el.playbackRate = r; if (r !== 1) S.nudges++; } }
   }
 
+  function beginFailed(e) { console.warn('[music] start failed', e && e.name); setStatus('error'); }   // (r2) critic r1 #3: no unhandled rejection
   function start() {
     if (!S.wantPlay || !S.signedIn || !S.haveClock || !station()) return;
+    if (!hasGesture()) { S.gen++; clearTimers(); setStatus('blocked'); return; }   // (r2) critic r1 #3: wait for the first gesture, load nothing
     S.gen++; clearTimers();
     for (const v of voices) { if (v !== cur) { v.el.pause(); } }
-    begin(otherVoice(), S.gen);
+    begin(otherVoice(), S.gen).catch(beginFailed);
   }
   function maybeStart() { if (S.wantPlay && S.signedIn && S.haveClock && station() && S.status !== 'playing') start(); }
 
@@ -243,16 +246,21 @@
     cur = null;
   }
 
-  let gestureArmed = false;
-  function armGesture() {
-    if (gestureArmed) return; gestureArmed = true;
-    const go = () => {
-      gestureArmed = false;
-      for (const ev of ['pointerdown', 'keydown', 'touchend']) document.removeEventListener(ev, go, true);
-      if (S.wantPlay && S.status === 'blocked') start();
-    };
-    for (const ev of ['pointerdown', 'keydown', 'touchend']) document.addEventListener(ev, go, true);
+  // ---------- user-gesture gate ----------
+  // (r2) critic r1 #3: 'The radio never checks for a user gesture itself'. Until this page load has had a real (trusted) user gesture
+  // play() is never called: start() parks the radio in the 'blocked' (waiting) state, and the first gesture anywhere starts it. A play()
+  // the browser still rejects (NotAllowedError) lands in the same state and the next gesture retries once. No timer, no retry loop.
+  let sawGesture = false;
+  const hasGesture = () => sawGesture || !!(navigator.userActivation && navigator.userActivation.hasBeenActive);
+  function onGesture(e) {
+    if (!e.isTrusted) return;
+    if (e.type === 'keydown' && e.key === 'Escape') return;                 // browsers do not count Escape as activation
+    if (e.type === 'pointerdown' && e.pointerType === 'touch') return;      // a touch counts at pointerup / touchend, not at its start
+    if (e.type === 'pointerup' && e.pointerType !== 'touch') return;        // mouse and pen already counted at pointerdown
+    sawGesture = true;
+    if (S.wantPlay && S.signedIn && S.status === 'blocked') start();         // radio OFF (wantPlay false) stays off through gestures
   }
+  for (const ev of ['pointerdown', 'pointerup', 'keydown', 'touchend']) document.addEventListener(ev, onGesture, { capture: true, passive: true });
 
   // periodic housekeeping: now-playing label, clock re-sync, hidden-tab policy
   let lastSig = '';
@@ -322,6 +330,9 @@
     if (root && bar.parentNode !== root) root.appendChild(bar);
     bar.classList.toggle('mu-bar--dock', phone);
   }
+  const setHtml = (el, h) => { if (el._h !== h) { el._h = h; el.innerHTML = h; } };
+  const setText = (el, t) => { if (el.textContent !== t) el.textContent = t; };
+  const setAttr = (el, k, v) => { if (el.getAttribute(k) !== v) el.setAttribute(k, v); };
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
   function mount() {
@@ -378,44 +389,58 @@
   function openPop() { popOpen = true; pop.hidden = false; placePop(); paintPop(); q('#mu-now').setAttribute('aria-expanded', 'true'); }
   function closePop() { popOpen = false; pop.hidden = true; q('#mu-now').setAttribute('aria-expanded', 'false'); }
 
+  // (r2) critic r1 #9: 'Station taps can be swallowed'. The list was rebuilt (innerHTML) every second while the sheet was open, so a press
+  // that straddled a repaint lost its click. Now the buttons are built once per station set and updated in place (classes, aria, now-playing).
+  let listSig = '';
+  const npHtml = tr => tr ? 'Now: ' + esc(tr.title) + (tr.artist ? ' <i>' + esc(tr.artist) + '</i>' : '') : '';
   function paintPop() {
     if (!pop) return;
-    const t = serverNow();
-    pop.querySelector('#mu-list').innerHTML = (S.stations.length ? S.stations.map(s => {
-      const p = posOf(s, t), tr = p && s.tracks[p.index];
-      return `<button type="button" class="mu-item${s.id === S.stationId ? ' on' : ''}" data-st="${esc(s.id)}" role="menuitemradio" aria-checked="${s.id === S.stationId}">
-        <b>${esc(s.name)}</b><span class="tag">${esc(s.tagline)}</span>
-        <span class="np">${tr ? 'Now: ' + esc(tr.title) + (tr.artist ? ' <i>' + esc(tr.artist) + '</i>' : '') : ''}</span></button>`;
-    }).join('') : '<div class="mu-empty">No stations yet.</div>');
+    const t = serverNow(), list = pop.querySelector('#mu-list');
+    const sig = S.stations.map(s => s.id + '\u0001' + s.name + '\u0001' + s.tagline).join('\u0002');
+    if (sig !== listSig) {
+      listSig = sig;
+      list.innerHTML = S.stations.length ? S.stations.map(s => `<button type="button" class="mu-item" data-st="${esc(s.id)}" role="menuitemradio" aria-checked="false">
+        <b>${esc(s.name)}</b><span class="tag">${esc(s.tagline)}</span><span class="np"></span></button>`).join('') : '<div class="mu-empty">No stations yet.</div>';
+    }
+    for (const b of list.querySelectorAll('[data-st]')) {
+      const s = S.stations.find(x => x.id === b.dataset.st); if (!s) continue;
+      const on = s.id === S.stationId, p = posOf(s, t), h = npHtml(p && s.tracks[p.index]);
+      if (b.classList.contains('on') !== on) b.classList.toggle('on', on);
+      if (b.getAttribute('aria-checked') !== String(on)) b.setAttribute('aria-checked', String(on));
+      const np = b.querySelector('.np'); if (np._h !== h) { np._h = h; np.innerHTML = h; }
+    }
   }
 
   function paintBar() {
     if (!bar) return;
     const st = station(), np = api.nowPlaying();
     const playing = S.status === 'playing' || S.status === 'loading';
-    for (const pb of qa('#mu-play, #mu-play2')) { pb.innerHTML = playing ? IC.pause : IC.play; pb.setAttribute('aria-label', playing ? 'Pause radio' : 'Play radio'); }
+    // (r2) critic r1 #9: write only what changed, so a repaint never replaces the node under a press
+    for (const pb of qa('#mu-play, #mu-play2')) { setHtml(pb, playing ? IC.pause : IC.play); setAttr(pb, 'aria-label', playing ? 'Pause radio' : 'Play radio'); }
     bar.classList.toggle('blocked', S.status === 'blocked');
     bar.classList.toggle('off', !S.wantPlay);
     bar.dataset.status = S.status;
-    for (const el of qa('.mu-st')) el.textContent = st ? st.name : 'Radio';
+    for (const el of qa('.mu-st')) setText(el, st ? st.name : 'Radio');
     let line = 'No stations';
     if (st) {
-      if (S.status === 'blocked') line = 'Click anywhere to start';
+      if (S.status === 'blocked') line = 'Click or tap to start';   // (r2) critic r1 #3: the explicit waiting state
       else if (!S.wantPlay) line = 'Paused (just for you)';
       else if (S.status === 'error') line = 'Audio unavailable, retrying';
       else line = np.track ? np.track.title : '';
     }
-    for (const el of qa('.mu-tr')) el.textContent = line;
-    q('#mu-now').title = st ? (st.tagline ? st.name + ': ' + st.tagline : st.name) + '. Pick a station.' : 'No stations';
-    q('#mu-now').setAttribute('aria-label', (st ? st.name : 'Radio') + (S.wantPlay ? ', on' : ', off') + '. Stations');
+    for (const el of qa('.mu-tr')) setText(el, line);
+    const waiting = S.status === 'blocked' && S.wantPlay;
+    setAttr(q('#mu-now'), 'title', waiting ? 'Radio is waiting for a click or tap (the browser needs one before it plays sound).' : st ? (st.tagline ? st.name + ': ' + st.tagline : st.name) + '. Pick a station.' : 'No stations');
+    setAttr(q('#mu-now'), 'aria-label', (st ? st.name : 'Radio') + (waiting ? ', waiting for a click or tap' : S.wantPlay ? ', on' : ', off') + '. Stations');
     for (const mb of qa('#mu-mute, #mu-mute2')) {
-      mb.innerHTML = S.muted || S.volume === 0 ? IC.mute : IC.vol;
-      mb.classList.toggle('on', S.muted);
-      mb.setAttribute('aria-label', S.muted ? 'Unmute radio' : 'Mute radio');
+      setHtml(mb, S.muted || S.volume === 0 ? IC.mute : IC.vol);
+      if (mb.classList.contains('on') !== S.muted) mb.classList.toggle('on', S.muted);
+      setAttr(mb, 'aria-label', S.muted ? 'Unmute radio' : 'Mute radio');
     }
     const vv = Math.round(S.volume * 100);
     for (const vs of qa('#mu-vol, #mu-vol2')) { if (String(vv) !== vs.value) vs.value = vv; vs.style.setProperty('--fill', vv + '%'); }
     bar.hidden = !S.stations.length;
+    if (popOpen) paintPop();
   }
 
   // ---------- boot ----------
