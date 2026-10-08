@@ -51,8 +51,8 @@ function step(run, to, rng) {
 }
 
 function payout(run, bet) {
-  if (run.steps === 0) throw new EngineError('bad_run', 'no step taken: refund, not a win');
   if (run.done === 'scandal') return 0;
+  if (run.steps === 0) throw new EngineError('bad_run', 'no step taken: refund, not a win');
   const win = bet * run.mx / 100;
   if (!Number.isSafeInteger(bet) || bet <= 0 || !Number.isSafeInteger(win)) throw new EngineError('bad_bet', 'bet does not pay whole units');
   return win;
