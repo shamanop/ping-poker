@@ -223,14 +223,14 @@
 .pin-mask, #lb-oldpin, #lb-newpin { -webkit-text-security: disc; text-security: disc; }
 
 /* Campaign Trail tile */
-.lb-camp { display: grid; grid-template-columns: 72px 1fr auto; align-items: center; gap: var(--p12); width: 100%; min-height: var(--p56, 56px); text-align: left; color: inherit; cursor: pointer; border-color: var(--brass-dk); background: linear-gradient(105deg, rgba(245, 185, 66, .14), transparent 62%), var(--bg-panel); }
+.lb-camp { display: grid; grid-template-columns: 72px 1fr auto; align-items: center; gap: var(--p12); width: 100%; min-height: max(72px, var(--p56, 56px)); text-align: left; color: inherit; cursor: pointer; border-color: var(--brass-dk); background: linear-gradient(105deg, rgba(245, 185, 66, .14), transparent 62%), var(--bg-panel); }
 .lb-camp:hover { border-color: var(--gold); }
 .lb-camp .mark svg { display: block; width: 72px; height: 48px; overflow: visible; }
 .lb-camp .mark .r { fill: none; stroke: var(--gold); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 0 3px rgba(245, 185, 66, .6)); }
 .lb-camp .mark .s circle { fill: #2a1d13; stroke: var(--gold); stroke-width: 1.6; }
 .lb-camp .mark .x { fill: none; stroke: #e0452f; stroke-width: 2.6; stroke-linecap: round; }
 .lb-camp .tx { display: grid; gap: var(--p2); min-width: 0; line-height: 1.15; }
-.lb-camp small { font-size: var(--fs-1); letter-spacing: .12em; text-transform: uppercase; color: var(--brass-lt); font-weight: 600; }
-.lb-camp .tx b { font-family: var(--f-display); font-weight: 400; font-size: var(--p24); letter-spacing: .06em; color: var(--gold); }
-.lb-camp .tx span { font-size: var(--fs-3); color: var(--ink-dim); }
-.lb-camp .go { font-style: normal; font-family: var(--f-display); letter-spacing: .12em; font-size: var(--p18, 18px); color: #2a1706; background: linear-gradient(#ffd269, #f5b942 60%, #d99a22); border: 1px solid #4a3410; border-radius: 4px; padding: 6px 12px 4px; text-transform: uppercase; }
+.lb-camp small { font-size: max(11px, var(--fs-1)); letter-spacing: .12em; text-transform: uppercase; color: var(--brass-lt); font-weight: 600; }
+.lb-camp .tx b { font-family: var(--f-display); font-weight: 400; font-size: max(24px, var(--p24)); line-height: 1; letter-spacing: .06em; color: var(--gold); }
+.lb-camp .tx span { font-size: max(12px, var(--fs-3)); color: var(--ink-dim); }
+.lb-camp .go { font-style: normal; font-family: var(--f-display); letter-spacing: .12em; font-size: max(17px, var(--p18, 18px)); color: #2a1706; background: linear-gradient(#ffd269, #f5b942 60%, #d99a22); border: 1px solid #4a3410; border-radius: 4px; padding: 0 14px; min-width: 52px; min-height: 44px; display: grid; place-items: center; text-transform: uppercase; }

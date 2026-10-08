@@ -31,7 +31,9 @@
     }
     let W = host.clientWidth || 360, Hh = host.clientHeight || 240;
     let cam = { s: 1, tx: 0, ty: 0 }, target = null, hideT = 0, scene = null, inset = { t: 34, r: 8, b: 8, l: 8 };
-    const insetFor = (mode) => { const big = W >= 700; return { t: mode === 'setup' ? (big ? 58 : 50) : 32, r: 8, b: big ? 66 : 38, l: 8 }; };
+    const tkEl = host.querySelector('#ticker'), tkH = () => (tkEl ? tkEl.offsetHeight : 40);      // the ticker sits over the bottom of the board: keep the map above it, whatever lines it has
+    let TK = 0;
+    const insetFor = (mode) => { const big = W >= 700; return { t: mode === 'setup' ? (big ? 58 : 50) : mode === 'run' && !big ? 44 : 32, r: 8, b: tkH() + 6, l: 8 }; };
     const cen = (c) => states[c].c;
     const isAir = (a, b) => (MAPI.air || []).some((p) => (p[0] === a && p[1] === b) || (p[0] === b && p[1] === a));
 
@@ -66,10 +68,11 @@
       hideT = setTimeout(() => { placeMarks(); marks.classList.remove('hide'); }, animate ? MOVE_MS - 80 : 0);
     }
     function resize() {
-      const w = host.clientWidth, h = host.clientHeight; if (!w || !h || (w === W && h === Hh)) return; W = w; Hh = h;
+      const w = host.clientWidth, h = host.clientHeight, tk = tkH(); if (!w || !h || (w === W && h === Hh && tk === TK)) return; W = w; Hh = h; TK = tk;
+      if (scene) inset = insetFor(scene.mode);
       if (target) look(target.codes, { animate: false, minW: target.minW });
     }
-    if (window.ResizeObserver) new ResizeObserver(resize).observe(host); else window.addEventListener('resize', resize);
+    if (window.ResizeObserver) { const ro = new ResizeObserver(resize); ro.observe(host); if (tkEl) ro.observe(tkEl); } else window.addEventListener('resize', resize);
 
     // ---- air links (dashed arcs): bulge toward the west for the Pacific legs, south for AK-HI
     function arcD(a, b) {
@@ -95,6 +98,7 @@
     function trailD(trail, skipLast) { let d = ''; for (let i = 0; i < trail.length - 1 - (skipLast ? 1 : 0); i++) d += segD(trail[i], trail[i + 1]); return d; }
     function draw(sc, opts) {
       const o = opts || {}; scene = sc; clearScene(); host.dataset.mode = sc.mode; inset = insetFor(sc.mode);
+      clearTimeout(popT); marks.querySelectorAll('.mk-pop').forEach((n) => n.remove());      // a "+4%" never lands on a later screen
       const visited = new Set(sc.trail || []);
       for (const c in paths) {
         const p = paths[c]; let cls = 'st ' + ((MAPI.states[c] || {}).tier || 'safe') + ' ' + ((MAPI.states[c] || {}).party || 'R');
@@ -140,16 +144,18 @@
     }
 
     // ---- markers (pixel space)
+    let placed = [];                                // badge and ring centres after placement: the "+4%" picks a spot that is clear of them
     const px = (c) => { const p = cen(c); return [cam.s * p[0] + cam.tx, cam.s * p[1] + cam.ty]; };
     function placeMarks() {
       marks.textContent = ''; if (!scene) return;
       const items = [], sc = scene, trail = sc.trail || [];
-      const add = (code, html, cls, r, fixed) => { const p = px(code); items.push({ code, x: p[0], y: p[1], html, cls, r: r || 14, fixed }); if (/mk-(cur|home|fail)/.test(cls)) { const nm = ((MAPI.states[code] && MAPI.states[code].name) || code).length, half = nm * 4.6; for (let gx = -half; gx <= half + 1; gx += 20) items.push({ code, x: p[0] + gx, y: p[1] - 27, r: 12, fixed: true, ghost: true, ox: p[0], oy: p[1] }); } };
+      const add = (code, html, cls, r, fixed) => { const p = px(code); if (cls === 'mk-seal' && (p[0] < 6 || p[0] > W - 6 || p[1] < inset.t - 8 || p[1] > Hh - inset.b + 8)) return;   // a stamp for a state outside the picture is dropped, never pinned to the edge
+       items.push({ code, x: p[0], y: p[1], html, cls, r: r || 14, fixed }); if (/mk-(cur|home|fail)/.test(cls)) { const nm = ((MAPI.states[code] && MAPI.states[code].name) || code).length, half = nm * 4.6; for (let gx = -half; gx <= half + 1; gx += 20) items.push({ code, x: p[0] + gx, y: p[1] - 27, r: 12, fixed: true, ghost: true, ox: p[0], oy: p[1] }); } };
       const nameOf = (c) => (MAPI.states[c] && MAPI.states[c].name) || (states[c] && states[c].n) || c;
       if (sc.mode === 'run') {
         for (const c of trail) if (c !== sc.at) add(c, '<i class="seal"></i>', 'mk-seal', 9, true);
-        for (const op of sc.options || []) add(op.to, '<b class="badge">' + op.n + '</b><span class="code">' + op.to + '</span>', 'mk-opt', 17);
-        if (sc.at) add(sc.at, '<i class="here"></i><span class="nm">' + nameOf(sc.at).toUpperCase() + '</span>', 'mk-cur', 16, true);
+        for (const op of sc.options || []) add(op.to, '<b class="badge">' + op.n + '</b><span class="code">' + op.to + '</span>', 'mk-opt', 18);
+        if (sc.at) add(sc.at, '<i class="here"></i><span class="nm">' + nameOf(sc.at).toUpperCase() + '</span>', 'mk-cur', 19, true);
       } else if (sc.mode === 'setup') {
         if (sc.home) add(sc.home, '<i class="pin"></i><span class="nm">' + nameOf(sc.home).toUpperCase() + '</span>', 'mk-home', 16, true);
       } else if (sc.mode === 'end') {
@@ -158,14 +164,14 @@
       }
       if (trail[0] && (sc.mode === 'run' || sc.mode === 'end') && trail[0] !== sc.at) { const i = items.findIndex((m) => m.code === trail[0] && m.cls === 'mk-seal'); if (i >= 0) { items[i].html = '<i class="pin sm"></i>'; items[i].cls = 'mk-home'; } }
       // keep markers on the board, then push overlapping option badges apart (a few relaxation passes)
-      const minX = 14, maxX = W - 14, minY = inset.t - 2, maxY = Hh - inset.b + 6;
+      const minX = 14, maxX = W - 14, minY = inset.t - 2, maxY = Hh - inset.b - 8;
       for (const m of items) { m.x = Math.max(minX, Math.min(maxX, m.x)); m.y = Math.max(minY, Math.min(maxY, m.y)); m.ox = m.x; m.oy = m.y; }
       const movable = items.filter((m) => !m.fixed);
       for (let it = 0; it < 24; it++) {
         let moved = false;
         for (let i = 0; i < items.length; i++) for (let j = i + 1; j < items.length; j++) {
           const a = items[i], b = items[j]; if (a.fixed && b.fixed) continue;
-          let dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy), need = (a.r + b.r) * 0.95;
+          let dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy), need = (a.r + b.r) * 1.08;
           if (d >= need) continue; moved = true; if (d < 0.01) { dx = 1; dy = 0.2; d = 1.02; }
           const push = (need - d) / 2 + 0.3, ux = dx / d, uy = dy / d;
           if (!a.fixed && !b.fixed) { a.x -= ux * push; a.y -= uy * push; b.x += ux * push; b.y += uy * push; }
@@ -174,9 +180,18 @@
         for (const m of movable) { m.x = Math.max(minX, Math.min(maxX, m.x)); m.y = Math.max(minY, Math.min(maxY, m.y)); }
         if (!moved) break;
       }
+      // the state code under a badge goes when it would sit on another badge, a name or another code (the number on the badge and the card still say which state it is)
+      const codes = items.filter((m) => m.cls === 'mk-opt');
+      for (const m of codes) {
+        const lx = m.x, ly = m.y + 19;
+        m.nocode = m.y + 27 > Hh - tkH() || items.some((o) => { if (o === m) return false; if (o.cls === 'mk-opt') return Math.abs(o.x - lx) < 30 && Math.abs(o.y + 19 - ly) < 15 || Math.hypot(Math.max(Math.abs(o.x - lx) - 14, 0), Math.max(Math.abs(o.y - ly) - 7, 0)) < 13;
+          const dx = Math.max(Math.abs(o.x - lx) - 14, 0), dy = Math.max(Math.abs(o.y - ly) - 7, 0); return Math.hypot(dx, dy) < (o.ghost ? 10 : o.r * 0.8); });
+      }
+      placed = items.filter((m) => m.cls === 'mk-opt' || m.cls === 'mk-cur' || m.cls === 'mk-home').map((m) => [m.x, m.y]);
       for (const m of items) {
         if (m.ghost) continue;
         const n = div('mk ' + m.cls, marks, m.html); n.style.transform = 'translate(' + m.x.toFixed(1) + 'px,' + m.y.toFixed(1) + 'px)'; n.dataset.s = m.code;
+        if (m.nocode) n.classList.add('nocode');
         if (m.cls === 'mk-opt') { n.dataset.to = m.code; if (Math.hypot(m.x - m.ox, m.y - m.oy) > 7) n.classList.add('nudged'); }
       }
     }
@@ -189,7 +204,10 @@
     });
     let popT = 0;
     function pop(code, text, cls) {                // "+10%" rises from the state you just carried, after the camera has landed
-      clearTimeout(popT); popT = setTimeout(() => { if (!states[code]) return; const p = px(code), n = div('mk mk-pop', marks); n.style.transform = 'translate(' + p[0].toFixed(1) + 'px,' + (p[1] + 24).toFixed(1) + 'px)'; const s = div('pop ' + (cls || ''), n, text); s.addEventListener('animationend', () => n.remove()); }, MOVE_MS + 30);
+      clearTimeout(popT); popT = setTimeout(() => { if (!states[code]) return; const p = px(code), n = div('mk mk-pop', marks), maxY = Hh - tkH() - 34, cand = [[0, -64], [0, 44], [78, -40], [-78, -40], [92, 8], [-92, 8], [0, -92]].map((o) => [Math.max(34, Math.min(W - 34, p[0] + o[0])), Math.max(inset.t + 2, Math.min(maxY, p[1] + o[1]))]);
+        const clear = (c) => placed.reduce((m, q) => Math.min(m, Math.hypot(c[0] - q[0], (c[1] + 14) - q[1])), 1e9);       // distance from the text's middle to the nearest badge or ring
+        let best = cand[0], bd = -1; for (const c of cand) { const d = clear(c); if (d >= 40) { best = c; bd = d; break; } if (d > bd) { bd = d; best = c; } }
+        n.style.transform = 'translate(' + best[0].toFixed(1) + 'px,' + best[1].toFixed(1) + 'px)'; marks.insertBefore(n, marks.firstChild); const s = div('pop ' + (cls || ''), n, text); s.addEventListener('animationend', () => n.remove()); }, MOVE_MS + 30);
     }
     function flash(code, kind) { const p = paths[code]; if (!p) return; p.classList.add('flash-' + kind); setTimeout(() => p.classList.remove('flash-' + kind), 1600); }
     return { draw, look, resize, flash, pop, placeMarks, el: host, camera: () => Object.assign({}, cam), boxOf, states, pathOf: (c) => paths[c], MOVE_MS };

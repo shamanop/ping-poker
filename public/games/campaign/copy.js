@@ -41,6 +41,8 @@
     if (pFail <= 0.5) return '1 in ' + Math.floor(1 / pFail) + ' scandal';
     return '1 in ' + Math.ceil(1 / (1 - pFail)) + ' to win';
   }
+  // the LANDSLIDE step is the one card whose odds are quoted as a WIN chance: say so in words that cannot be read as a scandal chance
+  const oddsFinal = (pFail) => (pFail > 0.5 ? 'all or nothing: ' + oddsWords(pFail) : oddsWords(pFail));
   // ---- money formats: Play $ = dollars and cents, Chips = whole chips; mx in hundredths
   const group = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   // the site's own display preference (Money.pref in the shell page): Chips may be shown as dollars when the player chose that; default is whole chips
@@ -51,5 +53,18 @@
     const a = Math.abs(n); return (n < 0 ? '-' : '') + '$' + group(Math.floor(a / 100)) + '.' + String(a % 100).padStart(2, '0');
   }
   const mxText = (mx) => group(Math.floor(mx / 100)) + '.' + String(mx % 100).padStart(2, '0') + 'x';
-  window.CampaignCopy = { news, pctOf, oddsWords, money, mxText, hash, NEWS };
+  // ---- server error codes -> plain sentences. `ctx` is what the player was doing when it came back (cash | step | start | ''). Nothing here is a rule: it only words what the server said.
+  const SAFE = ' Your stake is safe. Try again.';
+  const ERRS = {
+    money_down: { cash: 'Cash-out refused: money is unavailable.' + SAFE, step: 'Step refused: money is unavailable.' + SAFE, start: 'Could not start: money is unavailable. Nothing was taken. Try again.', def: 'Money is unavailable right now.' + SAFE },
+    internal: { cash: 'Cash-out refused: money is unavailable.' + SAFE, step: 'That step did not go through.' + SAFE, start: 'Could not start the run. Nothing was taken. Try again.', def: 'Something went wrong on our side. Try again.' },
+    funds: { def: 'Not enough funds for that stake.' }, auth: { def: 'Sign in again to play.' }, rate: { def: 'Easy. One tap at a time.' },
+    round_closed: { def: 'That run was already settled.' }, bad_bet: { def: 'That stake is not available. Pick another.' }, bad_home: { def: 'Pick a home state first.' }, bad_mode: { def: 'Pick Play $ or Chips first.' },
+    run_open: { def: 'A run is already open. Picking it up.' }
+  };
+  function errorText(code, ctx, serverMsg) {
+    const e = ERRS[code]; if (e) { const t = e[ctx] || e.def; if (code === 'funds' && serverMsg && /^not enough/i.test(serverMsg)) return serverMsg; return t; }
+    return serverMsg && serverMsg !== 'Server error' ? serverMsg : 'Something went wrong. Try again.';
+  }
+  window.CampaignCopy = { errorText, oddsFinal, oddsFinal, news, pctOf, oddsWords, money, mxText, hash, NEWS };
 })();
