@@ -25,7 +25,7 @@ t('E8 a line with `topup` legs to two players sets both cooldowns: topUp(a) insi
   l.batch([{ from: 'mint:topup', to: 'play:a', amount: 5, cur: 'play' }, { from: 'mint:topup', to: 'play:b', amount: 5, cur: 'play' }], 'tb1', 'topup');
   clock += 60000;
   for (const k of ['a', 'b']) { const e = s.topUpEligible(k); eq(e.eligible, false, k); eq(e.why, 'cooldown', k); }
-  try { s.topUp('a', 'tu-a'); ok(false, 'minted inside the cooldown'); } catch (e) { eq(e.code, 'cooldown'); }
+  try { s.topUp('a', 'tu-a'); ok(false, 'minted inside the cooldown'); } catch (e) { eq(e.code, 'disabled'); }    // SVC-1b: the refill is off; the cooldown itself is asserted through topUpEligible above
   l.close();
 });
 

@@ -432,15 +432,10 @@ function createService(ledger, opts = {}) {
     return { eligible: !why, why, total: h.total, wallet: h.wallet, seats: h.seats, escrow: h.escrow, retryMs };
   }
 
-  // Convenience on top of mint(): brings wallet + seats back up to START_PLAY (so money parked at a table is not minted twice).
-  function topUp(key, ref) {
-    needRef(ref);
-    if (ledger.has(ref)) { // replay: re-issue the original amount so the ledger answers dup or ref_conflict
-      for (const e of ledger.entriesOf(ref)) return mint('topup', key, e.amount, 'play', ref);
-    }
-    const e = topUpEligible(key);
-    if (!e.eligible) throw new MoneyError(e.why, { retryMs: e.retryMs, total: e.total });
-    return mint('topup', key, START_PLAY - e.total, 'play', ref);
+  // OFF (Money 1008 SVC-1b): the old refill minted Cash up to START_PLAY. Cash is real money and only an admin sets it, so this throws before any ledger write on
+  // every path (fresh ref or replayed ref). No caller is left (games/index.js refuses wallet_topup). topUpEligible above stays as a read-only question.
+  function topUp() {
+    throw new MoneyError('disabled', { why: 'Cash is set by the admin: no top up' });
   }
 
   // The fund a seat was bought in from, read from the ledger only: the most recent buyin:<fund> entry into the seat.
