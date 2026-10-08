@@ -30,7 +30,7 @@
     }
     let W = host.clientWidth || 360, Hh = host.clientHeight || 240;
     let cam = { s: 1, tx: 0, ty: 0 }, target = null, hideT = 0, scene = null, inset = { t: 34, r: 8, b: 8, l: 8 };
-    const insetFor = (mode) => { const big = W >= 700; return { t: mode === 'setup' ? (big ? 58 : 46) : 32, r: 8, b: big ? 66 : 38, l: 8 }; };
+    const insetFor = (mode) => { const big = W >= 700; return { t: mode === 'setup' ? (big ? 58 : 50) : 32, r: 8, b: big ? 66 : 38, l: 8 }; };
     const cen = (c) => states[c].c;
     const isAir = (a, b) => (MAPI.air || []).some((p) => (p[0] === a && p[1] === b) || (p[0] === b && p[1] === a));
 
@@ -186,8 +186,12 @@
       const t = ev.target; const code = t && t.dataset && t.dataset.s;
       if (code && paths[code] && H.pick) H.pick(code);
     });
+    let popT = 0;
+    function pop(code, text, cls) {                // "+10%" rises from the state you just carried, after the camera has landed
+      clearTimeout(popT); popT = setTimeout(() => { if (!states[code]) return; const p = px(code), n = div('mk mk-pop', marks); n.style.transform = 'translate(' + p[0].toFixed(1) + 'px,' + (p[1] + 24).toFixed(1) + 'px)'; const s = div('pop ' + (cls || ''), n, text); s.addEventListener('animationend', () => n.remove()); }, MOVE_MS + 30);
+    }
     function flash(code, kind) { const p = paths[code]; if (!p) return; p.classList.add('flash-' + kind); setTimeout(() => p.classList.remove('flash-' + kind), 1600); }
-    return { draw, look, resize, flash, placeMarks, el: host, camera: () => Object.assign({}, cam), boxOf, states, pathOf: (c) => paths[c], MOVE_MS };
+    return { draw, look, resize, flash, pop, placeMarks, el: host, camera: () => Object.assign({}, cam), boxOf, states, pathOf: (c) => paths[c], MOVE_MS };
   }
   window.CampaignMap = CampaignMap;
 })();

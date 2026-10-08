@@ -90,7 +90,7 @@
     const prev = S.run, op = (prev.options || []).find((o) => o.to === p.to);
     S.run = p.run; noteFresh(p.run); release();
     tick(C.news(p.tier || (op && op.tier) || tierOf(p.to), { S: nameOf(p.to), P: C.pctOf(op ? op.g100 : (p.run.mx > prev.mx ? Math.round(p.run.mx * 100 / prev.mx) : 100)) }, p.roundId + ':' + p.run.steps));
-    paint(); redrawMap(true); bump('mx'); bump('cards');
+    paint(); redrawMap(true); bump('mx'); bump('cards'); if (map) map.pop(p.run.at, op ? C.pctOf(op.g100) : '', p.tier || (op && op.tier) || 'safe');
   }
 
   function onEnd(p) {
