@@ -8,7 +8,8 @@ const DRY = ['3c', '8d', '9h', '4s', 'Jh'];
 function table(mode) {
   const W = world({ keys: ['a', 'b', 'c'], cash: { a: 100000, b: 100000, c: 100000 } });
   const cash = mode === 'play';
-  const T = W.registry.create('a', { name: 'Test table', mode, buyIn: cash ? { min: 100, max: 50000, default: 20000 } : { min: 100, max: 50000, default: 2000 }, blinds: cash ? { sb: 50, bb: 100 } : { sb: 25, bb: 50 }, seats: 3, autoStart: false, actionTimerSec: 0 });
+  const T = W.registry.create('a', { name: 'Test table', mode, buyIn: cash ? { min: 100, max: 50000, default: 20000 } : { min: 100, max: 50000, default: 2000 }, blinds: cash ? { sb: 50, bb: 100 } : { sb: 25, bb: 50 }, seats: 3, autoStart: false, actionTimerSec: 60 });
+  T.actionTimerSec = 0;             // K3-9: the validator refuses timer 0 for Cash; these tests drive every action by hand, so the clock is switched off after create
   W.cur = cash ? 'play' : 'chips'; W.stack = cash ? 20000 : 2000; W.bb = cash ? 100 : 50;
   for (const k of ['a', 'b', 'c']) if (!cash) W.service.ensureAccount(k);
   ['a', 'b', 'c'].forEach((k, i) => T.sit(k, { amount: W.stack, seat: i }));

@@ -8,7 +8,7 @@ async function run(mode, sig) {
   try {
     const a = await new Bot(srv, 'Opal').connect(), b = await new Bot(srv, 'Penn').connect();
     await a.signup(); await b.signup();
-    const t = (await a.req('table_create', { settings: { name: 'Night', mode, autoStart: false, actionTimerSec: 0 } }, 'table_created')).table;
+    const t = (await a.req('table_create', { settings: { name: 'Night', mode, autoStart: false, actionTimerSec: mode === 'play' ? 60 : 0 } }, 'table_created')).table;
     await a.sit(t.id, 2000); await b.sit(t.id, 2000);
     a.emit('table_start', { tableId: t.id }); await waitFor(() => a.gs && a.gs.status === 'playing', 3000); await sleep(50);
     await step([a, b], 'fold'); await waitFor(() => a.gs.handNum === 2, 3000); await sleep(2100);

@@ -11,7 +11,8 @@ function table(mode, n, opts) {
   const cash = {}; for (const k of keys) cash[k] = 1000000;
   const W = world({ keys, cash });
   const isCash = mode === 'play';
-  const T = W.registry.create('k0', { name: 'Blinds', mode, buyIn: isCash ? { min: 500, max: 60000, default: 50000 } : { min: 100, max: 60000, default: 5000 }, blinds: isCash ? { sb: 100, bb: 200 } : { sb: 25, bb: 50 }, seats: 5, autoStart: false, actionTimerSec: 0 });
+  const T = W.registry.create('k0', { name: 'Blinds', mode, buyIn: isCash ? { min: 500, max: 60000, default: 50000 } : { min: 100, max: 60000, default: 5000 }, blinds: isCash ? { sb: 100, bb: 200 } : { sb: 25, bb: 50 }, seats: 5, autoStart: false, actionTimerSec: 60 });
+  T.actionTimerSec = 0;             // K3-9: the validator refuses timer 0 for Cash; these tests drive every action by hand, so the clock is switched off after create
   W.stack = isCash ? 50000 : 5000; W.cur = isCash ? 'play' : 'chips';
   if (!isCash) for (const k of keys) W.service.ensureAccount(k);
   keys.slice(0, n).forEach((k, i) => T.sit(k, { amount: W.stack, seat: i }));
