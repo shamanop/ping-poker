@@ -87,17 +87,25 @@ function clearTimers() { for (const rec of open.values()) if (rec.timer) { clear
 // the player's two balances as the wallet push carries them (ctx.money.balance: what can be spent now; an open stake is in escrow, not in here)
 const balances = (key) => ({ play: M().balance(key, 'play'), chips: M().balance(key, 'chips') });
 
-// A stored state of the wrong shape must never lock an account out: every field is checked, a missing one gets its default, a malformed one resets
-// the whole state (newState). cb.bet is any whole number of cents in [1, 2500] (DENOMS: below an average of 10c the Callback step is 1 cent); warmBet (cents of the bet the warm squares were made at) is 0 when absent, carry (cents, [0, 10)) is 0 when absent or damaged.
+// A stored state of the wrong shape must never lock an account out, and it must never cost a player more than it has to (an armed Callback and the leads are Cash value that lives only in this file):
+// every field is checked on its own; a missing one gets its default, a malformed one is reset ALONE, with a log line that names the player, the field and the value that was dropped (MONEY 1008 K4-2).
+// A state that is not an object of version 1 at all reads as a new one (also logged). cb.bet is any whole number of cents in [1, 2500] (DENOMS: below an average of 10c the Callback step is 1 cent); warmBet (cents of the bet the warm squares were made at) is 0 when absent, carry (cents, [0, 10)) is 0 when absent or
 // cb.id (P6) is the Callback's round id, 'cb' + the id of the round that armed it; a missing or unusable id is not a damaged state, it is given a new one before the Callback may be played.
 const isInt = (n) => Number.isSafeInteger(n);
 const isFiniteNum = (n) => typeof n === 'number' && Number.isFinite(n);
 const validId = (x) => typeof x === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(x);
-function normState(st) {
+const resetSeen = new Set();             // one line per (player, field, value): a state is read on every spin and every state request
+function resetNote(who, field, raw) {
+  let t; try { t = JSON.stringify(raw); } catch { t = String(raw); } t = String(t); if (t.length > 300) t = t.slice(0, 300) + '...(' + t.length + ' chars)';
+  const k = who + '|' + field + '|' + t; if (resetSeen.has(k)) return; if (resetSeen.size > 2000) resetSeen.clear(); resetSeen.add(k);
+  alarm('coldcall: state of ' + who + ': ' + (field ? 'field ' + field + ' is damaged and was reset to its default (was ' + t + ')' : 'the whole state is not a version-1 state and reads as a new one (was ' + t + ')'));
+}
+function normState(st, who) {
   const d = Eng.newState();
-  if (!st || typeof st !== 'object' || Array.isArray(st) || st.v !== 1) return d;
-  const BAD = {}, cells = Eng.N || 30, out = {};
-  const get = (k, dflt, ok, fix) => { const x = st[k]; if (x === undefined || (x === null && dflt === null)) return dflt; return ok(x) ? (fix ? fix(x) : x) : BAD; };
+  if (st === null || st === undefined) return d;
+  if (typeof st !== 'object' || Array.isArray(st) || st.v !== 1) { resetNote(who || '(unknown)', '', st); return d; }
+  const cells = Eng.N || 30, out = {};
+  const get = (k, dflt, ok, fix) => { const x = st[k]; if (x === undefined || (x === null && dflt === null)) return dflt; if (ok(x)) return fix ? fix(x) : x; resetNote(who || '(unknown)', k, x); return dflt; };
   out.lt = get('lt', 0, (x) => isFiniteNum(x) && x >= 0);
   out.avg = get('avg', 0, (x) => isFiniteNum(x) && x >= 0);
   out.cb = get('cb', null, (x) => x && typeof x === 'object' && !Array.isArray(x) && isInt(x.bet) && x.bet >= 1 && x.bet <= 2500, (x) => { const c = { ...x }; if (!validId(c.id)) delete c.id; return c; });
@@ -109,12 +117,11 @@ function normState(st) {
   out.rounds = get('rounds', 0, (x) => isInt(x) && x >= 0);
   out.callbacks = get('callbacks', 0, (x) => isInt(x) && x >= 0);
   out.carry = typeof st.carry === 'number' && st.carry > 0 && st.carry < 10 ? st.carry : 0;   // N1-CARRY: cents left over by the last Callback; missing or damaged reads as 0 and never resets the rest of the state
-  if (Object.values(out).includes(BAD)) return d;
   return Object.assign(clone(st), out, { v: 1 });
 }
 
 // the player's STORED state as the engine should see it (a checked clone; NOT ticked: the engine ticks it itself, so it can report leaked / warmDied)
-const loadState = (nk, mode) => normState(store.player(nk, mode));
+const loadState = (nk, mode) => normState(store.player(nk, mode), nk + '|' + mode);
 
 // the day after a Chicago day string (noon UTC is early morning in Chicago, so +24 h never skips or repeats a day)
 const dayAfter = (d) => chicagoDay(Date.parse(d + 'T12:00:00Z') + 86400000);
@@ -257,7 +264,7 @@ function rebuild(o) {
   const force = o.force || null;
   return {
     id: o.roundId, key: o.key, nk: o.key, mode: o.mode, who: typeof o.who === 'string' && o.who ? o.who : o.key, socket: null, buy: o.buy, bet: o.pbet, betCents: o.bet, callback: !!o.callback,
-    state: normState(o.state), now: o.now, day: o.day, t: o.t, tape: o.tape.slice(), rtape: o.rtape.slice(), decisions: clone(o.decisions), force, forced: force,
+    state: normState(o.state, 'open round ' + o.roundId + ' of ' + o.key + '|' + o.mode), now: o.now, day: o.day, t: o.t, tape: o.tape.slice(), rtape: o.rtape.slice(), decisions: clone(o.decisions), force, forced: force,
     K, cfg: K.cfg.pull, cost: o.cost, costTenths: o.costTenths, stored: true, escrow: o.cost > 0, settled: false,
   };
 }
@@ -545,7 +552,7 @@ module.exports = {
     if (store) store.close();
     C = ctx; feed = []; feedSeq = 0; seedWarned = false;
     const file = process.env.COLDCALL_PULL_FILE || files.coldcallPull || null;
-    store = createStore(file, { log: logf });
+    store = createStore(file, { log: logf, alarm });
     cashForceSeen = 0;
     if (testHookOn()) alarm('coldcall: *** QA FORCE HOOK IS ON (COLDCALL_TEST=1, NODE_ENV=' + (process.env.NODE_ENV || '(unset)') + '): any signed-in player can force Cold Call rounds in CHIPS ONLY; Cash rounds ignore it. Never set COLDCALL_TEST on a real server. ***');
     for (const mode of ['play', 'chips']) { try { syncPot(mode); } catch {} }
