@@ -138,6 +138,36 @@ t('K3-2 pots.js: the old walk-over case still pays the live seat the dead money'
   assert.deepStrictEqual(sidePots({ 0: 5, 1: 10, 2: 0 }, [0, 1]), [{ amount: 15, eligible: [2] }]);
 });
 
+// ─── K1-4 ────────────────────────────────────────────────────────────────────
+t('K1-4 two-way split of an odd pot: 15 -> 8 to the first seat left of the button, 7 to the other', () => {
+  const h = mk({ stacks: [1000, 1000, 1000], button: 0, sb: 1, bb: 3, holes: [['2c', '3d'], ['4c', '5d'], ['6c', '7d']], board: ROYAL });
+  play(h, [[0, 'raise', 6], [1, 'call'], [2, 'fold']]);
+  while (h.phase === 'betting') play(h, [[h.toAct, 'check']]);
+  const r = finish(h);
+  assert.deepStrictEqual(r.pots, [{ amount: 15, eligible: [0, 1], winners: [1, 0] }]);
+  assert.deepStrictEqual(r.payouts, { 0: 7, 1: 8, 2: 0 });
+  assert.strictEqual(r.payouts[0] + r.payouts[1], 15);
+});
+
+t('K1-4 three-way split of an odd pot: 19 -> 7, 6, 6 in order from the button', () => {
+  const h = mk({ stacks: [1000, 1000, 1000, 1000], button: 0, sb: 1, bb: 3, holes: [['2c', '3d'], ['4c', '5d'], ['6c', '7d'], ['8c', '9d']], board: ROYAL });
+  play(h, [[3, 'raise', 6], [0, 'call'], [1, 'fold'], [2, 'call']]);
+  while (h.phase === 'betting') play(h, [[h.toAct, 'check']]);
+  const r = finish(h);
+  assert.deepStrictEqual(r.pots, [{ amount: 19, eligible: [0, 2, 3], winners: [2, 3, 0] }]);
+  assert.deepStrictEqual(r.payouts, { 0: 6, 1: 0, 2: 7, 3: 6 });
+});
+
+t('K1-4 an odd main pot split by two winners while a short all-in loses: 33 -> 17 to the first seat left of the button, 16 to the other', () => {
+  const h = mk({ stacks: { 0: 11, 1: 1000, 2: 1000 }, button: 0, sb: 1, bb: 2, holes: [['7c', '8d'], ['As', 'Ad'], ['Ah', 'Ac']], board: ['2c', '2d', '3h', '3s', '4c'] });
+  play(h, [[0, 'raise', 11], [1, 'call'], [2, 'call']]);
+  while (h.phase === 'betting') play(h, [[h.toAct, 'check']]);
+  const r = finish(h);
+  assert.deepStrictEqual(r.pots, [{ amount: 33, eligible: [0, 1, 2], winners: [1, 2] }]);
+  assert.deepStrictEqual(r.payouts, { 0: 0, 1: 17, 2: 16 });
+  assert.strictEqual(r.payouts[0] + r.payouts[1] + r.payouts[2], 33);
+});
+
 // ─── fuzz: short blinds, forced and voluntary folds, 2-9 seats ───────────────
 function fuzz(hands, seed) {
   const rng = mulberry32(seed);
