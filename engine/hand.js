@@ -49,6 +49,15 @@ function needsAction(hand, n) {
   return false;
 }
 
+// K3-2: the bet to call is never above what a seat still in the hand has put in. When the owner of the top bet folds
+// (kicked, left, or a fold with nothing to call), the seats still in are not asked to call a bet nobody holds any more;
+// its unmatched part goes back to its owner in returnUncalled.
+function clampCurrentBet(hand) {
+  let top = 0;
+  for (const s of seatNums(hand)) if (!hand.seats[s].folded && hand.seats[s].bet > top) top = hand.seats[s].bet;
+  if (top < hand.currentBet) hand.currentBet = top;
+}
+
 function nextToAct(hand, from) {
   for (const s of ringAfter(hand, from)) if (needsAction(hand, s)) return s;
   return null;
@@ -151,6 +160,7 @@ function apply(hand, seat, action) {
   switch (action.type) {
     case 'fold':
       s.folded = true;
+      clampCurrentBet(hand);
       events.push({ type: 'fold', seat: n });
       break;
 
@@ -288,6 +298,7 @@ function foldOut(hand, seat) {
   if (s.folded) return [];
   s.folded = true;
   s.forced = true;
+  clampCurrentBet(hand);
   const events = [{ type: 'fold', seat: n, forced: true }];
   if (hand.phase === 'runout') {
     if (liveSeats(hand).length === 1) toShowdown(hand, events);
@@ -321,6 +332,10 @@ function settle(hand) {
   for (const s of all) { payouts[s] = 0; returned[s] = hand.seats[s].returned; }
 
   const outPots = pots.map(p => {
+    if (p.refund) {                       // chips no live seat matched: each contributor gets its own back
+      for (const k of Object.keys(p.refund)) payouts[k] += p.refund[k];
+      return { amount: p.amount, eligible: [], winners: [], refund: Object.assign({}, p.refund) };
+    }
     let winners = p.eligible;
     if (contested && p.eligible.length > 1) {
       let top = hands[p.eligible[0]];

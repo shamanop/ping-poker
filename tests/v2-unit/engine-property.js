@@ -25,15 +25,30 @@ function oracle(hand) {
     for (const s of all) { const take = Math.min(rem[s], m); amount += take; rem[s] -= take; }
     pots.push({ amount, eligible });
   }
-  const leftover = all.reduce((t, s) => t + rem[s], 0); // dead chips of folded seats above every live level
-  if (leftover && pots.length) pots[pots.length - 1].amount += leftover;
-  else if (leftover) pots.push({ amount: leftover, eligible: live }); // only folded seats put chips in
+  // chips of folded seats above every live level (K3-2): no live seat matched them, each contributor gets its own back
+  const refunds = {};
+  for (const s of all) refunds[s] = 0;
+  if (pots.length) {
+    for (;;) {
+      const owed = all.filter(s => rem[s] > 0);
+      if (!owed.length) break;
+      const m = Math.min(...owed.map(s => rem[s]));
+      let amount = 0;
+      for (const s of owed) { refunds[s] += m; rem[s] -= m; amount += m; }
+      pots.push({ amount, eligible: [], refund: true });
+    }
+  } else {
+    const leftover = all.reduce((t, s) => t + rem[s], 0);
+    if (leftover) pots.push({ amount: leftover, eligible: live }); // only folded seats put chips in
+  }
   const leftOfButton = s => (s - hand.button - 1 + 100) % 100; // ascending distance clockwise from the button
   const payouts = {};
   for (const s of all) payouts[s] = 0;
   const hands = {};
   if (live.length > 1) for (const s of live) hands[s] = bestHand(hand.seats[s].hole, hand.board);
+  for (const s of all) payouts[s] += refunds[s];
   for (const p of pots) {
+    if (p.refund) continue;
     let winners = p.eligible;
     if (live.length > 1) {
       let best = p.eligible[0];
@@ -44,7 +59,7 @@ function oracle(hand) {
     const share = Math.floor(p.amount / winners.length), r = p.amount - share * winners.length;
     winners.forEach((w, i) => { payouts[w] += share + (i < r ? 1 : 0); });
   }
-  return { pots, payouts };
+  return { pots, payouts, refunds };
 }
 
 // Is this (seat, action) something legalActions offers? la = legalActions(hand, toAct) for the real turn seat.
@@ -125,7 +140,9 @@ function checkInvariants(hand, total, ctx) {
     assert(live >= 2, `${ctx}: betting with <2 live`);
     const x = hand.seats[hand.toAct];
     assert(x && !x.folded && !x.allIn, `${ctx}: toAct is not an able seat`);
-    assert(hand.currentBet >= maxBet, `${ctx}: currentBet below a bet`);
+    let liveMax = 0;
+    for (const s of all) if (!hand.seats[s].folded) liveMax = Math.max(liveMax, hand.seats[s].bet);
+    assert(hand.currentBet >= liveMax, `${ctx}: currentBet below a bet`);
     assert(hand.lastFullRaise >= 1, `${ctx}: lastFullRaise`);
   } else {
     assert.strictEqual(hand.toAct, null, `${ctx}: toAct set outside betting`);
@@ -147,12 +164,14 @@ function checkSettlement(hand, init, r, ctx) {
     assert.strictEqual(hand.seats[s].stack - init[s], r.net[s], `${ctx}: final stack - start != net, seat ${s}`);
     assert(hand.seats[s].stack >= 0, `${ctx}: negative stack`);
     // no seat is paid more than the pots it is eligible for
-    const cap = o.pots.filter(p => p.eligible.includes(s)).reduce((a, p) => a + p.amount, 0);
+    const cap = o.pots.filter(p => p.eligible.includes(s)).reduce((a, p) => a + p.amount, 0) + o.refunds[s];
     assert(r.payouts[s] <= cap, `${ctx}: seat ${s} paid ${r.payouts[s]} > eligible ${cap}`);
-    if (hand.seats[s].folded) assert.strictEqual(r.payouts[s], 0, `${ctx}: folded seat ${s} paid`);
+    // a folded seat is only ever paid back chips of its own that no live seat matched (K3-2)
+    if (hand.seats[s].folded) assert(r.payouts[s] <= committed[s] - r.returned[s], `${ctx}: folded seat ${s} paid more than it put in`);
     assert.strictEqual(r.payouts[s], o.payouts[s], `${ctx}: payout seat ${s} differs from the oracle`);
   }
   for (const p of r.pots) {
+    if (p.refund) { assert.deepStrictEqual(p.eligible, [], `${ctx}: refund layer has eligible seats`); continue; }
     assert(p.winners.length >= 1 && p.winners.every(w => p.eligible.includes(w)), `${ctx}: pot winners not eligible`);
     assert(p.eligible.every(s => !hand.seats[s].folded), `${ctx}: folded seat eligible`);
   }
