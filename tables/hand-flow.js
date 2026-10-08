@@ -274,6 +274,7 @@ const proto = {
       this.clearDeadline('phase');
       if (this.phase === 'between') this.setDeadline('phase', 'nexthand', this.nextHandDelay(), { hand: true });
     });
+    best('pause', () => this.applyPendingPause());           // K3-4: a pause asked for during the hand starts now that it has settled
   },
 
   buildResult(h, r, bySeat, names) {
@@ -318,8 +319,9 @@ const proto = {
     console.error(`[v2] VOID table=${this.id} hand=${this.handNo} reason=${reason}${err ? ' ' + (err.code || err.name) + ': ' + err.message : ''}`);
     this.out.event(this, 'void', { reason });
     this.out.state(this);
-    if (this.voids.length >= 3) { this.pause(); return true; }
+    if (this.voids.length >= 3) { this.pause(true); return true; }
     this.setDeadline('phase', 'nexthand', 2000, { hand: true });
+    this.applyPendingPause();
     return true;
   },
 
@@ -341,7 +343,7 @@ const proto = {
     }
     this.endNightPending = null; this.hand = null;
     this.deadlines.clear(); this.arm();
-    this.phase = 'ended'; this.state = 'ended'; this.paused = false; this.endedAt = this.now();
+    this.phase = 'ended'; this.state = 'ended'; this.paused = false; this.pausePending = false; this.endedAt = this.now();
     this.out.event(this, 'night_end', { reason, keys });
     this.out.event(this, 'money', { keys });
     this.out.state(this);

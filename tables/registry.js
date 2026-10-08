@@ -216,7 +216,7 @@ function createRegistry(deps) {
   function startSweep() { if (sweepHandle) return; sweepHandle = setInterval(() => sweep(), Math.min(60000, EMPTY_MS)); if (sweepHandle.unref) sweepHandle.unref(); }
   function stop() { if (sweepHandle) { clearInterval(sweepHandle); sweepHandle = null; } for (const t of tables.values()) { t.deadlines.clear(); t.arm(); } }
   const voidAll = reason => { let n = 0; for (const t of tables.values()) if (t.void(reason)) n++; return n; };
-  const pauseAll = () => { for (const t of tables.values()) if (!t.paused && t.phase !== 'ended') t.pause(); };
+  const pauseAll = () => { for (const t of tables.values()) if (!t.paused && t.phase !== 'ended') t.pause(true); };
 
   const registry = {
     tables, create, get, load, save, flush, ensurePermanent, seatOf, card, publicTable, listFor, mineFor, mine, canHost, isParticipant,

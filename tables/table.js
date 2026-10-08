@@ -19,6 +19,7 @@ class Table {
     this.cur = this.mode === 'chips' ? 'chips' : 'play';
     this.state = this.state || 'open';             // lobby state: open | paused | ended
     this.paused = this.state === 'paused';
+    this.pausePending = false;                    // pause asked for during a live hand (K3-4)
     this.handNo = this.handNo || 0;
     this.nightFromId = this.nightFromId || 0;
     this.nightHand0 = this.nightHand0 || 0;
@@ -89,8 +90,19 @@ class Table {
   }
 
   // ---- pause ------------------------------------------------------------------------------------------------
-  pause() {
+  // A pause never holds a live hand open (K3-4): asked for during a hand it is remembered (pausePending) and takes effect once that
+  // hand has settled or been voided; the run-out and the turn clock keep going until then. force = the safety wrapper (money
+  // fenced, three voids): those stop the table at once, as before.
+  pause(force) {
     if (this.paused || this.phase === 'ended') return false;
+    if (!force && this.handLive()) {
+      if (this.pausePending) return false;
+      this.pausePending = true;
+      this.out.event(this, 'table_event', { kind: 'pause_pending' });
+      this.out.state(this);
+      return true;
+    }
+    this.pausePending = false;
     const now = this.now();
     for (const d of this.deadlines.values()) if (d.hand && d.at != null) { d.frozen = Math.max(0, d.at - now); d.at = null; }
     this.paused = true; this.state = 'paused'; this.arm();
@@ -98,7 +110,19 @@ class Table {
     this.out.state(this);
     return true;
   }
+  // The hand is over (settled or voided): a pause asked for during it starts now.
+  applyPendingPause() {
+    if (!this.pausePending || this.handLive()) return;
+    if (this.endNightPending) { this.pausePending = false; return; }       // the night is ending: nothing to freeze
+    this.pause();
+  }
   resume() {
+    if (this.pausePending && !this.paused) {            // the host changed his mind before the hand ended
+      this.pausePending = false;
+      this.out.event(this, 'table_event', { kind: 'resumed' });
+      this.out.state(this);
+      return true;
+    }
     if (!this.paused || this.phase === 'ended') return false;
     const now = this.now();
     this.paused = false; this.state = 'open';

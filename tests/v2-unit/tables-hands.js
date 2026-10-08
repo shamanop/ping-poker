@@ -118,8 +118,8 @@ t('two consecutive timeouts sit a connected seat out', () => {
   e.clock.advance(5000 + 7000); e.table.hand.toAct != null && e.clock.advance(30000);
   eq(e.table.seatOfKey('ann').timeouts >= 1, true);
 });
-t('M3: pause freezes the turn clock and a preselect; resume gives back the remainder', () => {
-  const e = three(); e.table.startHand(); e.clock.advance(10000); e.table.pause(); e.clock.advance(120000);
+t('M3: a forced pause (safety wrapper) freezes the turn clock and a preselect; resume gives back the remainder (a host pause during a hand is pending: K3-4, tests/money-1008-k3-4-pause.js)', () => {
+  const e = three(); e.table.startHand(); e.clock.advance(10000); e.table.pause(true); e.clock.advance(120000);
   eq(e.table.hand.seats[0].folded, false); e.table.resume(); e.clock.advance(19999); eq(e.table.hand.seats[0].folded, false); e.clock.advance(1); eq(e.table.hand.seats[0].folded, true);
 });
 t('preselect: only for a seat not on turn, fires PRE_MS after its turn arrives, dies when the bet changes', () => {
