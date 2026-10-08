@@ -26,21 +26,22 @@ function newRun(home) {
   return { v: VERSION, home, at: home, trail: [home], steps: 0, mx: 100, done: null };
 }
 
-function options(run) {
+/* `tiers` (optional, same shape as TIERS) is the growth table a run was OPENED with: a stored run is paid and checked on its own numbers, never on a table a later deploy changed (ADD-A-GAME.md section 4). */
+function options(run, tiers = TIERS) {
   if (run.done) return [];
   const n = run.steps + 1, out = [];
   for (const to of MAP.states[run.at].adj) {
     if (run.trail.includes(to)) continue;
-    const tier = MAP.states[to].tier, g100 = TIERS[tier].g100, mx = nextMx(run.mx, g100, n);
+    const tier = MAP.states[to].tier, g100 = tiers[tier].g100, mx = nextMx(run.mx, g100, n);
     const deadEnd = n < MAX_STEPS && MAP.states[to].adj.every((a) => a === to || run.trail.includes(a));
     out.push({ to, tier, g100, nextMx: mx, pFail: pFail(run.mx, mx, n), deadEnd, landslide: n === MAX_STEPS });
   }
   return out;
 }
 
-function step(run, to, rng) {
+function step(run, to, rng, tiers = TIERS) {
   if (run.done) throw new EngineError('bad_step', 'run is over');
-  const opt = options(run).find((o) => o.to === to);
+  const opt = options(run, tiers).find((o) => o.to === to);
   if (!opt) throw new EngineError('bad_step', 'not an option');
   const trail = run.trail.slice();
   if (rng() < opt.pFail) return { ok: false, run: { ...run, trail, done: 'scandal', failedAt: to }, opt };
@@ -59,7 +60,7 @@ function payout(run, bet) {
 }
 
 /* Re-derive at / steps / mx / done from home + trail. A stored record is never trusted as it stands. */
-function check(run) {
+function check(run, tiers = TIERS) {
   const bad = (m) => { throw new EngineError('bad_run', m); };
   if (!run || typeof run !== 'object' || run.v !== VERSION || !has(MAP.states, run.home)) bad('shape');
   const t = run.trail;
@@ -68,12 +69,12 @@ function check(run) {
   for (let i = 1; i < t.length; i++) {
     if (!has(MAP.states, t[i]) || t.indexOf(t[i]) !== i) bad('repeat');
     if (!MAP.states[t[i - 1]].adj.includes(t[i])) bad('hop');
-    mx = nextMx(mx, TIERS[MAP.states[t[i]].tier].g100, i);
+    mx = nextMx(mx, tiers[MAP.states[t[i]].tier].g100, i);
     if (mx > CAP_MX) bad('cap');
   }
   const steps = t.length - 1, at = t[steps];
   if (run.steps !== steps || run.at !== at || run.mx !== mx) bad('derived');
-  const live = options({ ...run, done: null }).length;
+  const live = options({ ...run, done: null }, tiers).length;
   if (run.done === 'scandal') {
     if (!MAP.states[at].adj.includes(run.failedAt) || t.includes(run.failedAt) || steps >= MAX_STEPS) bad('failedAt');
   } else if (run.failedAt !== undefined) bad('failedAt');
