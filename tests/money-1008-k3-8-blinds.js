@@ -68,6 +68,39 @@ for (const mode of ['play', 'chips']) {
     eq(W.total(W.cur), W.total0);
   });
 
+  t(`${tag}: the stand-up dodger (leaves when a blind is due, sits again for the button) waits for the big blind too: 80 hands`, () => {
+    const { W, T } = table(mode, 3);
+    const posted = { k0: 0, k1: 0, k2: 0 }, dealt = { k0: 0, k1: 0, k2: 0 };
+    let returns = 0, ok1 = true;
+    for (let i = 0; i < 80; i++) {
+      const nos = [0, 1, 2], button = T.button == null ? 0 : (nos.find(n => n > T.button) ?? 0);
+      const ring = nos.filter(n => n > button).concat(nos.filter(n => n <= button));
+      const due = ring[0] === 0 || ring[1] === 0, there = !!T.seatOfKey('k0');
+      if (due && there) quiet(() => T.leave('k0', 'leave'));
+      if (!due && !there) { quiet(() => T.sit('k0', { amount: W.stack, seat: 0 })); returns++; }
+      const r = play(T); if (!r) continue;
+      if (r.dealt.includes('k0') && r.waiting.includes('k0')) ok1 = ok1 && r.bb === 0;
+      for (const k of r.dealt) { dealt[k]++; posted[k] += r.posted[k]; }
+    }
+    ok(returns > 5 && dealt.k0 > 0, `he came back ${returns} times and played ${dealt.k0} hands`);
+    ok(ok1, 'dealt in again only as the big blind');
+    ok(posted.k0 > 0 && posted.k0 >= 0.8 * Math.min(posted.k1, posted.k2), `his share of the blinds is not dodged: ${JSON.stringify(posted)}`);
+    eq(W.total(W.cur), W.total0);
+  });
+
+  t(`${tag}: standing up and sitting again with no hand dealt in between owes nothing; a player who never sat here is dealt in at once`, () => {
+    const { W, T } = table(mode, 3);
+    play(T);
+    quiet(() => { T.leave('k2', 'leave'); T.sit('k2', { amount: W.stack, seat: 2 }); });
+    eq(T.seatOfKey('k2').missedBlind, false);
+    quiet(() => T.leave('k2', 'leave'));
+    play(T);                                                               // a hand without him
+    quiet(() => T.sit('k2', { amount: W.stack, seat: 2 }));
+    eq(T.seatOfKey('k2').missedBlind, true, 'he missed a hand while away');
+    quiet(() => T.sit('k3', { amount: W.stack, seat: 3 }));
+    eq(T.seatOfKey('k3').missedBlind, false, 'a brand-new seat is not asked to wait');
+  });
+
   t(`${tag}: a returning seat does not post out of turn and is never the button; the button keeps moving through the seats that play`, () => {
     const { W, T } = table(mode, 4);
     const rec = [];

@@ -29,8 +29,9 @@ const proto = {
 
   // ---- missed blinds (K3-8) -----------------------------------------------------------------------------------
   // A seat that missed a hand while it was sitting out or away (missedBlind) is dealt in again only when the big blind reaches it: it
-  // waits, it does not post out of turn, and it can never be the button. A new seat has missed nothing and is dealt in at the next hand,
-  // in whatever position the button gives it (the rule for new seats is unchanged). With fewer than two seats that are free to play
+  // waits, it does not post out of turn, and it can never be the button. A player who stood up and sits again at this table after hands were
+  // dealt without him (table.leftAt) is the same case: standing up must not dodge a blind either. A seat that never sat here has missed
+  // nothing and is dealt in at the next hand, in whatever position the button gives it (the rule for new seats is unchanged). With fewer than two seats that are free to play
   // there is no game to wait behind, so the waiting seats are dealt in at once.
   pickButton(elig) {
     let base = elig.filter(s => !s.missedBlind);

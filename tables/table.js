@@ -21,6 +21,7 @@ class Table {
     this.paused = this.state === 'paused';
     this.reentry = {};                            // key -> { remaining, forgiven }: what the SERVER cashed out and the player may bring back (K3-5)
     this.pausePending = false;                    // pause asked for during a live hand (K3-4)
+    this.leftAt = {};                             // key -> hand number when his seat was removed: sitting again after missed hands waits for the big blind (K3-8)
     this.handNo = this.handNo || 0;
     this.nightFromId = this.nightFromId || 0;
     this.nightHand0 = this.nightHand0 || 0;
@@ -213,7 +214,7 @@ class Table {
     this.noteBuyIn(key, opts.amount);
     const seat = {
       seat: no, key, stack: opts.amount, fund: fund || this.cur, connected: true, socketId: opts.socketId || null,
-      sitOutNext: false, leaving: false, kickPending: false, missedBlind: false, disconnectedAt: null, graceAt: null, timeouts: 0, pre: null, dealt: false, folded: false, lastAction: null,
+      sitOutNext: false, leaving: false, kickPending: false, missedBlind: this.leftAt[key] != null && this.handNo > this.leftAt[key], disconnectedAt: null, graceAt: null, timeouts: 0, pre: null, dealt: false, folded: false, lastAction: null,
     };
     this.seats.set(no, seat);
     this.afterSeatChange(seat, 'joined', { stack: seat.stack, reconnect: false, ref: r.intent.ref });
@@ -302,6 +303,7 @@ class Table {
   }
 
   removeSeat(seat) {
+    this.leftAt[seat.key] = this.handNo;
     this.seats.delete(seat.seat);
     this.clearDeadline('grace:' + seat.seat);
   }
