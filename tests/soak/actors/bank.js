@@ -30,42 +30,18 @@ async function adminCall(W, ev, payload, op) {
 // what the ledger says the player's wallet / bank holds right now (the account an admin edit or a spin acts on)
 const walletOf = (W, key, cur) => { W.checker.poll(); return W.checker.balance(cur, (cur === 'chips' ? 'bank:' : 'play:') + key); };
 
+// bb298d2 ("Play $ is set by the admin"): wallet_topup is refused with topup_off for everybody, always, and mints nothing. The old rule (bring wallet + Play seats back to START_PLAY, hourly cooldown) is gone; a mint:topup
+// line would break I2 (mint:topup is expected to stay 0). A `wallet` push that arrives meanwhile is another game's timer credit, not a grant.
 async function topup(W) {
   const cand = unseated(W);
   if (!cand.length) return null;
   const b = W.rng.pick(cand), key = b.key;
-  if (W.model.slot.hasOpen(key)) return null;            // an open slot round settles on its own timer and moves the wallet while we compute what the top-up rule must answer
-  let note = '';
-  W.checker.poll();
-  if (W.checker.playHeldRule(key) >= TOPUP_BELOW && W.rng.chance(0.7)) {
-    const cents = W.rng.range(0, TOPUP_BELOW - 1);
-    const delta = cents - walletOf(W, key, 'play');
-    const r = await adminCall(W, 'admin_set_play', { key, cents }, 'set_play');
-    if (!(r.data && r.data.ok)) { W.violate('I7', `admin_set_play to ${cents} for ${key} was refused`, { key }, 'ok', JSON.stringify(r.data || r.error)); return null; }
-    if (delta !== 0) W.model.applyAdmin(key, 'play', delta);
-    note = `set_play ${cents}; `;
-  }
-  W.checker.poll();
-  const walletBefore = W.checker.balance('play', 'play:' + key), heldBefore = W.checker.playHeldRule(key);
-  const seatPart = heldBefore - walletBefore;                 // a player who just left mid-hand still has this hand's chips in a seat
-  const recent = lastTopup.has(key) && Date.now() - lastTopup.get(key) < COOLDOWN_MS;
-  const eligible = heldBefore < TOPUP_BELOW && !recent;
-  const wantErr = heldBefore >= TOPUP_BELOW ? 'not_needed' : 'cooldown';
-  const r = await b.req('wallet_topup', {}, 'wallet', 3000, { pred: d => d.play !== walletBefore });
-  if (r.timeout && !eligible) return { what: 'topup', who: key, note: note + 'no answer (ok: nothing to add)' };
-  if (r.timeout) { W.violate('I7', `${key} was eligible for a top-up (Play $ ${heldBefore}) and got no answer`, { key }, 'wallet event', 'timeout'); return null; }
+  const r = await b.req('wallet_topup', {}, 'wallet', 1500, { pred: () => false });
   if (r.error) {
-    if (eligible) W.violate('I7', `top-up refused with ${r.error.code} though ${key} holds ${heldBefore} and had no top-up in the last hour`, { key }, 'granted', r.error.code);
-    else if (r.error.code !== wantErr) W.violate('I7', `top-up refused with ${r.error.code}, expected ${wantErr}`, { key }, wantErr, r.error.code);
-    return { what: 'topup', who: key, note: note + 'refused ' + r.error.code };
+    if (r.error.code !== 'topup_off') W.violate('I7', `top-up refused with ${r.error.code}, expected topup_off`, { key }, 'topup_off', r.error.code);
+    return { what: 'topup', who: key, note: 'refused ' + r.error.code };
   }
-  if (!eligible) { W.violate('I7', `top-up granted to ${key} who holds ${heldBefore} (recent top-up: ${recent})`, { key }, wantErr, 'granted'); return null; }
-  const minted = r.data.play - walletBefore;
-  if (minted !== START_PLAY - heldBefore) W.violate('I7', `top-up minted ${minted} for ${key}, the rule (bring wallet + Play seats to ${START_PLAY}) says ${START_PLAY - heldBefore}`, { key }, START_PLAY - heldBefore, minted);
-  W.model.applyMint('topup', key, minted, `topup:${key}:${++topupSeq}`);
-  lastTopup.set(key, Date.now());
-  void seatPart;
-  return { what: 'topup', who: key, note: note + 'granted', amount: minted };
+  return { what: 'topup', who: key, note: 'no answer (ok: Play $ top-up is off)' };
 }
 
 async function bonus(W) {

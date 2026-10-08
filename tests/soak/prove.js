@@ -6,7 +6,7 @@
 // Usage: node tests/soak/prove.js [--minutes 1.5] [--kills 3] [--seed 7] [--port 4742] [--only name[,name]] [--no-clean] [--data <dir>]
 const fs = require('fs'), path = require('path');
 const { spawnSync } = require('child_process');
-const { EXPECT } = require('./bugs/inject');
+const { EXPECT, ARGS } = require('./bugs/inject');
 
 const argv = process.argv.slice(2);
 const arg = (n, d) => { const i = argv.indexOf('--' + n); return i >= 0 && i + 1 < argv.length ? argv[i + 1] : d; };
@@ -19,7 +19,7 @@ fs.mkdirSync(base, { recursive: true });
 function run(name, bug) {
   const dir = path.join(base, name);
   const args = [path.join(__dirname, 'soak.js'), '--seed', String(seed), '--minutes', String(minutes), '--kills', String(kills), '--port', String(port), '--data', dir];
-  if (bug) args.push('--bug', bug);
+  if (bug) args.push('--bug', bug, ...((ARGS || {})[bug] || []));
   const t0 = Date.now();
   const r = spawnSync('node', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, timeout: Math.round((minutes + 3) * 60000) });
   const secs = Math.round((Date.now() - t0) / 100) / 10;

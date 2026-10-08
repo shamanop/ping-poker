@@ -1,10 +1,10 @@
 # The money soak
 
-One server, several tables in both currencies, Ballot Bender, the slot COLD CALL, bank moves, kills and restarts. After EVERY step the invariants below are checked from the ledger file,
+One server, several tables in both currencies, Ballot Bender, the slot COLD CALL, the step game CAMPAIGN TRAIL, bank moves, kills and restarts. After EVERY step the invariants below are checked from the ledger file,
 the mirror files, the server's own `__audit` and the harness' own book. It exists to fail loudly when money code is wrong; `prove.js` shows that it does.
 
 ```
-node tests/soak/soak.js [--seed N] [--minutes M | --steps N] [--kills N] [--port 4740] [--server-dir D] [--data D] [--bug NAME] [--players 6]
+node tests/soak/soak.js [--seed N] [--minutes M | --steps N] [--kills N] [--port 4740] [--server-dir D] [--data D] [--bug NAME] [--kill-kinds a,b] [--players 6]
 node tests/soak/prove.js [--minutes 1.5] [--kills 3] [--seed 7] [--port 4742] [--only a,b] [--no-clean]
 ```
 
@@ -22,7 +22,8 @@ All choices come from one seeded PRNG (`lib/prng.js`, mulberry32). The same `--s
 | `bank` | signups mid-run, `wallet_topup` (and its refusals), `bonus:claim` twice, admin plus / minus / minus-too-big / set-play, a non-admin trying an admin event |
 | `bender` | `g:bender:spin` in both currencies, every bet level, with and without buyBonus, an unaffordable spin, two spins back to back |
 | `coldcall` | `g:coldcall:spin` in both currencies at every bet level: plain spins, every buy (call / bonus1 / bonus2 / hunt), QA-forced rounds (`COLDCALL_TEST=1`), a decision answered, a decision left to its 3 s timer (`ready`), a decision left open, the free Callback, the office pot won while another player's round is open (`poolrace`), a live config change while a round is open (`cfg`), a socket dropped while a round is open (`drop`), a spin the player cannot afford, back-to-back spins, a spin while a decision is open |
-| `chaos` | the `--kills` budget, spread over the run: SIGKILL (a quarter SIGTERM) mid-hand, right after a spin was sent, right after a `showdown_result`, during a burst of buy-ins, after a hand batch with the result muted (`settle`), a Bender spin whose answer is dropped (`spinlost`), a slot decision open (`slotopen`), a Callback open or armed (`slotcb`), a slot spin whose answer is dropped (`slotlost`). Then restart on the SAME data dir, sign every bot in again, go on |
+| `campaign` | `g:campaign:*` in both currencies at every bet level (CAMPAIGN TRAIL; `CAMPAIGN_TEST=1` and a 2.5 s idle timer `CAMPAIGN_IDLE_MS`): a run with several steps and a cash-out, a run ridden to a scandal (QA-forced), a withdrawal at 0 steps, a run left to the idle timer, a socket dropped with a run open (also for longer than the idle timer, so the run closes unheard), an unaffordable start (a player made poor through the admin), a second start while one is open (`run_open`), a double step / cash, hostile payloads, `state`, and now and then the whole 50-state LANDSLIDE route (1,000x). Every option the server shows is re-derived from the engine |
+| `chaos` | the `--kills` budget, spread over the run: SIGKILL (a quarter SIGTERM) mid-hand, right after a spin was sent, right after a `showdown_result`, during a burst of buy-ins, after a hand batch with the result muted (`settle`), a Bender spin whose answer is dropped (`spinlost`), a slot decision open (`slotopen`), a Callback open or armed (`slotcb`), a slot spin whose answer is dropped (`slotlost`), a Campaign run open at 0 steps (`campopen0`) or at >= 1 step (`campopen1`), a Campaign step sent and unanswered (`campstep`), a Campaign cash-out sent and unanswered (`campcash`). Then restart on the SAME data dir, sign every bot in again, go on |
 
 Actor interface: `{ name, weight, init(W)?, afterRestart(W)?, step(W) -> record | null }`. `W` is the world built in `soak.js` (rng, model, checker, bots, counters, `W.violate`, `W.warn`). A step records
 what it did (it is written to `steps.jsonl`), never decides what is true, and feeds the model only through events the client received. To add a game: write `actors/<game>.js`, add it to `ACTORS` in
@@ -45,6 +46,20 @@ A kill (or a socket that went while a round was open) makes exactly these things
 
 And the other direction is a hard rule: **every result a client DID receive is in the ledger** (acked means durable), with the same cost, win and pot prize.
 
+### CAMPAIGN TRAIL: runs open across a kill (and a dropped socket)
+
+The model (`CampBook`) holds, per open run, the last state the client SAW (steps, multiplier, the options it was shown) and the one step it has sent and not seen answered (`pend`). A run the client was told is open must get **exactly ONE close line**,
+written either just before the kill (or by the idle timer while the client's socket was down) or by boot recovery (decision D1: a restart is an automatic cash-out). Which close lines are accepted (`allowedCloses` in `actors/campaign.js`):
+
+| the client last saw | no step in flight (or a cash in flight) | ONE step in flight, unanswered |
+|---|---|---|
+| 0 steps | a **refund**: a void line returning the whole stake, no spend, no credit | refund, **or** win 0 (the step was a scandal and settled), **or** stake x the multiplier of that one option (it survived and was flushed) |
+| >= 1 step at m x | a settle: spend = stake, credit = stake x m / 100 | win 0 (scandal), **or** stake x m (the step was never flushed), **or** stake x the multiplier of that one option (it survived and was flushed) |
+
+Nothing else is accepted: a settle at 0 steps with no step in flight, a credit that is any other number, two close lines, a close line for a run the client never saw open, or a run still open after the restart are violations (I9 / I7).
+A start sent and unanswered at the kill may leave nothing, or an `:open` line that boot refunds (never a win). A client that was listening must hear the end of every run: a run whose close line is in the ledger and whose `end` event never reached a connected client is an I7 violation.
+
+
 ## Invariants (`invariants.js`)
 
 The checker has its OWN reader of `money.jsonl` and shares no code with `money/`. Ledger-only violations are final; the rest get 1.5 s to clear (a message may still be in flight).
@@ -57,6 +72,7 @@ The checker has its OWN reader of `money.jsonl` and shares no code with `money/`
 - **I6 what the client is told**: the `wallet_get` answer and the admin overview rows equal the ledger.
 - **I7 the model**: every player's holdings (bank or wallet + seats by fund + open escrows) equal the model; every result the client received is in the ledger as told (Bender, poker, Cold Call); a round told open has its `:open` line and its stake in escrow; a ledger line closes a round no client was told about = violation.
 - **I8 no money in memory**: `audit.walletPending` = 0.
+- **Campaign (inside I2 / I4 / I7)**: `_campLine` takes every `campaign:` line apart: a run writes exactly ONE `:open` line (player -> `escrow:campaign:<key>:<roundId>`) and ONE `:close` line (escrow -> `house:campaign` for the whole stake plus `house:campaign` -> player for the payout, or escrow -> player alone as a void); any other ref (a credit mid-run, a second payout under a new ref) or leg shape is an I2 violation on the spot. `checkCampaign`: every `end` the client received (stake, win, refund) is in the ledger as told; every run told open has its `:open` line, its escrow and no close line; every non-zero `escrow:campaign:*` is a run the client was told about; `audit.games.campaign.openRounds` equals the escrows and `pools` is empty; `house:campaign` equals minus what the players netted. Every runView and step answer is compared with the engine (options, odds to 4 decimals, next multiplier, cash-out amounts) and every `end` obeys the rules of its `reason`.
 - **I9 restart**: lines across a kill are only the kinds a cut-off operation can leave (`hand|bender|coldcall|achv|bonus|signup|buyin|...`); lines written after the process died are only `boot:*` or the slot's own recovery closes; the restarted server's balances equal the file's; every slot round open at the kill has exactly one close line.
 
 ## Seeded bugs (`bugs/inject.js`, run by `prove.js`)
@@ -78,6 +94,13 @@ Each fires rarely from its own counter (the soak has to find it) and logs `[soak
 | `stranded-escrow` | now and then a `settleRound` / `voidRound` of the slot is swallowed after `open`: the game forgets the round, the escrow stays; only a close with a stake in escrow is swallowed, a free round has none to strand | I4 (escrow with no open round) |
 | `pool-skim` | the pot feed leg is dropped, or a prize is paid from `house:coldcall` instead of the pool (both sum to zero) | I4 pool (prize leg, feed rate), I2 |
 | `settle-after-void` | a slot round with a win is voided (stake back) and ALSO settled under a fresh ref: the win is paid on a returned stake | I7, I2 |
+| `camp-pays-scandal` | now and then a scandal (win 0) is settled as a win of the stake | I7 (told win 0), I2 `house:campaign` |
+| `camp-pays-twice` | after a cash-out the same win is credited again under a new ref | I2 (the ref shape), I7 |
+| `camp-cash-plus-step` | a cash-out pays 4% of the stake more than the multiplier the run reached ("one step more than survived") | I7 (told vs ledger), I2 |
+| `camp-stranded-escrow` | a settle / void of Campaign is swallowed after the game dropped its record: the stake stays in escrow | I4 (escrow with no open run), I7 |
+| `camp-record-kept` | the record of a closed run is not dropped now and then: the game keeps reporting a run open that the ledger closed | I4 (`audit` lists a run with no escrow) |
+| `camp-recover-pays-zero` | boot recovery pays a run that sat at 0 steps (+4%) instead of refunding it. Reachable only through a kill with a run open at 0 steps: `prove.js` runs it with `--kill-kinds campopen0,...` (`ARGS` in `bugs/inject.js`) | I9 (a settle where only a refund is allowed), I7 |
+| `camp-step-credit` | a surviving step credits 1 unit to the player under a ref of its own, mid-run (a step moves no money) | I2 (`campaign:<key>:<roundId>:s<n>` is not open / close) |
 
 `node tests/soak/prove.js` prints one line per run (name, exit code, invariants that fired, step, seconds, firings, verdict) and exits 0 only if the clean soak exits 0 and every bug exits 1 naming an invariant it is expected to break.
 A bug that is not caught is printed as FAILED PROOF, never hidden.
@@ -91,6 +114,11 @@ A bug that is not caught is printed as FAILED PROOF, never hidden.
 - `fx:chips` + `fx:play` = 0 always; each side alone is not 0 once a cross-funded seat has won or lost (see PROGRESS).
 - Bugs that no longer make sense on today's code: none of the twelve was retired. `stuck-stake` changed shape twice. First (wave 2) the adapter's `schedule` and a refused credit, while a Bender stake was parked inside one handler. Since wave 3b fix A5 Bender books a round as ONE ledger write (`ctx.money.round`) and no product path calls the adapter's `spend`, so that hook never fired (0 firings = FAILED PROOF); it now hooks `service.houseRound` for a Bender round and parks a stake of its own through the adapter's real `spend`. I8 still has a proof, but the bug stands for a path the product no longer takes: if the legacy `spend`/`credit` road is deleted from the adapter, retire this bug and say that I8 has no proof.
 
+## Campaign notes
+
+- bb298d2 ("Chips and Play $ fully separate", the commit the Campaign branch starts from) had changed the product after the soak last ran green, so three soak pieces were stale and are adapted here (not a Campaign change): `wallet_topup` is always refused with `topup_off` and mints nothing (the bank actor checks that; the old cooldown / not_needed rule is gone); the daily bonus pays Chips (model `applyMint('bonus')` and the `mint:bonus` expectation are in chips); achievements are badges (reward 0).
+- Campaign: `CAMPAIGN_IDLE_MS=2500` and `CAMPAIGN_TEST=1` are set for the server (soak.js), so a run left alone closes by the idle timer within a few seconds and QA-forced outcomes are available. A `--kill-kinds a,b,c` argument replaces the seeded choice of the chaos kinds (cycled in order).
+
 ## Not covered
 
-Chaos on the HTTP side, tournaments, the achievements surface beyond the unlock mints, accounts other than the bot set, two servers, a full disk, a torn line in the MIDDLE of the file, clock changes, and the slot's cold clock / daily claim (the clock is real, one run is minutes).
+Chaos on the HTTP side, tournaments, the achievements surface beyond the unlock mints, accounts other than the bot set, two servers, a full disk, a torn line in the MIDDLE of the file, clock changes, and the slot's cold clock / daily claim (the clock is real, one run is minutes), a Campaign run left open for the real 60 s idle timer (the soak shortens it to 2.5 s), two servers sharing one Campaign file.
