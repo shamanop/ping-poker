@@ -147,6 +147,36 @@ for (const mode of ['play', 'chips']) {
     eq([...new Set(hands)].length, 1, 'one ledger write for the hand');
   });
 
+  t(`${tag}: kick pending, then the victim's socket drops: the disconnect clock (not the kick) folds him, he is paid and removed once, the grace timer never pays him twice`, () => {
+    const { W, T } = table(mode, 2);
+    W.decks.push(rigDeck([['7c', '2d'], ['As', 'Ad']], DRY));
+    quiet(() => T.startHand());
+    T.act('a', { type: 'raise', to: 4 * W.bb });
+    quiet(() => { T.kick('a', 'b', false); T.disconnect('s-b'); });
+    ok(T.seatOfKey('b') && T.hand.toAct === 1, 'still his turn');
+    eq(W.port.drift(T, T.auditSeats()), [], 'no drift while the kick is pending');
+    quiet(() => W.clock.advance(31000));                                    // the 30 s disconnect clock
+    eq(T.seatOfKey('b'), null);
+    const d = finish(W);
+    eq([d.a, d.b], [W.bb, -W.bb]); conserved(W); noSeatAccount(W, T, 'b');
+    quiet(() => W.clock.advance(300000));
+    eq(W.errors, [], 'no deadline failed'); eq(net(W), d, 'nothing paid twice');
+    eq(evs(W, T, e => e[1] === 'bust' && e[2].key === 'b').length, 0, 'a kicked seat gets no bust-out panel');
+  });
+
+  t(`${tag}: no drift between the ledger and the seats while a kick is pending, on any street`, () => {
+    const { W, T } = table(mode, 2);
+    W.decks.push(rigDeck([['7c', '2d'], ['As', 'Ad']], DRY));
+    quiet(() => T.startHand());
+    quiet(() => T.kick('a', 'b', false));
+    let g = 0;
+    while (T.handLive() && T.hand.phase === 'betting' && g++ < 40) {
+      eq(W.port.drift(T, T.auditSeats()), [], 'drift on ' + T.hand.street);
+      const s = T.seats.get(T.hand.toAct); T.act(s.key, { type: T.hand.currentBet > T.hand.seats[s.seat].bet ? 'call' : 'check' });
+    }
+    conserved(W); eq(W.port.drift(T, T.auditSeats()), []);
+  });
+
   t(`${tag}: admin kick follows the same rule`, () => {
     const { W, T } = table(mode, 2);
     W.decks.push(rigDeck([['7c', '2d'], ['As', 'Ad']], DRY));
