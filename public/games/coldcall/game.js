@@ -505,7 +505,7 @@
   // a round that was open when the page loaded (state.open) or that another tab of the account started: play it from the beginning of what the server says was seen
   function adopt(p) {
     if (!p || !st.live || st.busy || st.modal) return false;
-    if (p.mode && p.mode !== st.mode) { st.mode = p.mode; modeUi(); toParent({ type: 'mode', mode: st.mode }); }
+    if (p.mode && p.mode !== st.mode) { st.mode = p.mode; modeUi(); toParent({ type: 'mode', mode: st.mode }); } if (p.mode === 'play' || p.mode === 'chips') st.modeTaken = true;
     mkBox(p.roundId); dbg.adopted = (dbg.adopted || 0) + 1; applyWallet(p.wallet || p.balances);
     runRound(p, p.buyBonus || 'spin', true); return true;
   }
@@ -668,7 +668,12 @@
     else if (Array.isArray(m.bets) && m.bets.length && st.bets.join() !== m.bets.join()) {   // the shell's wallet message can open the game live BEFORE the state does: the ladder (1c / 2c / 5c) arrives with the state, keep the bet the player is on
       const cur = bet(); st.bets = m.bets.slice(); const i = st.bets.indexOf(cur); if (i >= 0) st.betIdx = i; else setBets(m.bets);
     }
-    if (m.mode === 'play' || m.mode === 'chips') st.mode = m.mode;
+    // MODE FLIP: the shell's mode counts only on the FIRST message that carries one (the shell's wallet message can open the game live before the state does). After that the game keeps its own mode:
+    // a resync, a reconnect or a stale shell never flips it, and the shell is told what the game shows. A click on Cash / Chips or an adopted open round also settles it.
+    if (m.mode === 'play' || m.mode === 'chips') {
+      if (!st.modeTaken) { st.mode = m.mode; st.modeTaken = true; }
+      else if (m.mode !== st.mode) toParent({ type: 'mode', mode: st.mode });
+    }
     applyWallet(m.wallet || m.balances); modeUi(); if (!st.busy) setBal(walletBal(), false);
     const s = m.state, pl = s && s.pull;
     if (pl && !st.busy) {
@@ -710,7 +715,7 @@
   function initTransport() {
     const bar = document.createElement('div'); bar.id = 'modebar';
     bar.innerHTML = '<div class="mb"><button data-m="play">Cash</button><button data-m="chips">Chips</button></div><span id="modenote"></span>'; stage.appendChild(bar);
-    bar.addEventListener('click', (e) => { const x = e.target.closest('button'); if (!x || !st.live || st.busy) return; st.mode = x.dataset.m; SFX_.click(); resetWin(); setBal(walletBal(), false); modeUi(); feedReplay(); syncView(); toParent({ type: 'mode', mode: st.mode }); });
+    bar.addEventListener('click', (e) => { const x = e.target.closest('button'); if (!x || !st.live || st.busy) return; st.mode = x.dataset.m; st.modeTaken = true; SFX_.click(); resetWin(); setBal(walletBal(), false); modeUi(); feedReplay(); syncView(); toParent({ type: 'mode', mode: st.mode }); });
     modeUi();
     if (BRIDGE) {
       addEventListener('message', (ev) => {

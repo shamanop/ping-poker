@@ -875,7 +875,12 @@
   function goLive(m) {
     applyCfg(m.cfg);
     if (!money.live) { money.live = true; setBets(Array.isArray(m.bets) && m.bets.length ? m.bets : DEFAULT_BETS.concat([2500])); }
-    if (m.mode === 'play' || m.mode === 'chips') money.mode = m.mode;
+    // MODE FLIP: the shell's mode counts only on the FIRST message that carries one (a bare wallet message can open the game live before the init does). After that the game keeps its own mode:
+    // a resync or a stale shell never flips it, and the shell is told what the game shows. A click on Cash / Chips also settles it.
+    if (m.mode === 'play' || m.mode === 'chips') {
+      if (!money.modeTaken) { money.mode = m.mode; money.modeTaken = true; }
+      else if (m.mode !== money.mode) toParent({ type: 'mode', mode: money.mode });
+    }
     fmt = liveFmt();
     applyWallet(m.wallet || m.balances); modeUi(); if (!st.busy) setBal(walletBal(), false); drawBet();
   }
@@ -890,7 +895,7 @@
     $('stage').appendChild(bar);
     bar.addEventListener('click', (e) => {
       const b = e.target.closest('button'); if (!b || !money.live || st.busy) return;
-      money.mode = b.dataset.m; fmt = liveFmt(); SFX.click(); setBal(walletBal(), false); modeUi(); drawBet(); toParent({ type: 'mode', mode: money.mode });
+      money.mode = b.dataset.m; money.modeTaken = true; fmt = liveFmt(); SFX.click(); setBal(walletBal(), false); modeUi(); drawBet(); toParent({ type: 'mode', mode: money.mode });
     });
     modeUi();
     if (!BRIDGE) return;
