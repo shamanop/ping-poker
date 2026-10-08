@@ -225,6 +225,7 @@ function viewLobby() {
       h('section', { class: 'panel' }, h('h2', { class: 'panel__title' }, 'Open tables', h('small', null, 'Listed by their hosts')), h('div', { id: 'lb-open', class: 'lb-rows' }))),
     h('div', { class: 'lb-stack' },
       h('section', { class: 'lb-best panel panel--tight', id: 'lb-best', 'aria-label': 'Biggest win today' }),
+      campTile(),
       h('button', { class: 'btn btn--primary btn--lg btn--block', id: 'lb-create-btn', onclick: () => show('create') }, 'Create table'),
       h('section', { class: 'panel' }, h('h2', { class: 'panel__title' }, 'Join by code'), h('div', { class: 'lb-stack', style: 'gap:var(--p12)' }, codeIn, h('button', { class: 'btn btn--secondary btn--block', id: 'lb-join-btn', onclick: go }, 'Join'), jerr)),
       h('section', { class: 'panel' }, h('h2', { class: 'panel__title' }, 'Leaderboard', h('small', null, 'Lifetime net')), h('div', { id: 'lb-board' })),
@@ -600,6 +601,13 @@ function drawBest() {
   el.replaceChildren(h('img', { src: 'images/fx2/sticker-vp-charm.png', alt: '' }),
     h('div', { class: 'tx' }, h('small', null, 'Biggest win today'), h('b', null, fm(win.amountCents, 'cents')), h('span', null, win.name + ' on ' + (win.game === 'bender' ? 'Ballot Bender' : 'Poker'))),
     h('time', { 'data-ts': win.ts }, feedAgo(win.ts)));
+}
+// CAMPAIGN TRAIL tile: opens the game in the shell's dock window (Shell.registerGame id 'campaign'); the route art is a static inline SVG, no network
+function campTile() {
+  const mk = h('span', { class: 'mark', 'aria-hidden': 'true' });
+  mk.innerHTML = '<svg viewBox="0 0 72 48"><path class="r" d="M6 36 L22 26 L30 33 L44 15 L56 22 L66 8"/><g class="s"><circle cx="6" cy="36" r="3.2"/><circle cx="22" cy="26" r="3.2"/><circle cx="30" cy="33" r="3.2"/><circle cx="44" cy="15" r="3.2"/><circle cx="56" cy="22" r="3.2"/></g><path class="x" d="M62 4l8 8M70 4l-8 8"/></svg>';
+  return h('button', { class: 'lb-camp panel panel--tight', id: 'lb-camp', type: 'button', 'aria-label': 'Play Campaign Trail', onclick: () => { if (window.Shell && window.Shell.openGame) window.Shell.openGame('campaign'); } },
+    mk, h('div', { class: 'tx' }, h('small', null, 'New: solo game'), h('b', null, 'Campaign Trail'), h('span', null, 'Walk the map state by state. Cash out before the scandal.')), h('i', { class: 'go' }, 'Play'));
 }
 function onBest(p) { if (!p) return; if (typeof p.now === 'number') feedSkew = Date.now() - p.now; S.best = p; drawBest(); }
 setInterval(() => { if (S.user && S.view === 'lobby') emit('social:biggest'); }, 300000);
