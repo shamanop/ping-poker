@@ -1,0 +1,197 @@
+[
+ {
+  "name": "both seated at POKERPING",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "1440x900: same track + position at POKERPING",
+  "ok": true,
+  "detail": "worst delta 17 ms (st=smoky-lounge/smoky-lounge track=3/3 pos=39.029311/39.029194)"
+ },
+ {
+  "name": "brand-new account default: radio ON, saved to the account",
+  "ok": true,
+  "detail": "{'on': True, 'station': 'smoky-lounge'}"
+ },
+ {
+  "name": "A station change takes effect (A on new station)",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "station change: both on new station, same position",
+  "ok": true,
+  "detail": "worst delta 7 ms (st=basement-funk/basement-funk track=5/5 pos=13.176967/13.174611)"
+ },
+ {
+  "name": "slot MUSIC switch mirrors radio (on)",
+  "ok": true,
+  "detail": "{'music': True, 'pressed': 'true'}"
+ },
+ {
+  "name": "slot bed held while radio plays (no overlap)",
+  "ok": true,
+  "detail": "held=0.0000 free(control)=0.1089 reheld=0.0000"
+ },
+ {
+  "name": "slot MUSIC off -> radio paused + silent on A",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "B unaffected (still playing)",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "bed stays silent too (switch is off)",
+  "ok": true,
+  "detail": "rms=0.0000 state={\"on\":true,\"ctx\":\"running\",\"masterGain\":0.8500000238418579,\"musicOn\":false,\"musicGain\":0,\"sfxGain\":0.8999999761581421}"
+ },
+ {
+  "name": "per-player pref saved on account (on=false, station)",
+  "ok": true,
+  "detail": "{'on': False, 'station': 'basement-funk'}"
+ },
+ {
+  "name": "after reload: still off + silent + station kept",
+  "ok": true,
+  "detail": "idle"
+ },
+ {
+  "name": "new device login: radio off, station restored from account",
+  "ok": true,
+  "detail": "idle"
+ },
+ {
+  "name": "toggle back on: rejoined in sync with B",
+  "ok": true,
+  "detail": "worst delta 24 ms (st=basement-funk/basement-funk track=5/5 pos=43.301725/43.318473)"
+ },
+ {
+  "name": "bar play -> slot MUSIC switch on",
+  "ok": true,
+  "detail": "{'music': True, 'pressed': 'true'}"
+ },
+ {
+  "name": "bar pause -> slot MUSIC switch off + silent",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "slot switch on -> radio resumes in sync",
+  "ok": true,
+  "detail": "worst delta 10 ms (st=basement-funk/basement-funk track=5/5 pos=51.877344/51.871825)"
+ },
+ {
+  "name": "Cold Call MUSIC switch mirrors radio (on)",
+  "ok": true,
+  "detail": "{'music': True, 'pressed': 'true', 'bed': False}"
+ },
+ {
+  "name": "Cold Call bed held while radio plays (no overlap)",
+  "ok": true,
+  "detail": "{'music': True, 'pressed': 'true', 'bed': False}"
+ },
+ {
+  "name": "Cold Call control: bed audible when the hold is released, held again after",
+  "ok": true,
+  "detail": "free=True reheld=False"
+ },
+ {
+  "name": "Cold Call MUSIC off -> radio paused + silent on A",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "B unaffected by Cold Call switch",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "Cold Call MUSIC on -> radio plays again, bed stays held",
+  "ok": true,
+  "detail": "{'music': True, 'pressed': 'true', 'bed': False}"
+ },
+ {
+  "name": "Cold Call switch on -> radio in sync with B",
+  "ok": true,
+  "detail": "worst delta 9 ms (st=basement-funk/basement-funk track=5/5 pos=61.947151/61.941511)"
+ },
+ {
+  "name": "Cold Call big win ducks the radio, then it recovers",
+  "ok": true,
+  "detail": "base=0.1225 ducked=0.0612 after=0.1225"
+ },
+ {
+  "name": "Ballot Bender big win ducks the radio, then it recovers",
+  "ok": true,
+  "detail": "base=0.1225 ducked=0.0612 after=0.1225"
+ },
+ {
+  "name": "shell juice mega stinger ducks the radio, then it recovers",
+  "ok": true,
+  "detail": "base=0.1225 ducked=0.0551 after=0.1225"
+ },
+ {
+  "name": "no page errors",
+  "ok": true,
+  "detail": "[]"
+ },
+ {
+  "name": "360 wide: radio button inside viewport, in the shell root, no horizontal overflow",
+  "ok": true,
+  "detail": "{'w': 40, 'h': 44, 'l': 4, 'r': 44, 't': 690, 'b': 734, 'vw': 360, 'vh': 740, 'sw': 360, 'own': 'shell-root'}"
+ },
+ {
+  "name": "360 wide (at a table): top bar is hidden by phone.css, radio button still clickable",
+  "ok": true,
+  "detail": "{'topbar': 'none', 'hit': True}"
+ },
+ {
+  "name": "360 wide: station sheet inside viewport",
+  "ok": true,
+  "detail": "{'l': 8, 'r': 352, 't': 226.296875, 'b': 676, 'vw': 360, 'vh': 740}"
+ },
+ {
+  "name": "360 wide: sheet pause button pauses the radio (just for this player)",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "360x740: resumed in sync with B",
+  "ok": true,
+  "detail": "worst delta 9 ms (st=basement-funk/basement-funk track=5/5 pos=83.632845/83.626648)"
+ },
+ {
+  "name": "360 wide: sheet closes on an outside click",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "name": "844x390: radio button inside viewport, no horizontal overflow",
+  "ok": true,
+  "detail": "{'l': 6, 'r': 46, 't': 340, 'b': 384, 'vw': 844, 'vh': 390, 'sw': 844}"
+ },
+ {
+  "name": "844x390: station sheet inside viewport",
+  "ok": true,
+  "detail": "{'l': 60, 'r': 400, 't': 52, 'b': 382, 'vw': 844, 'vh': 390}"
+ },
+ {
+  "name": "844x390: still in sync with B",
+  "ok": true,
+  "detail": "worst delta 13 ms (st=basement-funk/basement-funk track=5/5 pos=87.354885/87.344749)"
+ },
+ {
+  "name": "no autoplay before a gesture (blocked, nothing audible)",
+  "ok": true,
+  "detail": "blocked"
+ },
+ {
+  "name": "first real click starts it",
+  "ok": true,
+  "detail": ""
+ }
+]

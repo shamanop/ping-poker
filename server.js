@@ -80,6 +80,7 @@ function start(env = process.env) {
   transportRef.start();
 
   // ---- HTTP ---------------------------------------------------------------------------------------------------
+  require('./music').attach({ app, io, publicDir: path.join(__dirname, 'public'), on: (socket, ev, fn) => ctx.safe.onEvent(socket, ev, fn) });
   app.use(express.static(path.join(__dirname, 'public')));
   app.get('/apic/:key/:ver', (req, res) => {
     const a = accounts.get(String(req.params.key).toLowerCase());

@@ -2,7 +2,7 @@
    Two independent switches, persisted in localStorage ping.sfx / ping.music (same keys as Ballot Bender, so the setting is shared).
    The AudioContext is created / resumed on a user gesture only (SFX.init() is called from pointer/key handlers). */
 const SFX = (() => {
-  let ctx, comp, sfxG, musG, duckG, noiseBuf, musicTimer = null, musicMode = null, step = 0, nextT = 0;
+  let ctx, comp, sfxG, musG, duckG, noiseBuf, bedHeld = false, musicTimer = null, musicMode = null, step = 0, nextT = 0;
   const ls = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
   const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* private mode */ } };
   const off = (v) => v !== null && /^(0|off|false|mute|muted|no)$/i.test(v);
@@ -115,7 +115,7 @@ const SFX = (() => {
     // hold music: soft electric-piano arpeggio over a walking bass, jazzy muzak. base = 96 bpm, bonus = 126 bpm and brighter.
     music(mode) {
       musicMode = mode;
-      if (!ctx || !musicOn) return;
+      if (!ctx || !musicOn || bedHeld) return;
       if (musicTimer && musicMode === mode && api._mm === mode) return;
       api.musicStop(); api._mm = mode; step = 0; nextT = ctx.currentTime + 0.1;
       const bonus = mode === 'bonus', sixteenth = 60 / (bonus ? 126 : 96) / 4;
@@ -133,7 +133,16 @@ const SFX = (() => {
       musicTimer = setInterval(sched, 60); sched();
     },
     musicStop() { if (musicTimer) { clearInterval(musicTimer); musicTimer = null; } api._mm = null; },
-    duck(on) { if (!duckG || !ctx) return; duckG.gain.cancelScheduledValues(ctx.currentTime); duckG.gain.linearRampToValueAtTime(on ? 0.12 : 0.5, ctx.currentTime + 0.25); }
+    // the shell radio is audible: hold the synthesized hold-music bed (mode is remembered) and resume it when the radio stops
+    holdBed(v) {
+      bedHeld = !!v;
+      if (bedHeld) api.musicStop(); else if (musicOn && musicMode && ctx) { const m = musicMode; musicMode = null; api.music(m); }
+    },
+    duck(on) {
+      if (on) try { const PM = window.parent !== window && window.parent.PingMusic; if (PM) PM.duck(2500, 0.5); } catch (e) { /* cross-origin */ }
+      if (!duckG || !ctx) return;
+      duckG.gain.cancelScheduledValues(ctx.currentTime); duckG.gain.linearRampToValueAtTime(on ? 0.12 : 0.5, ctx.currentTime + 0.25);
+    }
   };
   return api;
 })();

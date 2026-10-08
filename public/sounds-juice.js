@@ -149,6 +149,8 @@
 
   PJ.sfxNames = Object.keys(S);
 
+  // Win stingers briefly lower the lobby radio (window.PingMusic, also reachable from game iframes via parent).
+  var DUCK = { big: [900, 0.45], mega: [1600, 0.55], jackpot: [2600, 0.65] };
   PJ.sfx = function (name, opts) {
     var fn = S[name];
     if (!fn || muted()) return false;
@@ -159,6 +161,8 @@
     try {
       if (!ensure()) return false;
       fn(ctx.currentTime + 0.01, opts);
+      var dk = DUCK[name];
+      if (dk) { try { var M = window.PingMusic || (window.parent && window.parent.PingMusic); if (M) M.duck(dk[0], dk[1]); } catch (e) {} }
       return true;
     } catch (e) { return false; }
   };
