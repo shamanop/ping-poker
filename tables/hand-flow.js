@@ -27,6 +27,35 @@ const proto = {
     return nos.find(n => n > this.button) ?? nos[0];
   },
 
+  // ---- missed blinds (K3-8) -----------------------------------------------------------------------------------
+  // A seat that missed a hand while it was sitting out or away (missedBlind) is dealt in again only when the big blind reaches it: it
+  // waits, it does not post out of turn, and it can never be the button. A new seat has missed nothing and is dealt in at the next hand,
+  // in whatever position the button gives it (the rule for new seats is unchanged). With fewer than two seats that are free to play
+  // there is no game to wait behind, so the waiting seats are dealt in at once.
+  pickButton(elig) {
+    let base = elig.filter(s => !s.missedBlind);
+    if (base.length < 2) { for (const s of elig) s.missedBlind = false; base = elig; }
+    return this.nextButton(base);
+  },
+  // The seats dealt into this hand: every seat that is free to play, plus the first waiting seat (ring order after the button) that
+  // would be the big blind if it were dealt in.
+  dealtSeats(elig, button) {
+    const base = elig.filter(s => !s.missedBlind), waiting = elig.filter(s => s.missedBlind);
+    if (!waiting.length) return elig;
+    const after = n => (n - button + 1000) % 1000;
+    waiting.sort((a, b) => after(a.seat) - after(b.seat));
+    for (const w of waiting) {
+      const trial = [...base, w].sort((a, b) => a.seat - b.seat), nos = trial.map(x => x.seat);
+      const ring = nos.filter(n => n > button).concat(nos.filter(n => n <= button));    // seats after the button, wrapping (the button last)
+      if (ring[1] === w.seat) return trial;                                            // at least 3 seats here: SB = ring[0], BB = ring[1]
+    }
+    return base;
+  },
+  // A hand is dealt without a seat that has chips and is sitting out or away: that seat now owes the wait for the big blind.
+  noteMissedBlinds(dealtIn) {
+    for (const s of this.players()) if (!dealtIn.includes(s) && s.stack > 0 && !s.leaving && (s.sitOutNext || !s.connected)) s.missedBlind = true;
+  },
+
   nextHandDelay() { const env = Number(process.env.HAND_DELAY_MS); if (env > 0) return env; return this.hand && this.hand.uncontested ? 7000 : 5000; },
 
   // ---- start ------------------------------------------------------------------------------------------------
@@ -36,6 +65,8 @@ const proto = {
     if (this.endNightPending) { this.finishNight(this.endNightPending); return false; }
     const elig = this.eligible();
     if (elig.length < 2) { this.setPhase('waiting'); this.checkAutostart(); return false; }
+    this.missedSnap = new Map(this.players().map(s => [s, s.missedBlind]));          // a voided hand did not happen: void() puts the flags back
+    const button = this.pickButton(elig), dealtIn = this.dealtSeats(elig, button);
     this.clearDeadline('phase');
     const now = this.now();
     if (this.pendingBlinds) {
@@ -47,15 +78,16 @@ const proto = {
     const risen = lv.enabled && lv.level > (this.blindLevelSeen || 0);
     this.blindLevelSeen = lv.level;
     this.handNo += 1;
-    this.button = this.nextButton(elig);
+    this.button = button;
+    this.noteMissedBlinds(dealtIn);
     this.handStartStacks = {};
     for (const s of this.players()) { this.handStartStacks[s.seat] = s.stack; s.dealt = false; s.folded = false; s.lastAction = null; s.pre = null; }
     const deck = (this.deckSource && this.deckSource()) || shuffle(makeDeck(), this.rng || (this.rng = defaultRng()));
     this.committed = false; this.lastResult = null; this.log = [];
     try {
-      this.hand = engine.createHand({ handNo: this.handNo, button: this.button, sb: lv.sb, bb: lv.bb, seats: elig.map(s => ({ seat: s.seat, stack: s.stack })), deck });
+      this.hand = engine.createHand({ handNo: this.handNo, button: this.button, sb: lv.sb, bb: lv.bb, seats: dealtIn.map(s => ({ seat: s.seat, stack: s.stack })), deck });
     } catch (e) { this.hand = null; this.handNo -= 1; throw e; }
-    for (const s of elig) s.dealt = true;
+    for (const s of dealtIn) { s.dealt = true; s.missedBlind = false; }
     const h = this.hand;
     this.setPhase('betting');
     this.pushLog(`Hand ${this.handNo} dealt`);
@@ -319,6 +351,7 @@ const proto = {
       if (s.leaving) { try { this.money.sweep(this, s.key); } catch (e) { console.error('[v2] void sweep failed', s.key, e && e.message); } this.removeSeat(s); continue; }
       if (s.dealt && this.handStartStacks && this.handStartStacks[s.seat] != null) s.stack = this.handStartStacks[s.seat];
       s.dealt = false; s.folded = false; s.pre = null; s.lastAction = null; live.add(s.seat);
+      if (this.missedSnap && this.missedSnap.has(s)) s.missedBlind = this.missedSnap.get(s);
     }
     this.setPhase('between'); this.committed = false;
     const now = this.now();

@@ -213,7 +213,7 @@ class Table {
     this.noteBuyIn(key, opts.amount);
     const seat = {
       seat: no, key, stack: opts.amount, fund: fund || this.cur, connected: true, socketId: opts.socketId || null,
-      sitOutNext: false, leaving: false, kickPending: false, disconnectedAt: null, graceAt: null, timeouts: 0, pre: null, dealt: false, folded: false, lastAction: null,
+      sitOutNext: false, leaving: false, kickPending: false, missedBlind: false, disconnectedAt: null, graceAt: null, timeouts: 0, pre: null, dealt: false, folded: false, lastAction: null,
     };
     this.seats.set(no, seat);
     this.afterSeatChange(seat, 'joined', { stack: seat.stack, reconnect: false, ref: r.intent.ref });
