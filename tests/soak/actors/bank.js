@@ -18,6 +18,9 @@ async function signup(W) {
   W.model.addPlayer(b.key);
   W.lastSignupAt = Date.now();
   await sleep(150);                                    // accounts.json is written 50 ms after a signup: never kill before that
+  W.checker.poll();
+  const cash0 = W.checker.balance('play', 'play:' + b.key), chips0 = W.checker.balance('chips', 'bank:' + b.key);
+  if (cash0 !== 0 || chips0 !== 10000) W.violate('I11', `a new account ${b.key} starts with ${cash0} Cash and ${chips0} Chips (signup gives 0 Cash and 10000 Chips)`, { key: b.key }, '0 Cash, 10000 Chips', `${cash0} Cash, ${chips0} Chips`);
   return { what: 'signup', who: b.key };
 }
 
@@ -55,6 +58,11 @@ async function bonus(W) {
     if (!c1.data.ok || c1.data.amountCents !== st.data.amountCents) W.violate('I7', `bonus for ${b.key}: status said ${st.data.amountCents}, claim answered ${JSON.stringify(c1.data)}`, { key: b.key }, st.data.amountCents, JSON.stringify(c1.data));
     if (c1.data.ok && !(st.data.schedule || W.bonusSchedule).includes(c1.data.amountCents)) W.violate('I2', `bonus amount ${c1.data.amountCents} is not in the schedule`, { key: b.key }, W.bonusSchedule.join(','), c1.data.amountCents);
   } else if (c1.data.ok) W.violate('I7', `bonus for ${b.key}: status said already claimed, the claim paid ${c1.data.amountCents}`, { key: b.key }, 'refused', JSON.stringify(c1.data));
+  if (c1.data.ok) {                                    // the daily bonus pays Chips only (bb298d2): the ledger line is mint:bonus -> bank: in chips, nothing in play
+    W.checker.poll();
+    const ln = W.checker.lines.slice(-400).reverse().find(L => (L.ref || '').startsWith(`bonus:${b.key}:`));
+    if (ln && !ln.items.every(it => it.cur === 'chips' && it.from === 'mint:bonus' && it.to === 'bank:' + b.key)) W.violate('I10', `the daily bonus of ${b.key} (${ln.ref}) is not Chips only`, { key: b.key, ref: ln.ref }, 'mint:bonus -> bank:<key> in chips', JSON.stringify(ln.items).slice(0, 200));
+  }
   const c2 = await b.req('bonus:claim', {}, 'bonus:claimed', 3000);
   if (!c2.data || c2.data.ok) W.violate('I7', `second bonus claim in a row for ${b.key} was not refused`, { key: b.key }, '{ok:false}', JSON.stringify(c2.data || c2.error));
   return { what: 'bonus', who: b.key, first: c1.data.ok ? c1.data.amountCents : 'claimed', second: c2.data && c2.data.ok ? 'PAID' : 'refused' };
@@ -109,7 +117,15 @@ async function admin(W) {
   return { what: 'admin_nonadmin', who: plain.key, result: r.error ? r.error.code : 'ignored' };
 }
 
+// Setup: the product gives a new account 0 Cash (bb298d2); the soak players get theirs the only legal way, an admin adjust, so admin:adjust is the one source of Cash (the model books it).
+async function grantCash(W, key, cents) {
+  const r = await adminCall(W, 'admin_adjust', { key, delta: cents, cur: 'play', reason: 'soak grant' }, 'adjust');
+  if (!(r.data && r.data.ok)) throw new Error(`admin grant of ${cents} Cash to ${key} refused: ${JSON.stringify(r.data || r.error)}`);
+  W.model.applyAdmin(key, 'play', cents);
+}
+
 module.exports = {
+  grantCash,
   name: 'bank', weight: 10,
   async step(W) {
     const op = W.rng.weighted([[8, signup], [24, topup], [30, bonus], [38, admin]]);
