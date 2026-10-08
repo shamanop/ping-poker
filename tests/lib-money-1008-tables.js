@@ -64,8 +64,10 @@ function world(o = {}) {
   const sum = (prefix, cur) => W.ledger.list(prefix, cur).reduce((a, x) => a + x.balance, 0);
   W.total = cur => sum(cur === 'chips' ? 'bank:' : 'play:', cur) + sum('seat:', cur) + sum('pot:', cur);
   // A server stop and start on the same files: void live hands, save, close, reopen, boot recovery, load tables.json.
-  W.restart = (bootId) => {
+  // editTables(file), when given, runs on tables.json after the shutdown save and before the next boot reads it (an old or hand-edited file).
+  W.restart = (bootId, editTables) => {
     quiet(() => { W.registry.voidAll('shutdown'); W.registry.flush(); });
+    if (editTables) editTables(path.join(dir, 'tables.json'));
     W.ledger.close();
     const l2 = open(file, { fsync: 'none', log: () => {} });
     const id = bootId || 'b' + (++boots + 1);                       // a fresh boot id per start, like the live server: refs never repeat

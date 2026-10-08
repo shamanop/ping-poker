@@ -62,7 +62,7 @@ function validateSettings(raw) {
   const bin = raw.blindIncrease === undefined ? {} : raw.blindIncrease;
   if (!bin || typeof bin !== 'object') return invalid('blindIncrease', 'Bad blind increase');
   const blindIncrease = { enabled: !!bin.enabled, everyMin: bin.everyMin === undefined ? 15 : bin.everyMin, schedule: bin.schedule === undefined ? 'standard' : bin.schedule };
-  if (!EVERY_MIN.includes(blindIncrease.everyMin) || !MULTS[blindIncrease.schedule]) return invalid('blindIncrease', 'Bad blind increase');
+  if (!EVERY_MIN.includes(blindIncrease.everyMin) || typeof blindIncrease.schedule !== 'string' || !Object.prototype.hasOwnProperty.call(MULTS, blindIncrease.schedule)) return invalid('blindIncrease', 'Bad blind increase');
   const look = raw.look === undefined ? 'basement' : raw.look;
   if (typeof look !== 'string' || !LOOKS.includes(look)) return invalid('look', 'Unknown table look');
   return { ok: true, value: { name, mode, unit, buyIn, blinds, blindIncrease, seats, actionTimerSec: timer, rebuys, rebuyLimit, isPrivate, autoStart, look } };

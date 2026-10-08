@@ -49,11 +49,11 @@ t('K3-9 proof: Cash, opponent all-in, the connected staller never acts: his cloc
 t('load: a stored Cash table with timer 0 is read as 30 (and is not dropped); a stored Chips table keeps 0; a stored Cash 15 stays 15', () => {
   const W = world({ keys: ['a'] });
   const c0 = W.registry.create('a', { ...base('play'), actionTimerSec: 30 }), c15 = W.registry.create('a', { ...base('play'), actionTimerSec: 15 }), ch = W.registry.create('a', { ...base('chips'), actionTimerSec: 0 });
-  quiet(() => W.registry.flush());
-  const f = path.join(W.dir, 'tables.json'), j = JSON.parse(fs.readFileSync(f, 'utf8'));
-  for (const x of j.tables) if (x.id === c0.id) x.actionTimerSec = 0;
-  fs.writeFileSync(f, JSON.stringify(j));
-  W.restart();
+  W.restart(null, f => {
+    const j = JSON.parse(fs.readFileSync(f, 'utf8'));
+    for (const x of j.tables) if (x.id === c0.id) x.actionTimerSec = 0;
+    fs.writeFileSync(f, JSON.stringify(j));
+  });
   eq(W.registry.get(c0.id).actionTimerSec, 30); eq(W.registry.get(c15.id).actionTimerSec, 15); eq(W.registry.get(ch.id).actionTimerSec, 0);
 });
 done();
