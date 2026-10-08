@@ -145,6 +145,31 @@ const finish = (w, s, r) => { for (let k = 0; r.status === 'pending' && k < 8; k
     });
   });
 
+  // K4-4: a `decide` whose message names another currency. The currency of a round is the STORED one (rec.mode), never the message's.
+  await test('decide: a message that names another currency (mode: play on a Chips round, and the reverse) settles in the round\'s own currency; Cash never moves for a Chips round', async () => {
+    const w = world({ rng: E.rngFrom(31), roundRng: E.rngFrom(32) }); const s = w.sock('ann'); w.setBal('ann', 'play', 5000000); w.setBal('ann', 'chips', 5000000);
+    const other = (m) => (m === 'play' ? 'chips' : 'play');
+    for (const mode of ['chips', 'play']) {
+      // (1) a paid Chips / Cash round waiting at a decision
+      const pend = H.toPending(w, s, 'more', mode, 100); const a0 = w.bal('ann', mode), o0 = w.bal('ann', other(mode));
+      s.send('g:coldcall:decide', { roundId: pend.roundId, k: 'more', take: false, mode: other(mode), bet: 2500, cost: 1 });
+      let r = H.last(s, 'g:coldcall:result');
+      assert.strictEqual(r.status, 'done'); assert.strictEqual(r.mode, mode, 'the result is in the round\'s own currency');
+      assert.strictEqual(w.bal('ann', mode), a0 + r.totalWin, 'paid in ' + mode); assert.strictEqual(w.bal('ann', other(mode)), o0, other(mode) + ' did not move');
+      // (2) a Callback armed in this currency, played free, every decision answered with the OTHER currency in the message
+      w.SRV._pull.store.setPlayer('ann', mode, { ...E.newState(), cb: { bet: 2500, id: 'cbmix' + mode }, lt: 100 }); w.flush();
+      const b0 = w.bal('ann', mode), q0 = w.bal('ann', other(mode));
+      r = H.spin(w, s, { bet: 10, mode }); assert.strictEqual(r.callback, true, 'the Callback plays'); assert.strictEqual(r.cost, 0);
+      for (let i = 0; r.status === 'pending' && i < 8; i++) r = H.decide(w, s, r, { ...H.policy(i, r.pending), mode: other(mode) });
+      assert.strictEqual(r.status, 'done'); assert.strictEqual(r.mode, mode);
+      assert.strictEqual(w.bal('ann', mode), b0 + r.totalWin + (r.pot ? r.pot.amount : 0), 'the Callback is paid in ' + mode); assert.strictEqual(w.bal('ann', other(mode)), q0, other(mode) + ' did not move');
+    }
+    // every ledger line of the decisions above sits in one currency per ref: no ref was paid in a currency it was not opened in
+    const byRef = new Map(); for (const e of w.lines((e) => /^coldcall:ann:/.test(e.ref))) { const set = byRef.get(e.ref) || new Set(); set.add(e.cur); byRef.set(e.ref, set); }
+    for (const [ref, set] of byRef) assert.strictEqual(set.size, 1, ref + ' touched ' + [...set].join('+'));
+    w.crash();
+  });
+
   // boot line
   await test('boot: with the hook on the server prints ONE loud line saying so; with it off it prints nothing about the hook', async () => {
     for (const [vars, expect] of [[ON, 1], [{ COLDCALL_TEST: null, NODE_ENV: null }, 0], [{ COLDCALL_TEST: '1', NODE_ENV: 'production' }, 0]]) {
