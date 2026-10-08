@@ -51,7 +51,7 @@ async function main() {
 
   const W = {
     seed, rng: mulberry32(seed), dataDir, serverDir, port, nPlayers, bug,
-    ctl: new ServerCtl({ port, dir: dataDir, serverDir, bug, injectPath: path.join(__dirname, 'bugs', 'inject.js'), env: { COLDCALL_TEST: '1', CAMPAIGN_TEST: '1', CAMPAIGN_IDLE_MS: '2500', NODE_ENV: 'test', BENDER_ADMIN_TOKEN: slot.ADMIN_TOKEN } }),
+    ctl: new ServerCtl({ port, dir: dataDir, serverDir, bug, injectPath: path.join(__dirname, 'bugs', 'inject.js'), env: { COLDCALL_TEST: '1', CAMPAIGN_TEST: '1', CAMPAIGN_IDLE_MS: '2500', NODE_ENV: 'test', ADMIN_CLAIM_PASSWORD: 'test-admin-claim-1008', BENDER_ADMIN_TOKEN: slot.ADMIN_TOKEN } }),
     model: new Model(), checker: new Checker(path.join(dataDir, 'money.jsonl'), { knownMigration: strict ? null : KNOWN_MIGRATION }),
     bots: new Map(), tables: new Map(), admin: null, auditSock: null,
     inflightSpins: [], cfg: { betLevels: [1, 2, 10, 20, 50, 100, 200, 500, 1000, 2500], buyCostX: { election: 10.91, landslide: 77.21 } },

@@ -23,7 +23,7 @@ class ServerCtl {
     const e = { ...base, PORT: String(this.port), DATA_DIR: this.dir, BANK_FILE: f('bank.json'), LEDGER_FILE: f('ledger.json'), ACCOUNTS_FILE: f('accounts.json'),
       TABLES_FILE: f('tables.json'), WALLET_FILE: f('wallet.json'), STACKS_FILE: f('stacks.json'), BIGWINS_FILE: f('bigwins.json'), BENDER_CFG_FILE: f('bender-cfg.json'),
       MONEY_FILE: f('money.jsonl'), RIG: '1', AUTO_START_MS: '250', HAND_DELAY_MS: '120', STREET_MS: '120', TURN_MS: '1500', HOST_GRACE_MS: '3000',
-      AUTH_SIGNUP_LIMIT: '100000', ...this.extraEnv };
+      AUTH_SIGNUP_LIMIT: '100000', ADMIN_CLAIM_PASSWORD: 'test-admin-claim-1008', ...this.extraEnv };
     if (this.bug) e.SOAK_BUG = this.bug;
     delete e.NODE_OPTIONS;
     return e;
