@@ -1,0 +1,14 @@
+# Campaign Trail: asset sources and licences
+
+Everything here is free to ship. Nothing is fetched at run time (no CDN, no network).
+
+| File | What | Source | Licence |
+|---|---|---|---|
+| `map-data.js` | One SVG path per US state (50, keyed by postal code), label point and bounding box per state | Wikimedia Commons, "Blank US Map (states only).svg" by Heitordp, derived from "Blank USA, w territories.svg". https://commons.wikimedia.org/wiki/File:Blank_US_Map_(states_only).svg (raw: https://upload.wikimedia.org/wikipedia/commons/1/1a/Blank_US_Map_%28states_only%29.svg). Alaska and Hawaii are in the file's own inset positions. | CC0 1.0 (public domain dedication), confirmed in the Commons metadata (`LicenseShortName: CC0`) on 2026-10-07 |
+| `build-map.js` | Our script that turns that SVG into `map-data.js` (`node build-map.js us.svg > map-data.js`) | written for this game | same as the repo |
+| `assets/fonts/BebasNeue-Regular.woff2` | Display face (numbers, labels) | Bebas Neue, Dharma Type; converted ttf to woff2 with fontTools from the copy already in the repo's Cold Call font scratch | SIL OFL 1.1 (`assets/fonts/OFL-BebasNeue.txt`) |
+| `assets/fonts/AlfaSlabOne-Regular.woff2`, `SpecialElite-Regular.woff2`, `CourierPrime-Bold.woff2` | Title slab, ticker typewriter, small print | copied from `public/games/coldcall/assets/fonts/` (see the licence text in that folder's `LICENSES.txt`: Alfa Slab One and Courier Prime OFL 1.1, Special Elite Apache 2.0) | OFL 1.1 / Apache 2.0 |
+
+All fonts are Latin subsets: copy in the game uses Basic Latin characters only.
+
+The air links (AK-WA, AK-HI, HI-CA) are drawn by `map.js` as dashed arcs between state label points; the border pairs list inside `map-data.js` (`borders`) is only what the SVG file itself carried and is not used by the game (the server's map is the truth).
