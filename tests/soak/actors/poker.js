@@ -7,7 +7,7 @@ const { sleep } = require('../lib/bot');
 let tableSeq = 0;
 const SETTINGS = {
   chips: () => ({ name: `Soak chips ${++tableSeq}`, mode: 'chips', buyIn: { min: 500, max: 100000, default: 2000 }, blinds: { sb: 25, bb: 50 }, actionTimerSec: 0, autoStart: true, isPrivate: false, rebuys: true, rebuyLimit: 0 }),
-  play: () => ({ name: `Soak play ${++tableSeq}`, mode: 'play', buyIn: { min: 1000, max: 100000, default: 5000 }, blinds: { sb: 50, bb: 100 }, actionTimerSec: 0, autoStart: true, isPrivate: false, rebuys: true, rebuyLimit: 0 }),
+  play: () => ({ name: `Soak play ${++tableSeq}`, mode: 'play', buyIn: { min: 1000, max: 100000, default: 5000 }, blinds: { sb: 50, bb: 100 }, actionTimerSec: 30, autoStart: true, isPrivate: false, rebuys: true, rebuyLimit: 0 }),
 };
 const aliveTables = W => [...W.tables.values()].filter(t => !t.ended && !t.gone);
 const storeOf = (cur, key) => (cur === 'chips' ? 'bank:' : 'play:') + key;

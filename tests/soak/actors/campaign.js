@@ -9,6 +9,7 @@
 // flight and unanswered, exactly three closes are accepted: win 0 (the step was a scandal), the last seen multiplier (the step was never flushed), or the multiplier of that one option (it survived and was flushed).
 // The ledger side (stake, win, escrow, shape) is judged in invariants.js checkCampaign. The math of every option the server shows is re-derived here from the engine (pure math, not money code).
 const { sleep } = require('../lib/bot');
+const { opId } = require('../lib/opid');
 const E = require('../../../games/campaign-engine.js');
 
 const WITNESS = 'ME NH VT MA RI CT NY NJ DE MD PA WV OH MI IN IL WI MN ND MT SD IA NE KS CO WY UT ID WA AK HI CA OR NV AZ NM OK TX LA AR MO KY VA NC SC GA FL AL MS TN'.split(' ');
@@ -230,8 +231,11 @@ async function startRun(W, bot, { mode, bet, home }) {
   if (r.error) return { ...refuse(W, r, `start ${mode} ${bet} ${home}`), run: r.error.run || null };
   return { kind: 'run', run: r.data.run };
 }
-async function stepRun(W, bot, o, to, force) {
+// The QA `force` hook is Chips only (K4-3 / K5-F): a Cash run is never sent a `force`, so every step of a Cash run is the engine's own draw.
+const forceFor = (o, force) => (o.cur === 'chips' && force ? force : undefined);
+async function stepRun(W, bot, o, to, force0) {
   await pace(W, bot, 'step');
+  const force = forceFor(o, force0);
   const opt = o.options.find((x) => x.to === to), n = o.steps + 1;
   o.pend = { kind: 'step', to, n, opt, force: force || null }; bot.spinsInFlight++;
   const r = await bot.req('g:campaign:step', { roundId: o.rid, n, to, ...(force ? { force } : {}) }, ['g:campaign:step', 'g:campaign:end'], 5000, { pred: (d) => d.roundId === o.rid });
@@ -322,7 +326,7 @@ module.exports = {
       }
       if (kind === 'double') {                                // two identical steps (or cashes) back to back: one effect
         C.c.doubles++; await pace(W, bot, 'step');
-        const cash = o.steps >= 1 && W.rng.chance(0.4), to = pickTo(W, o), n = o.steps + 1, force = W.rng.chance(0.6) ? 'survive' : undefined;
+        const cash = o.steps >= 1 && W.rng.chance(0.4), to = pickTo(W, o), n = o.steps + 1, force = forceFor(o, W.rng.chance(0.6) ? 'survive' : undefined);
         const ev = cash ? 'g:campaign:cash' : 'g:campaign:step', payload = cash ? { roundId: o.rid } : { roundId: o.rid, n, to, ...(force ? { force } : {}) };
         o.pend = cash ? { kind: 'cash' } : { kind: 'step', to, n, opt: o.options.find((x) => x.to === to), force: force || null };
         bot.spinsInFlight += 2;
@@ -357,13 +361,13 @@ module.exports = {
       const bot = W.rng.pick(all); if (B.hasOpen(bot.key)) return null;
       let h = have(W, bot, mode), bet = W.camp.betLevels.slice().reverse().find((b) => b > h), restore = null;
       if (!bet && mode === 'play' && !bot.tableId && !W.model.slot.hasOpen(bot.key) && bot.spinsInFlight === 0 && W.admin.connected()) {      // nobody is poor: make one player poor in Cash through the admin (same book-keeping as the bank actor), then give it back
-        const cents = W.rng.range(0, 99), r = await W.admin.req('admin_set_play', { key: bot.key, cents }, 'admin_result', 4000, { pred: (d) => d.op === 'set_play' });
-        if (!(r.data && r.data.ok)) return null;
+        const cents = W.rng.range(0, 99), r = await W.admin.req('admin_set_play', { key: bot.key, cents, opId: opId() }, 'admin_result', 4000, { pred: (d) => d.op === 'set_play' });
+        if (!(r.data && r.data.ok)) { if (r.data && r.data.code === 'cash_in_play') violate(W, `admin_set_play ${cents} for ${bot.key} refused for cash in play, but the bot has no seat, no open run and no open slot round`, { key: bot.key }, 'ok', JSON.stringify(r.data)); return null; }     // K1-3: a refused set changes nothing, so the model is left alone
         W.model.applyAdmin(bot.key, 'play', cents - h); restore = h; h = cents; bet = 100;
       }
       if (!bet) return null;
       const n0 = markLines(W), r = await startRun(W, bot, { mode, bet, home: 'OH' });
-      if (restore != null) { const now = have(W, bot, 'play'); const rr = await W.admin.req('admin_set_play', { key: bot.key, cents: restore }, 'admin_result', 4000, { pred: (d) => d.op === 'set_play' }); if (rr.data && rr.data.ok && restore !== now) W.model.applyAdmin(bot.key, 'play', restore - now); }
+      if (restore != null) { const now = have(W, bot, 'play'); const rr = await W.admin.req('admin_set_play', { key: bot.key, cents: restore, opId: opId() }, 'admin_result', 4000, { pred: (d) => d.op === 'set_play' }); if (rr.data && rr.data.ok) { if (restore !== now) W.model.applyAdmin(bot.key, 'play', restore - now); } else violate(W, `admin_set_play ${restore} (give the Cash back) for ${bot.key} was refused`, { key: bot.key }, 'ok', JSON.stringify(rr.data || rr.error)); }       // K1-3: the set is the TOTAL; this bot has no run, seat or round, so the wallet is the total and a refusal is a finding
       if (r.kind === 'run') return rec('start_big', bot, { bet, answer: 'run' });
       { const ls = newCampLines(W, n0, bot.key).filter((L) => L.camp.suffix === 'open'); if (r.code === 'funds' && ls.length) violate(W, 'a refused start (funds) wrote a ledger line', { key: bot.key }, 'nothing', ls.map((L) => L.ref).join(',')); }
       return rec('start_big', bot, { bet, answer: r.code });
@@ -378,9 +382,9 @@ module.exports = {
       return rec('hostile', bot, { ev, answer: r.error ? r.error.code : r.ev });
     }
     const bot = freeBot(W); if (!bot) return null;
-    if (kind === 'landslide') {                               // the witness route, 49 forced survivals, the 50th state: 1,000x of a $1.00 / 100 chip stake. Rare: it takes about 9 s.
+    if (kind === 'landslide') {                               // the witness route, 49 forced survivals (Chips only), the 50th state: 1,000x of a 100 chip stake. Rare: it takes about 9 s.
       W.camp.landslideTries++;
-      const m = have(W, bot, 'play') >= 100 ? 'play' : 'chips'; if (have(W, bot, m) < 100) return null;
+      const m = 'chips'; if (have(W, bot, m) < 100) return null;                // 49 forced survivals need `force`, which is Chips only: the whole route is played in Chips
       const r = await startRun(W, bot, { mode: m, bet: 100, home: WITNESS[0] }); if (r.kind !== 'run') return null;
       const o = B.open.get(`${bot.key}:${r.run.roundId}`); if (!o) return null;
       let last = null;
@@ -400,8 +404,8 @@ module.exports = {
     if (kind === 'scandal') {
       const pre = W.rng.int(3);
       for (let i = 0; i < pre && modelOpen(W, o); i++) await stepRun(W, bot, o, pickTo(W, o), 'survive');
-      if (modelOpen(W, o)) await stepRun(W, bot, o, pickTo(W, o, false), 'scandal');
-      return rec('scandal', bot, { bet, pre });
+      if (modelOpen(W, o)) await stepRun(W, bot, o, pickTo(W, o, false), 'scandal');      // a Cash run is not forced (forceFor): the step is the engine's own draw and the run may live on
+      return rec('scandal', bot, { bet, pre, forced: o.cur === 'chips' });
     }
     const n = kind === 'idle' ? W.rng.int(3) : 1 + W.rng.int(5);
     for (let i = 0; i < n && modelOpen(W, o); i++) await stepRun(W, bot, o, pickTo(W, o, W.rng.chance(0.85)), W.rng.chance(0.65) ? 'survive' : undefined);

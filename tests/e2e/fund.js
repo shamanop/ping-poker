@@ -6,5 +6,5 @@ let i = 0;
 s.on('connect', () => s.emit('auth_login', { name: 'chris', pin: '4321' }));
 s.on('auth_ok', () => next());
 s.on('admin_result', r => { console.log(r.key, r.ok ? 'ok' : (r.code || r.message)); next(); });
-function next() { if (i >= names.length) { s.close(); return; } s.emit('admin_adjust', { key: names[i++], delta: Number(amount), cur: 'chips', reason: 'e2e funding' }); }
+function next() { if (i >= names.length) { s.close(); return; } s.emit('admin_adjust', { key: names[i++], delta: Number(amount), cur: 'chips', reason: 'e2e funding', opId: `e2e-fund-${Date.now().toString(36)}-${i}` }); }
 setTimeout(() => { s.close(); process.exit(0); }, 15000);
