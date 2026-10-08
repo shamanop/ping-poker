@@ -96,7 +96,7 @@
 .lb-sign .bb:active:not(:disabled) { transform: translateY(var(--p1)); filter: brightness(.97); box-shadow: 0 0 0 rgba(0, 0, 0, .6), 0 var(--p2) var(--p6) rgba(0, 0, 0, .45), inset 0 0 0 1px rgba(255, 248, 224, .4), inset 0 var(--p2) var(--p10) rgba(80, 55, 20, .5); }
 .lb-sign .bb:focus-visible { outline: var(--p3) solid var(--gold); outline-offset: var(--p3); }
 .lb-sign .bb:disabled:not(.on) { opacity: .5; cursor: default; filter: saturate(.6); }
-.lb-sign .bb.on:disabled { cursor: progress; }
+.lb-sign .bb.on:disabled { cursor: progress; opacity: .8; filter: saturate(.8); } /* (r2) critic r1 #11: a locked submit must not look live */
 
 /* tabs: two ballot strips side by side; the inactive one sits back. The group keeps the kit's .seg class (tests find the tabs by it) but drops its frame. */
 .lb-sign .seg.lb-seg { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); grid-template-columns: none; gap: var(--p12); padding: 0; border: 0; border-image: none; border-radius: 0; background: none; box-shadow: none; overflow: visible; }

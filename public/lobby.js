@@ -845,6 +845,8 @@ function onAuthOk({ account, token }) {
 function bind() {
   const s = getSock(); if (!s) return;
   s.on('connect', () => { if (!S.resumeBusy && (S.user || loadSession())) tryResume(); });
+  // (r2) critic r1 #11: a socket drop between submit and reply left the sign-in button locked for good; no reply can come any more, so release it
+  s.on('disconnect', () => { if (S.view !== 'signin') return; const b = $('lb-submit'); if (b && b.classList.contains('on')) { b.disabled = false; b.classList.remove('on'); } });
   s.on('auth_ok', onAuthOk);
   s.on('auth_error', ({ code, retryMs, message } = {}) => {
     S.resumeBusy = false;
