@@ -231,8 +231,11 @@ async function startRun(W, bot, { mode, bet, home }) {
   if (r.error) return { ...refuse(W, r, `start ${mode} ${bet} ${home}`), run: r.error.run || null };
   return { kind: 'run', run: r.data.run };
 }
-async function stepRun(W, bot, o, to, force) {
+// The QA `force` hook is Chips only (K4-3 / K5-F): a Cash run is never sent a `force`, so every step of a Cash run is the engine's own draw.
+const forceFor = (o, force) => (o.cur === 'chips' && force ? force : undefined);
+async function stepRun(W, bot, o, to, force0) {
   await pace(W, bot, 'step');
+  const force = forceFor(o, force0);
   const opt = o.options.find((x) => x.to === to), n = o.steps + 1;
   o.pend = { kind: 'step', to, n, opt, force: force || null }; bot.spinsInFlight++;
   const r = await bot.req('g:campaign:step', { roundId: o.rid, n, to, ...(force ? { force } : {}) }, ['g:campaign:step', 'g:campaign:end'], 5000, { pred: (d) => d.roundId === o.rid });
@@ -323,7 +326,7 @@ module.exports = {
       }
       if (kind === 'double') {                                // two identical steps (or cashes) back to back: one effect
         C.c.doubles++; await pace(W, bot, 'step');
-        const cash = o.steps >= 1 && W.rng.chance(0.4), to = pickTo(W, o), n = o.steps + 1, force = W.rng.chance(0.6) ? 'survive' : undefined;
+        const cash = o.steps >= 1 && W.rng.chance(0.4), to = pickTo(W, o), n = o.steps + 1, force = forceFor(o, W.rng.chance(0.6) ? 'survive' : undefined);
         const ev = cash ? 'g:campaign:cash' : 'g:campaign:step', payload = cash ? { roundId: o.rid } : { roundId: o.rid, n, to, ...(force ? { force } : {}) };
         o.pend = cash ? { kind: 'cash' } : { kind: 'step', to, n, opt: o.options.find((x) => x.to === to), force: force || null };
         bot.spinsInFlight += 2;
@@ -379,9 +382,9 @@ module.exports = {
       return rec('hostile', bot, { ev, answer: r.error ? r.error.code : r.ev });
     }
     const bot = freeBot(W); if (!bot) return null;
-    if (kind === 'landslide') {                               // the witness route, 49 forced survivals, the 50th state: 1,000x of a $1.00 / 100 chip stake. Rare: it takes about 9 s.
+    if (kind === 'landslide') {                               // the witness route, 49 forced survivals (Chips only), the 50th state: 1,000x of a 100 chip stake. Rare: it takes about 9 s.
       W.camp.landslideTries++;
-      const m = have(W, bot, 'play') >= 100 ? 'play' : 'chips'; if (have(W, bot, m) < 100) return null;
+      const m = 'chips'; if (have(W, bot, m) < 100) return null;                // 49 forced survivals need `force`, which is Chips only: the whole route is played in Chips
       const r = await startRun(W, bot, { mode: m, bet: 100, home: WITNESS[0] }); if (r.kind !== 'run') return null;
       const o = B.open.get(`${bot.key}:${r.run.roundId}`); if (!o) return null;
       let last = null;
@@ -401,8 +404,8 @@ module.exports = {
     if (kind === 'scandal') {
       const pre = W.rng.int(3);
       for (let i = 0; i < pre && modelOpen(W, o); i++) await stepRun(W, bot, o, pickTo(W, o), 'survive');
-      if (modelOpen(W, o)) await stepRun(W, bot, o, pickTo(W, o, false), 'scandal');
-      return rec('scandal', bot, { bet, pre });
+      if (modelOpen(W, o)) await stepRun(W, bot, o, pickTo(W, o, false), 'scandal');      // a Cash run is not forced (forceFor): the step is the engine's own draw and the run may live on
+      return rec('scandal', bot, { bet, pre, forced: o.cur === 'chips' });
     }
     const n = kind === 'idle' ? W.rng.int(3) : 1 + W.rng.int(5);
     for (let i = 0; i < n && modelOpen(W, o); i++) await stepRun(W, bot, o, pickTo(W, o, W.rng.chance(0.85)), W.rng.chance(0.65) ? 'survive' : undefined);

@@ -244,8 +244,8 @@ function pickBet(W, bot, cur, buy) {
 }
 
 // One spin with its answer awaited. Returns { kind: 'result'|'refused'|'timeout', code? }.
-async function spinOnce(W, bot, { mode, bet, buy, force }) {
-  const S = W.slot, key = bot.key;
+async function spinOnce(W, bot, { mode, bet, buy, force: force0 }) {
+  const S = W.slot, key = bot.key, force = mode === 'chips' ? force0 : null;       // the QA `force` hook is Chips only (K4-3): a Cash spin is never sent one, it is played unforced
   await pace(bot);
   W.checker.poll();
   const rec = { key, mode, bet, buy: buy || null, force: force || null, cost: costFor(W, bet, buy) };
@@ -419,7 +419,7 @@ module.exports = {
       return { actor: 'coldcall', what: 'spin2', who: bot.key, mode, bet, answers: got.map(g => (g.error ? g.error.code : g.data.status)) };
     }
     const buy = kind === 'buy' ? W.rng.pick(['bonus1', 'bonus1', 'bonus1', 'bonus2', 'bonus2', 'call', 'hunt']) : null;
-    const force = kind === 'forced' ? W.rng.pick(FORCES) : null;
+    const force = kind === 'forced' && mode === 'chips' ? W.rng.pick(FORCES) : null;     // a 'forced' pick in Cash is a plain unforced Cash spin (same number of Cash spins, spinOnce drops force for Cash anyway)
     const bet = pickBet(W, bot, mode, buy);
     if (!bet) return null;
     const r = await spinOnce(W, bot, { mode, bet, buy, force });
