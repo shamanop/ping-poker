@@ -14,12 +14,28 @@ Worktree `wt-port-radio`, cut from `port-1007` c1cf225. Nothing pushed, nothing 
 - `tests/radio-sync.py` rewritten for v2 (sign in -> lobby -> `table_join`), own port 4711. `qa/music/shots_port.py`: layout asserts + screenshots. Screenshots in `qa/port-radio/*.jpg`, `layout.json`, `radio-sync-results.json`.
 
 ## HUNKS FOR LEAD
-1. `package.json` scripts.test: append ` && node tests/music-clock.test.js` (the old branch did; `package.json` is the lead's).
+1. `package.json` scripts.test: append ` && node tests/music-clock.test.js` (the old branch did; `package.json` is the lead's). DONE by the lead (5efbbc1).
+2. (r2) `public/index.html`: move the cache-busts because `music.js` and `music.css` changed:
+   - line 19 `<link rel="stylesheet" href="music.css?v=1-port">` -> `music.css?v=1-port-r2`
+   - line 199 `<script src="music.js?v=1-port"></script>` -> `music.js?v=1-port-r2`
+   (`music-clock.js` is unchanged.)
 No hunk needed in `index.html` (tags and cache-busts already there), `shell.js`, `shell.css`, `phone.css`, `landscape.css`.
+
+## Round 2 (critic r1 fixes, from port-1007 a236e59)
+Done (each change tagged `(r2) critic r1 #N` in the code):
+- #3 user-gesture gate in `public/music.js`: `play()` is never called before a trusted gesture this page load (`onGesture` capture listeners on pointerdown / pointerup(touch) / touchend / keydown, plus `navigator.userActivation.hasBeenActive`). ON and no gesture: status `blocked`, nothing loaded, label "Click or tap to start", pulsing control (+ gold dot on the compact icon, `music.css`). A rejected play() (NotAllowedError) lands in `blocked`; each later gesture retries once, no timer. `begin()` callers have `.catch(beginFailed)`: no unhandled rejection. OFF stays off through gestures. Default for a new account NOT changed (still ON): open product question for Chris.
+- #9 station list updated in place (`paintPop`): buttons are built once per station set, classes / aria / now-playing updated on the same nodes; `paintBar` writes only what changed (`setHtml` / `setText` / `setAttr`).
+- #10 `music.css`: at <= 600 px the dock row gets `padding-left: 52px` while the radio icon is shown (it was 2 px under the first dock icon at 360).
+- Evidence: `qa/port-radio/r2/` (`layout.py`, `gate.py`, `layout.json`, shots).
+Open:
+- Playwright `page.evaluate` / `wait_for_function` run with userGesture:true and give the page sticky activation; the no-input leg therefore reads console reports from an init script only (see `gate.py`). Any future gate test must do the same.
+- Chromium's own autoplay policy was NOT exercised (headless does not enforce it); the gate is the page's own logic, forced-reject covers the browser side. Real Chrome / Safari / iOS untested.
+- At 320 px wide the dock row (275 px of icons) no longer fits next to the 52 px padding and overflows by about 7 px each side; icons then sit 0.5 px clear of the radio. Not in the 7 measured sizes. A 4th dock game would overflow below about 400 px.
+Resume: dev server as in "How to resume", then `PORT=4710 python3 qa/port-radio/r2/layout.py` and `PORT=4710 python3 qa/port-radio/r2/gate.py`; `node tests/music-clock.test.js`; `PORT=4711 SHOTS=<dir> python3 tests/radio-sync.py`.
 
 ## Open
 - v2's own top bar overlaps its level chip and wallet below about 1100 px wide (measured with music.css disabled, e.g. 900x800: `sh-lvl` 180-338 vs `sh-wallet` 206-506). Not caused by the radio; the compact layout keeps the radio out of that bar.
-- Phone dock margin button: at 360 px it sits flush against the first dock icon (button 4-44 px, first icon from 44 px). Narrower than 360 px would overlap; a 4th game in the dock would push icons into it.
+- Phone dock margin button: FIXED in round 2 (#10), see above for the 320 px / 4th-game caveat.
 - The two radio files `qa/music/two_context.py`, `shot_narrow.py` use the old landing form and are not run.
 - `tests/profile.js` fails on untouched port-1007 c1cf225 too (it waits on `game_state`, v2 sends `table_state`); `tests/accounts.js` and `tests/profile.js` hard-code `/home/isabelle/.cache/node_modules/socket.io-client`, run them with `SIO_CLIENT=$PWD/node_modules/socket.io-client`.
 - Pixabay content licence: no political-use review done (LICENSES.md says so as shipped).
