@@ -1,6 +1,6 @@
 'use strict';
 // SELF-TEST OF THE KIT: a kit that has never failed proves nothing. A minimal two-step game (deal: stake into escrow, reveal: settle) is played through
-// tests/game-kit.js once as written (it must PASS every check) and then in 10 deliberately broken variants; each variant must FAIL the check named for it.
+// tests/game-kit.js once as written (it must PASS every check) and then in 11 deliberately broken variants; each variant must FAIL the check named for it.
 //   node tests/game-kit-selftest.js        exit 0 when the good toy passes and every broken one is caught on its check
 const crypto = require('crypto');
 const fs = require('fs');
@@ -11,17 +11,22 @@ const { Refused } = K;
 
 const BETS = [100, 500, 1000];
 let backdoor = null;                    // the service of the live kit world, for the variants that cheat
+const persisted = new Map();            // data dir -> open rounds that outlive a restart (variant redraw: a record kept in a file)
 let carried = 0;                        // a result kept in memory across a restart (variant keepdoomed); init() does not clear it on purpose
 
 function makeToy(variant) {
-  const rec = new Map();                // account key -> the open round { roundId, cur, bet }
   const done = new Map();               // roundId -> win paid (variant doublepay)
   let C = null;
+  let rec = new Map();                  // account key -> the open round { roundId, cur, bet }
   const keyOf = (s) => String(s.data.acct.key).toLowerCase();
   const bad = (socket, code) => socket.emit('error', { code, game: 'toy' });
   const mod = {
     id: 'toy', name: 'Toy', kind: 'solo',
-    init(ctx) { C = ctx; rec.clear(); done.clear(); },
+    init(ctx) {
+      C = ctx; done.clear();
+      if (variant === 'redraw') { const d = ctx.files && ctx.files.dir; if (!persisted.has(d)) persisted.set(d, new Map()); rec = persisted.get(d); } else rec = new Map();
+    },
+    recover(rounds, ctx) { if (variant === 'bootbonus') for (const r of rounds) ctx.money.settle(r.key, r.cur, r.roundId, { win: r.amount * 2, stake: r.amount }); },   // boot pays double
     audit() { return { openRounds: [...rec.entries()].map(([key, r]) => ({ key, cur: r.cur, roundId: r.roundId, amount: variant === 'varmoney' ? 0 : r.bet })).filter((r) => r.amount > 0), pools: {} }; },
     handlers: {
       deal(socket, p) {
@@ -64,6 +69,10 @@ function makeToy(variant) {
           else if (variant === 'keepdoomed') { const extra = carried; carried = 0; C.money.settle(key, cur, id, { win: win + extra, stake: r.bet }); }
           else C.money.settle(key, cur, id, { win, stake: r.bet });
         } catch (e) {
+          if (variant === 'redraw' && e && e.code === 'round_closed') {         // the record outlived the restart: the round is played again with a new draw and a fresh ref
+            try { C.money.round(key, r.cur, id + 'r' + crypto.randomBytes(3).toString('hex'), { cost: 0, win: r.bet * 2 }); } catch {}
+            rec.delete(key); return socket.emit('g:toy:result', { roundId: id, win: r.bet * 2 });
+          }
           if (variant === 'keepdoomed') carried += win;                         // the result the ledger refused is kept to be paid with the next round
           return bad(socket, 'internal');
         }
@@ -80,7 +89,7 @@ function adapterFor(variant) {
   const mod = makeToy(variant);
   return {
     id: 'toy', mod, modPath: 'toy.js', example: variant !== 'unregistered' || undefined, oneOpen: true, playVariants: 1,
-    files: (dir) => ({}),
+    files: (dir) => ({ dir }),
     bets: { good: BETS, min: 100, max: 1000 },
     open: (cur, bet) => ({ ev: 'deal', payload: { mode: cur, bet } }),
     play(g, sock, { cur, bet }) {
@@ -106,6 +115,8 @@ const VARIANTS = [
   ['varmoney', 'escrow', 'holds the stake in a variable, no escrow while the round is open'],
   ['nomax', 'input', 'accepts any positive bet'],
   ['twoopen', 'sockets', 'two sockets of one account both get a round'],
+  ['bootbonus', 'restart', 'boot recovery pays twice the stake instead of refunding it'],
+  ['redraw', 'restart', 'a round record outlives the restart and the round is played again under a fresh ref'],
   ['unregistered', 'registration', 'not in MODULES, house account not registered'],
 ];
 

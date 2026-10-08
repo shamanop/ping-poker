@@ -121,7 +121,7 @@ The shell owns the socket: it forwards `g:<id>:*` events and shows `wallet` push
 
 ## 9. The kit: `node tests/game-kit.js <gameId>`
 
-A game is pluggable when it passes the kit and has the 4-line registration (`MODULES` in `games/index.js`, `house:<id>` in `SOURCE_ACCOUNTS`, `<id>` in `GAMES`, the `.kit.js` adapter). `node tests/game-kit.js --all` runs every game in `MODULES`; `node tests/game-kit.js coinflip` runs the worked example (`games/_example-coinflip.js`, about 40 lines: copy it). `node tests/game-kit-selftest.js` proves the kit itself: nine deliberately broken toys must each FAIL the check named for them.
+A game is pluggable when it passes the kit and has the 4-line registration (`MODULES` in `games/index.js`, `house:<id>` in `SOURCE_ACCOUNTS`, `<id>` in `GAMES`, the `.kit.js` adapter). `node tests/game-kit.js --all` runs every game in `MODULES`; `node tests/game-kit.js coinflip` runs the worked example (`games/_example-coinflip.js`, about 40 lines: copy it). `node tests/game-kit-selftest.js` proves the kit itself: eleven deliberately broken toys must each FAIL the check named for them.
 
 The kit runs the REAL ledger, service, `ctx.money` and registry (with boot `recover()`) in a temp dir and plays the game through its own socket messages. It knows nothing of the game's rules; the game tells it how in `games/<id>.kit.js`. An adapter never touches money or the ledger: it only sends the game's messages through the kit's driver `g` and reports what the CLIENT was shown.
 
