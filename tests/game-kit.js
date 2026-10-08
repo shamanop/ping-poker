@@ -204,7 +204,9 @@ function runCheck(A, name, cur, fn) {
 }
 
 // ------------------------------------------------------------------------------------------------------------------------------------ shared steps
-const bigBets = (A) => A.bets.good;
+// the most a round of bet `b` can cost: the bet itself, unless the game sells bigger rounds (a bought bonus): adapter.maxCost(b)
+const maxCost = (A, b) => (A.maxCost ? A.maxCost(b) : b);
+const stakeLegal = (A, s) => s === 0 || (A.maxCost ? s <= A.maxCost(A.bets.max) : A.bets.good.includes(s));
 const playN = (A) => Math.max(A.bets.good.length * 2, (A.playVariants || 1) * 2) + 2;
 // play one whole round with bookkeeping: -> { res, id0, lines, round }
 function playOne(w, sock, cur, i) {
@@ -224,7 +226,10 @@ function holdOne(w, sock, pt, cur, i = 0) {
 function roundFacts(t, w, who, cur, key, o) {
   const A = w.A, p = lineProblems(A, o.lines);
   for (const m of p.slice(0, 3)) t.fail(`${who}: ${m}`);
-  if (!o.round) { t.fail(`${who}: no ledger line carries round ${o.res.roundId}`); return; }
+  if (!o.round) {
+    if (o.res.cost === 0 && !o.res.win) return;     // a free round that won nothing writes no line (ADD-A-GAME.md section 4)
+    t.fail(`${who}: no ledger line carries round ${o.res.roundId}`); return;
+  }
   const r = o.round;
   t.ok(r.curs.size === 1 && r.curs.has(cur), `${who}: round lines in ${[...r.curs].join('+')}, opened in ${cur}`);
   t.ok(r.staked === o.res.cost, `${who}: ledger took ${r.staked} from the player, the game says the round cost ${o.res.cost}`);
@@ -355,10 +360,10 @@ function checkRestart(A, cur) {
         const rounds = roundsOf(A, w.since(id0));
         for (const r of rounds.values()) {
           t.ok(r.curs.size <= 1 && (r.curs.size === 0 || r.curs.has(cur)), `${who}: round ${r.rid} has lines in ${[...r.curs]}`);
-          t.ok(r.staked <= bet, `${who}: the player staked ${r.staked} > bet ${bet}`);
+          t.ok(r.staked <= maxCost(A, bet), `${who}: the player staked ${r.staked} > the most a bet of ${bet} can cost (${maxCost(A, bet)})`);
           t.ok(new Set(r.lines.filter((l) => /:close$/.test(l.ref)).map((l) => l.ref)).size <= 1, `${who}: more than one close for ${r.rid}`);
         }
-        t.ok(w.bal('ann', cur) >= b0 - bet, `${who}: lost more than the stake (${b0} -> ${w.bal('ann', cur)})`);
+        t.ok(w.bal('ann', cur) >= b0 - maxCost(A, bet), `${who}: lost more than the stake (${b0} -> ${w.bal('ann', cur)})`);
         for (const m of lineProblems(A, w.since(id0)).slice(0, 2)) t.fail(`${who}: ${m}`);
         const id2 = w.lastId(); w.reboot();
         t.ok(w.lastId() === id2, `${who}: a second boot wrote lines`);
@@ -387,7 +392,7 @@ function checkReplay(A, cur) {
         if (res.win != null) t.ok(round.returned === res.win, `${dup} play#${i}: shown win ${res.win}, ledger paid ${round.returned}`);
         // every other round the doubled messages may have made must be a whole round of its own: a stake, one escrow or settled
         for (const r of roundsOf(A, lines).values()) {
-          t.ok(A.bets.good.includes(r.staked) || r.staked === 0, `${dup} play#${i}: round ${r.rid} staked ${r.staked}, not a bet level`);
+          t.ok(stakeLegal(A, r.staked), `${dup} play#${i}: round ${r.rid} staked ${r.staked}, not a legal stake`);
           t.ok(new Set(r.lines.filter((l) => /:close$/.test(l.ref)).map((l) => l.ref)).size <= 1, `${dup} play#${i}: round ${r.rid} closed twice`);
         }
       }
@@ -437,10 +442,10 @@ function checkSockets(A, cur) {
       const bal = w.bal('ann', cur), lines = w.since(id0), rounds = roundsOf(A, lines);
       t.ok(bal >= 0, `${who}: negative balance ${bal}`);
       t.ok(CURS.every((c) => w.bal('ann', c) >= 0), `${who}: a negative player balance`);
-      for (const r of rounds.values()) t.ok(r.staked === 0 || A.bets.good.includes(r.staked), `${who}: round ${r.rid} staked ${r.staked}, not a bet level`);
+      for (const r of rounds.values()) t.ok(stakeLegal(A, r.staked), `${who}: round ${r.rid} staked ${r.staked}, not a legal stake`);
       const open = w.escrows(cur);
       if (A.oneOpen) t.ok(open.length <= 1, `${who}: ${open.length} open rounds for one account, the game says one`);
-      t.ok(open.every((e) => e.balance === bet || A.bets.good.includes(e.balance)), `${who}: an escrow of ${JSON.stringify(open.map((e) => e.balance))} is not a bet`);
+      t.ok(open.every((e) => stakeLegal(A, e.balance)), `${who}: an escrow of ${JSON.stringify(open.map((e) => e.balance))} is not a bet`);
       const staked = [...rounds.values()].reduce((n, r) => n + r.staked, 0), returned = [...rounds.values()].reduce((n, r) => n + r.returned, 0);
       t.ok(staked - returned <= start, `${who}: net debit ${staked - returned} > the balance ${start}`);
       t.ok(bal === start - staked + returned, `${who}: balance ${bal} != ${start} - ${staked} + ${returned}`);

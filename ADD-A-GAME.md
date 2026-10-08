@@ -135,6 +135,7 @@ module.exports = {
   crash(mod) {},                         // optional: abandon the module like a kill (clear timers, close stores WITHOUT flushing)
   bets: { good: [100, 500], min: 100, max: 500 },   // legal bets in whole units; the kit derives the bad ones
   oneOpen: true,                         // the game lets an account have only ONE open round
+  maxCost: (bet) => bet * 500,           // optional: the most a round of this bet can cost (a bought bonus); default = the bet itself
   playVariants: 3,                       // how many different shapes of a whole round play() has (index i)
   currencies: ['play', 'chips'],         // optional
   open: (cur, bet) => ({ ev: 'start', payload: { mode: cur, bet } }),   // the message that places a bet (the kit sends it with bad values too)
