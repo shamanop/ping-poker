@@ -784,13 +784,18 @@ function replayRound(s, cfg) {
     }
   });
 
-  await test('coldcall QA hook: with COLDCALL_TEST=1 each force plays that feature, through the normal ledger path (ctx.money.round), in both purses', async () => {
+  await test('coldcall QA hook: with COLDCALL_TEST=1 each force plays that feature in CHIPS (normal ledger path, ctx.money.round); a Cash spin with the same force is an ordinary round (MONEY 1008 K4-3)', async () => {
     await withEnv({ COLDCALL_TEST: '1', NODE_ENV: null }, async () => {
       const s = setup({ rng: E.rngFrom(79) }); const a = s.sock('ann'); let bal = 1000000;
       a.send('g:coldcall:state'); assert.strictEqual(last(a, 'g:coldcall:state').qaHook, true);
       for (const f of FORCE_CASES) for (const mode of ['play', 'chips']) {
         s.clock.advance(200); a.send('g:coldcall:spin', { bet: 200, mode, force: f });
-        const r = last(a, 'g:coldcall:result'); assert.strictEqual(r.forced, f); assert.strictEqual(r.buyBonus, null);
+        const r = last(a, 'g:coldcall:result'); assert.strictEqual(r.buyBonus, null);
+        if (mode === 'play') {      // Cash never honours the hook: a normal paid round, one ledger ref, balance moves by exactly -cost + win
+          assert.strictEqual(r.forced, undefined, 'a Cash round is never forced: ' + f);
+          bal += -r.cost + r.totalWin; assert.strictEqual(s.balances('ann').play, bal); assert.strictEqual(r.wallet.play, bal); continue;
+        }
+        assert.strictEqual(r.forced, f);
         const sc = r.script;
         if (f === 'bonus1' || f === 'bonus2' || f === 'bonus3') { assert.strictEqual(sc.bonus.kind, f); assert.strictEqual(sc.spin.bells, { bonus1: 3, bonus2: 4, bonus3: 5 }[f]); }
         if (f === 'phone') assert.ok(sc.spin.phone && sc.spin.phone.leads.length >= 4);
@@ -798,11 +803,9 @@ function replayRound(s, cfg) {
         if (f === 'big') assert.ok(r.totalWinMult >= 25, 'big win ' + r.totalWinMult);
         if (f === 'tease') { assert.strictEqual(sc.spin.bells, 2); assert.strictEqual(sc.bonus, null); }
         assert.strictEqual(r.cost, 200); assert.strictEqual(r.totalWin, r.totalWinTenths * 200 / 10);
-        const w = s.balances('ann');
-        if (mode === 'play') { bal += -r.cost + r.totalWin; assert.strictEqual(w.play, bal); assert.strictEqual(r.wallet.play, bal); }
-        else assert.strictEqual(w.chips, r.wallet.chips);
+        assert.strictEqual(s.balances('ann').chips, r.wallet.chips);
       }
-      assert.strictEqual(new Set(s.lines((e) => e.cur === 'play' && /^coldcall:ann:/.test(e.ref)).map((e) => e.ref)).size, 7, 'seven forced Cash rounds, one ledger ref each');
+      assert.strictEqual(new Set(s.lines((e) => e.cur === 'play' && /^coldcall:ann:/.test(e.ref)).map((e) => e.ref)).size, 7, 'seven ordinary Cash rounds, one ledger ref each');
     });
   });
 
