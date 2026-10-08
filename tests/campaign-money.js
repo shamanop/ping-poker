@@ -417,11 +417,14 @@ t('F4: an open run is paid on the numbers it was opened with: the growth table c
   } finally { E.TIERS.safe.g100 = was; }
 });
 
-t('F6: the idle timer retries a close the ledger refused once (real timer)', async () => {
+t('F6: the idle timer retries a close the ledger refused (real timer: it fires, is refused, fires again and closes)', async () => {
   const w = world(97), s = w.sock('ann'); hook(true); process.env.CAMPAIGN_IDLE_MS = '40'; const pre = w.bal('ann', 'play');
   let run = advance(w, s, H.start(w, s, 'play', 500, 'OH').payload.run, 2);
-  w.hooks.before.settle = refuse; w.clock.advance(300); const r = H.call(w, s, 'cash', { roundId: run.roundId }); eq(r.error.code, 'internal'); w.hooks.before = {};
-  await sleep(150); const e = H.last(s, 'g:campaign:end'); ok(e && e.reason === 'timeout', 'the timer re-armed and closed it'); eq(w.bal('ann', 'play'), pre - 500 + 5 * run.mx); eq(w.escrows().length, 0); eq(w.runs.size, 0);
+  let tries = 0; w.hooks.before.settle = () => { tries++; refuse(); };
+  await sleep(110); ok(tries >= 1, 'the idle timer tried the close'); eq(H.all(s, 'g:campaign:end').length, 0, 'refused: no result'); eq(w.escrows().length, 1); eq(w.runs.size, 1, 'the run stays open');
+  const t1 = tries; w.hooks.before = {};
+  await sleep(150); const e = H.last(s, 'g:campaign:end'); ok(e && e.reason === 'timeout', 'the timer was re-armed after the refusal and closed it'); ok(t1 >= 1);
+  eq(w.bal('ann', 'play'), pre - 500 + 5 * run.mx); eq(w.escrows().length, 0); eq(w.runs.size, 0);
   hook(false); delete process.env.CAMPAIGN_IDLE_MS;
 });
 
