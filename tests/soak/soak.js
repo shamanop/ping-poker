@@ -415,7 +415,7 @@ async function main() {
     seed, bug, steps: W.stepNo, minutes: Math.round((Date.now() - started) / 600) / 100, players: nPlayers, kills: W.counters.kills, sigterm: W.counters.sigterm, restarts: W.counters.restarts,
     handsSettled: M.count.hands, handsSettledUnacked: M.count.handsUnacked, handsVoidedByKill: W.counters.handsVoidedByKill,
     spins: M.count.spins, spinsUnacked: W.counters.spinsUnacked, spinsRefused: W.counters.spinsRefused, buyIns: W.counters.buyIns, cashOuts: W.counters.cashOuts,
-    mints: { signup: M.count.signups, bonus: M.count.bonus, achv: M.count.achv, topup: M.count.topup }, adminAdjusts: M.count.adminAdjust, adminRefused: M.count.adminRefused,
+    mints: { signup: M.count.signups, bonus: M.count.bonus, achv: M.count.achv, topup: M.count.topup }, adminAdjusts: M.count.adminAdjust, adminRefused: M.count.adminRefused, setCashRefused: M.count.setCashRefused || 0,
     campaign: { runs: M.count.campRuns || 0, unacked: M.count.campRunsUnacked || 0, net: M.camp.net, c: W.camp.c },
     slot: { rounds: M.count.slotRounds || 0, unacked: M.count.slotRoundsUnacked || 0, voids: M.count.slotVoids || 0, net: M.slot.net, byKind: { plain: W.slot.c.plain, buy: W.slot.c.buy, forced: W.slot.c.forced, callback: W.slot.c.callbacks, decisionsOpened: W.slot.c.pending, decisionsAnswered: W.slot.c.decided, readyLeftToTimer: W.slot.c.readyLeft, potWins: W.slot.c.potWon, refusedFunds: W.slot.c.funds, refusedRate: W.slot.c.rate, refusedBusy: W.slot.c.busy, socketDrops: W.slot.c.drops, configSwaps: W.slot.c.cfg, voidedEvents: W.slot.c.voided } },
     ledgerLines: files.ledgerLines, checks: W.counters.checks, warnings: W.counters.warnings,

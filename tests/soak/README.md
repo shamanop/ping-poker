@@ -32,7 +32,7 @@ what it did (it is written to `steps.jsonl`), never decides what is true, and fe
 ## Rules the harness plays by (Money 1008)
 
 - **Admin money messages carry an op id** (K1-2): every `admin_adjust` / `admin_set_play` gets a fresh unique `opId` (`lib/opid.js`); the server refuses one without (`op_required`). A resend of the same message would keep its id.
-- **"Set Cash to X" sets the TOTAL Cash** (wallet + at a seat + in a round, K1-3) and is refused with `cash_in_play`, nothing moved, when X is below the part at a seat / in a round. The bank actor probes that refusal on purpose (step kind `admin_setplay_refused` in `steps.jsonl`, counted in `adminRefused`) and checks the answer's `atTable` / `inRound`; an accepted set makes the model's total exactly X (`Model.applySetCash`); an accepted set below the part in play is an I7 violation.
+- **"Set Cash to X" sets the TOTAL Cash** (wallet + at a seat + in a round, K1-3) and is refused with `cash_in_play`, nothing moved, when X is below the part at a seat / in a round. The bank actor probes that refusal on purpose (step kind `admin_setplay_refused` in `steps.jsonl`, counted in `adminRefused` and `setCashRefused` of `result.json`) and checks the refusal code and that the ledger really holds more than X at a seat / in a round; an accepted set makes the model's total exactly X (`Model.applySetCash`); an accepted set below the part in play is an I7 violation.
 - **The QA `force` hook is Chips only** (K4-3, K5-F): Cold Call and Campaign are sent `force` only in a Chips round / run; Cash rounds and runs are played unforced (the Campaign LANDSLIDE route and the chaos runs with forced survivals are Chips).
 
 ## The model (`model.js`)

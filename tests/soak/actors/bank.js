@@ -110,7 +110,7 @@ async function admin(W) {
 }
 
 // "Set Cash to X" (K1-3): the player's TOTAL Cash becomes X (wallet + Cash at a seat + Cash in an open round). The part at a seat / in a round is not the admin's to take, so an X below it is
-// REFUSED (cash_in_play, the answer carries wallet / atTable / inRound / total) and nothing moves; otherwise the model's total for the player becomes exactly X. A refusal is expected, checked and counted;
+// REFUSED (cash_in_play; the socket answer carries the code only, the part in play is read from the ledger) and nothing moves; otherwise the model's total for the player becomes exactly X. A refusal is expected, checked and counted;
 // it never passes as a success, and an accepted set below the part in play is a violation.
 async function setCash(W, t) {
   const key = t.key;
@@ -136,14 +136,13 @@ async function setCashCall(W, t, cents, probe) {
   const firmBelow = cents < Math.min(partBefore, partAfter);                                  // below the part in play at BOTH reads: the server must refuse
   if (d.ok) {
     if (firmBelow) { W.violate('I7', `admin_set_play ${cents} for ${key} was accepted but ${Math.min(partBefore, partAfter)} Cash is at a seat / in a round (it must be refused, nothing moved)`, { key }, 'cash_in_play', JSON.stringify(d)); return null; }
-    if (!d.dup && d.total !== cents) W.violate('I7', `admin_set_play ${cents} for ${key} answered a total of ${d.total}`, { key }, cents, JSON.stringify(d));
     const delta = W.model.applySetCash(key, cents);                                          // the model's total for the player is exactly X
     return { what: 'admin_setplay', who: key, cents, delta };
   }
   if (d.code !== 'cash_in_play') { W.violate('I7', `admin_set_play ${cents} for ${key} refused with ${d.code}`, { key }, probe ? 'cash_in_play' : 'ok', JSON.stringify(d)); return null; }
-  if (!(cents < (d.atTable || 0) + (d.inRound || 0))) W.violate('I7', `admin_set_play ${cents} for ${key} was refused for cash in play, but the answer shows only ${(d.atTable || 0) + (d.inRound || 0)} at a seat / in a round`, { key }, 'X below atTable + inRound', JSON.stringify(d));
+  if (!(cents < Math.max(partBefore, partAfter))) W.violate('I7', `admin_set_play ${cents} for ${key} was refused for cash in play, but the ledger shows only ${Math.max(partBefore, partAfter)} at a seat / in a round`, { key }, 'X below the part in play', JSON.stringify(d));     // the socket answer carries the code only (see REPORT: Needs the lead), so the part is read from the ledger
   W.model.count.adminRefused++; W.model.count.setCashRefused = (W.model.count.setCashRefused || 0) + 1;     // a refused set changes nothing in the model; I7 compares the ledger to it right after
-  return { what: 'admin_setplay_refused', who: key, cents, atTable: d.atTable, inRound: d.inRound };
+  return { what: 'admin_setplay_refused', who: key, cents, part: Math.max(partBefore, partAfter) };
 }
 
 // Setup: the product gives a new account 0 Cash (bb298d2); the soak players get theirs the only legal way, an admin adjust, so admin:adjust is the one source of Cash (the model books it).
