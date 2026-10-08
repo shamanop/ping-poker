@@ -297,7 +297,8 @@ async function main() {
     const C = W.checker, M = W.model;
     await pollSettled();
     const cls = C.classifyRestart();
-    const bad = cls.violations.map(v => ({ step: W.stepNo, ...v }));
+    // Ledger-only violations are final and must not be hidden by a restart finding: a boot-recovery line of the wrong shape is reported by I9 here AND by the invariant that owns its shape (I2 / I1 / I3).
+    const bad = [...W.checker.take().map(v => ({ step: W.stepNo, ...v })), ...cls.violations.map(v => ({ step: W.stepNo, ...v }))];
     const perTableUnacked = new Map();
     const unknownSpins = sentSpins.slice();
     for (const L of cls.racing) {

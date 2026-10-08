@@ -171,6 +171,9 @@ class Checker {
     if (e[kind]) bad(`second ${kind} line for round ${id}`);
     if ((kind === 'instant' && (e.open || e.close)) || (kind !== 'instant' && e.instant)) bad(`round ${id} has both an instant line and open/close lines`);
     if (kind === 'close' && e.close) bad(`round ${id} closed twice`);
+    // a paid decision round writes :open then :close; only the free Callback (round id cb<id>) has a :close alone. Any other :close is a payout for a round that was never opened
+    // (settle-after-void under a fresh ref is exactly this: the credit is booked as a "close" of a round id nobody opened).
+    if (kind === 'close' && !e.open && !rid.startsWith('cb')) bad(`a close line for round ${id} that has no :open line (a payout for a round nobody opened)`);
     e[kind] = L; this.slotRounds.set(id, e);
     if (kind !== 'open') this.slotPending.push({ id, L });
   }
