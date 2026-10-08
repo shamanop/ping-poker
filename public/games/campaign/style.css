@@ -140,7 +140,7 @@ button:disabled, [aria-disabled="true"] { cursor: default; }
 
 /* ---------------------------------------------------------------- panel */
 #panelWrap { position: relative; flex: 0 1 auto; min-height: 0; display: flex; flex-direction: column; }
-#panel { flex: 0 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; max-height: 39vh; scrollbar-width: thin; scrollbar-color: var(--brass) transparent; scroll-padding-bottom: 46px; }
+#panel { flex: 0 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; max-height: 39vh; scrollbar-width: thin; scrollbar-color: var(--brass) transparent; }
 #app[data-list="1"] #panel { max-height: 58vh; }
 #app[data-list="1"] #board { min-height: 100px; } #app[data-list="1"] #title { display: none; }
 #panelWrap[data-more="1"] #panel { -webkit-mask-image: linear-gradient(#000 calc(100% - 26px), transparent); mask-image: linear-gradient(#000 calc(100% - 26px), transparent); }

@@ -144,11 +144,13 @@
     }
 
     // ---- markers (pixel space)
+    let placed = [];                                // badge and ring centres after placement: the "+4%" picks a spot that is clear of them
     const px = (c) => { const p = cen(c); return [cam.s * p[0] + cam.tx, cam.s * p[1] + cam.ty]; };
     function placeMarks() {
       marks.textContent = ''; if (!scene) return;
       const items = [], sc = scene, trail = sc.trail || [];
-      const add = (code, html, cls, r, fixed) => { const p = px(code); items.push({ code, x: p[0], y: p[1], html, cls, r: r || 14, fixed }); if (/mk-(cur|home|fail)/.test(cls)) { const nm = ((MAPI.states[code] && MAPI.states[code].name) || code).length, half = nm * 4.6; for (let gx = -half; gx <= half + 1; gx += 20) items.push({ code, x: p[0] + gx, y: p[1] - 27, r: 12, fixed: true, ghost: true, ox: p[0], oy: p[1] }); } };
+      const add = (code, html, cls, r, fixed) => { const p = px(code); if (cls === 'mk-seal' && (p[0] < 6 || p[0] > W - 6 || p[1] < inset.t - 8 || p[1] > Hh - inset.b + 8)) return;   // a stamp for a state outside the picture is dropped, never pinned to the edge
+       items.push({ code, x: p[0], y: p[1], html, cls, r: r || 14, fixed }); if (/mk-(cur|home|fail)/.test(cls)) { const nm = ((MAPI.states[code] && MAPI.states[code].name) || code).length, half = nm * 4.6; for (let gx = -half; gx <= half + 1; gx += 20) items.push({ code, x: p[0] + gx, y: p[1] - 27, r: 12, fixed: true, ghost: true, ox: p[0], oy: p[1] }); } };
       const nameOf = (c) => (MAPI.states[c] && MAPI.states[c].name) || (states[c] && states[c].n) || c;
       if (sc.mode === 'run') {
         for (const c of trail) if (c !== sc.at) add(c, '<i class="seal"></i>', 'mk-seal', 9, true);
@@ -185,6 +187,7 @@
         m.nocode = m.y + 27 > Hh - tkH() || items.some((o) => { if (o === m) return false; if (o.cls === 'mk-opt') return Math.abs(o.x - lx) < 30 && Math.abs(o.y + 19 - ly) < 15 || Math.hypot(Math.max(Math.abs(o.x - lx) - 14, 0), Math.max(Math.abs(o.y - ly) - 7, 0)) < 13;
           const dx = Math.max(Math.abs(o.x - lx) - 14, 0), dy = Math.max(Math.abs(o.y - ly) - 7, 0); return Math.hypot(dx, dy) < (o.ghost ? 10 : o.r * 0.8); });
       }
+      placed = items.filter((m) => m.cls === 'mk-opt' || m.cls === 'mk-cur' || m.cls === 'mk-home').map((m) => [m.x, m.y]);
       for (const m of items) {
         if (m.ghost) continue;
         const n = div('mk ' + m.cls, marks, m.html); n.style.transform = 'translate(' + m.x.toFixed(1) + 'px,' + m.y.toFixed(1) + 'px)'; n.dataset.s = m.code;
@@ -201,7 +204,10 @@
     });
     let popT = 0;
     function pop(code, text, cls) {                // "+10%" rises from the state you just carried, after the camera has landed
-      clearTimeout(popT); popT = setTimeout(() => { if (!states[code]) return; const p = px(code), n = div('mk mk-pop', marks); n.style.transform = 'translate(' + Math.max(30, Math.min(W - 30, p[0])).toFixed(1) + 'px,' + Math.max(inset.t + 2, p[1] - 70).toFixed(1) + 'px)'; const s = div('pop ' + (cls || ''), n, text); s.addEventListener('animationend', () => n.remove()); }, MOVE_MS + 30);
+      clearTimeout(popT); popT = setTimeout(() => { if (!states[code]) return; const p = px(code), n = div('mk mk-pop', marks), maxY = Hh - tkH() - 34, cand = [[0, -64], [0, 44], [78, -40], [-78, -40], [92, 8], [-92, 8], [0, -92]].map((o) => [Math.max(34, Math.min(W - 34, p[0] + o[0])), Math.max(inset.t + 2, Math.min(maxY, p[1] + o[1]))]);
+        const clear = (c) => placed.reduce((m, q) => Math.min(m, Math.hypot(c[0] - q[0], (c[1] + 14) - q[1])), 1e9);       // distance from the text's middle to the nearest badge or ring
+        let best = cand[0], bd = -1; for (const c of cand) { const d = clear(c); if (d >= 40) { best = c; bd = d; break; } if (d > bd) { bd = d; best = c; } }
+        n.style.transform = 'translate(' + best[0].toFixed(1) + 'px,' + best[1].toFixed(1) + 'px)'; marks.insertBefore(n, marks.firstChild); const s = div('pop ' + (cls || ''), n, text); s.addEventListener('animationend', () => n.remove()); }, MOVE_MS + 30);
     }
     function flash(code, kind) { const p = paths[code]; if (!p) return; p.classList.add('flash-' + kind); setTimeout(() => p.classList.remove('flash-' + kind), 1600); }
     return { draw, look, resize, flash, pop, placeMarks, el: host, camera: () => Object.assign({}, cam), boxOf, states, pathOf: (c) => paths[c], MOVE_MS };

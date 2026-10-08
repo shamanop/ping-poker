@@ -219,7 +219,7 @@
     const b = $('cta'), main = b.querySelector('.main'), sub = b.querySelector('.sub'), v = S.view, r = S.run, bet = S.bet;
     let act = 'start', label = 'LOADING', note = '', dis = true;
     if (v === 'setup') {
-      act = 'start'; label = S.home ? 'START CAMPAIGN' : 'PICK A HOME STATE'; note = S.home ? fmt(S.bet) + ' on ' + nameOf(S.home) : 'search above or tap the map';
+      act = 'start'; label = S.home ? 'START CAMPAIGN' : 'PICK A HOME STATE'; note = S.home ? fmt(S.bet) + ' on ' + nameOf(S.home) : 'tap the map, or search above';
       const have = S.wallet[S.mode]; const short = typeof have === 'number' && S.bet != null && have < S.bet;
       dis = !S.home || !S.bet || S.busy || S.offline || short; if (short && S.home) note = 'not enough ' + (S.mode === 'chips' ? 'chips' : 'Play $');
     } else if (v === 'run' && r) {
