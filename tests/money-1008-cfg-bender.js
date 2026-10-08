@@ -35,11 +35,11 @@ const times = (a, k) => a.map((x) => x * k);
       const a = auditLines(); assert.strictEqual(a.length, n0 + 1, name); const l = a[a.length - 1];
       assert.strictEqual(l.outcome, 'refused'); assert.strictEqual(l.who, 'test-admin#1234'); assert.ok(!Number.isNaN(Date.parse(l.t))); assert.strictEqual(l.old.pct, 98.0); assert.ok(l.why);
     }
-    // the synchronous swap machinery is never silent about an unmeasured config, and the file it saves is not trusted at the next boot
-    await quiet(async () => { B.setLiveConfig({ overrides: { buyCost: { election: 14 } }, note: 'machinery test' }); });
-    const u = auditLines(); assert.strictEqual(u[u.length - 1].outcome, 'unchecked');
-    const err = console.error; const said = []; console.error = (...x) => said.push(x.join(' ')); try { E.resetConfig(); B.loadLiveConfig(); } finally { console.error = err; }
-    assert.strictEqual(JSON.stringify(E.CFG), SHIPPED); assert.ok(said.some((m) => /payback measurement/.test(m))); fs.rmSync(CFG_FILE, { force: true });
+    // the synchronous setter has no way in without a proof for exactly these numbers (the critic's p-bender.js calls it directly)
+    assert.throws(() => B.setLiveConfig({ overrides: RIGGED[0][1], rtpLabel: '98% (long-run)', note: 'k2' }), /no passing payback measurement/);
+    assert.throws(() => B.setLiveConfig({ overrides: RIGGED[1][1], measured: { ok: true, hash: 'f'.repeat(64) } }), /no passing payback measurement/, 'a proof for other numbers');
+    assert.throws(() => B.setLiveConfig({ overrides: RIGGED[1][1], measured: { ok: false, hash: R.cfgHash(E.DEFAULT_CFG) } }), /no passing payback measurement/);
+    unchanged();
   });
   await test('a saved file without a passing measurement is not loaded at boot', async () => {
     fs.writeFileSync(CFG_FILE, JSON.stringify({ overrides: { scatterW: 1e6, scatterPay: { 6: 10000 } }, rtpLabel: '98% (long-run)', note: 'hand edited' }));

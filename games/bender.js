@@ -34,11 +34,11 @@ function loadLiveConfig() {
     live = { overrides: over, rtpLabel: null, note: j.note || '', updatedAt: j.updatedAt || null, measured: isDefaultCfg(next) ? null : m };
   } catch (e) { if (e.code !== 'ENOENT') console.error('[bender] live config not loaded, using defaults:', e.message); try { Eng.setConfig({}); } catch {} live = { overrides: {}, rtpLabel: null, note: '', updatedAt: null, measured: null }; }
 }
-// swap the live config: the swap machinery. The admin route goes through setLiveConfigChecked (measure, refuse above the ceiling, then this) and boot trusts a saved file only with its measurement. A caller that gets
-// here without a passing measurement for these numbers is never silent: it writes an `unchecked` audit line, and the file it saves is not trusted at the next boot.
+// swap the live config. `measured` = the passing check for these numbers (made by setLiveConfigChecked; the proof must carry the hash of exactly these numbers). There is no way in without one: a rigged
+// pay table cannot be set by calling this directly, only the shipped numbers (reset) need no proof.
 function setLiveConfig({ overrides, rtpLabel, note, measured } = {}) {
   const over = overrides || {}, next = mergeOver(over), reset = isDefaultCfg(next), proven = !!(measured && measured.ok === true && measured.hash === hashOf(next));
-  if (!reset && !proven) audit({ who: 'in-process caller', outcome: 'unchecked', why: 'swapped in without a payback measurement of these numbers', note: String(note || '').slice(0, 120) });
+  if (!reset && !proven) throw new Error('cfg: refused, no passing payback measurement for these numbers (use setLiveConfigChecked)');
   Eng.setConfig(over);                             // throws on a bad config; nothing changes in that case
   const rec = { overrides: over, rtpLabel: null, note: String(note || '').slice(0, 300), updatedAt: new Date().toISOString(), measured: !reset && proven ? measured : null };
   const tmp = CFG_FILE + '.tmp';
