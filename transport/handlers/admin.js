@@ -37,8 +37,10 @@ function register(ctx, socket, on) {
     const me = auth.requireAdmin(socket); if (!me) return;
     const k = keyArg(key);
     const r = accounts.resetPin(me, k, typeof newPin === 'string' || typeof newPin === 'number' ? String(newPin) : '');
-    if (r.ok) console.log(`admin ${me} reset PIN for ${k}`);
-    socket.emit('admin_result', { op: 'reset_pin', key: k, ok: !!r.ok, code: r.code, message: r.ok ? 'PIN reset. Their other sessions were signed out.' : r.message });
+    // K6b-1: stored sessions are gone (accounts.resetPin); the sockets that are signed in right now go too, so the message below is true
+    const n = r.ok ? auth.signOutSockets(ctx.socketsOf(k), 'pin_reset', 'Your PIN was reset by the admin. Sign in again with the new PIN.') : 0;
+    if (r.ok) console.log(`admin ${me} reset PIN for ${k} (${n} live socket${n === 1 ? '' : 's'} signed out)`);
+    socket.emit('admin_result', { op: 'reset_pin', key: k, ok: !!r.ok, code: r.code, message: r.ok ? `PIN reset. All their sessions were signed out${n ? ` (${n} open now)` : ''}.` : r.message });
   });
 }
 

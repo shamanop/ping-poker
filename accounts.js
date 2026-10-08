@@ -282,9 +282,11 @@ function createAccounts({ file, roomPassword = 'ping' }) {
     if (!PIN_RE.test(String(newPin))) return err('bad_pin', 'PIN is 4-6 digits');
     recordOk(ids);
     setPin(a, newPin);
-    a.sessions = (a.sessions || []).filter(s => s.h === ctx.sessionH);
+    // K6b-1: every stored session goes, the changing socket gets a fresh one (the caller signs the account's OTHER sockets out)
+    a.sessions = [];
+    const token = newSession(a, ctx.ua);
     save();
-    return { ok: true };
+    return { ok: true, account: a, token };
   }
 
   function resetPin(adminKey, key, newPin) {
