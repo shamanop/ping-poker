@@ -581,6 +581,15 @@ function finalAudit(t, w, cur, label) {
     if (diff.length) FINAL.fails.push(`${who}${c}: replay != balances: ${diff.slice(0, 2).join('; ')}`);
     if (sum !== 0) FINAL.fails.push(`${who}${c}: the sum over all accounts is ${sum}, not 0`);
   }
+  // the game's own count of its pools (audit().pools) equals the ledger's, per currency; a ledger pool the game does not list holds nothing
+  try {
+    const mine = (w.audit() || {}).pools || {};
+    for (const c of CURS) {
+      const led = new Map(w.ledger.list('pool:' + w.A.id + ':', c).map((x) => [x.account.slice(('pool:' + w.A.id + ':').length), x.balance]));
+      for (const [name, v] of Object.entries(mine)) if ((v && v[c] || 0) !== (led.get(name) || 0)) FINAL.fails.push(`${who}pool ${name} ${c}: audit() says ${v && v[c]}, the ledger holds ${led.get(name) || 0}`);
+      for (const [name, v] of led) if (v !== 0 && !(name in mine)) FINAL.fails.push(`${who}pool ${name} ${c}: the ledger holds ${v} and audit() does not list it`);
+    }
+  } catch (e) { FINAL.fails.push(`${who}audit() threw: ${e && e.message}`); }
   if (rp.neg.length) FINAL.fails.push(`${who}a holder account went negative in the replay: ${rp.neg[0]}`);
   const q = w.ledger.quarantined.length; if (q) FINAL.fails.push(`${who}${q} line(s) quarantined in a world with no rogue line`);
 }
