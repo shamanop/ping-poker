@@ -185,12 +185,17 @@ t('B: `funds` and `state` write nothing; a refused start leaves balances alone',
 
 t('B: a cash against the idle timer closes once (real timer), in both orders', async () => {
   const w = world(31), s = w.sock('ann'); hook(true); process.env.CAMPAIGN_IDLE_MS = '40';
-  for (const mode of ['play', 'chips']) {
+  for (const order of ['cash-then-timer', 'timer-then-cash']) for (const mode of ['play', 'chips']) {
     w.clock.advance(300); const pre = w.bal('ann', mode); const id0 = w.lastId();
     let run = H.start(w, s, mode, 500, 'OH').payload.run; run = H.call(w, s, 'step', { roundId: run.roundId, n: 1, to: run.options.find((o) => !o.deadEnd).to, force: 'survive' }).payload.run;
-    await sleep(38);   // right at the timer: cash in the same breath
-    w.clock.advance(300); s.send('g:campaign:cash', { roundId: run.roundId }); await sleep(120);
-    const cl = w.since(id0).filter((l) => /:close$/.test(l.ref)); eq(new Set(cl.map((l) => l.id)).size, 1, 'exactly one close'); eq(w.escrows().length, 0); eq(w.bal('ann', mode), pre - 500 + 5 * run.mx);
+    const nEnd = H.all(s, 'g:campaign:end').length;
+    if (order === 'cash-then-timer') {
+      w.clock.advance(300); s.send('g:campaign:cash', { roundId: run.roundId }); eq(H.all(s, 'g:campaign:end').length, nEnd + 1, 'the cash closed it'); await sleep(120);        // the timer was cleared by the close
+    } else {
+      await sleep(120); eq(H.all(s, 'g:campaign:end').length, nEnd + 1, 'the idle timer closed it'); eq(H.last(s, 'g:campaign:end').reason, 'timeout');
+      w.clock.advance(300); const n = s.out.length; s.send('g:campaign:cash', { roundId: run.roundId }); const late = s.out.slice(n).find((o) => o[0] === 'error'); eq(late && late[1].code, 'no_run', 'a cash behind the timer finds no run');
+    }
+    const cl = w.since(id0).filter((l) => /:close$/.test(l.ref)); eq(new Set(cl.map((l) => l.id)).size, 1, order + ' ' + mode + ': exactly one close'); eq(w.escrows().length, 0); eq(w.bal('ann', mode), pre - 500 + 5 * run.mx);
     eq(H.all(s, 'g:campaign:end').filter((e) => e.roundId === run.roundId).length, 1);
   }
   hook(false); delete process.env.CAMPAIGN_IDLE_MS;
@@ -285,7 +290,7 @@ t('D6: a record whose E.check fails is voided, never paid; a bet that is not the
     if (tamper === 'run-missing') delete rec.run; if (tamper === 'roundId') rec.roundId = 'x:y';
     fs.writeFileSync(w.files.store, JSON.stringify(d)); w.boot(); hook(false);
     eq(w.bal('ann', cur), pre, tamper + ': the stake is back, not a win'); eq(w.escrows().length, 0); eq(w.disk().open.ann, undefined); eq(w.audit().openRounds.length, 0);
-    const cl = closeLines(w, id0); if (tamper !== 'roundId') { eq(closeBatches(w, id0), 1, tamper); ok(/campaign:void:unresolvable/.test(cl[0].reason), cl[0] && cl[0].reason); } else eq(closeBatches(w, id0), 0 + closeBatches(w, id0), 'the escrow is refunded by the sweep or recover');
+    const cl = closeLines(w, id0); if (tamper !== 'roundId') { eq(closeBatches(w, id0), 1, tamper); ok(/campaign:void:unresolvable/.test(cl[0].reason), cl[0] && cl[0].reason); } else { eq(closeBatches(w, id0), 1, 'the escrow is refunded once, by the sweep or recover'); ok(/campaign:void:/.test(cl[0].reason), cl[0] && cl[0].reason); }
   }
 });
 
@@ -309,6 +314,137 @@ t('D8: a damaged store file boots empty; the escrow it forgot is refunded by rec
   const w2 = world(73), s2 = w2.sock('ann'); hook(true); const preP = w2.bal('ann', 'play'), preC = w2.bal('ann', 'chips'), idb = w2.lastId();
   H.start(w2, s2, 'play', 500, 'GA'); w2.crash(); const d = JSON.parse(fs.readFileSync(w2.files.store, 'utf8')); d.open.ann.cur = 'chips'; fs.writeFileSync(w2.files.store, JSON.stringify(d)); w2.boot(); hook(false);
   eq(w2.bal('ann', 'play'), preP); eq(w2.bal('ann', 'chips'), preC); eq(w2.escrows().length, 0);
+});
+
+// ---- F: fix round 1 (CRITIC-R1 C1-C7): a drawn result is final, an open run is paid on its own numbers ---------------------------------------------------------------------------
+const WITNESS = 'ME NH VT MA RI CT NY NJ DE MD PA WV OH MI IN IL WI MN ND MT SD IA NE KS CO WY UT ID WA AK HI CA OR NV AZ NM OK TX LA AR MO KY VA NC SC GA FL AL MS TN'.split(' ');
+const refuse = () => { throw Object.assign(new Error('write_failed'), { code: 'internal' }); };
+const fence = (w) => fs.appendFileSync(w.files.money, '\n');                       // one foreign byte: the REAL ledger latches `foreign_write` on its next append, for the life of the process
+// n surviving steps (QA hook, no ledger line) from `home`, along the first non-dead-end option (or the 50-state witness route when route is true)
+function advance(w, s, run, n, route) {
+  for (let i = 0; i < n; i++) {
+    const to = route ? WITNESS[run.steps + 1] : run.options.find((o) => !o.deadEnd && !o.landslide).to;
+    const r = H.call(w, s, 'step', { roundId: run.roundId, n: run.steps + 1, to, force: 'survive' }); ok(r.ev === 'step', 'survive ' + JSON.stringify(r.error || r.ev)); run = r.payload.run;
+  }
+  return run;
+}
+const stepOf = (run, to, force) => ({ roundId: run.roundId, n: run.steps + 1, to, force });
+
+for (const cur of ['chips', 'play']) for (const k of [0, 3]) {
+  t(`F1 ${cur}, ${k} steps: the ledger refuses writes, a scandal is drawn, the server restarts -> a LOSS (stake kept, no credit leg), never a cash-out or a refund`, () => {
+    const w = world(80 + k), s = w.sock('ann'); hook(true); const pre = w.bal('ann', cur);
+    let run = advance(w, s, H.start(w, s, cur, 2500, 'OH').payload.run, k);
+    fence(w);
+    const r = H.call(w, s, 'step', stepOf(run, run.options[0].to, 'scandal')); eq(r.error && r.error.code, 'internal'); eq(H.all(s, 'g:campaign:end').length, 0, 'no result reached the client');
+    const rec = w.runs.get('ann'); ok(rec && rec.pend && rec.pend.reason === 'scandal', 'the drawn scandal is pended in memory');
+    ok(w.disk().open.ann.pend && w.disk().open.ann.pend.reason === 'scandal', 'and in the record on disk');
+    const id0 = w.lastId(); w.reboot(); hook(false);
+    const cl = closeLines(w, id0); eq(cl.length, 1, 'one leg: the stake to the house'); eq(cl.filter((l) => l.reason === 'campaign:credit').length, 0, 'no credit leg');
+    eq(cl.find((l) => l.reason === 'campaign:spend').amount, 2500); eq(w.bal('ann', cur), pre - 2500, 'the stake is lost'); eq(w.escrows().length, 0); eq(w.disk().open.ann, undefined); eq(w.audit().openRounds.length, 0);
+  });
+}
+
+t('F1: a fenced ledger -> no new step is drawn (an error, no rng use), no new start; a pended run refuses another step', () => {
+  const w = world(84, ['ann', 'bob']), s = w.sock('ann'), sb = w.sock('bob'); hook(true);
+  const runA = advance(w, s, H.start(w, s, 'chips', 500, 'OH').payload.run, 1);
+  const runB = advance(w, sb, H.start(w, sb, 'chips', 500, 'TX').payload.run, 1);
+  fence(w); let draws = 0; w.RNG.fn = () => { draws++; return 0.999999; };
+  H.call(w, s, 'step', stepOf(runA, runA.options[0].to, 'scandal'));                          // the first refused write shows the fence
+  const e1 = H.call(w, sb, 'step', { roundId: runB.roundId, n: runB.steps + 1, to: runB.options[0].to }); eq(e1.error && e1.error.code, 'money_down'); eq(draws, 0, 'nothing was drawn against a dead ledger');
+  const e1f = H.call(w, sb, 'step', stepOf(runB, runB.options[0].to, 'survive')); eq(e1f.error && e1f.error.code, 'money_down'); eq(w.runs.get('bob').run.steps, runB.steps, 'the run did not move');
+  const e2 = H.call(w, sb, 'start', { mode: 'play', bet: 100, home: 'OH' }); ok(e2.error, 'no start on a fenced ledger');
+  const e3 = H.call(w, s, 'step', { roundId: runA.roundId, n: runA.steps + 1, to: runA.options[0].to }); ok(e3.error, 'a step on the pended run is refused'); eq(draws, 0);
+});
+
+t('F1: the record flush fails too -> the drawn scandal is kept in memory, step / cash on that run are refused and never pay; the idle path closes it as a loss', () => {
+  const w = world(85), s = w.sock('ann'); hook(true); const pre = w.bal('ann', 'play');
+  let run = advance(w, s, H.start(w, s, 'play', 500, 'OH').payload.run, 2);
+  const store = w.store(), realFlush = store.flush; store.flush = () => { throw new Error('disk full'); }; w.hooks.before.settle = refuse;
+  H.call(w, s, 'step', stepOf(run, run.options[0].to, 'scandal')); const rec = w.runs.get('ann'); ok(rec.pend, 'pended in memory');
+  let draws = 0; w.RNG.fn = () => { draws++; return 0.999999; };
+  const a = H.call(w, s, 'step', stepOf(run, run.options[0].to, 'survive')); ok(a.error, 'step refused'); const b = H.call(w, s, 'cash', { roundId: run.roundId }); ok(b.error, 'cash refused'); eq(draws, 0);
+  eq(w.escrows().length, 1, 'the stake is still in escrow, nothing was paid'); eq(H.all(s, 'g:campaign:end').length, 0);
+  store.flush = realFlush; w.hooks.before = {}; SRV._test.autoClose(rec, 'timeout');
+  const e = H.last(s, 'g:campaign:end'); eq(e.reason, 'scandal'); eq(e.win, 0); eq(w.bal('ann', 'play'), pre - 500); eq(w.escrows().length, 0);
+});
+
+for (const mode of ['landslide', 'deadend']) {
+  t(`F2 ${mode}: a drawn win whose settle is refused is pended with its multiplier; the retry, the idle timer and the boot each pay THAT multiplier once, never a new draw`, () => {
+    for (const via of ['retry', 'timer', 'boot']) {
+      const w = world(90), s = w.sock('ann'); hook(true); const pre = w.bal('ann', 'chips');
+      let run, final, to;
+      if (mode === 'landslide') { run = advance(w, s, H.start(w, s, 'chips', 2500, WITNESS[0]).payload.run, 48, true); to = WITNESS[49]; final = 100000; }
+      else { run = H.start(w, s, 'chips', 2500, 'ME').payload.run; run = advance(w, s, run, 1); to = null; }
+      if (mode === 'deadend') {                                                          // walk to a state whose onward options are all deadEnd flagged: step along the options until one is deadEnd
+        let guard = 0; while (!run.options.some((o) => o.deadEnd) && guard++ < 60) run = advance(w, s, run, 1);
+        ok(run.options.some((o) => o.deadEnd), 'a dead end is reachable'); to = run.options.find((o) => o.deadEnd).to; final = run.options.find((o) => o.deadEnd).nextMx;
+      }
+      const owed = 2500 * final / 100;
+      w.hooks.before.settle = refuse; const r = H.call(w, s, 'step', stepOf(run, to, 'survive')); eq(r.error && r.error.code, 'internal'); eq(H.all(s, 'g:campaign:end').length, 0);
+      const rec = w.runs.get('ann'); ok(rec.pend && rec.pend.reason === mode && rec.pend.run.mx === final, 'pended at the drawn multiplier'); eq(w.disk().open.ann.pend.run.mx, final, 'durable');
+      let draws = 0; w.RNG.fn = () => { draws++; return 0; };                                   // a re-draw would be a scandal
+      w.hooks.before = {}; const id0 = w.lastId();
+      if (via === 'retry') { const r2 = H.call(w, s, 'step', stepOf(run, to, 'scandal')); eq(r2.ev, 'end'); eq(r2.payload.reason, mode); eq(r2.payload.win, owed); }
+      else if (via === 'timer') { SRV._test.autoClose(rec, 'timeout'); const e = H.last(s, 'g:campaign:end'); eq(e.reason, mode); eq(e.win, owed); }
+      else { w.crash(); w.boot(); }
+      eq(draws, 0, via + ': no draw'); eq(closeBatches(w, id0), 1, via + ': one close'); eq(w.bal('ann', 'chips'), pre - 2500 + owed, via + ': the drawn multiplier is paid'); eq(w.escrows().length, 0); eq(w.disk().open.ann, undefined);
+      const again = H.call(w, s, 'cash', { roundId: run.roundId }); ok(again.error, 'nothing left to close'); eq(closeBatches(w, id0), 1);
+    }
+  });
+}
+
+t('F4: an open run is paid on the numbers it was opened with: the growth table changes between the run and the boot', () => {
+  const was = E.TIERS.safe.g100;
+  try {
+    for (const g of [105, 103, 110]) for (const k of [1, 12]) {
+      E.TIERS.safe.g100 = was;
+      const w = world(95), s = w.sock('ann'); hook(true); const pre = w.bal('ann', 'play');
+      let run = advance(w, s, H.start(w, s, 'play', 2500, 'GA').payload.run, k); const id0 = w.lastId();
+      w.crash(); E.TIERS.safe.g100 = g; w.boot(); hook(false);                                 // the new build
+      const cl = closeLines(w, id0); eq(cl.map((l) => l.reason + ' ' + l.amount).join(','), `campaign:spend 2500,campaign:credit ${2500 * run.mx / 100}`, `safe x${g / 100}, ${k} steps`);
+      eq(w.bal('ann', 'play'), pre - 2500 + 2500 * run.mx / 100); eq(w.escrows().length, 0);
+    }
+    // a record from before the snapshot existed is checked on the current table; a truly corrupt snapshot or a tampered mx is still a refund
+    E.TIERS.safe.g100 = was;
+    for (const how of ['no-snapshot', 'bad-snapshot', 'tampered-mx']) {
+      const w = world(96), s = w.sock('ann'); hook(true); const pre = w.bal('ann', 'play'), id0 = w.lastId();
+      const run = advance(w, s, H.start(w, s, 'play', 500, 'GA').payload.run, 4); w.crash();
+      const d = JSON.parse(fs.readFileSync(w.files.store, 'utf8')); ok(d.open.ann.tiers, 'the record carries the growth table it was opened with');
+      if (how === 'no-snapshot') delete d.open.ann.tiers; if (how === 'bad-snapshot') d.open.ann.tiers.safe.g100 = 'x'; if (how === 'tampered-mx') d.open.ann.run.mx += 1;
+      fs.writeFileSync(w.files.store, JSON.stringify(d)); w.boot(); hook(false);
+      if (how === 'no-snapshot') eq(w.bal('ann', 'play'), pre - 500 + 5 * run.mx, 'paid at the stored multiplier'); else { eq(w.bal('ann', 'play'), pre, how + ': refunded'); ok(/campaign:void:unresolvable/.test(closeLines(w, id0)[0].reason)); }
+    }
+  } finally { E.TIERS.safe.g100 = was; }
+});
+
+t('F6: the idle timer retries a close the ledger refused once (real timer)', async () => {
+  const w = world(97), s = w.sock('ann'); hook(true); process.env.CAMPAIGN_IDLE_MS = '40'; const pre = w.bal('ann', 'play');
+  let run = advance(w, s, H.start(w, s, 'play', 500, 'OH').payload.run, 2);
+  w.hooks.before.settle = refuse; w.clock.advance(300); const r = H.call(w, s, 'cash', { roundId: run.roundId }); eq(r.error.code, 'internal'); w.hooks.before = {};
+  await sleep(150); const e = H.last(s, 'g:campaign:end'); ok(e && e.reason === 'timeout', 'the timer re-armed and closed it'); eq(w.bal('ann', 'play'), pre - 500 + 5 * run.mx); eq(w.escrows().length, 0); eq(w.runs.size, 0);
+  hook(false); delete process.env.CAMPAIGN_IDLE_MS;
+});
+
+t('F6: a close the ledger refuses at boot keeps the run open (record, escrow, timer); a later close pays the stored multiplier', () => {
+  const w = world(98), s = w.sock('ann'); hook(true); const pre = w.bal('ann', 'play');
+  let run = advance(w, s, H.start(w, s, 'play', 500, 'OH').payload.run, 3); w.crash(); w.hooks.before.settle = refuse; w.boot(); hook(false);
+  const rec = w.runs.get('ann'); ok(rec && rec.timer, 'held in memory with a timer'); ok(w.disk().open.ann, 'record kept'); eq(w.escrows().length, 1); eq(w.audit().openRounds.length, 1);
+  w.hooks.before = {}; SRV._test.autoClose(rec, 'timeout'); eq(w.bal('ann', 'play'), pre - 500 + 5 * run.mx); eq(w.escrows().length, 0); eq(w.disk().open.ann, undefined);
+});
+
+t('F7: each stake guard alone: the live close, the boot close and the boot bet check', () => {
+  hook(true);
+  { const w = world(99), s = w.sock('ann'); const seen = []; let run = advance(w, s, H.start(w, s, 'play', 500, 'OH').payload.run, 2);
+    w.hooks.before.settle = (a) => seen.push(a[3]); w.clock.advance(300); H.call(w, s, 'cash', { roundId: run.roundId }); eq(seen.length, 1); eq(seen[0].stake, 500, 'the live close names the stake'); }
+  { const w = world(99), s = w.sock('ann'); const seen = []; let run = advance(w, s, H.start(w, s, 'chips', 500, 'OH').payload.run, 2);
+    w.hooks.before.settle = (a) => seen.push(a[3]); w.crash(); w.hooks.before.settle = (a) => seen.push(a[3]); w.boot(); eq(seen.length, 1); eq(seen[0].stake, 500, 'the boot close names the stake'); }
+  { const w = world(99), s = w.sock('ann'); const pre = w.bal('ann', 'play'); let run = advance(w, s, H.start(w, s, 'play', 2500, 'OH').payload.run, 2); w.crash();
+    const d = JSON.parse(fs.readFileSync(w.files.store, 'utf8')); d.open.ann.bet = 100; fs.writeFileSync(w.files.store, JSON.stringify(d));     // the record says 100, the escrow holds 2500
+    let attempts = 0; w.hooks.before.settle = () => { attempts++; }; w.boot(); eq(attempts, 0, 'a bet that is not the escrow is refused before any payment is tried'); eq(w.bal('ann', 'play'), pre, 'the escrow is given back'); }
+  { const w = world(99), s = w.sock('ann'); const pre = w.bal('ann', 'play'); let run = advance(w, s, H.start(w, s, 'play', 500, 'OH').payload.run, 2);
+    w.runs.get('ann').bet = 2500;                                                                                                                  // the in-memory run disagrees with the escrow (500)
+    w.clock.advance(300); const id0 = w.lastId(); const r = H.call(w, s, 'cash', { roundId: run.roundId }); ok(r.error, 'refused'); eq(w.bal('ann', 'play'), pre, 'the escrow is returned, no win is paid on a stake that was never in'); ok(/void:unresolvable/.test(closeLines(w, id0)[0].reason)); }
+  hook(false);
 });
 
 (async () => {
