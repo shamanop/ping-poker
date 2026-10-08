@@ -8,7 +8,7 @@ const path = require('path');
 const { open, MoneyError } = require('../money/ledger');
 
 const START_CHIPS = 10000;     // server.js BANK_DEFAULT: what an account with no bank row gets on first touch today
-const START_PLAY = 1000000;    // wallet.js START_PLAY
+const START_PLAY = 1000000;    // wallet.js START_PLAY: kept for old fixtures that pass { signupPlay: START_PLAY }; the migration itself defaults to 0
 
 const isInt = (n) => typeof n === 'number' && Number.isSafeInteger(n);
 const isObj = (o) => o && typeof o === 'object' && !Array.isArray(o);
@@ -33,8 +33,12 @@ function why(v) {
   return 'negative';
 }
 
-function migrate(inputs) {
+// opts.signupPlay: the Cash an account WITHOUT a wallet row starts with. Default 0: Cash is real money and only an admin sets it, so a migration never
+// mints it (Money 1008 S-1). Only an old test fixture passes a number here. Wallet rows that exist are always carried over unchanged.
+function migrate(inputs, opts) {
   const { bank = {}, wallet = {}, stacks = {}, accounts = {} } = inputs || {};
+  const signupPlay = opts && opts.signupPlay != null ? opts.signupPlay : 0;
+  if (!isInt(signupPlay) || signupPlay < 0) throw new Error('signupPlay must be a non-negative integer');
   const keys = accountKeys(accounts);
   const isAccount = new Set(keys);
   const items = [];
@@ -109,10 +113,10 @@ function migrate(inputs) {
     else { mint('orphan:' + name, v, 'play', 'mig:orphan:play:' + name); report.orphans.push({ source: 'wallet', name, cur: 'play', amount: v }); }
   }
 
-  // today's lazy defaults, so nobody's balance changes on first touch. Same refs as service.ensureAccount.
+  // today's lazy Chips default, so nobody's balance changes on first touch (Cash only when a fixture asks for it, see signupPlay). Same refs as service.ensureAccount.
   for (const k of keys) {
     if (!hasBank.has(k)) { mint('bank:' + k, START_CHIPS, 'chips', 'signup:bank:' + k, 'mint:signup', 'signup'); report.defaults.chips.push(k); }
-    if (!hasWallet.has(k)) { mint('play:' + k, START_PLAY, 'play', 'signup:play:' + k, 'mint:signup', 'signup'); report.defaults.play.push(k); }
+    if (!hasWallet.has(k) && signupPlay > 0) { mint('play:' + k, signupPlay, 'play', 'signup:play:' + k, 'mint:signup', 'signup'); report.defaults.play.push(k); }
   }
 
   // totals in vs out per currency: what the inputs account for vs what the items put into player accounts
