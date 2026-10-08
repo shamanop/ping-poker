@@ -37,7 +37,7 @@ t('state: shape, bet levels, map, balances, no run', () => {
   deq(p.betLevels, [100, 200, 500, 1000, 2500]); deq(p.modes, ['play', 'chips']); eq(p.rtp, '96.0%'); eq(p.maxWinX, 1000); eq(p.capX, 10000); eq(p.idleMs, 60000);
   eq(Object.keys(p.map.states).length, 50); ok(p.map.tiers && p.map.tiers.swing, 'tier table in the map'); eq(p.run, null);
   eq(p.balances.play, w.bal('ann', 'play')); eq(p.balances.chips, w.bal('ann', 'chips'));
-  eq(lines(w), w.lines((l) => /^campaign:/.test(l.ref || '')).length); eq(lines(w), 0, 'state writes nothing');
+  eq(lines(w), 0, 'state writes nothing'); eq(w.lines().filter((l) => /^campaign/.test(String(l.ref || ''))).length, 0);
 });
 
 t('start: runView fields, escrow, ledger lines, balances', () => {
@@ -76,7 +76,8 @@ t('start: hostile mode / bet / home / payload', () => {
   for (const v of ['ZZ', 'oh', 'Oh', 'DC', '', ' OH', 'OH ', '__proto__', 'constructor', 'toString', 'hasOwnProperty', 'states', 5, null, undefined, ['OH'], { a: 1 }, true]) bad({ mode: 'play', bet: 500, home: v }, 'bad_home');
   for (const p of [null, undefined, 'start', 5, [], true]) bad(p, 'bad_mode');
   bad({ mode: 'play', bet: 500 }, 'bad_home'); bad({ mode: 'play', home: 'OH' }, 'bad_bet'); bad({ bet: 500, home: 'OH' }, 'bad_mode');
-  bad(JSON.parse('{"mode":"play","bet":500,"home":"OH","__proto__":{"x":1}}').__proto__ ? JSON.parse('{"__proto__":{"mode":"play"},"bet":500,"home":"OH"}') : {}, 'bad_mode');   // an inherited `mode` does not count
+  bad(Object.assign(Object.create({ mode: 'play' }), { bet: 500, home: 'OH' }), 'bad_mode');   // a `mode` that only the PROTOTYPE has does not count (own bet and home are there)
+  eq(Object.getPrototypeOf(JSON.parse('{"__proto__":{"mode":"play"},"bet":500,"home":"OH"}')), Object.prototype, 'JSON.parse makes __proto__ an own field, which is why the real prototype case is built by hand above');
   const proto = Object.create({ mode: 'play', bet: 500, home: 'OH' }); bad(proto, 'bad_mode');
   const good = open(w, s, 'play', 500, 'OH'); eq(good.steps, 0);   // extra unknown fields are ignored, not trusted
 });
@@ -269,7 +270,8 @@ t('money error: an error and no result, the run stays open, a retry closes it on
   // a scandal draw whose settle fails stays a scandal
   run = open(w, s); w.hooks.before.settle = () => { throw Object.assign(new Error('disk'), { code: 'internal' }); };
   r = step(w, s, run, run.options[0].to, 'scandal'); eq(r.error.code, 'internal'); eq(w.runs.size, 1); w.hooks.before = {};
-  w.RNG.v = 0.999999; r = H.call(w, s, 'cash', { roundId: run.roundId }); eq(r.ev, 'end'); eq(r.payload.reason, 'scandal'); eq(r.payload.win, 0); eq(w.escrows().length, 0);
+  w.RNG.v = 0.999999;                                                                       // a NEW draw would survive: the step below must not draw at all
+  r = H.call(w, s, 'step', { roundId: run.roundId, n: run.steps + 1, to: run.options[0].to }); eq(r.ev, 'end', 'the step retried the close, it did not draw'); eq(r.payload.reason, 'scandal'); eq(r.payload.win, 0); eq(w.escrows().length, 0);
   // the open call failing leaves nothing
   w.hooks.before.open = () => { throw Object.assign(new Error('disk'), { code: 'internal' }); }; const b2 = snap(w);
   r = H.start(w, s, 'play', 500, 'OH'); eq(r.error.code, 'internal'); noEffect(w, b2); eq(w.runs.size, 0);
@@ -319,6 +321,50 @@ t('runView: cashout and nextCashout are the server\'s whole units at every bet l
 t('init: a reload of the module drops live timers and runs; audit is from the game\'s own records', () => {
   const w = setup(), s = w.sock('ann'); open(w, s); const a = w.audit(); eq(a.openRounds.length, 1); deq(a.pools, {});
   w.reboot(); eq(w.runs.size, 0, 'a restart cashed the run out (refund at 0 steps)'); eq(w.audit().openRounds.length, 0); eq(w.escrows().length, 0);
+});
+
+// ---- fix round 1 (CRITIC-R1 C3, C5, C6) -------------------------------------------------------------------------------------------------------------------------------------
+t('C5: a step sent to a doomed run (after a money error) is refused, draws nothing, and closes the run as the scandal it was', () => {
+  const w = setup(), s = w.sock('ann'); hook(true); const pre = w.bal('ann', 'play');
+  let run = open(w, s); run = step(w, s, run, run.options[0].to, 'survive').payload.run;
+  w.hooks.before.settle = () => { throw Object.assign(new Error('disk'), { code: 'internal' }); };
+  let r = step(w, s, run, run.options[0].to, 'scandal'); eq(r.error.code, 'internal'); w.hooks.before = {};
+  let draws = 0; const was = w.RNG; SRV.rng = () => { draws++; return 0.999999; };
+  const trail = w.runs.get('ann').run.trail.slice();
+  r = step(w, s, run, run.options[0].to, 'survive');                                          // even a forced survive must not draw: the result is already drawn
+  eq(draws, 0, 'no draw'); eq(r.ev, 'end'); eq(r.payload.reason, 'scandal'); eq(r.payload.win, 0); eq(w.bal('ann', 'play'), pre - 500); eq(w.runs.size, 0);
+  hook(false);
+});
+
+t('C3: a surviving step whose record flush failed: the retry of the same step returns the SAME draw (no second roll)', () => {
+  const w = setup(), s = w.sock('ann'); const store = w.store(), real = store.flush;
+  const run = open(w, s, 'play', 500, 'GA'), to = run.options.find((o) => o.tier === 'swing').to;
+  let boom = 1; store.flush = () => { if (boom-- > 0) throw new Error('disk full'); return real(); };
+  w.RNG.v = 0.999999; let r = step(w, s, run, to); eq(r.error.code, 'internal'); eq(w.runs.get('ann').run.steps, 0, 'the step did not happen yet');
+  w.RNG.v = 0;                                                                                 // a fresh draw would be a scandal
+  r = step(w, s, run, to); eq(r.ev, 'step', 'the retry gets the draw that was made: a survive'); eq(r.payload.run.steps, 1); eq(w.runs.get('ann').run.steps, 1);
+  ok(w.disk().open.ann.run.steps === 1, 'durable now'); eq(w.runs.get('ann').memo, null);
+  // a different step after a failed flush is a new decision: it draws
+  const run2 = r.payload.run, to2 = run2.options.find((o) => !o.deadEnd).to; boom = 1; w.RNG.v = 0.999999; r = step(w, s, run2, to2); eq(r.error.code, 'internal');
+  w.RNG.v = 0; const other = run2.options.find((o) => o.to !== to2 && !o.deadEnd); r = step(w, s, run2, other.to); eq(r.ev, 'end', 'another destination draws afresh'); eq(r.payload.reason, 'scandal');
+  store.flush = real;
+});
+
+t('C3: one failed flush on the first attempt does not change a step\'s odds (seeded, 800 runs, swing first step)', () => {
+  const R = (a) => () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let x = Math.imul(a ^ (a >>> 15), 1 | a); x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x; return ((x ^ (x >>> 14)) >>> 0) / 4294967296; };
+  const rng = R(2026), w = setup(), s = w.sock('ann'); const store = w.store(), real = store.flush; w.RNG.v = null;
+  hook(false); SRV.rng = rng; let surv = 0, N = 800, design = 0;
+  for (let i = 0; i < N; i++) {
+    w.clock.advance(300);
+    const run = open(w, s, 'play', 100, 'GA'), o = run.options.find((x) => x.tier === 'swing'); design = 1 - o.pFail;
+    let boom = 1; store.flush = () => { if (boom-- > 0) throw new Error('disk full'); return real(); };
+    let r = step(w, s, run, o.to);
+    if (r.error) r = step(w, s, run, o.to);                                                    // the client retries the same message
+    store.flush = real;
+    if (r.ev === 'step') { surv++; H.call(w, s, 'cash', { roundId: run.roundId }); }
+  }
+  const p = surv / N, sd = Math.sqrt(design * (1 - design) / N);
+  ok(Math.abs(p - design) < 4 * sd, `survival ${p.toFixed(3)} vs design ${design.toFixed(3)} (4 sd = ${(4 * sd).toFixed(3)})`);
 });
 
 (async () => {

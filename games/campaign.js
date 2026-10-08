@@ -3,10 +3,13 @@
 // Every unit of money is a balance in the ledger and every movement is ONE ctx.money call (ADD-A-GAME.md sections 3-5). The only money that ever moves is the stake (open) and the payout
 // (settle / void): a surviving step moves nothing. The module keeps its own state (the one open run of an account) in campaign.json; none of it is money.
 //   start : validate -> ledger open (stake into escrow) -> record on disk (flushed) -> emit
-//   step  : validate -> E.step with the server rng -> scandal / run done: ledger settle -> drop the record (flushed) -> emit end;  survived and going on: record updated, FLUSHED, emit (no ledger line)
+//   step  : validate -> E.step with the server rng -> scandal / run done: the drawn result is written into the record (`pend`, flushed) FIRST, then ledger settle -> drop the record -> emit end;
+//           survived and going on: record updated, FLUSHED, emit (no ledger line). A drawn result is final: a refused settle never un-draws it (retry, idle timer and boot close at the pended result),
+//           and a surviving step whose flush failed is remembered (`memo`) so the retry of the same message returns the same draw.
 //   cash  : steps >= 1 settle at stake x multiplier;  steps === 0 void (a refund: nothing was risked)
 //   idle  : 60 s with no accepted pick = the same as a cash-out (reason 'timeout')
-//   boot  : recover() cashes out every stored run at its stored multiplier (decision D1: a restart is an automatic cash-out), refunds a 0-step run, voids an escrow that has no record.
+//   boot  : recover() cashes out every stored run at its stored multiplier (decision D1: a restart is an automatic cash-out) on the growth table the run was opened with, refunds a 0-step run,
+//           closes a pended result as drawn (a scandal = loss, stake kept), voids an escrow that has no record.
 const crypto = require('crypto');
 const E = require('./campaign-engine.js');
 const { createStore } = require('./campaign-store.js');
@@ -34,10 +37,16 @@ const keyOf = (socket) => { const a = socket.data && socket.data.acct; return nk
 const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
 const field = (p, k) => (p && typeof p === 'object' && own(p, k) ? p[k] : undefined);   // own fields only: a payload with a prototype cannot smuggle `force`
 const isInt = (n) => Number.isSafeInteger(n);
+// the growth table a run is opened with, stored in its record: an open run is paid on the numbers it was opened with, whatever a later deploy changes (ADD-A-GAME.md section 4)
+const tiersNow = () => { const t = {}; for (const k of Object.keys(E.TIERS)) t[k] = { g100: E.TIERS[k].g100 }; return t; };
+const tiersOk = (t) => !!t && typeof t === 'object' && Object.keys(E.TIERS).every((k) => own(t, k) && t[k] && isInt(t[k].g100) && t[k].g100 >= 100 && t[k].g100 <= 1000);
+const tiersOf = (o) => (o.tiers == null ? E.TIERS : tiersOk(o.tiers) ? o.tiers : null);   // a record from before the snapshot existed uses the current table; an unusable snapshot = null
 const validId = (x) => typeof x === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(x);
 const logf = (...a) => { const f = module.exports.log; if (f) f(...a); };
 
 let C = null;                    // the games ctx from init (io, money, now, rng)
+let fenced = null;               // the ledger code once a money call showed the ledger refuses writes for good (foreign_write | lost_lock | closed); init() clears it. Poker pauses on this (server.js onFence), the game port has no such hook.
+const FENCE_CODES = ['foreign_write', 'lost_lock', 'closed'];
 let store = null;
 const runs = new Map();          // account key -> live record { ...stored record, nk, timer, expiresAt }: the account's ONE open run
 const rateLast = new Map();      // "<account>|<event>" -> time of the last accepted event: the 150 ms limit is per account and event, not per socket
@@ -46,6 +55,7 @@ const now = () => C.now();
 const rngOf = () => (module.exports.rng || cryptoRng);
 
 function err(socket, code, message, extra) { socket.emit('error', { message, code, game: 'campaign', ...(extra || {}) }); }
+const MONEY_DOWN = 'Money is unavailable right now, please try again later';
 const fundsMsg = (cur) => (cur === 'chips' ? 'Not enough chips' : 'Not enough Play $');
 const balances = (nk) => ({ play: M().balance(nk, 'play'), chips: M().balance(nk, 'chips') });
 const safeBalances = (nk) => { try { return balances(nk); } catch { return null; } };
@@ -67,7 +77,7 @@ function runView(rec) {
   return {
     roundId: rec.roundId, mode: rec.cur, bet: rec.bet, home: run.home, at: run.at, trail: run.trail.slice(), steps: run.steps, mx: run.mx,
     cashout: units(rec.bet, run.mx), canCash: true,                  // at 0 steps cashout = the stake: it is a refund (void), not a win
-    options: E.options(run).map((o) => ({ to: o.to, name: name(o.to), tier: o.tier, g100: o.g100, nextMx: o.nextMx, nextCashout: units(rec.bet, o.nextMx), pFail: round4(o.pFail), deadEnd: !!o.deadEnd, landslide: !!o.landslide })),
+    options: E.options(run, rec.tiers).map((o) => ({ to: o.to, name: name(o.to), tier: o.tier, g100: o.g100, nextMx: o.nextMx, nextCashout: units(rec.bet, o.nextMx), pFail: round4(o.pFail), deadEnd: !!o.deadEnd, landslide: !!o.landslide })),
     idleMs: rec.idleMs, expiresAt: rec.expiresAt,
   };
 }
@@ -80,7 +90,12 @@ function endView(rec, run, reason, win, failedAt) {
 }
 
 // ---------------------------------------------------------------------------------------------------------------- the open run: record, timer
-const toStored = (rec) => ({ roundId: rec.roundId, key: rec.nk, cur: rec.cur, bet: rec.bet, run: rec.run, startedAt: rec.startedAt, lastAt: rec.lastAt });
+const toStored = (rec) => {
+  const o = { roundId: rec.roundId, key: rec.nk, cur: rec.cur, bet: rec.bet, run: rec.run, startedAt: rec.startedAt, lastAt: rec.lastAt };
+  if (rec.tiers) o.tiers = rec.tiers;
+  if (rec.pend) o.pend = rec.pend;                                    // the drawn result of a terminal step (scandal / dead end / LANDSLIDE) whose settle is not done yet: final, durable
+  return o;
+};
 function clearTimer(rec) { if (rec.timer) { clearTimeout(rec.timer); rec.timer = null; } }
 function armIdle(rec, ms) {
   clearTimer(rec);
@@ -94,7 +109,12 @@ function armIdle(rec, ms) {
 function forget(rec) { clearTimer(rec); rec.closed = true; if (runs.get(rec.nk) === rec) runs.delete(rec.nk); }
 
 // A money call that failed for a reason the game cannot act on: the run is NOT closed, its record stays, the client is told (an error, never a result), and the idle timer is armed again so the close is tried once more.
+function noteFence(e) {
+  const c = e && ((e.cause && e.cause.code) || e.code);
+  if (FENCE_CODES.includes(c) && !fenced) { fenced = c; logf('campaign: the ledger refuses writes for good, no new step is drawn until a restart', c); }
+}
 function moneyFailed(rec, e, where) {
+  noteFence(e);
   logf('campaign: money call failed, the run stays open', rec.roundId, where, e && e.code, e && e.message);
   if (runs.get(rec.nk) === rec && !rec.closed) {
     const payload = e && e.code === 'funds' ? { message: fundsMsg(rec.cur), code: 'funds', game: 'campaign' } : { message: 'Server error', code: 'internal', game: 'campaign' };
@@ -145,51 +165,63 @@ function unresolvable(rec, extraSocket) {
 // idle: a cash-out at the current multiplier (a refund at 0 steps)
 function autoClose(rec, reason) {
   if (rec.closed || runs.get(rec.nk) !== rec) return;
-  if (rec.doomed) return void closeRun(rec, rec.doomed.run, 'scandal', rec.doomed.failedAt);
+  if (rec.pend) return void closeRun(rec, rec.pend.run, rec.pend.reason, rec.pend.run.failedAt || null);   // a drawn result is closed as drawn, never re-drawn, never turned into a cash-out
   closeRun(rec, rec.run, reason, null);
 }
 
 // ---------------------------------------------------------------------------------------------------------------- boot: recover(rounds) (decision D1)
 // Synchronous, called by the games registry before the server listens. `rounds` = this game's non-zero escrows read from the ledger.
-//   record + escrow (E.check ok, escrow = bet)  -> steps >= 1: settle at the STORED multiplier;  steps === 0: void (refund)
-//   record + escrow, E.check fails / bet is not the escrow -> void (a record we cannot vouch for is never paid)
+//   record + escrow (check ok on the run's OWN growth table, escrow = bet) -> steps >= 1: settle at the STORED multiplier;  steps === 0: void (refund)
+//   record with a pended result (a drawn scandal / dead end / LANDSLIDE whose settle was refused) -> settle as drawn: a scandal = loss (win 0, stake kept), a win at its drawn multiplier
+//   record + escrow, check fails / bet is not the escrow -> void (a record we cannot vouch for is never paid)
 //   record, no escrow                            -> stale: dropped, nothing paid
 //   escrow, no record                            -> void (the crash fell between the ledger open and the record: no step was taken)
 // A ledger call that is refused for another reason keeps the record and the run (audit() lists it, an idle timer tries again).
+// A pend pairs with its run: same home, same trail up to the last live step, one step further for a win, the same step count for a scandal.
+function pendOk(p, run, tiers) {
+  if (!p || typeof p !== 'object' || !p.run || typeof p.run !== 'object') return false;
+  const r = p.run;
+  try { E.check(r, tiers); } catch { return false; }
+  if (r.done !== p.reason || !['scandal', 'deadend', 'landslide'].includes(r.done)) return false;
+  if (r.home !== run.home || !run.trail.every((x, i) => r.trail[i] === x)) return false;
+  return r.done === 'scandal' ? r.steps === run.steps : r.steps === run.steps + 1;
+}
 function recoverOne(o, escrows) {
   const nk = o && typeof o.key === 'string' ? nkey(o.key) : '';
-  const rec = o && { roundId: o.roundId, nk, cur: o.cur, bet: o.bet, run: o.run, startedAt: o.startedAt, lastAt: o.lastAt, timer: null, closed: false };
+  const tiers = o ? tiersOf(o) : null;
+  const rec = o && { roundId: o.roundId, nk, cur: o.cur, bet: o.bet, run: o.run, startedAt: o.startedAt, lastAt: o.lastAt, tiers: tiers || undefined, pend: o.pend || undefined, timer: null, closed: false };
   const dropIt = () => { try { store.delOpen(o && o.key); store.flush(); } catch (e) { logf('campaign: recover: record not dropped', o && o.roundId, e && e.message); } };
   if (!rec || !nk || !validId(rec.roundId) || !MODES.includes(rec.cur)) { logf('campaign: recover: unusable record dropped', o && o.roundId); return dropIt(); }
   const esc = escrows.get(`${nk}|${rec.cur}|${rec.roundId}`);
   if (esc == null) { logf('campaign: recover: stale record (no escrow), dropped, nothing paid', rec.roundId); return dropIt(); }
-  let good = isInt(rec.bet) && rec.bet === esc;
-  if (good) { try { E.check(rec.run); } catch { good = false; } }
-  if (good && rec.run.done === 'scandal') good = false;                         // a stored run is never a lost one
+  let valid = !!tiers;                                                           // the run is consistent with the growth table it was opened with (not the table of this build)
+  if (valid) { try { E.check(rec.run, tiers); } catch { valid = false; } }
+  if (valid && rec.run.done) valid = false;                                      // a stored live run is never a finished one (a finished one is the `pend`)
+  if (valid && o.pend != null && !pendOk(o.pend, rec.run, tiers)) valid = false;
+  const good = valid && isInt(rec.bet) && rec.bet === esc;
   if (!good) {
     logf('campaign: recover: record fails its check or does not match the escrow, voiding it', rec.roundId);
-    try { M().void(nk, rec.cur, rec.roundId, 'unresolvable'); } catch (e) { if (!(e && e.code === 'round_closed')) { logf('campaign: recover: void refused, record kept', rec.roundId, e && e.message); return keepOpen(o, esc); } }
+    try { M().void(nk, rec.cur, rec.roundId, 'unresolvable'); } catch (e) { if (!(e && e.code === 'round_closed')) { logf('campaign: recover: void refused, record kept', rec.roundId, e && e.message); return keepOpen(rec, valid); } }
     return dropIt();
   }
-  const refund = rec.run.steps === 0;
+  const pend = rec.pend || null, refund = !pend && rec.run.steps === 0;
   try {
     if (refund) M().void(nk, rec.cur, rec.roundId, 'boot');
-    else M().settle(nk, rec.cur, rec.roundId, { win: E.payout(rec.run, rec.bet), stake: rec.bet });
+    else M().settle(nk, rec.cur, rec.roundId, { win: E.payout(pend ? pend.run : rec.run, rec.bet), stake: rec.bet });
   } catch (e) {
     if (e && e.code === 'round_closed') { logf('campaign: recover: the ledger closed this run already, record dropped', rec.roundId); return dropIt(); }
     if (e && e.code === 'stake_mismatch') { try { M().void(nk, rec.cur, rec.roundId, 'unresolvable'); return dropIt(); } catch {} }
+    noteFence(e);
     logf('campaign: recover: close refused, the run stays open', rec.roundId, e && e.code, e && e.message);
-    return keepOpen(o, esc);
+    return keepOpen(rec, true);
   }
-  logf('campaign: recover:', refund ? 'refunded' : 'cashed out at the stored multiplier', rec.roundId, 'steps', rec.run.steps, 'mx', rec.run.mx);
+  logf('campaign: recover:', refund ? 'refunded' : pend ? `closed as drawn (${pend.reason})` : 'cashed out at the stored multiplier', rec.roundId, 'steps', rec.run.steps, 'mx', (pend ? pend.run : rec.run).mx);
   dropIt();
 }
-// the run stays open in memory with an idle timer that retries the close (the record is on disk; audit() lists it)
-function keepOpen(o, esc) {
-  const nk = nkey(o.key);
-  const rec = { roundId: o.roundId, nk, cur: o.cur, bet: o.bet, run: o.run, startedAt: o.startedAt, lastAt: o.lastAt, timer: null, closed: false };
-  try { E.check(rec.run); } catch { return; }
-  runs.set(nk, rec); armIdle(rec, idleMs());
+// the run stays open in memory with an idle timer that retries the close (the record is on disk; audit() lists it). A record that failed its check is not held in memory: it cannot be played.
+function keepOpen(rec, usable) {
+  if (!usable) return;
+  runs.set(rec.nk, rec); armIdle(rec, idleMs());
 }
 function recover(rounds) {
   if (!store) return;
@@ -232,16 +264,17 @@ function start(socket, payload) {
   if (typeof home !== 'string' || !own(E.MAP.states, home)) return err(socket, 'bad_home', 'Pick a home state');
   const open = runs.get(nk);
   if (open) return err(socket, 'run_open', 'You have a run open', { run: runView(open) });
+  if (fenced) return err(socket, 'money_down', MONEY_DOWN);
   let run;
   try { run = E.newRun(home); } catch { return err(socket, 'bad_home', 'Pick a home state'); }
   try { if (M().balance(nk, cur) < bet) return err(socket, 'funds', fundsMsg(cur)); } catch { return err(socket, 'internal', 'Server error'); }
   const roundId = crypto.randomBytes(8).toString('hex');
   // ---- the ledger first: the stake goes into escrow (ONE transfer). Nothing below may await, or a second start could interleave.
   try { M().open(nk, cur, roundId, bet); }
-  catch (e) { return e && e.code === 'funds' ? err(socket, 'funds', fundsMsg(cur)) : err(socket, 'internal', 'Server error'); }
+  catch (e) { noteFence(e); return e && e.code === 'funds' ? err(socket, 'funds', fundsMsg(cur)) : err(socket, 'internal', 'Server error'); }
   // ---- state second: the record is on disk before the client hears of the run. A crash between the two leaves an escrow with no record: recover() refunds it (no step was taken).
   const t = now();
-  const rec = { roundId, nk, cur, bet, run, startedAt: t, lastAt: t, timer: null, closed: false, idleMs: 0, expiresAt: 0 };
+  const rec = { roundId, nk, cur, bet, run, tiers: tiersNow(), startedAt: t, lastAt: t, timer: null, closed: false, idleMs: 0, expiresAt: 0 };
   try { store.putOpen(toStored(rec)); store.flush(); }
   catch (e) {
     logf('campaign: record not flushed, refunding the stake', roundId, e && e.message);
@@ -267,30 +300,39 @@ function step(socket, payload) {
   if (limited(socket, nk, 'step')) return;
   const rec = runFor(socket, nk, payload, 'step');
   if (!rec) return;
-  if (rec.doomed) return void autoClose(rec, 'timeout');
+  if (rec.pend) return void autoClose(rec, 'timeout');                                    // a result is already drawn for this run: close it as drawn (retry the ledger), never draw again
+  if (fenced) return err(socket, 'money_down', MONEY_DOWN);                               // the ledger refuses writes for good: nothing is drawn against a dead ledger
   const n = field(payload, 'n'), to = field(payload, 'to');
   if (!isInt(n) || n !== rec.run.steps + 1) return err(socket, 'bad_step', 'That step is not next');
-  if (typeof to !== 'string' || !E.options(rec.run).some((o) => o.to === to)) return err(socket, 'bad_step', 'You cannot go there');
-  const force = testHookOn() ? field(payload, 'force') : undefined;
-  const rng = typeof force === 'string' && own(FORCE_RNG, force) ? FORCE_RNG[force] : rngOf();
+  if (typeof to !== 'string' || !E.options(rec.run, rec.tiers).some((o) => o.to === to)) return err(socket, 'bad_step', 'You cannot go there');
   let res;
-  try { res = E.step(rec.run, to, rng); } catch (e) { return err(socket, e && e.code === 'bad_step' ? 'bad_step' : 'internal', e && e.code === 'bad_step' ? 'You cannot go there' : 'Server error'); }
+  if (rec.memo && rec.memo.n === n && rec.memo.to === to) res = rec.memo.res;             // the same step again after a failed flush: the SAME draw, not a second one
+  else {
+    rec.memo = null;
+    const force = testHookOn() ? field(payload, 'force') : undefined;
+    const rng = typeof force === 'string' && own(FORCE_RNG, force) ? FORCE_RNG[force] : rngOf();
+    try { res = E.step(rec.run, to, rng, rec.tiers); } catch (e) { return err(socket, e && e.code === 'bad_step' ? 'bad_step' : 'internal', e && e.code === 'bad_step' ? 'You cannot go there' : 'Server error'); }
+  }
   const next = res.run;
-  if (!res.ok) {                                                                          // ledger: settle with win 0, the stake goes to the house
-    if (!closeRun(rec, next, 'scandal', to, socket) && !rec.closed) rec.doomed = { run: next, failedAt: to };   // the ledger refused: the drawn scandal stays drawn, a retry closes it as a scandal (never a re-draw)
+  if (!res.ok || next.done) {                                                             // scandal (settle with win 0: the stake goes to the house) or landslide / dead end (an automatic cash-out at the new multiplier)
+    rec.memo = null;
+    rec.pend = { run: next, reason: next.done };                                          // the drawn result is final from here: written to the record BEFORE the ledger is asked, so a refused settle,
+    try { store.putOpen(toStored(rec)); store.flush(); }                                  // a restart or a flush error can never turn it into a cash-out, a better result or a new draw
+    catch (e) { logf('campaign: pended result not flushed (kept in memory, the idle and boot paths still close it as drawn when the record is written)', rec.roundId, e && e.message); }
+    closeRun(rec, next, next.done, next.failedAt || null, socket);                        // refused: rec.pend stays, a retry / the idle timer / boot close it as drawn
     return;
   }
-  if (next.done) return void closeRun(rec, next, next.done, null, socket);                // landslide / deadend: an automatic cash-out at the new multiplier
   // survived and the run goes on: the new record is flushed BEFORE the client hears of the step; a crash before the flush = the step never happened. No ledger line (nothing moved).
   const old = toStored(rec), t = now();
   const fresh = { ...old, run: next, lastAt: t };
   try { store.putOpen(fresh); store.flush(); }
   catch (e) {
-    logf('campaign: step not flushed, the step did not happen', rec.roundId, e && e.message);
+    logf('campaign: step not flushed, the step did not happen yet (the retry of this step gets the same draw)', rec.roundId, e && e.message);
     try { store.putOpen(old); } catch {}
+    rec.memo = { n, to, res };
     return err(socket, 'internal', 'Server error');
   }
-  rec.run = next; rec.lastAt = t;
+  rec.memo = null; rec.run = next; rec.lastAt = t;
   armIdle(rec, idleMs());
   socket.emit('g:campaign:step', { roundId: rec.roundId, n, to, tier: res.opt.tier, run: runView(rec) });
 }
@@ -300,7 +342,7 @@ function cash(socket, payload) {
   if (limited(socket, nk, 'cash')) return;
   const rec = runFor(socket, nk, payload, 'cash');
   if (!rec) return;
-  if (rec.doomed) return void autoClose(rec, 'timeout');
+  if (rec.pend) return void autoClose(rec, 'timeout');
   closeRun(rec, rec.run, rec.run.steps === 0 ? 'withdrawn' : 'cashout', null, socket);
 }
 
@@ -319,7 +361,7 @@ module.exports = {
   init(ctx) {
     this.rng = ctx.rng || cryptoRng;
     for (const rec of runs.values()) clearTimer(rec);
-    runs.clear(); rateLast.clear();
+    runs.clear(); rateLast.clear(); fenced = null;
     if (store) store.close();
     C = ctx;
     const files = ctx.files || {};
