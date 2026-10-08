@@ -30,18 +30,34 @@ function createAdmin({ service, ledger, accounts, registry, views, onlineKeys })
     catch (e) { if (e && e.name === 'MoneyError') return { ok: false, code: e.code === 'insufficient' ? 'insufficient' : e.code }; throw e; }
   }
 
-  function setPlay(key, cents, opId) {
+  // Where a player's Cash sits now: wallet, Play seats ("at tables"), open game rounds, and the total of the three.
+  function cashOf(key) {
+    const h = service.balances(key);
+    return { wallet: h.play, atTable: h.atTable.play, inRound: h.inRound.play, total: h.play + h.atTable.play + h.inRound.play };
+  }
+
+  // "Set Cash to X": the player's TOTAL Cash becomes X (wallet + seats + open rounds). Cash at a seat or in a round is not the admin's to move, so X below that part
+  // is refused (cash_in_play, the message names the amount) and nothing is written; otherwise the wallet is set to X minus the part in play. The answer carries
+  // wallet / atTable / inRound / total. The ledger reason carries the target, so the request is in the line: with an op id the ledger already
+  // holds, the same request (same target) is the first answer (ok, dup) whatever the balance is now; any other edit under that op id (another kind, another target) is ref_conflict.
+  function setPlay(key, target, opId) {
     if (!key || !accounts.get(key)) return { ok: false, code: 'unknown_player' };
-    if (!isInt(cents) || cents < 0 || cents > MAX_PLAY) return { ok: false, code: 'range' };
+    if (!isInt(target) || target < 0 || target > MAX_PLAY) return { ok: false, code: 'range' };
     const bad = checkOp(opId); if (bad) return bad;
-    const reason = `admin set play to ${cents}`;
+    const reason = `admin set play to ${target}`;
     if (ledger.has(refOf(key, opId))) {
       const held = ledger.entriesOf(refOf(key, opId))[0];
-      return held && held.cur === 'play' && held.reason === 'admin:' + reason ? { ok: true, dup: true } : { ok: false, code: 'ref_conflict' };
+      return held && held.cur === 'play' && held.reason === 'admin:' + reason ? { ok: true, dup: true, ...cashOf(key) } : { ok: false, code: 'ref_conflict' };
     }
-    const delta = cents - playOf(key);
-    if (delta === 0) return { ok: true, noop: true };
-    return adjust(key, delta, 'play', reason, opId);
+    const c = cashOf(key), part = c.atTable + c.inRound;
+    if (target < part) {
+      const where = [c.atTable ? `${cents(c.atTable)} at tables` : '', c.inRound ? `${cents(c.inRound)} in open rounds` : ''].filter(Boolean).join(' and ');
+      return { ok: false, code: 'cash_in_play', message: `Cannot set Cash to ${cents(target)}: ${where} (${cents(part)}) is in play and cannot be taken. End the night or wait for the round, then set it. Nothing was changed.`, ...c };
+    }
+    const delta = target - part - c.wallet;
+    if (delta === 0) return { ok: true, noop: true, ...c };
+    const r = adjust(key, delta, 'play', reason, opId);
+    return r.ok ? { ...r, ...cashOf(key) } : r;
   }
 
   function overview() {
