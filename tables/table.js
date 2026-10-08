@@ -182,6 +182,9 @@ class Table {
     opts = opts || {};
     if (this.phase === 'ended') throw new TableError('ended');
     const mine = this.seatOfKey(key);
+    // K3-6: a seat that left or was kicked in a live hand is a seat on its way out, not a reconnect: there is no stack to hand back.
+    // He sits again (with a real buy-in) once the hand has settled and the seat has been swept.
+    if (mine && mine.leaving) throw new TableError('hand_live');
     if (mine) return this.rebind(mine, opts.socketId);
     const other = this.hooks.seatOf && this.hooks.seatOf(key);
     if (other) throw new TableError('one_seat', { tableId: other.tableId });
@@ -217,6 +220,7 @@ class Table {
     opts = opts || {};
     const seat = this.seatOfKey(key);
     if (!seat) throw new TableError('no_seat');
+    if (seat.leaving) throw new TableError('hand_live');            // K3-6: a seat on its way out takes no buy-in
     if (this.liveSeat(seat) && !seat.folded && this.hand.seats[seat.seat] && !this.hand.seats[seat.seat].folded) throw new TableError('in_hand');
     if (seat.stack > 0) throw new TableError('have_chips');
     if (!this.buyInAllowed(key)) throw new TableError('rebuy_off');
