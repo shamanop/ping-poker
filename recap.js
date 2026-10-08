@@ -7,6 +7,7 @@
 // numbers as registry.nightPayload(t) and so as the settle-up screen.
 // Persistence: one JSONL line per finished hand, appended on setImmediate (after the tick's emits) and flushed synchronously on shutdown.
 const fs = require('fs');
+const crypto = require('crypto');
 
 const HAND_RANK = { 'High Card': 1, 'Pair': 2, 'Two Pair': 3, 'Three of a Kind': 4, 'Straight': 5, 'Flush': 6, 'Full House': 7, 'Four of a Kind': 8, 'Straight Flush': 9, 'Royal Flush': 10 };
 const MAX_HANDS = 6000;
@@ -19,12 +20,17 @@ function createRecap({ file, registry, accounts, now = Date.now, log }) {
   const say = log || ((...a) => console.error(...a));
   const reg = () => (typeof registry === 'function' ? registry() : registry && registry.current ? registry.current : registry);
   const isAdmin = key => !!(accounts && accounts.isAdmin && accounts.isAdmin(key));
-  const acct = key => (accounts && accounts.get ? accounts.get(key) : null);
+  // (r2) critic r1 #12: accounts.get(k) reads a plain object, so 'constructor' / '__proto__' answer with an inherited value; a real account carries its own key
+  const acct = key => { const a = accounts && accounts.get ? accounts.get(key) : null; return a && typeof a === 'object' && a.key === key ? a : null; };
+  const own = (o, k) => !!o && typeof k === 'string' && Object.prototype.hasOwnProperty.call(o, k);
 
   let hands = [];
   const open = new Map();       // tableId -> hand in progress { rec, bySeat, street, pot, rb }
   const lastDone = new Map();   // tableId -> last finished record (voluntary shows patch it)
   const pending = [];           // JSONL lines waiting for the next setImmediate drain
+  const voided = new Map();     // (r2) critic r1 #5: tableId -> Set of hand numbers (handNo) that were dealt and then voided: not a missing recording
+  const rev = new Map();        // (r2) critic r1 #8: tableId -> counter bumped on every change a recap payload could show (a hand, a show, a void)
+  const bump = id => rev.set(id, (rev.get(id) || 0) + 1);
   let scheduled = false, writeFails = 0, lastFailLog = 0;
 
   // ---- persistence --------------------------------------------------------------------------------------------
@@ -37,12 +43,16 @@ function createRecap({ file, registry, accounts, now = Date.now, log }) {
     for (const ln of lines) {
       let j; try { j = JSON.parse(ln); } catch { continue; }
       if (!j || typeof j !== 'object') continue;                                  // a foreign line never stops the boot (critic r1 #2)
-      if (j.patch) {
+      if (j.void) {                                                               // (r2) critic r1 #5: a voided hand is remembered across a restart
+        if (typeof j.tableId === 'string' && Number.isFinite(j.handNo)) { if (!voided.has(j.tableId)) voided.set(j.tableId, new Set()); voided.get(j.tableId).add(j.handNo); }
+      } else if (j.patch) {
         if (!Array.isArray(j.shown)) continue;
         const r = hands[at.get(j.tableId + '|' + j.handNo)];
         const p = r && r.players.find(x => x && x.key === j.key);
         if (p) p.shown = [!!(p.shown && p.shown[0]) || !!j.shown[0], !!(p.shown && p.shown[1]) || !!j.shown[1]];
-      } else if (Array.isArray(j.players) && j.players.every(x => x && typeof x === 'object' && Array.isArray(x.cards)) && Array.isArray(j.actions) && Array.isArray(j.winners) && Array.isArray(j.board) && typeof j.tableId === 'string' && Number.isFinite(j.handNo)) {
+      } else if (Array.isArray(j.players) && j.players.every(x => x && typeof x === 'object' && typeof x.key === 'string' && Array.isArray(x.cards))
+        && Array.isArray(j.actions) && j.actions.every(x => x && typeof x === 'object') && Array.isArray(j.winners) && j.winners.every(x => x && typeof x === 'object')
+        && Array.isArray(j.board) && typeof j.tableId === 'string' && Number.isFinite(j.handNo) && Number.isFinite(j.t)) {
         const k = recKey(j);
         if (at.has(k)) hands[at.get(k)] = j; else { at.set(k, hands.length); hands.push(j); }
       }
@@ -89,8 +99,15 @@ function createRecap({ file, registry, accounts, now = Date.now, log }) {
     for (const [no, a] of [[h.sbSeat, 'sb'], [h.bbSeat, 'bb']]) {
       const rp = o.bySeat[no]; if (!rp) continue;
       const put = h.seats[no].committed;
-      o.pot += put; o.rb[no] = h.seats[no].bet;
+      o.pot += put; o.rb[no] = put;                           // (r2) critic r1 #4: 'bet' is already 0 when a blind closed betting at the deal; the post is what was committed
       rec.actions.push({ k: rp.key, street: 'preflop', a, put, to: o.rb[no], allIn: h.seats[no].allIn || undefined, pot: o.pot });
+    }
+    // (r2) critic r1 #4: 'a blind post that is all-in closes betting at deal': engine/hand.js hands the uncalled part back inside createHand and drops the
+    // `returned` event, so the recorder never saw it. The hand object still carries it (seats[n].returned): log the same 'back' line the live flow logs.
+    for (const no of [h.sbSeat, h.bbSeat]) {
+      const rp = o.bySeat[no], back = h.seats[no] && h.seats[no].returned; if (!rp || !(back > 0)) continue;
+      o.pot -= back; rp.bet -= back; o.rb[no] = (o.rb[no] || 0) - back;
+      rec.actions.push({ k: rp.key, street: 'preflop', a: 'back', put: -back, to: 0, pot: o.pot });
     }
     open.set(t.id, o);
   }
@@ -144,7 +161,7 @@ function createRecap({ file, registry, accounts, now = Date.now, log }) {
     }
     rec.t = now();
     hands.push(rec); if (hands.length > MAX_HANDS) hands.shift();
-    lastDone.set(t.id, rec);
+    lastDone.set(t.id, rec); bump(t.id);
     append(rec);
   }
 
@@ -153,7 +170,7 @@ function createRecap({ file, registry, accounts, now = Date.now, log }) {
     const rec = lastDone.get(t.id);
     if (!rec || rec.handNo !== t.handNo) return;
     const rp = rec.players.find(x => x.key === key); if (!rp) return;
-    rp.shown = [!!(rp.shown && rp.shown[0]) || !!flags[0], !!(rp.shown && rp.shown[1]) || !!flags[1]];
+    rp.shown = [!!(rp.shown && rp.shown[0]) || !!flags[0], !!(rp.shown && rp.shown[1]) || !!flags[1]]; bump(t.id);
     append({ patch: true, tableId: rec.tableId, handNo: rec.handNo, key, shown: [!!flags[0], !!flags[1]] });
   }
 
@@ -161,7 +178,14 @@ function createRecap({ file, registry, accounts, now = Date.now, log }) {
   function onEvent(t, kind, data) {
     if (kind === 'hand_start') startHand(t);
     else if (kind === 'hand_end') endHand(t, data);
-    else if (kind === 'void') open.delete(t.id);               // a voided hand never happened
+    else if (kind === 'void') {                                // a voided hand never happened: nothing is recorded, but its number is not a hole in the log
+      const o = open.get(t.id); open.delete(t.id);
+      if (o) {
+        if (!voided.has(t.id)) voided.set(t.id, new Set());
+        voided.get(t.id).add(o.rec.handNo); bump(t.id);
+        append({ void: true, tableId: t.id, nightId: t.nightId || null, handNo: o.rec.handNo });
+      }
+    }
   }
 
   // ---- building the payload ------------------------------------------------------------------------------------
@@ -220,7 +244,19 @@ function createRecap({ file, registry, accounts, now = Date.now, log }) {
     return tableId ? R.get(tableId) : null;
   }
 
-  function build({ viewerKey, tableId, nightId, start }) {
+  // (r2) critic r1 #8: a short fingerprint of everything a payload for this scope shows. The client sends the one it holds; an equal one is answered
+  // with { ok, unchanged, version } instead of the whole hand log (POKERPING can hold 6000 hands).
+  function versionOf(t, scope, hs, nightRows) {
+    const m = crypto.createHash('md5');
+    m.update([t.id, t.nightId || '', rev.get(t.id) || 0, hs.length, hs.length ? hs[hs.length - 1].handNo : 0, scope.start, scope.end, scope.ended ? 1 : 0, scope.sessions ? scope.sessions.length : 0].join('|'));
+    if (nightRows) for (const k of Object.keys(nightRows).sort()) { const n = nightRows[k] || {}; m.update('|' + [k, n.buyIn, n.cashOut, n.open, n.net].join(',')); }
+    return m.digest('hex').slice(0, 16);
+  }
+
+  function build({ viewerKey, tableId, nightId, start, have }) {
+    start = typeof start === 'number' && Number.isFinite(start) ? start : null;        // (r2) critic r1 #1: build() is safe on its own, whatever the caller passes
+    if (typeof tableId !== 'string') tableId = null;
+    if (typeof nightId !== 'string') nightId = null;
     const t = resolve(tableId, nightId);
     if (!t) return { error: NO_NIGHT };
     const R = reg();
@@ -229,7 +265,7 @@ function createRecap({ file, registry, accounts, now = Date.now, log }) {
     let hs, scope;
     if (legacy) {
       const sessions = sessionsOf(t.id);
-      const s = start ? sessions.find(x => x.start === Number(start)) : sessions[sessions.length - 1];
+      const s = start ? sessions.find(x => x.start === start) : sessions[sessions.length - 1];
       hs = s ? hands.filter(h => h.tableId === t.id && h.t >= s.start && h.t <= s.end) : [];
       scope = { kind: 'session', tableId: t.id, tableName: t.name, mode: t.mode, unit: t.unit, start: s ? s.start : null, end: s ? s.end : null, ended: !!s && now() - s.end >= SESSION_GAP_MS, sessions: sessions.slice(-12).reverse() };
       notes.push('A POKERPING session is a run of hands with no gap of 4 hours or more. Net is chips won or lost in hands; buy-ins, cash-outs and bank edits are not counted.');
@@ -241,12 +277,20 @@ function createRecap({ file, registry, accounts, now = Date.now, log }) {
     if (!legacy) {
       try { nightRows = R.nightOf(t).perKey; } catch (e) { say('[v2] recap nightOf failed:', e && e.message); }
       if (!nightRows) notes.push('Money totals are unavailable right now. Nets here come from the hands recorded.');
-      if (hs.length && hs[0].handNum > 1) notes.push(`Hand log starts at hand #${hs[0].handNum}; earlier hands were played before recording began.`);
+      if (hs.length && hs[0].handNum > 1) {
+        // (r2) critic r1 #5: 'earlier hands were played before recording began' only for hand numbers that were neither recorded nor voided
+        const vs = voided.get(t.id), firstNo = hs[0].handNo, base = firstNo - hs[0].handNum;
+        let missing = 0; for (let no = base + 1; no < firstNo; no++) if (!(vs && vs.has(no))) missing++;
+        if (missing) notes.push(`Hand log starts at hand #${hs[0].handNum}; earlier hands were played before recording began.`);
+      }
     }
     if (viewerKey && !legacy && !isAdmin(viewerKey)) {
-      const inNight = t.hostKey === viewerKey || (nightRows && nightRows[viewerKey]) || hs.some(h => h.players.some(p => p.key === viewerKey));
+      const inNight = t.hostKey === viewerKey || (nightRows && own(nightRows, viewerKey)) || hs.some(h => h.players.some(p => p.key === viewerKey));
       if (!inNight) return { error: NO_NIGHT };
     }
+
+    const version = versionOf(t, scope, hs, nightRows);
+    if (typeof have === 'string' && have === version) return { ok: true, unchanged: true, version, generatedAt: now() };
 
     // per-player table
     const P = new Map();
@@ -283,7 +327,7 @@ function createRecap({ file, registry, accounts, now = Date.now, log }) {
     for (const p of players) p.raises = hs.reduce((s, h) => s + h.actions.filter(a => a.k === p.key && a.a === 'raise').length, 0);
     const sup = superlatives(hs, nameOf);
     return {
-      ok: true, scope, notes, players, superlatives: sup, hands: handsOut,
+      ok: true, version, scope, notes, players, superlatives: sup, hands: handsOut,
       totals: { hands: hs.length, pot: hs.reduce((s, h) => s + h.pot, 0), handNetSum: players.reduce((s, p) => s + p.handNet, 0) },
       generatedAt: now(),
     };
