@@ -78,6 +78,7 @@ const proto = {
   },
 
   noteEvents(events, actorSeat) {
+    if (this.recorder && events && events.length) { try { this.recorder.onEngine(this, events); } catch (e) { console.error('[v2] recap engine:', e && e.message); } }
     for (const e of events || []) {
       const who = e.seat != null && this.seats.get(e.seat) ? this.displayOf(this.seats.get(e.seat).key) : '';
       const seat = e.seat != null ? this.seats.get(e.seat) : null;
