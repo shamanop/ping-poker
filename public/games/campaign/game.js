@@ -5,6 +5,7 @@
   const C = window.CampaignCopy, $ = (id) => document.getElementById(id);
   const BRIDGE = window.parent !== window && new URLSearchParams(location.search).get('bridge') === '1';
   const WATCHDOG_MS = 5000;
+  const FX = window.CampaignFx || null;                    // ?fx=a (fx-a.js): the election-night graphics pass. null = today's look, and none of its branches run
 
   // ---------------------------------------------------------------- state
   const S = {
@@ -40,7 +41,7 @@
     if (m.type === 'init') onInit(m);
     else if (m.type === 'wallet') { applyWallet(m.wallet); paint(); }
     else if (m.type === 'pref') { paint(); if (S.view === 'run' || S.view === 'ended') redrawMap(false); }
-    else if (m.type === 'ev') { log('in', m.event, m.payload); onEvent(m.event, m.payload || {}); }
+    else if (m.type === 'ev') { log('in', m.event, m.payload); if (FX && FX.gate(() => onEvent(m.event, m.payload || {}))) return; onEvent(m.event, m.payload || {}); }   // FX only adds time: an answer that lands during the count is applied when the count ends
     else if (m.type === 'disconnect') { S.offline = true; $('offline').hidden = false; paint(); }
     else if (m.type === 'mode') { if (!S.run && (m.mode === 'play' || m.mode === 'chips')) { S.mode = m.mode; paint(); } }
   });
@@ -56,7 +57,7 @@
     if (m.state) onState(m.state);
   }
   function onState(st) {
-    release(); S.st = st; applyWallet(st.balances);
+    release(); S.st = st; applyWallet(st.balances); if (FX) FX.clear();          // a resync never leaves a count or a strap on the screen
     if (!map) buildMap();
     if (!S.bet || !(st.betLevels || []).includes(S.bet)) S.bet = pickDefaultBet(st.betLevels || []);
     S.ready = true;
@@ -79,6 +80,7 @@
     const isNew = !S.run || S.run.roundId !== run.roundId;
     rememberOdds(run); S.run = run; if (run.mode && run.mode !== S.mode) toParent({ type: 'mode', mode: run.mode }); S.mode = run.mode || S.mode;   // keep the shell's mode on the run's currency, or a resync after a reload flips the game to the other one S.bet = run.bet; S.home = run.home; S.again = { home: run.home, bet: run.bet, mode: run.mode };
     S.lastEnd = null; setView('run'); if (isNew) { S.tk = []; S.whole = false; }
+    if (FX) { if (isNew && !quiet) FX.open(); else FX.clear(); }
     if (isNew && !quiet) tick(C.news('open', { S: nameOf(run.home) }, run.roundId));
     else if (isNew) tick(run.steps ? 'Back on the trail in ' + nameOf(run.at) + '.' : 'Polls are open in ' + nameOf(run.home) + '.', true);
     release(); paint(); redrawMap(false);
@@ -91,7 +93,9 @@
     const prev = S.run, op = (prev.options || []).find((o) => o.to === p.to);
     S.run = p.run; rememberOdds(p.run); noteFresh(p.run); release();
     tick(C.news(p.tier || (op && op.tier) || tierOf(p.to), { S: nameOf(p.to), P: op ? C.pctOf(op.g100) : C.mxText(p.run.mx) }, p.roundId + ':' + p.run.steps));
-    paint(); redrawMap(true); bump('mx'); bump('cards'); if (map) map.pop(p.run.at, op ? C.pctOf(op.g100) : '', p.tier || (op && op.tier) || 'safe');
+    paint(); redrawMap(true); bump('mx'); bump('cards');
+    if (FX) FX.called({ to: p.to, name: nameOf(p.to), tier: p.tier || (op && op.tier) || 'safe', gain: op ? C.pctOf(op.g100) : '', mx: C.mxText(p.run.mx), mxFrom: prev.mx, mxTo: p.run.mx, mxFmt: C.mxText, n: p.run.trail.length });
+    else if (map) map.pop(p.run.at, op ? C.pctOf(op.g100) : '', p.tier || (op && op.tier) || 'safe');
   }
 
   function onEnd(p) {
@@ -107,11 +111,17 @@
     else if (R === 'landslide') tick(C.news('landslide', { S: nameOf(p.at) }, p.roundId));
     else tick(C.news(R === 'cashout' ? 'cashout' : R === 'withdrawn' ? 'withdrawn' : R === 'timeout' ? 'timeout' : 'boot', { S: nameOf(p.at) }, p.roundId));
     paint(); redrawMap(true);
-    if (R === 'scandal') scandalFx(p.failedAt); else if (p.win > 0 && R !== 'withdrawn') winFx(R === 'landslide');
+    if (FX) {
+      const money = (n) => fmt(n, p.mode);
+      if (R === 'scandal') FX.bust({ to: p.failedAt, name: nameOf(p.failedAt), mx: C.mxText(p.mx), lost: money(p.bet), news: S.tk[0] });
+      else if (R === 'landslide') FX.landslide({ win: p.win, fmt: money, mx: C.mxText(p.mx) });
+      else if (p.win > 0 && !refund) FX.victory({ tag: (REASON[R] || REASON.cashout)[0], trail: p.trail, win: p.win, fmt: money, mx: C.mxText(p.mx), states: (p.trail || []).length });
+      else FX.clear();
+    } else if (R === 'scandal') scandalFx(p.failedAt); else if (p.win > 0 && R !== 'withdrawn') winFx(R === 'landslide');
   }
 
   function onError(e) {
-    const code = e && e.code, ctx = S.pending === 'cash' || S.pending === 'step' || S.pending === 'start' ? S.pending : '';
+    const code = e && e.code, ctx = S.pending === 'cash' || S.pending === 'step' || S.pending === 'start' ? S.pending : ''; if (FX) FX.clear();
     if (code === 'run_open') { release(); if (e.run) { noteFresh(e.run); adopt(e.run, true); } else askState(); toast(C.errorText('run_open', ctx)); return; }
     if (code === 'rate') { release(); paint(); toast(C.errorText('rate', ctx)); return; }
     if (code === 'bad_step' || code === 'no_run') { release(); askState(); return; }
@@ -124,7 +134,8 @@
   function pick(to) {
     if (S.view !== 'run' || !S.run || S.busy || S.offline) return;
     if (!(S.run.options || []).some((o) => o.to === to)) return;
-    S.pendingTo = to; send('step', { roundId: S.run.roundId, n: S.run.steps + 1, to });
+    const op = S.run.options.find((o) => o.to === to), from = S.run.at, mode = S.run.mode;
+    S.pendingTo = to; if (send('step', { roundId: S.run.roundId, n: S.run.steps + 1, to }) && FX) FX.suspense({ from, to, name: op.name, tier: op.tier, final: !!op.landslide, pay: fmt(op.nextCashout, mode) });
   }
   function cash() { if (S.view === 'run' && S.run && S.run.canCash && !S.busy) send('cash', { roundId: S.run.roundId }); }
   function start() {
@@ -135,7 +146,7 @@
     if (S.view !== 'ended' || S.busy) return; const a = S.again; if (!a) return;
     S.home = a.home; S.bet = a.bet; S.mode = a.mode || S.mode; send('start', { mode: S.mode, bet: S.bet, home: S.home });
   }
-  function toSetup() { if (S.busy || S.run) return; S.lastEnd = null; setView('setup'); paint(); redrawMap(true); }
+  function toSetup() { if (S.busy || S.run) return; if (FX) FX.clear(); S.lastEnd = null; setView('setup'); paint(); redrawMap(true); }
   function setHome(code) {
     if (S.view !== 'setup' || !mapStates()[code]) return; S.home = code; S.q = ''; S.listOpen = false; const f = document.getElementById('homeQ'); if (f) f.blur(); paint(); redrawMap(false);
   }
@@ -163,6 +174,7 @@
   function buildMap() {
     const m = S.st.map || {};
     map = CampaignMap($('board'), window.CAMPAIGN_GEO, { states: m.states || {}, air: m.air || [] }, { pick: (c) => { if (S.view === 'setup') setHome(c); else pick(c); } });
+    if (FX) FX.attach(map);
   }
   function redrawMap(animate) {
     if (!map) return;
