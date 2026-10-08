@@ -4,6 +4,7 @@
 const { sleep } = require('../lib/bot');
 const poker = require('./poker');
 const slot = require('./coldcall');
+const camp = require('./campaign');
 
 async function untilLive(W, ms) {            // let the table run until a hand with chips in the pot is live, acting for whoever is on turn
   const end = Date.now() + ms;
@@ -127,6 +128,39 @@ async function step(W, kind, sig) {
     while (Date.now() < end) { W.checker.poll(); if (W.checker.lines.length > n0) break; await sleep(1); }
     return finish(W, kind, sig, `slot spin ${mode} ${bet} ${buy || 'plain'} by ${bot.key}, answer dropped`);
   }
+  if (kind === 'campopen0' || kind === 'campopen1') {
+    // a Campaign run is open (the stake sits in escrow) when the server dies: at 0 steps boot refunds it, at >= 1 step boot cashes it out at the multiplier the client last saw, ONE close line either way (decision D1).
+    // A run left to the idle timer in an earlier step may be open too: it gets the same treatment.
+    const o = await camp.ops.prepare(W, kind === 'campopen0' ? 0 : 1 + W.rng.int(3));
+    note = o ? `a run of ${o.key} (stake ${o.bet} ${o.cur}) is open at ${o.steps} steps, ${o.mx}x` : 'no run could be opened';
+    await W.settlePoll();
+    W.checker.markKill();
+    return finish(W, kind, sig, note);
+  }
+  if (kind === 'campstep' || kind === 'campcash') {
+    // a step (or a cash-out) is sent and the server dies before the client hears anything: the answer is muted on our side. With a step in flight the ledger may hold a scandal (win 0), the last multiplier (the step was
+    // never flushed) or the one option's multiplier (it survived and was flushed): exactly one close line, and nothing else is accepted (soak/actors/campaign.js allowedCloses).
+    const o = await camp.ops.prepare(W, W.rng.int(3));
+    if (!o) return finish(W, kind, sig, 'no run could be opened');
+    const bot = W.bots.get(o.key);
+    await W.drain();
+    W.checker.markKill();
+    W.mute.camp = true;
+    const n0 = W.checker.lines.length;
+    if (kind === 'campstep') {
+      const live = o.options.filter(x => !x.deadEnd), to = W.rng.pick(live.length ? live : o.options).to, force = W.rng.pick(['survive', 'survive', 'scandal', undefined]);
+      o.pend = { kind: 'step', to, n: o.steps + 1, opt: o.options.find(x => x.to === to), force: force || null };
+      bot.emit('g:campaign:step', { roundId: o.rid, n: o.steps + 1, to, ...(force ? { force } : {}) });
+      note = `step into ${to} (${force || 'natural'}) from ${o.steps} steps ${o.mx}x, answer dropped`;
+    } else {
+      bot.emit('g:campaign:cash', { roundId: o.rid });
+      note = `cash-out at ${o.steps} steps ${o.mx}x, answer dropped`;
+    }
+    const end = Date.now() + 1500;
+    while (Date.now() < end) { W.checker.poll(); if (W.checker.lines.length > n0) break; await sleep(1); }
+    await sleep(W.rng.int(3));
+    return finish(W, kind, sig, note);
+  }
   if (kind === 'buyins') {
     const tables = [...W.tables.values()].filter(t => !t.ended && !t.gone);
     const cand = W.connectedBots().filter(b => !b.tableId);
@@ -142,7 +176,7 @@ async function step(W, kind, sig) {
 
 async function finish(W, kind, sig, note) {
   W.log({ actor: 'chaos', what: 'kill-kind', kind, sig, note });
-  try { await W.killAndRestart(sig, { marked: true }); } finally { W.mute.showdown = W.mute.bender = W.mute.achv = W.mute.slot = false; }
+  try { await W.killAndRestart(sig, { marked: true }); } finally { W.mute.showdown = W.mute.bender = W.mute.achv = W.mute.slot = W.mute.camp = false; }
   return { actor: 'chaos', what: 'kill', kind, sig, note };
 }
 

@@ -19,8 +19,17 @@ const EXPECT = {
   'stranded-escrow': ['I4'],
   'pool-skim': ['I4', 'I2'],
   'settle-after-void': ['I7', 'I2'],
+  'camp-pays-scandal': ['I7', 'I2'],
+  'camp-pays-twice': ['I2', 'I7'],
+  'camp-cash-plus-step': ['I7', 'I2'],
+  'camp-stranded-escrow': ['I4', 'I7'],
+  'camp-record-kept': ['I4'],
+  'camp-recover-pays-zero': ['I9', 'I7', 'I2'],
+  'camp-step-credit': ['I2'],
 };
-module.exports = { EXPECT };
+// extra soak.js arguments a bug needs to be reachable at all (prove.js appends them): the boot-recovery bug only fires on a kill with a run open at 0 steps.
+const ARGS = { 'camp-recover-pays-zero': ['--kill-kinds', 'campopen0,campopen0,campopen0,campopen0'] };
+module.exports = { EXPECT, ARGS };
 
 const bug = process.env.SOAK_BUG;
 if (!bug) return;
@@ -88,6 +97,51 @@ const SERVICE = {
           ledger.batch([{ from: 'house:coldcall', to: (cur === 'chips' ? 'bank:' : 'play:') + key, amount: o.win, cur, reason: 'coldcall:credit' }], `coldcall:${key}:${roundId}v:close`, 'coldcall:settle');
           return { id: w.id, dup: false, noop: false };
         }
+      }
+      return orig.apply(this, arguments);
+    };
+  },
+  // CAMPAIGN TRAIL: a scandal (win 0) is settled as a win of the stake (the player is told he lost, the ledger pays him back).
+  'camp-pays-scandal'(svc) {
+    const fire = every(3), orig = svc.settleRound;
+    svc.settleRound = function (game, key, cur, roundId, o) {
+      if (game === 'campaign' && o && o.win === 0 && o.stake > 0 && fire()) { say('paid a scandal as a win of the stake', key, roundId, o.stake); return orig.call(this, game, key, cur, roundId, { ...o, win: o.stake }); }
+      return orig.apply(this, arguments);
+    };
+  },
+  // CAMPAIGN TRAIL: after a cash-out the same win is credited a second time under a new ref.
+  'camp-pays-twice'(svc, ledger) {
+    const fire = every(3), orig = svc.settleRound; let n = 0;
+    svc.settleRound = function (game, key, cur, roundId, o) {
+      const r = orig.apply(this, arguments);
+      if (game === 'campaign' && o && o.win > 0 && !r.noop && fire()) { say('paid the cash-out twice', key, roundId, o.win); ledger.transfer('house:campaign', (cur === 'chips' ? 'bank:' : 'play:') + key, o.win, cur, 'campaign:credit', `campaign:${key}:${roundId}:again${++n}`); }
+      return r;
+    };
+  },
+  // CAMPAIGN TRAIL: a cash-out pays at one step more than the run survived (4% of the stake on top, the size of the smallest step).
+  'camp-cash-plus-step'(svc) {
+    const fire = every(3), orig = svc.settleRound;
+    svc.settleRound = function (game, key, cur, roundId, o) {
+      if (game === 'campaign' && o && o.win > 0 && o.stake >= 100 && fire()) { const win = o.win + (o.stake / 100) * 4; say('cashed out one step too high', key, roundId, o.win, '->', win); return orig.call(this, game, key, cur, roundId, { ...o, win }); }
+      return orig.apply(this, arguments);
+    };
+  },
+  // CAMPAIGN TRAIL: a settle or a void is swallowed now and then (the game believes the run is closed and drops its record; the stake stays in escrow).
+  'camp-stranded-escrow'(svc, ledger) {
+    const fire = every(4), noop = { id: null, dup: false, noop: true };
+    for (const name of ['settleRound', 'voidRound']) {
+      const orig = svc[name];
+      svc[name] = function (game, key, cur, roundId) { if (game === 'campaign' && ledger.balance(`escrow:campaign:${key}:${roundId}`, cur) > 0 && fire()) { say(`swallowed ${name}`, key, roundId); return noop; } return orig.apply(this, arguments); };
+    }
+  },
+  // CAMPAIGN TRAIL: boot recovery pays a run that sat at 0 steps (a bonus of 4% of the stake) instead of refunding it. Only a void with the reason 'boot' is touched.
+  'camp-recover-pays-zero'(svc) {
+    const orig = svc.voidRound;
+    svc.voidRound = function (game, key, cur, roundId, why) {
+      if (game === 'campaign' && why === 'boot') {
+        const ledger = svc._ledger || null; void ledger;
+        const held = svc.openRounds('campaign').find((r) => r.key === key && r.cur === cur && r.roundId === roundId);
+        if (held) { say('paid a 0-step run at boot instead of refunding it', key, roundId, held.amount); return svc.settleRound(game, key, cur, roundId, { win: held.amount + (held.amount / 100) * 4, stake: held.amount }); }
       }
       return orig.apply(this, arguments);
     };
@@ -161,6 +215,33 @@ const ADAPTER = {
   },
 };
 
+let theLedger = null;
+if (bug === 'camp-step-credit') {
+  // CAMPAIGN TRAIL: a surviving step credits 1 unit to the player under a ref of its own, mid-run (a step moves no money). The handler of the module is wrapped; the ledger is the one server.js opened.
+  const lm = req('money/ledger.js'), lo = lm.open;
+  lm.open = function () { const l = lo.apply(this, arguments); theLedger = l; return l; };
+  const mod = req('games/campaign.js'), orig = mod.handlers.step, fire = every(3);
+  mod.handlers.step = function (socket, payload) {
+    const a = socket.data && socket.data.acct, nk = String(a && typeof a === 'object' ? a.key : a || '').toLowerCase().trim();
+    const before = mod._test.runs.get(nk), s0 = before ? before.run.steps : -1;
+    const r = orig.apply(this, arguments);
+    const after = mod._test.runs.get(nk);
+    if (theLedger && after && s0 >= 0 && after.run.steps > s0 && fire()) {
+      say('credited 1 unit mid-run', nk, after.roundId, after.run.steps);
+      try { theLedger.transfer('house:campaign', (after.cur === 'chips' ? 'bank:' : 'play:') + nk, 1, after.cur, 'campaign:credit', `campaign:${nk}:${after.roundId}:s${after.run.steps}`); } catch (e) { say('credit refused', e.code); }
+    }
+    return r;
+  };
+}
+if (bug === 'camp-record-kept') {
+  // CAMPAIGN TRAIL: the record of a closed run is not dropped now and then (the game keeps a run open that the ledger closed).
+  const sm = req('games/campaign-store.js'), orig = sm.createStore, fire = every(3);
+  sm.createStore = function () {
+    const st = orig.apply(this, arguments), del = st.delOpen;
+    st.delOpen = function (key) { if (fire()) { say('kept the record of a closed run', key); return false; } return del.apply(this, arguments); };
+    return st;
+  };
+}
 if (SERVICE[bug]) {
   const m = req('money/service.js'), orig = m.createService;
   m.createService = function (ledger) { const svc = orig.apply(this, arguments); SERVICE[bug](svc, ledger); return svc; };

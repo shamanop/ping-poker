@@ -15,7 +15,7 @@ function createRig(ctx) {
     const bank = {}, wallet = {};
     for (const k of keys) { bank[k] = ledger.balance('bank:' + k, 'chips'); wallet[k] = ledger.balance('play:' + k, 'play'); }
     const minted = -['mint:bonus', 'mint:achv', 'mint:topup'].reduce((n, a) => n + sum(a), 0);
-    const slotNet = -['house:bender', 'house:coldcall'].reduce((n, a) => n + sum(a), 0);
+    const slotNet = -['house:bender', 'house:coldcall', 'house:campaign'].reduce((n, a) => n + sum(a), 0);
     const seats = [];
     for (const cur of CURS) for (const { account, balance } of ledger.list('seat:', cur)) if (balance !== 0) seats.push({ account, cur, balance });
     const drift = [];

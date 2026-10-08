@@ -5,7 +5,7 @@
 const fs = require('fs');
 
 const CURS = ['chips', 'play'];
-const SOURCES = new Set(['mint:signup', 'mint:bonus', 'mint:achv', 'mint:topup', 'mint:migration', 'house:bender', 'house:coldcall', 'admin:adjust', 'fx:chips', 'fx:play']);
+const SOURCES = new Set(['mint:signup', 'mint:bonus', 'mint:achv', 'mint:topup', 'mint:migration', 'house:bender', 'house:coldcall', 'house:campaign', 'admin:adjust', 'fx:chips', 'fx:play']);
 const SHAPE = { bank: 2, play: 2, seat: 3, pot: 3, escrow: 4, pool: 3 };      // number of ':' separated parts
 const ONLY_CUR = { bank: 'chips', play: 'play', 'fx:chips': 'chips', 'fx:play': 'play' };
 const isAmount = n => typeof n === 'number' && Number.isSafeInteger(n) && n > 0;
@@ -38,6 +38,8 @@ class Checker {
     this.killMark = null;
     this.slotPending = [];                      // closing lines of rounds not matched with a round the harness knows yet
     this.slotRounds = new Map();                // 'key:rid' -> { open: L, instant: L, close: L } (the Cold Call lines of one round)
+    this.campRounds = new Map();                // 'key:rid' -> { open: L, close: L } (the CAMPAIGN TRAIL lines of one run)
+    this.campPending = [];                      // closing lines of runs not matched with a run the harness knows yet
     this.slotScan = { idx: 0, S: { chips: 0, play: 0 }, F: { chips: 0, play: 0 }, n: 0 };   // the pot-feed bound, see checkSlot
     this.stat = { lines: 0, checks: 0 };
   }
@@ -130,6 +132,7 @@ class Checker {
       L.hand = { tableId, handNo: Number(handNo), nets, fund };
     }
     if (typeof rec.ref === 'string' && rec.ref.startsWith('coldcall:')) this._slotLine(L);
+    if (typeof rec.ref === 'string' && rec.ref.startsWith('campaign:')) this._campLine(L);
     this.hist.push({ idx: L.idx, seenAt: now, sig: this._sig() });
     if (this.hist.length > 120) this.hist.splice(0, this.hist.length - 120);
   }
@@ -170,6 +173,36 @@ class Checker {
     if (kind === 'close' && e.close) bad(`round ${id} closed twice`);
     e[kind] = L; this.slotRounds.set(id, e);
     if (kind !== 'open') this.slotPending.push({ id, L });
+  }
+
+  // A CAMPAIGN TRAIL line (ref campaign:<key>:<roundId>:open | :close) taken apart by the legs the contract allows (CAMPAIGN-DESIGN.md section 3): open (player -> escrow), spend (escrow -> house:campaign, the whole stake), credit (house:campaign -> player,
+  // the payout, only with a spend), void (escrow -> player, the whole stake, alone). The ONLY lines a run may write are one open and one close: a surviving step moves nothing, so any other ref is an I2 violation on the spot (that is how a credit mid-run shows).
+  _campLine(L) {
+    const p = L.ref.split(':'), HOUSE = 'house:campaign';
+    const bad = (msg, extra) => this.v('I2', `campaign ${L.ref}: ${msg}`, { ref: L.ref, ...(extra || {}) }, 'a leg shape of the campaign contract', msg);
+    if (p.length !== 4 || (p[3] !== 'open' && p[3] !== 'close')) { bad('the ref is not campaign:<key>:<roundId>:open|:close (a run writes exactly one open and one close line, nothing in between)'); return; }
+    const [, key, rid, suffix] = p;
+    const cur = L.items.length ? L.items[0].cur : null;
+    const player = (cur === 'chips' ? 'bank:' : 'play:') + key, esc = `escrow:campaign:${key}:${rid}`;
+    const s = { key, rid, suffix, cur, spend: 0, credit: 0, open: 0, voided: 0, voidWhy: null };
+    for (const it of L.items) {
+      if (it.cur !== cur) { bad('legs in two currencies'); continue; }
+      if (it.reason === 'campaign:spend') { if (suffix !== 'close' || it.from !== esc || it.to !== HOUSE) bad(`spend leg ${it.from} -> ${it.to}`, { from: it.from, to: it.to }); s.spend += it.amount; }
+      else if (it.reason === 'campaign:credit') { if (suffix !== 'close' || it.from !== HOUSE || it.to !== player) bad(`credit leg ${it.from} -> ${it.to}`, { from: it.from, to: it.to }); s.credit += it.amount; }
+      else if (it.reason === 'campaign:open') { if (suffix !== 'open' || it.from !== player || it.to !== esc) bad(`open leg ${it.from} -> ${it.to}`, { from: it.from, to: it.to }); s.open += it.amount; }
+      else if (/^campaign:void:/.test(it.reason)) { if (suffix !== 'close' || it.from !== esc || it.to !== player) bad(`void leg ${it.from} -> ${it.to}`, { from: it.from, to: it.to }); s.voided += it.amount; s.voidWhy = it.reason.slice(14); }
+      else bad(`unknown reason ${it.reason}`, { reason: it.reason });
+    }
+    if (suffix === 'open' && (s.open === 0 || s.spend + s.credit + s.voided > 0)) bad('an :open line must be exactly one open leg');
+    if (suffix === 'close' && s.voided > 0 && s.spend + s.credit > 0) bad('a void line carries a settle leg: a run closed twice in one line');
+    if (suffix === 'close' && s.voided === 0 && s.spend === 0) bad('a close line with neither a spend nor a void');
+    if (suffix === 'close' && s.spend > 0 && s.credit > 0 && (s.spend % 100 !== 0 || s.credit % (s.spend / 100) !== 0)) bad(`payout ${s.credit} is not a whole number of hundredths of the stake ${s.spend}`);
+    L.camp = s;
+    const id = `${key}:${rid}`;
+    const e = this.campRounds.get(id) || {};
+    if (e[suffix]) bad(`second ${suffix} line for run ${id}`);
+    e[suffix] = L; this.campRounds.set(id, e);
+    if (suffix === 'close') this.campPending.push({ id, L });
   }
 
   // ---------- derived ----------
@@ -462,6 +495,57 @@ class Checker {
     return out;
   }
 
+
+  // ---------- CAMPAIGN TRAIL ----------
+  // Every number the client was told is in the ledger (acked means durable); every open run has its escrow and its :open line and no close line; every escrow is an open run the client was told about, and the game's own audit() says the same.
+  checkCampaign(model, audit) {
+    const out = [], B = model.camp, escrows = [];
+    for (const c of CURS) for (const [a, v] of this.bal[c]) if (a.startsWith('escrow:campaign:')) { const p = a.split(':'); escrows.push({ account: a, key: p[2], rid: p.slice(3).join(':'), cur: c, amount: v }); }
+    // a. runs the client was told closed (or whose close line was adopted), against their ledger lines
+    for (const [id, r] of B.rounds) {
+      if (r.checked) continue;
+      const e = this.campRounds.get(id) || {};
+      if (!e.open) { out.push({ id: 'I7', message: `run ${id} was told closed but the ledger has no :open line`, accounts: { run: id }, expected: `open ${r.bet}`, got: 'no line' }); continue; }
+      if (e.open.camp.open !== r.bet || e.open.camp.cur !== r.cur) { out.push({ id: 'I7', message: `open line ${e.open.ref} holds ${e.open.camp.open} ${e.open.camp.cur}, the client was told ${r.bet} ${r.cur}`, accounts: { ref: e.open.ref }, expected: r.bet, got: e.open.camp.open }); continue; }
+      const L = e.close;
+      if (!L) { out.push({ id: 'I7', message: `a Campaign result the client received is not in the ledger (${id}: ${r.reason}, stake ${r.bet}, win ${r.win})`, accounts: { run: id }, expected: `close for ${r.reason}`, got: 'no close line' }); continue; }
+      const s = L.camp, bad = [];
+      if (s.cur !== r.cur) bad.push(`closed in ${s.cur}, told ${r.cur}`);
+      if (r.void) { if (s.voided !== r.bet) bad.push(`void ${s.voided}, told a refund of ${r.bet}`); if (s.spend || s.credit) bad.push(`settled (spend ${s.spend} credit ${s.credit}) but told a refund`); }
+      else { if (s.voided) bad.push(`voided (${s.voided} back) but told ${r.reason} with win ${r.win}`); if (s.spend !== r.bet) bad.push(`stake ${s.spend}, told ${r.bet}`); if (s.credit !== r.win) bad.push(`win ${s.credit}, told ${r.win}`); }
+      if (bad.length) out.push({ id: 'I7', message: `ledger ${L.ref} does not match what the client was told: ${bad.join('; ')}`, accounts: { ref: L.ref, key: r.key }, expected: r.void ? `refund ${r.bet}` : `stake ${r.bet} win ${r.win}`, got: `spend ${s.spend} credit ${s.credit} void ${s.voided}` });
+      else r.checked = true;
+    }
+    // a2. a closing line for a run nobody told the harness about, once the answer has had time to arrive
+    const nowMs = Date.now();
+    this.campPending = this.campPending.filter(({ id, L }) => {
+      if (B.rounds.has(id) || B.open.has(id)) return false;
+      if (nowMs - L.seenAt > 1500) out.push({ id: 'I7', message: `ledger line ${L.ref} closes a Campaign run that no client was told about (spend ${L.camp.spend}, win ${L.camp.credit}, void ${L.camp.voided})`, accounts: { ref: L.ref }, expected: 'a run the harness knows', got: L.reason });
+      return true;
+    });
+    // b. open runs: the stake is in escrow, the open line is in the ledger, no close line exists
+    for (const [id, o] of B.open) {
+      const e = this.campRounds.get(id) || {}, esc = `escrow:campaign:${o.key}:${o.rid}`, held = this.balance(o.cur, esc);
+      if (e.close) { out.push({ id: 'I7', message: `run ${id} was told as open but the ledger already closed it (${e.close.ref}) and the client was never told`, accounts: { ref: e.close.ref, key: o.key }, expected: 'an end event', got: e.close.reason || 'close' }); continue; }
+      if (!e.open) out.push({ id: 'I7', message: `run ${id} was told as open but the ledger has no :open line`, accounts: { run: id }, expected: `open ${o.bet}`, got: 'no line' });
+      else if (e.open.camp.open !== o.bet) out.push({ id: 'I7', message: `open line ${e.open.ref} holds ${e.open.camp.open}, the client was told a stake of ${o.bet}`, accounts: { ref: e.open.ref }, expected: o.bet, got: e.open.camp.open });
+      else if (held !== o.bet) out.push({ id: 'I4', message: `${esc} holds ${held}, the open run's stake is ${o.bet}`, accounts: { account: esc }, expected: o.bet, got: held });
+    }
+    // c. every escrow is a run the client was told about; d. the game's own list of open runs is the ledger's list, and it keeps no pool
+    for (const x of escrows) if (!B.open.has(`${x.key}:${x.rid}`)) out.push({ id: 'I4', message: `${x.account} (${x.cur}) holds ${x.amount} and no run the harness knows is open`, accounts: { account: x.account }, expected: 0, got: x.amount });
+    const g = (audit.games || {}).campaign;
+    if (!g) out.push({ id: 'I4', message: 'the server audit has no entry for campaign', accounts: {}, expected: 'games.campaign', got: JSON.stringify(Object.keys(audit.games || {})) });
+    else if (g.error) out.push({ id: 'I4', message: 'campaign audit() threw: ' + g.error, accounts: {}, expected: 'audit', got: g.error });
+    else {
+      const mine = new Set(escrows.map(x => `${x.key}|${x.cur}|${x.rid}|${x.amount}`));
+      const theirs = new Set((g.openRounds || []).map(r => `${r.key}|${r.cur}|${r.roundId}|${r.amount}`));
+      for (const m of mine) if (!theirs.has(m)) out.push({ id: 'I4', message: `escrow ${m} is in the ledger but the game reports no such open run`, accounts: { escrow: m }, expected: 'an open run', got: [...theirs].join(' ') || 'none' });
+      for (const t of theirs) if (!mine.has(t)) out.push({ id: 'I4', message: `the game reports open run ${t} but the ledger has no such escrow`, accounts: { run: t }, expected: 'an escrow', got: [...mine].join(' ') || 'none' });
+      if (g.pools && Object.keys(g.pools).length) out.push({ id: 'I4', message: 'campaign keeps no pool and reports one', accounts: {}, expected: '{}', got: JSON.stringify(g.pools) });
+    }
+    return out;
+  }
+
   // ---------- restart (I9) ----------
   markKill() { this.killMark = { lines: this.lines.length, lastId: this.lastId }; }
   // dead: the lines the file held when the old process was gone; everything before it was written by the process that died, everything after it by the boot of the next.
@@ -469,12 +553,12 @@ class Checker {
   // After a restart: [lines written just before the kill that we had not read] = racing, [lines of the boot] = boot (+ bootSlot: the slot's own recovery closes).
   // Returns { racing: [lines], boot: [lines], bootSlot: [lines], violations }.
   classifyRestart() {
-    const out = { racing: [], boot: [], bootSlot: [], violations: [] };
+    const out = { racing: [], boot: [], bootSlot: [], bootCamp: [], violations: [] };
     if (!this.killMark) return out;
     const dead = this.killMark.dead != null ? this.killMark.dead : this.lines.length;
     const fresh = this.lines.slice(this.killMark.lines);
     const isBoot = L => (L.ref || '').startsWith('boot:') || (L.reason || '').startsWith('boot');
-    const allowed = /^(hand|bender|coldcall|achv|bonus|signup|buyin|rebuy|leave|kick|sweep|grace|night):/;
+    const allowed = /^(hand|bender|coldcall|campaign|achv|bonus|signup|buyin|rebuy|leave|kick|sweep|grace|night):/;
     for (const L of fresh) {
       if (L.idx < dead) {
         if (isBoot(L)) { out.violations.push({ id: 'I9', message: `line ${L.no} (${L.ref}) is a boot line written before the server died`, accounts: { ref: L.ref }, expected: 'a cut-off operation', got: L.reason || L.ref }); continue; }
@@ -482,7 +566,8 @@ class Checker {
         out.racing.push(L);
       } else if (isBoot(L)) { if (!(L.ref || '').startsWith('boot:')) out.violations.push({ id: 'I9', message: `boot line with a non boot ref: ${L.ref}`, accounts: { ref: L.ref }, expected: 'boot:<id>:<account>', got: L.ref }); out.boot.push(L); }
       else if (L.slot && L.slot.suffix === 'close') out.bootSlot.push(L);
-      else out.violations.push({ id: 'I9', message: `line ${L.no} (${L.ref}) was written after boot recovery and before anyone reconnected`, accounts: { ref: L.ref }, expected: 'only boot lines (or a Cold Call recovery close)', got: L.reason || L.ref });
+      else if (L.camp && L.camp.suffix === 'close') out.bootCamp.push(L);
+      else out.violations.push({ id: 'I9', message: `line ${L.no} (${L.ref}) was written after boot recovery and before anyone reconnected`, accounts: { ref: L.ref }, expected: 'only boot lines (or a Cold Call / Campaign recovery close)', got: L.reason || L.ref });
     }
     return out;
   }

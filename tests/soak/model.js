@@ -8,8 +8,9 @@ const CURS = ['chips', 'play'];
 class Model {
   constructor() {
     this.players = new Map();                       // key -> { key, held:{chips,play} }
-    this.src = { signup: { chips: 0, play: 0 }, bonus: 0, achv: 0, topup: 0, admin: { chips: 0, play: 0 }, bender: { chips: 0, play: 0 }, coldcall: { chips: 0, play: 0 } };   // what each source account must be -sum of (coldcall: what the players netted; house + pool = -that)
+    this.src = { signup: { chips: 0, play: 0 }, bonus: 0, achv: 0, topup: 0, admin: { chips: 0, play: 0 }, bender: { chips: 0, play: 0 }, coldcall: { chips: 0, play: 0 }, campaign: { chips: 0, play: 0 } };   // what each source account must be -sum of (coldcall: what the players netted; house + pool = -that)
     this.slot = new SlotBook();
+    this.camp = new CampBook();
     this.spins = new Map();                         // ref -> { key, cur, cost, win, checked }
     this.hands = new Map();                         // 'table:handNo' -> { nets, cur, via }
     this.mints = new Map();                         // dedupe key -> { kind, key, amount }
@@ -51,11 +52,11 @@ class Model {
     return { applied: true };
   }
   hasHand(tableId, handNo) { return this.hands.has(`${tableId}:${handNo}`); }
-  // kind: bonus | achv | topup (all Play $). dedupe: a string unique per mint (ledger ref shape), so a client told twice pays once.
+  // kind: bonus (Chips, bb298d2) | achv | topup (Play $; both 0 since bb298d2). dedupe: a string unique per mint (ledger ref shape), so a client told twice pays once.
   applyMint(kind, key, amount, dedupe) {
     if (this.mints.has(dedupe)) return false;
     this.mints.set(dedupe, { kind, key, amount });
-    this._add(key, 'play', amount); this.src[kind] += amount; this.count[kind]++;
+    this._add(key, kind === 'bonus' ? 'chips' : 'play', amount); this.src[kind] += amount; this.count[kind]++;   // bb298d2: the daily bonus pays Chips; achievements are badges only (reward 0); the top-up is off
     return true;
   }
   // A Cold Call round the client was told is closed (or the ledger line that closed it where the client could not hear): the player nets win + prize - cost. A void nets 0 (the stake came back).
@@ -69,12 +70,23 @@ class Model {
     this.count[r.void ? 'slotVoids' : r.via === 'client' ? 'slotRounds' : 'slotRoundsUnacked'] = (this.count[r.void ? 'slotVoids' : r.via === 'client' ? 'slotRounds' : 'slotRoundsUnacked'] || 0) + 1;
     return true;
   }
+  // A CAMPAIGN TRAIL run the client was told is over (or the ledger line that closed it where the client could not hear): the player nets win - bet. A refund (void: a withdrawal, a timeout at 0 steps, a boot refund) nets 0.
+  applyCamp(r) {
+    const id = `${r.key}:${r.rid}`;
+    if (this.camp.rounds.has(id)) return false;
+    const net = r.void ? 0 : r.win - r.bet;
+    this.camp.rounds.set(id, { ...r, net, checked: false });
+    this.camp.open.delete(id);
+    this._add(r.key, r.cur, net); this.src.campaign[r.cur] += net; this.camp.net[r.cur] += net;
+    const k = r.via === 'client' ? 'campRuns' : 'campRunsUnacked'; this.count[k] = (this.count[k] || 0) + 1;
+    return true;
+  }
   applyAdmin(key, cur, delta) { this._add(key, cur, delta); this.src.admin[cur] += delta; this.count.adminAdjust++; }
   accounts() { return [...this.players.keys()]; }
   expectedSource(cur) {
     return {
-      'mint:signup': -this.src.signup[cur], 'admin:adjust': -this.src.admin[cur], 'house:bender': -this.src.bender[cur], 'mint:migration': 0,
-      'mint:bonus': cur === 'play' ? -this.src.bonus : 0, 'mint:achv': cur === 'play' ? -this.src.achv : 0, 'mint:topup': cur === 'play' ? -this.src.topup : 0,
+      'mint:signup': -this.src.signup[cur], 'admin:adjust': -this.src.admin[cur], 'house:bender': -this.src.bender[cur], 'house:campaign': -this.src.campaign[cur], 'mint:migration': 0,
+      'mint:bonus': cur === 'chips' ? -this.src.bonus : 0, 'mint:achv': cur === 'play' ? -this.src.achv : 0, 'mint:topup': cur === 'play' ? -this.src.topup : 0,
     };
   }
 }
@@ -92,4 +104,14 @@ class SlotBook {
   hasOpen(key) { for (const o of this.open.values()) if (o.key === key) return true; return false; }
   openOf(key, cur) { for (const o of this.open.values()) if (o.key === key && o.cur === cur) return o; return null; }
 }
-module.exports = { Model, SlotBook, START, CURS };
+// what the harness knows about CAMPAIGN TRAIL: the runs it was told about (open: a stake in escrow and the last state the client saw; rounds: closed, with the win the client was told or the ledger close line adopted).
+class CampBook {
+  constructor() {
+    this.rounds = new Map();              // 'key:rid' -> { key, cur, rid, bet, win, reason, steps, mx, via, void, net, checked }
+    this.open = new Map();                // 'key:rid' -> { key, cur, rid, bet, steps, mx, trail, options, gen, epoch, pend, since }
+    this.net = { chips: 0, play: 0 };     // sum over closed runs of win - bet
+  }
+  hasOpen(key) { for (const o of this.open.values()) if (o.key === key) return true; return false; }
+  openOf(key) { for (const o of this.open.values()) if (o.key === key) return o; return null; }
+}
+module.exports = { Model, SlotBook, CampBook, START, CURS };
