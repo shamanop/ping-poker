@@ -99,8 +99,9 @@
     if (!S.run && S.view !== 'run') { paint(); return; }               // nothing of ours is open: just the wallet
     S.lastEnd = p; S.run = null; S.again = { home: (p.trail && p.trail[0]) || S.home, bet: p.bet, mode: p.mode };
     S.mode = p.mode || S.mode; S.bet = p.bet; setView('ended');
-    const R = p.reason;
-    if (R === 'scandal') tick(C.news('scandal', { S: nameOf(p.failedAt) }, p.roundId));
+    const R = p.reason, refund = (p.steps || 0) === 0 && R !== 'scandal';
+    if (refund) tick(C.news('withdrawn', {}, p.roundId));
+    else if (R === 'scandal') tick(C.news('scandal', { S: nameOf(p.failedAt) }, p.roundId));
     else if (R === 'deadend') tick(C.news('deadend', { S: nameOf(p.at) }, p.roundId));
     else if (R === 'landslide') tick(C.news('landslide', { S: nameOf(p.at) }, p.roundId));
     else tick(C.news(R === 'cashout' ? 'cashout' : R === 'withdrawn' ? 'withdrawn' : R === 'timeout' ? 'timeout' : 'boot', { S: nameOf(p.at) }, p.roundId));
@@ -139,7 +140,7 @@
   }
   function setMode(m) { if (S.run || S.busy || (m !== 'play' && m !== 'chips')) return; S.mode = m; toParent({ type: 'mode', mode: m }); paint(); }
   function setBet(n) { if (S.view === 'setup') { S.bet = n; paint(); } }
-  function toggleWhole() { S.whole = !S.whole; $('wholeBtn').setAttribute('aria-pressed', S.whole); redrawMap(true); }
+  function toggleWhole() { S.whole = !S.whole; $('wholeBtn').setAttribute('aria-pressed', S.whole); $('wholeBtn').textContent = S.whole ? 'Follow' : 'Whole map'; redrawMap(true); }
 
   $('app').addEventListener('click', (e) => {
     const t = e.target.closest('[data-action]'); if (!t || t.disabled || t.getAttribute('aria-disabled') === 'true') return;
@@ -316,11 +317,12 @@
   };
   function paintResult(p) {
     const e = S.lastEnd; if (!e) { p.innerHTML = ''; return; }
-    const t = REASON[e.reason] || ['RESULT', 'neutral'];
-    const sub = e.reason === 'scandal' ? 'in ' + nameOf(e.failedAt) : e.reason === 'timeout' ? 'auto cash-out' : e.reason === 'deadend' ? 'victory declared in ' + nameOf(e.at) : e.reason === 'landslide' ? 'all 50 states' : e.reason === 'withdrawn' ? 'stake back' : e.reason === 'boot' ? 'cashed out at your standing' : 'in ' + nameOf(e.at);
+    const t = ((e.steps || 0) === 0 && e.reason !== 'scandal') ? REASON.withdrawn : (REASON[e.reason] || ['RESULT', 'neutral']);
+    const refund = (e.steps || 0) === 0 && e.reason !== 'scandal';
+    const sub = refund ? 'stake back' : e.reason === 'scandal' ? 'in ' + nameOf(e.failedAt) : e.reason === 'timeout' ? 'auto cash-out' : e.reason === 'deadend' ? 'victory declared in ' + nameOf(e.at) : e.reason === 'landslide' ? 'all 50 states' : e.reason === 'withdrawn' ? 'stake back' : e.reason === 'boot' ? 'cashed out at your standing' : 'in ' + nameOf(e.at);
     const route = (e.trail || []).map((c) => '<i>' + c + '</i>').join('');
     p.innerHTML = '<div class="result k-' + t[1] + '"><div class="stamp"><b>' + t[0] + '</b><span>' + esc(sub) + '</span></div>' +
-      '<dl class="figs"><div><dt>STAKE</dt><dd>' + fmt(e.bet, e.mode) + '</dd></div><div><dt>' + (e.reason === 'scandal' ? 'WAS AT' : 'MULTIPLIER') + '</dt><dd>' + C.mxText(e.mx) + '</dd></div><div class="paid"><dt>PAID</dt><dd>' + fmt(e.win, e.mode) + '</dd></div></dl>' +
+      '<dl class="figs"><div><dt>STAKE</dt><dd>' + fmt(e.bet, e.mode) + '</dd></div><div><dt>' + (e.reason === 'scandal' ? 'WAS AT' : 'MULTIPLIER') + '</dt><dd>' + C.mxText(e.mx) + '</dd></div><div class="paid"><dt>' + (refund ? 'RETURNED' : 'PAID') + '</dt><dd>' + fmt(e.win, e.mode) + '</dd></div></dl>' +
       '<div class="route" aria-label="Route"><div class="rh"><small>ROUTE: ' + (e.trail || []).length + ' STATE' + ((e.trail || []).length === 1 ? '' : 'S') + '</small><button type="button" class="link" data-action="setup">Change home or stake</button></div><div class="rl">' + route + (e.reason === 'scandal' ? '<i class="x">' + e.failedAt + '</i>' : '') + '</div></div></div>';
   }
 

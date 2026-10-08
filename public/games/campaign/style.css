@@ -275,6 +275,7 @@ button:disabled, [aria-disabled="true"] { cursor: default; }
   #side { flex: 0 0 clamp(380px, 32vw, 460px); border-left: 2px solid var(--brass-dk); box-shadow: -10px 0 24px rgba(0, 0, 0, .5); }
   #ticker { min-height: 50px; } #tkNew { font-size: 17px; }
   .cards { gap: 10px 9px; padding: 14px 14px 10px; } .card { min-height: 78px; } .card .nm { font-size: 25px; }
+  #sheet { align-items: center; } .sh-card { border-bottom: 2px solid var(--brass-dk); border-radius: 12px; max-height: 88%; }
   #hd { padding: 10px 22px; } .hbox b { font-size: 34px; } .hbox.mxbox b { font-size: 62px; } .hbox small { font-size: 13px; }
   #title b { font-size: 28px; } #title { left: 18px; top: 12px; } #bug { left: 18px; top: 14px; } #wholeBtn { right: 16px; top: 12px; }
     .setup { padding: 12px 16px 14px; gap: 10px; } .stamp b { font-size: 48px; } .figs dd { font-size: 30px; }
