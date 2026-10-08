@@ -11,6 +11,9 @@ const crypto = require('crypto');
 
 const HAND_RANK = { 'High Card': 1, 'Pair': 2, 'Two Pair': 3, 'Three of a Kind': 4, 'Straight': 5, 'Flush': 6, 'Full House': 7, 'Four of a Kind': 8, 'Straight Flush': 9, 'Royal Flush': 10 };
 const MAX_HANDS = 6000;
+// (r3) critic r2 MAJOR: 'every request ... does a full uncached recompute ... over up to MAX_HANDS=6000 hands' (0.5 s on the one thread, 25 MB).
+// One recap shows at most this many hands, the newest; no real night gets there (500 hands is 10+ hours at a live table).
+const RECAP_HANDS = 500;
 // A POKERPING (permanent table) session = consecutive hands with no gap of SESSION_GAP_MS or more between them.
 const SESSION_GAP_MS = 4 * 3600 * 1000;
 const NO_NIGHT = 'No such night';
@@ -289,6 +292,10 @@ function createRecap({ file, registry, accounts, now = Date.now, log }) {
       if (!inNight) return { error: NO_NIGHT };
     }
 
+    if (hs.length > RECAP_HANDS) {
+      hs = hs.slice(-RECAP_HANDS);
+      notes.push(`This recap covers the last ${RECAP_HANDS} hands of the ${legacy ? 'session' : 'night'}; earlier hands are not in it.`);
+    }
     const version = versionOf(t, scope, hs, nightRows);
     if (typeof have === 'string' && have === version) return { ok: true, unchanged: true, version, generatedAt: now() };
 
@@ -336,4 +343,4 @@ function createRecap({ file, registry, accounts, now = Date.now, log }) {
   return { onEvent, onEngine, onShown, build, sessionsOf, flush, all: () => hands, stats: () => ({ hands: hands.length, open: open.size, writeFails }) };
 }
 
-module.exports = { createRecap, SESSION_GAP_MS, HAND_RANK, MAX_HANDS };
+module.exports = { createRecap, SESSION_GAP_MS, HAND_RANK, MAX_HANDS, RECAP_HANDS };
