@@ -36,11 +36,13 @@ function createRecap({ file, registry, accounts, now = Date.now, log }) {
     const at = new Map();     // a hand flushed twice around a shutdown is read once (last one wins)
     for (const ln of lines) {
       let j; try { j = JSON.parse(ln); } catch { continue; }
+      if (!j || typeof j !== 'object') continue;                                  // a foreign line never stops the boot (critic r1 #2)
       if (j.patch) {
+        if (!Array.isArray(j.shown)) continue;
         const r = hands[at.get(j.tableId + '|' + j.handNo)];
-        const p = r && r.players.find(x => x.key === j.key);
+        const p = r && r.players.find(x => x && x.key === j.key);
         if (p) p.shown = [!!(p.shown && p.shown[0]) || !!j.shown[0], !!(p.shown && p.shown[1]) || !!j.shown[1]];
-      } else if (j && Array.isArray(j.players) && j.tableId) {
+      } else if (Array.isArray(j.players) && j.players.every(x => x && typeof x === 'object' && Array.isArray(x.cards)) && Array.isArray(j.actions) && Array.isArray(j.winners) && Array.isArray(j.board) && typeof j.tableId === 'string' && Number.isFinite(j.handNo)) {
         const k = recKey(j);
         if (at.has(k)) hands[at.get(k)] = j; else { at.set(k, hands.length); hands.push(j); }
       }
