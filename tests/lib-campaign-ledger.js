@@ -12,6 +12,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const EventEmitter = require('events');
+const crypto = require('crypto');
 
 const { open } = require('../money/ledger');
 const { createService } = require('../money/service');
@@ -73,7 +74,7 @@ function world(opts = {}) {
     const wallet = createWalletAdapter({ service, ledger, onChange, log: () => {} });
     w.money = real.forGame('campaign');                // the bound ctx.money as a module sees it, without the call log or the hooks
     io.removeAllListeners('connection');
-    reg = w.g = games({ io, wallet, money: gm, service, modules: [SRV], accounts: {}, tables: {}, rooms: {}, now: clock.now, rng: opts.rng, files: { campaign: files.store }, ledger: { log: () => {} } });
+    reg = w.g = games({ io, wallet, money: gm, service, modules: [SRV], accounts: {}, tables: {}, rooms: {}, now: clock.now, rng: () => (w.pin != null ? w.pin : (opts.rng ? opts.rng() : crypto.randomBytes(6).readUIntBE(0, 6) / 281474976710656)), files: { campaign: files.store }, ledger: { log: () => {} } });
     w.report = reg.recover();
     return w.report;
   }
@@ -147,10 +148,18 @@ function world(opts = {}) {
 // ---- the client side, for the tests that only need to play ----
 const assert = require('assert');
 // send an event 200 ms after the last thing and return what came back: { ev, payload } for the newest campaign event, or { error }
+// Money 1008 K5-F: the QA `force` hook is Chips only; a Cash run ignores it. The older money-flow tests force a result in Cash, so for a Cash run `force` here becomes the same draw through the rng the world hands the
+// game (w.pin): the run, the ledger and the record go the same way. A test of the hook itself sends the message with sock.send, not through this helper.
+const PINS = { survive: 0.999999, scandal: 0 };
 function call(w, sock, ev, payload) {
   w.clock.advance(200);
   const n = sock.out.length;
-  sock.send('g:campaign:' + ev, payload);
+  let p = payload;
+  if (ev === 'step' && p && typeof p === 'object' && typeof p.force === 'string' && p.force in PINS && process.env.CAMPAIGN_TEST === '1' && process.env.NODE_ENV !== 'production') {   // only where the hook would have run
+    const a = sock.data && sock.data.acct, rec = w.runs.get(String(a && typeof a === 'object' ? a.key : a || '').toLowerCase().trim());
+    if (rec && rec.cur === 'play') { w.pin = PINS[p.force]; p = { ...p }; delete p.force; }
+  }
+  try { sock.send('g:campaign:' + ev, p); } finally { w.pin = null; }
   const got = sock.out.slice(n);
   const errs = got.filter((o) => o[0] === 'error');
   if (errs.length) return { error: errs[errs.length - 1][1], got };
