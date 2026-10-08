@@ -104,3 +104,4 @@ module.exports = function games(ctx) {
 
   return { wallet, modules: mods, onConnection, pushWallet, recover, audit };
 };
+module.exports.MODULES = MODULES;   // read by tests/game-kit.js (--all)

@@ -118,3 +118,49 @@ The shell owns the socket: it forwards `g:<id>:*` events and shows `wallet` push
 
 - Its own tests, plus an actor in `tests/soak/actors/<id>.js` (see `tests/soak/README.md`): spins or rounds in both currencies, a round left open across a kill, a void, a pool win while another player's round is open if it has a pool, a live config change mid-round if it has live config.
 - `node tests/soak/prove.js` passes: the clean soak finds nothing and every seeded bug is caught.
+
+## 9. The kit: `node tests/game-kit.js <gameId>`
+
+A game is pluggable when it passes the kit and has the 4-line registration (`MODULES` in `games/index.js`, `house:<id>` in `SOURCE_ACCOUNTS`, `<id>` in `GAMES`, the `.kit.js` adapter). `node tests/game-kit.js --all` runs every game in `MODULES`; `node tests/game-kit.js coinflip` runs the worked example (`games/_example-coinflip.js`, about 40 lines: copy it). `node tests/game-kit-selftest.js` proves the kit itself: nine deliberately broken toys must each FAIL the check named for them.
+
+The kit runs the REAL ledger, service, `ctx.money` and registry (with boot `recover()`) in a temp dir and plays the game through its own socket messages. It knows nothing of the game's rules; the game tells it how in `games/<id>.kit.js`. An adapter never touches money or the ledger: it only sends the game's messages through the kit's driver `g` and reports what the CLIENT was shown.
+
+```js
+module.exports = {
+  id: 'campaign',
+  module: 'campaign.js',                 // under games/
+  env: { CAMPAIGN_TEST: '1' },           // optional: the QA switch for the game's seeded / forced draws (the kit unsets NODE_ENV)
+  files: (dir) => ({ campaign: path.join(dir, 'campaign.json') }),   // ctx.files for the game's own state, under the kit's temp dir
+  prepare(mod, { rng, log }) {},         // optional: set module-level hooks (rng, log, ...) before every boot
+  crash(mod) {},                         // optional: abandon the module like a kill (clear timers, close stores WITHOUT flushing)
+  bets: { good: [100, 500], min: 100, max: 500 },   // legal bets in whole units; the kit derives the bad ones
+  oneOpen: true,                         // the game lets an account have only ONE open round
+  playVariants: 3,                       // how many different shapes of a whole round play() has (index i)
+  currencies: ['play', 'chips'],         // optional
+  open: (cur, bet) => ({ ev: 'start', payload: { mode: cur, bet } }),   // the message that places a bet (the kit sends it with bad values too)
+  play(g, sock, { cur, bet, i }) { ...; return { roundId, cost, win }; },   // ONE whole round, to its end
+  heldPoints: [{                         // every point where a round stays open and a kill is meaningful; [] for an instant game
+    name: 'stepped',
+    hold(g, sock, { cur, bet, i }) { ...; return { roundId, cost, bootWin }; },   // bootWin = what a restart must pay (the number the client was last shown), null = any
+    finish(g, sock, held) { ...; return { win }; },                               // end the held round
+  }],
+};
+```
+`g.call(sock, ev, payload)` sends `g:<id>:<ev>` and returns the game's answer payload, or throws `Refused` when the game answered an error. `g.try` returns `{ ok, error, payload }` instead. `g.rng` is the seeded rng that is also `ctx.rng`.
+
+Checks, each in BOTH currencies (`PASS|FAIL <game> <check>/<cur> <detail>`):
+
+| check | what it proves |
+|---|---|
+| `registration` | in `MODULES`, `house:<id>` in `SOURCE_ACCOUNTS`, id in `GAMES`, has `audit()`, `init()`, handlers |
+| `escrow` | every ledger line has a ref `<id>:<key>:<roundId>[:open\|:close]` and touches only the player, this round's escrow, `house:<id>`, `pool:<id>:*`; one non-zero escrow while open, zero after; house + pool moved by stake minus win; the win the client was shown is the win the ledger paid |
+| `restart` | kill at every held point, and at every `ctx.money` call a round makes (crash before and after it): stake with its owner, or settled once, or refunded once (what boot paid = `bootWin`); a second boot writes nothing; replaying the round's messages afterwards, also claiming the other currency, writes nothing; `audit()` equals the ledger's escrows |
+| `replay` | every message sent twice (at once, and 200 ms later), and every message of a closed round replayed: no second spend, no second pay, no line written by a replay |
+| `sockets` | 2 and 10 sockets of one account, same tick and spaced: no negative balance, stakes are bet levels, `oneOpen` honoured, balance = start - staked + returned |
+| `mix` | follow-up messages claiming the other currency (`mode`, `cur`, `currency`) and a held round resumed after a restart: lines only in the opening currency, the other currency's balance, house and pool untouched, no fx account |
+| `errors` | the ledger fenced (`foreign_write`): no result is shown, no line written, nothing carried in memory; after the restart the balance is what it was and the next round pays exactly what the client was shown |
+| `input` | negative, zero, fractional, NaN, Infinity, string, null, object, array, above max, below min, bad mode, junk payload, another account's round id: refused with no ledger line and no balance moved |
+| `quarantine` | lines from an unknown source, a non-existent house and a wrong currency, written in the game's name, are quarantined at boot and change no balance; the game still plays |
+| `ledger-replay` | an independent replay of `money.jsonl` (no ledger code) equals the service balances per currency after every world above and a mixed one; sum over all accounts is 0; no holder account ever negative |
+
+A kit FAIL is a bug in the game or a hole in the contract, never a reason to loosen the kit. If the contract itself lacks a call the game needs, change `transport/game-money.js` and this file once, for all games.
