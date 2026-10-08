@@ -69,7 +69,7 @@ function start(env = process.env) {
   ctx.auth = createAuth({ accounts, registry: ctx.registry });
   ctx.adm = createAdmin({ service, ledger, accounts, registry: ctx.registry, views: ctx.views, onlineKeys: () => new Set(ctx.allSockets().filter(s => s.data && s.data.acct).map(s => s.data.acct)) });
   Object.assign(transportRef, createTransport(ctx));
-  ctx.games = require('./games')({ io, accounts, social: ctx.social, now: () => Date.now(), wallet: ctx.wallet, money: ctx.gameMoney, service, rooms: ctx.registry.tables, tables: ctx.registry, ledger: presLedger, files: { coldcallPull: paths.COLDCALL_PULL_FILE, coldcallConfig: paths.COLDCALL_CFG_FILE } });
+  ctx.games = require('./games')({ io, accounts, social: ctx.social, now: () => Date.now(), wallet: ctx.wallet, money: ctx.gameMoney, service, rooms: ctx.registry.tables, tables: ctx.registry, ledger: presLedger, files: { coldcallPull: paths.COLDCALL_PULL_FILE, coldcallConfig: paths.COLDCALL_CFG_FILE, campaign: process.env.CAMPAIGN_FILE || path.join(path.dirname(paths.BANK_FILE), 'campaign.json') } });
   const gr = ctx.games.recover();
   log(`game recovery: ${Object.entries(gr.games).map(([id, g]) => `${id} ${g.found} open/${g.settledOrVoidedByGame} by game/${g.kept} kept`).join(', ') || 'no games'}, ${gr.voided.length} escrows voided${gr.errors.length ? ', ERRORS ' + gr.errors.length : ''}`);
   { const st = ledger.stats(), ck = ledger.checkpoint(); log(`ledger: ${st.lines} lines, ${st.inMemory} in memory, checkpoint ${ck.ok ? 'ok' : ck.why} ${ck.ms || 0} ms`); }
