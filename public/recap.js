@@ -6,7 +6,8 @@
   const SUITS = { '♠': 'S', '♣': 'C', '♥': 'H', '♦': 'D' };
   const STREET = { preflop: 'Preflop', flop: 'Flop', turn: 'Turn', river: 'River' };
   const BOARD_AT = { preflop: 0, flop: 3, turn: 4, river: 5 };
-  const st = { cur: null, settle: null, data: null, req: null, sel: 0, step: 0, timer: null, poll: null, bound: false, err: null, start: null, lastTarget: null };
+  const st = { cur: null, settle: null, data: null, req: null, sel: 0, step: 0, timer: null, poll: null, bound: false, err: null, start: null, lastTarget: null, pending: false, quiet: false, failT: null };
+  const FAIL_MS = 15000;      // (r2) critic r1 #7: a request that gets no answer at all ends the loading state too
 
   const h = (tag, attrs, ...kids) => {
     const el = document.createElement(tag);
@@ -43,11 +44,29 @@
     st.lastTarget = target || st.lastTarget;
     const t = Object.assign({}, st.lastTarget || {});
     if (st.start && !t.nightId) t.start = st.start;
+    // (r2) critic r1 #8: a refresh says which version it already holds; the server answers { unchanged } instead of the whole hand log
+    if (quiet && st.data && st.data.version) t.have = st.data.version;
+    st.pending = true; st.quiet = !!quiet;
+    clearTimeout(st.failT); st.failT = setTimeout(() => settleFail('Could not load the recap. Try again.'), FAIL_MS);
     s.emit('recap_get', t);
     if (!quiet) { st.data = null; st.err = null; render(); }
   }
+  function endPending() { st.pending = false; clearTimeout(st.failT); st.failT = null; }
+  // (r2) critic r1 #7: any error while a request is pending ends "Loading the night" with a plain message and Try again / Close
+  function settleFail(msg, force) {
+    if (!st.pending) return;
+    const quiet = st.quiet; endPending();
+    if (!isOpen() || (quiet && st.data && !force)) return;                 // a failed background refresh keeps what is on screen
+    st.err = msg; st.data = null; render();
+  }
   function onData(d) {
     if (!isOpen()) return;
+    if (d && d.unchanged) {                                       // nothing new: keep the screen, spend nothing
+      endPending();
+      if (!st.data) request(null);                                // we hold nothing for it (the scope changed meanwhile): ask for the whole thing
+      return;
+    }
+    endPending();
     const prev = st.data && st.data.hands[st.sel];
     st.data = d; st.err = null;
     if (prev) { const i = d.hands.findIndex((x) => x.handNum === prev.handNum && x.t === prev.t); st.sel = i >= 0 ? i : d.hands.length - 1; } else st.sel = Math.max(0, d.hands.length - 1);
@@ -60,10 +79,16 @@
     st.bound = true;
     s.on('table_joined', (d) => { if (d && d.tableId) st.cur = { tableId: d.tableId, nightId: (d.table && d.table.nightId) || null, name: d.table && d.table.name }; syncEntry(); });
     s.on('table_left', () => { st.cur = null; syncEntry(); });
-    s.on('settle_up', (d) => { if (d) st.settle = { nightId: d.nightId || null, tableId: d.tableId || (d.table && d.table.id) || null, name: d.table && d.table.name }; st.cur = null; syncEntry(); inject(); });
-    s.on('auth_out', () => { st.cur = null; st.settle = null; close(); syncEntry(); });
+    // (r2) critic r1 #6: settle_up is also the reply to night_get (Bank / night list), so it only ends the viewer's own table when that table's night is over
+    s.on('settle_up', (d) => {
+      if (d) st.settle = { nightId: d.nightId || null, tableId: d.tableId || (d.table && d.table.id) || null, name: d.table && d.table.name };
+      const mine = d && st.cur && d.ended === true && ((st.cur.nightId && st.cur.nightId === d.nightId) || (st.cur.tableId && st.cur.tableId === d.tableId));
+      if (mine) st.cur = null;
+      syncEntry(); inject();
+    });
+    s.on('auth_out', () => { st.cur = null; st.settle = null; endPending(); close(); syncEntry(); });
     s.on('recap_data', onData);
-    s.on('error', (e) => { if (e && e.code === 'recap' && isOpen()) { st.err = e.message || 'Recap not available'; st.data = null; render(); } });
+    s.on('error', (e) => { if (isOpen()) settleFail(e && e.code === 'recap' ? (e.message || 'Recap not available') : 'Could not load the recap. Try again.', !!(e && e.code === 'recap')); });
     return true;
   }
 
@@ -87,7 +112,7 @@
     st.poll = setInterval(() => { if (isOpen() && st.data && !st.data.scope.ended && !document.hidden) request(null, true); }, 10000);
     setTimeout(() => { const c = $('rc-close'); if (c) c.focus(); }, 30);
   }
-  function close() { if (!root) return; stopPlay(); closeCard(); clearInterval(st.poll); root.classList.remove('open'); }
+  function close() { if (!root) return; stopPlay(); closeCard(); clearInterval(st.poll); endPending(); root.classList.remove('open'); }
 
   function when(ts) { return ts ? new Date(ts).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : ''; }
   function dateOnly(ts) { return ts ? new Date(ts).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }) : ''; }
@@ -107,7 +132,8 @@
         h('button', { class: 'panel__close', id: 'rc-close', type: 'button', 'aria-label': 'Close recap', onclick: close }, '\u2715')));
     const notes = h('div', { class: 'rc-notes', id: 'rc-notes' }, d ? d.notes.map((n) => h('p', null, n)) : []);
     let body;
-    if (st.err) body = h('div', { class: 'rc-body' }, h('div', { class: 'rc-card', style: 'grid-column:1/-1' }, h('div', { class: 'rc-empty' }, h('b', null, 'No recap here'), st.err)));
+    if (st.err) body = h('div', { class: 'rc-body' }, h('div', { class: 'rc-card', style: 'grid-column:1/-1' }, h('div', { class: 'rc-empty', id: 'rc-error' }, h('b', null, 'No recap here'), st.err,
+      h('div', { class: 'rc-modal-btns' }, h('button', { class: 'btn btn--primary btn--sm', type: 'button', id: 'rc-retry', onclick: () => request(null) }, 'Try again'), h('button', { class: 'btn btn--secondary btn--sm', type: 'button', id: 'rc-err-close', onclick: close }, 'Close')))));
     else if (!d) body = h('div', { class: 'rc-body' }, h('div', { class: 'rc-card', style: 'grid-column:1/-1' }, h('div', { class: 'rc-empty', id: 'rc-loading' }, h('b', null, 'Loading the night'), 'Reading the hand log.')));
     else if (!d.hands.length) body = h('div', { class: 'rc-body' }, h('div', { class: 'rc-card', style: 'grid-column:1/-1' }, h('div', { class: 'rc-empty', id: 'rc-nohands' }, h('b', null, 'No hands recorded yet'), 'Play a hand and the recap fills in.')));
     else body = h('div', { class: 'rc-body' },
