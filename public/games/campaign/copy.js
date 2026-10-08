@@ -43,9 +43,11 @@
   }
   // ---- money formats: Play $ = dollars and cents, Chips = whole chips; mx in hundredths
   const group = (n) => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  // the site's own display preference (Money.pref in the shell page): Chips may be shown as dollars when the player chose that; default is whole chips
+  function chipsAsUsd() { try { const M = window.parent && window.parent !== window ? window.parent.Money : null; return !!(M && (M.pref === 'usd' || (M.getPref && M.getPref() === 'usd'))); } catch (e) { return false; } }
   function money(units, mode) {
     const n = Math.round(Number(units) || 0);
-    if (mode === 'chips') return group(n);
+    if (mode === 'chips' && !chipsAsUsd()) return group(n);
     const a = Math.abs(n); return (n < 0 ? '-' : '') + '$' + group(Math.floor(a / 100)) + '.' + String(a % 100).padStart(2, '0');
   }
   const mxText = (mx) => group(Math.floor(mx / 100)) + '.' + String(mx % 100).padStart(2, '0') + 'x';

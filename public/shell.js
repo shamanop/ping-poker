@@ -278,7 +278,7 @@
 
   // ---------- top bar / dock refresh ----------
   const user = () => { try { return window.Lobby && window.Lobby.user ? window.Lobby.user() : null; } catch (e) { return null; } };
-  if (window.Money && window.Money.onPrefChange) window.Money.onPrefChange(() => { try { refreshTop(); } catch (e) {} try { if (ccReady) toCC({ type: 'pref' }); } catch (e) {} });   // Chips shown as chips or dollars: the slot repaints its idle amounts
+  if (window.Money && window.Money.onPrefChange) window.Money.onPrefChange(() => { try { refreshTop(); } catch (e) {} try { if (ccReady) toCC({ type: 'pref' }); } catch (e) {} try { if (campReady) toCamp({ type: 'pref' }); } catch (e) {} });   // Chips shown as chips or dollars: the slot repaints its idle amounts
   function refreshTop() {
     const p = $('sh-play'); if (!p) return;
     const c = $('sh-chips'); if (c) c.innerHTML = '<small class="plate__label">Chips</small><b class="plate__value">' + (chipsTotal == null ? '--' : chipAmt(chipsTotal)) + '</b>';

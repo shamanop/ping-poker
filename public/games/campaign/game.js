@@ -39,6 +39,7 @@
     if (ev.source !== window.parent) return; const m = ev.data || {};
     if (m.type === 'init') onInit(m);
     else if (m.type === 'wallet') { applyWallet(m.wallet); paint(); }
+    else if (m.type === 'pref') { paint(); if (S.view === 'run' || S.view === 'ended') redrawMap(false); }
     else if (m.type === 'ev') { log('in', m.event, m.payload); onEvent(m.event, m.payload || {}); }
     else if (m.type === 'disconnect') { S.offline = true; $('offline').hidden = false; paint(); }
     else if (m.type === 'mode') { if (!S.run && (m.mode === 'play' || m.mode === 'chips')) { S.mode = m.mode; paint(); } }
