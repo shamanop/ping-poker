@@ -152,8 +152,17 @@ window.addEventListener('hashchange', () => {
 });
 
 // ── sign in ───────────────────────────────────────────────────────
+const BB_PENCIL = '<svg viewBox="0 0 30 20" preserveAspectRatio="none" aria-hidden="true" focusable="false">'
+  + '<path pathLength="1" d="M-2 19 L9 -1 L6 21 L15 -1 L11 21 L21 -1 L16 21 L27 -1 L21 21 L32 1 L27 21 L32 11"/>'
+  + '<path class="b" pathLength="1" d="M-2 3 L32 8 L-2 12 L32 15 L-2 19 L32 22"/></svg>';
+// sample-ballot button: a bubble cell (penciled in when active) plus a live-text label
+function bb(label, a) {
+  return h('button', { ...a, class: 'bb ' + (a.class || '') },
+    h('span', { class: 'bb-cell', 'aria-hidden': 'true' }, h('span', { class: 'bb-bubble', html: BB_PENCIL })),
+    h('span', { class: 'bb-label' }, label));
+}
 function viewSignin() {
-  let tab = 'in', avatar = LS.get('ping.avatar') || 'a01', claim = false;
+  let tab = 'in', avatar = LS.get('ping.avatar') || 'a01', claim = false, fillIn = false;
   const wrap = h('div', { class: 'lb-center' });
   const draw = () => {
     const err = h('div', { class: 'lb-err', id: 'lb-err', role: 'alert' });
@@ -161,7 +170,10 @@ function viewSignin() {
     const pin = h('input', { class: 'field pin-mask', id: 'lb-pin', type: 'text', inputmode: 'numeric', pattern: '[0-9]*', maxlength: 6, autocomplete: 'off', autocorrect: 'off', autocapitalize: 'off', spellcheck: 'false', 'data-1p-ignore': 'true', 'data-lpignore': 'true', placeholder: '4 to 6 digits',
       oninput: (e) => { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6); } });
     const room = h('input', { class: 'field', id: 'lb-room', type: 'password', autocomplete: 'off', autocapitalize: 'off', autocorrect: 'off', spellcheck: 'false', placeholder: 'Room password' });
-    const submit = h('button', { class: 'btn btn--primary btn--lg btn--block', id: 'lb-submit', type: 'submit' }, tab === 'in' ? 'Sign in' : claim ? 'Claim name' : 'Create account');
+    const submit = bb(tab === 'in' ? 'Sign in' : claim ? 'Claim name' : 'Create account', { class: 'big', id: 'lb-submit', type: 'submit' });
+    // fillIn: a tab switch redraws the form, so the new tab is added to .on one frame late and the bubble fills in
+    const tabBtn = (id, label) => bb(label, { type: 'button', role: 'tab', 'data-tab': id, 'aria-selected': tab === id ? 'true' : 'false', class: tab === id && !fillIn ? 'on' : '',
+      onclick: () => { if (tab === id) return; tab = id; if (id === 'in') claim = false; fillIn = true; draw(); } });
     const fieldsAv = tab === 'up' ? h('div', { class: 'lb-field' }, h('label', null, 'Avatar'),
       h('div', { class: 'lb-avatars', id: 'lb-avatars' }, Array.from({ length: 12 }, (_, i) => { const id = 'a' + String(i + 1).padStart(2, '0');
         return h('button', { type: 'button', 'data-av': id, class: id === avatar ? 'on' : '', onclick: (e) => { avatar = id; LS.set('ping.avatar', id); wrap.querySelectorAll('.lb-avatars button').forEach((b) => b.classList.toggle('on', b.dataset.av === id)); } }, h('img', { src: avUrl(id), alt: id })); }))) : null;
@@ -172,25 +184,24 @@ function viewSignin() {
         if (n.length < 2) return showErr('Enter your name (2 to 16 characters).');
         if (!/^[A-Za-z0-9 _.\-']+$/.test(n)) return showErr('Names can only use letters, numbers, spaces and . _ - \' (no emoji or other symbols).');
         if (!/^\d{4,6}$/.test(p)) return showErr('PIN must be 4 to 6 digits.');
-        LS.set('ping.name', n); showErr(''); submit.disabled = true;
-        S.onError = () => { submit.disabled = false; };
+        LS.set('ping.name', n); showErr(''); submit.disabled = true; submit.classList.add('on');
+        S.onError = () => { submit.disabled = false; submit.classList.remove('on'); };
         if (tab === 'in') emit('auth_login', { name: n, pin: p });
         else if (claim) emit('auth_claim', { name: n, pin: p, avatar, roomPassword: room.value });
         else emit('auth_signup', { name: n, pin: p, avatar });
       } },
       h('div', { class: 'logo' }, h('img', { src: 'images/ui/vp-mark.png', alt: '' }), h('b', null, 'THE ', h('em', null, 'PING')), h('span', { class: 'lb-eyebrow' }, 'Private poker tables for friends')),
-      h('div', { class: 'seg seg--tabs seg--block', role: 'tablist' },
-        h('button', { type: 'button', 'data-tab': 'in', class: tab === 'in' ? 'on' : '', onclick: () => { tab = 'in'; claim = false; draw(); } }, 'Sign in'),
-        h('button', { type: 'button', 'data-tab': 'up', class: tab === 'up' ? 'on' : '', onclick: () => { tab = 'up'; draw(); } }, 'New account')),
+      h('div', { class: 'seg seg--tabs seg--block lb-seg tabs', role: 'tablist' }, tabBtn('in', 'Sign in'), tabBtn('up', 'New account')),
       claim ? h('div', { class: 'note', id: 'lb-claim' }, 'This name is already on the books. Set a PIN to claim it, and enter the room password.') : null,
       h('div', { class: 'lb-field' }, h('label', { for: 'lb-name' }, 'Name'), name),
       h('div', { class: 'lb-field' }, h('label', { for: 'lb-pin' }, 'PIN'), pin),
       claim ? h('div', { class: 'lb-field' }, h('label', { for: 'lb-room' }, 'Room password'), room) : null,
       fieldsAv, err, submit);
     wrap.replaceChildren(form);
+    if (fillIn) { fillIn = false; requestAnimationFrame(() => requestAnimationFrame(() => { const t = form.querySelector('.lb-seg [aria-selected=true]'); t && t.classList.add('on'); })); }
     function showErr(m) { err.textContent = m; }
     S.signErr = (code, retryMs, msg) => {
-      submit.disabled = false;
+      submit.disabled = false; submit.classList.remove('on');
       if (code === 'claim_required') { tab = 'up'; claim = true; const n = name.value, p = pin.value; draw(); $('lb-name').value = n; $('lb-pin').value = p; return; }
       if (code === 'rate_limited') { S.lockUntil = Date.now() + (retryMs || 30000); tickLock(); return; }
       const m = { name_taken: 'That name already has an account. Tap Sign in and use its PIN, or pick a different name.', bad_name: msg || 'Names are 2 to 16 letters, numbers, spaces, . _ - \'', bad_pin: tab === 'in' ? 'Wrong name or PIN.' : 'PIN must be 4 to 6 digits.',
