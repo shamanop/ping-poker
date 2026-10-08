@@ -30,8 +30,8 @@ module.exports = function games(ctx) {
   const service = ctx.service; delete full.service;   // the boot sweep needs it; a module must not (ctx.money is its only way to the ledger)
 
   const mods = (ctx.modules || MODULES.map((m) => require(m)));
-  // With ctx.money, only Bender keeps ctx.wallet (the old spend/credit path): it writes any ref and any game's house, so another module would bypass ctx.money.
-  const modCtx = (m) => { if (!forGame) return full; const c = { ...full, money: forGame(m.id) }; if (m.id !== 'bender') delete c.wallet; return c; };
+  // No game gets ctx.wallet (the old spend / credit path writes any ref and any game's house): ctx.money, bound to the game's id, is the only way to money.
+  const modCtx = (m) => { const c = forGame ? { ...full, money: forGame(m.id) } : { ...full }; delete c.wallet; return c; };
   const ctxOf = new Map(mods.map((m) => [m, modCtx(m)]));
   for (const m of mods) if (m.init) m.init(ctxOf.get(m));
 

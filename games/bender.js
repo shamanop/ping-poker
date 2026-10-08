@@ -40,6 +40,8 @@ const history = new Map(); // account key -> last rounds (memory only)
 const keyOf = (socket) => { const a = socket.data && socket.data.acct; return String(a && typeof a === 'object' ? a.key : a || ''); };
 
 function err(socket, code, message) { socket.emit('error', { message, code, game: 'bender' }); }
+// the player's two balances as the wallet push carries them (ctx.money.balance: what can be spent now)
+const balances = (ctx, key) => ({ play: ctx.money.balance(key, 'play'), chips: ctx.money.balance(key, 'chips') });
 
 function walletErr(socket, e, mode) {
   if (e && e.code === 'funds') return err(socket, 'funds', mode === 'chips' ? 'Not enough chips' : 'Not enough Cash');
@@ -60,7 +62,7 @@ module.exports = {
       socket.emit('g:bender:state', {
         betLevels: BET_LEVELS, modes: ['play', 'chips'], rtp: rtpLabel(), cfg: clientCfg(),
         buyCostX: { election: Eng.CFG.buyCost.election, landslide: Eng.CFG.buyCost.landslide },
-        wallet: ctx.wallet.get(keyOf(socket)), balances: ctx.wallet.get(keyOf(socket)), bets: BET_LEVELS,
+        wallet: balances(ctx, keyOf(socket)), balances: balances(ctx, keyOf(socket)), bets: BET_LEVELS,
       });
     },
     history(socket) {
@@ -87,18 +89,11 @@ module.exports = {
       const totalWin = floor + (exact - floor > 1e-9 && rng() < exact - floor ? 1 : 0);
       // A round that costs nothing is not a round (the wallet refused an amount of 0 before the one-call path): refuse it before any write, nothing is told but the error.
       if (!(cost > 0)) return err(socket, 'bad_request', 'Could not place that bet');
-      const ref = { game: 'bender', round: roundId };
-      // Ledger first (ADD-A-GAME.md rule 4): a money error is an error to the client, never a result. With ctx.money the whole round is ONE
-      // ledger write (ref bender:<key>:<roundId>, the same ref and numbers the wallet adapter's spend + credit pair wrote), so the ledger
-      // holds all of it or none of it. Without ctx.money (the legacy wallet.js tests) it stays spend then credit, and a credit that throws is an error too.
-      let w;
-      if (ctx.money) {
-        try { ctx.money.round(key, p.mode, roundId, { cost, win: totalWin }); } catch (e) { return walletErr(socket, e, p.mode); }
-        w = ctx.wallet.get(key);
-      } else {
-        try { ctx.wallet.spend(key, p.mode, cost, ref); } catch (e) { return walletErr(socket, e, p.mode); }
-        try { w = ctx.wallet.credit(key, p.mode, totalWin, ref); } catch (e) { return walletErr(socket, e, p.mode); }
-      }
+      // Ledger first (ADD-A-GAME.md rule 4): a money error is an error to the client, never a result. The whole round is ONE ledger write
+      // (ctx.money.round, ref bender:<key>:<roundId>), so the ledger holds all of it or none of it.
+      try { ctx.money.round(key, p.mode, roundId, { cost, win: totalWin }); } catch (e) { return walletErr(socket, e, p.mode); }
+      let w = null;
+      try { w = balances(ctx, key); } catch { /* the round is in the ledger; the wallet push carries the balances */ }
 
       const h = history.get(key) || [];
       h.unshift({ roundId, t: t, bet: p.bet, cost, mode: p.mode, buy, totalWin, tier: r.tier });
@@ -114,5 +109,7 @@ module.exports = {
       });
     },
   },
+  // an instant game never holds an escrow: nothing to recover, nothing to report (ADD-A-GAME.md section 6.5)
+  audit() { return { openRounds: [], pools: {} }; },
   _history: history,
 };
