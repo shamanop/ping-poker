@@ -16,6 +16,7 @@ const EventEmitter = require('events');
 const { open } = require('../money/ledger');
 const { createService } = require('../money/service');
 const { createGameMoney } = require('../transport/game-money');
+const { createWalletAdapter } = require('../transport/wallet-adapter');
 const games = require('../games');
 const SRV = require('../games/campaign.js');
 const E = require('../games/campaign-engine.js');
@@ -69,9 +70,10 @@ function world(opts = {}) {
         return out;
       },
     };
+    const wallet = createWalletAdapter({ service, ledger, onChange, log: () => {} });
     w.money = real.forGame('campaign');                // the bound ctx.money as a module sees it, without the call log or the hooks
     io.removeAllListeners('connection');
-    reg = w.g = games({ io, wallet: undefined, money: gm, service, modules: [SRV], accounts: {}, tables: {}, rooms: {}, now: clock.now, rng: opts.rng, files: { campaign: files.store }, ledger: { log: () => {} } });
+    reg = w.g = games({ io, wallet, money: gm, service, modules: [SRV], accounts: {}, tables: {}, rooms: {}, now: clock.now, rng: opts.rng, files: { campaign: files.store }, ledger: { log: () => {} } });
     w.report = reg.recover();
     return w.report;
   }
