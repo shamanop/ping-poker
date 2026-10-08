@@ -863,7 +863,7 @@
     bar.querySelectorAll('button').forEach((b) => b.classList.toggle('on', money.live && b.dataset.m === money.mode));
     $('modenote').textContent = !money.live ? 'Practice (no wallet)' : money.mode === 'chips' ? 'Real poker chips from your bank.' : 'Pretend money.';
     $('balM').querySelector('.lbl').innerHTML = '&#9733; ' + (!money.live ? 'VOTES' : money.mode === 'chips' ? 'CHIPS' : 'BALANCE');
-    const fineTxt = !money.live ? 'Practice (no wallet). Free play only.' : (window.BENDER_FOOTER || 'No deposits, no payouts. Chips are your poker bank.');
+    const fineTxt = !money.live ? 'Practice (no wallet). Free play only.' : (window.BENDER_FOOTER || 'Chips have no cash value.');
     [$('fine'), $('dis')].forEach((el) => { if (el) el.textContent = fineTxt; });
   }
   function setBets(list) {

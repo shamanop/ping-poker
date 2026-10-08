@@ -645,7 +645,7 @@
     bar.querySelectorAll('button').forEach((x) => x.classList.toggle('on', st.live && x.dataset.m === st.mode));
     $('modenote').textContent = !st.live ? 'Practice (no wallet)' : st.mode === 'chips' ? 'Real poker chips from your bank.' : 'Pretend money.';
     $('balL').textContent = !st.live ? 'PRACTICE' : st.mode === 'chips' ? 'CHIPS' : 'BALANCE';
-    $('fine').textContent = !st.live ? 'Practice (no wallet). Free play only.' : 'No deposits, no payouts. Chips are your poker bank.';
+    $('fine').textContent = !st.live ? 'Practice (no wallet). Free play only.' : 'Chips have no cash value.';
   }
   // the pull view of the current mode to the look layer; the warm squares on the board; the bet readout (Callback)
   function syncView() {
@@ -798,7 +798,7 @@
         <p><b>The Call.</b> When the cascade ends and a <b>rotary phone</b> is on the board, every hot lead is dialed and flips to a <b>quote bubble</b> (bronze ${range(C.bubbles.bronze)}, silver ${range(C.bubbles.silver)}, gold ${range(C.bubbles.gold)}), an <b>UPSELL</b> (${C.upsell.map((u) => 'x' + u[0]).join(' ')}, multiplies the bubbles and closes next to it) or <b>THE CLOSE</b>, which collects every bubble on the board. After a close the other leads are dialed again. The bubbles and closes on the board pay.</p>
         <p><b>Bells.</b> The desk bells that landed in a spin: 3 = DIALING FOR DOLLARS (${C.spins.bonus1} free spins, leads stay lit until a phone calls them), 4 = ALWAYS BE CLOSING (${C.spins.bonus2} free spins, leads stay lit the whole bonus), 5 or more = QUOTE ACCEPTED (${C.spins.bonus3} free spins, a phone on every spin, no bronze bubbles). In a bonus 2 bells add 2 spins, 3 add 4; 4 or more in DIALING FOR DOLLARS upgrades it to ALWAYS BE CLOSING. Up to ${C.maxSpins} spins.</p>
         ${buys}${small}<p class="tl">Pay for a cluster, x bet</p><div class="pt"><table><tr><th></th>${head}</tr>${rows}</table></div>
-        <p><small>Max win ${maxX().toLocaleString('en-US')}x. ${label} No deposits, no payouts.</small></p>
+        <p><small>Max win ${maxX().toLocaleString('en-US')}x. ${label} Chips have no cash value.</small></p>
         <button class="btn" data-v="x">Close</button><div class="cue">SCROLL FOR THE PAY TABLE</div></div>`;
   }
   const infoCue = (cd) => { const cue = cd.querySelector('.cue'), chk = () => cue.classList.toggle('end', cd.scrollTop + cd.clientHeight >= cd.scrollHeight - 6); cd.addEventListener('scroll', chk); chk(); };
