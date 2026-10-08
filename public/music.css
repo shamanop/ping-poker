@@ -95,6 +95,9 @@
 }
 @media (max-width: 600px) {
   .mu-bar--dock { left: 4px; }
+  /* (r2) critic r1 #10: 'overlaps the first dock button by 2 px at 360 wide'. The dock row is centred, so at 360 its first icon starts at
+     42.5 px under the 4..44 px radio button. Reserve the radio's column in the dock row (padding only while the radio is shown). */
+  body.sh-on:has(.mu-bar--dock:not([hidden])) .sh-dock { padding-left: 52px; }
   .mu-pop { left: 8px; right: 8px; width: auto; bottom: calc(var(--sh-bot, 56px) + 8px); max-height: calc(100vh - var(--sh-top, 0px) - var(--sh-bot, 56px) - 24px); }
   .mu-item { padding-top: 12px; padding-bottom: 12px; }
 }
