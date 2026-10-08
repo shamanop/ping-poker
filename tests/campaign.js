@@ -40,6 +40,18 @@ t('state: shape, bet levels, map, balances, no run', () => {
   eq(lines(w), 0, 'state writes nothing'); eq(w.lines().filter((l) => /^campaign/.test(String(l.ref || ''))).length, 0);
 });
 
+t('state: carries the per-tier odds (first step, later steps) and they equal the engine\'s own pFail', () => {
+  const E = require('../games/campaign-engine.js'), w = setup(), s = w.sock('ann'); const p = H.call(w, s, 'state', {}).payload;
+  deq(Object.keys(p.odds).sort(), Object.keys(E.TIERS).sort(), 'one row per tier');
+  const r1 = E.newRun('OH'), o1 = E.options(r1);
+  for (const o of o1) eq(p.odds[o.tier].first, Math.round(o.pFail * 10000) / 10000, 'first step odds of ' + o.tier + ' = the engine option pFail');
+  const pick = o1[0], st = E.step(r1, pick.to, () => 0.999); ok(st.ok, 'a surviving step');
+  const same = E.options(st.run).filter((o) => o.tier === pick.tier); ok(same.length > 0, 'a later option of the same tier exists');
+  for (const o of same) eq(p.odds[o.tier].later, Math.round(o.pFail * 10000) / 10000, 'later step odds of ' + o.tier + ' = the engine option pFail');
+  for (const k of Object.keys(p.odds)) ok(p.odds[k].first > p.odds[k].later, k + ': the house edge sits in the first step only');
+  eq(lines(w), 0, 'state still writes nothing');
+});
+
 t('start: runView fields, escrow, ledger lines, balances', () => {
   const w = setup(), s = w.sock('ann');
   const b0 = w.bal('ann', 'play');

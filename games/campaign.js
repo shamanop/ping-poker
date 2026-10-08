@@ -81,9 +81,19 @@ function runView(rec) {
     idleMs: rec.idleMs, expiresAt: rec.expiresAt,
   };
 }
+// per-tier odds for the rules sheet (money hardening 2026-10-08): the engine's own pFail, no new numbers. `first` = the first step (from 1.00x, carries the house edge), `later` = the second step
+// (from the first step's multiplier; every step after it is exactly fair). Same rounding as an option card's pFail.
+function tierOdds() {
+  const out = {};
+  for (const [tier, t] of Object.entries(E.MAP.tiers || E.TIERS)) {
+    const m1 = E.nextMx(100, t.g100, 1), m2 = E.nextMx(m1, t.g100, 2);
+    out[tier] = { first: round4(E.pFail(100, m1, 1)), later: round4(E.pFail(m1, m2, 2)) };
+  }
+  return out;
+}
 function stateView(nk) {
   const rec = runs.get(nk);
-  return { betLevels: E.BET_LEVELS.slice(), modes: MODES.slice(), rtp: RTP_LABEL, maxWinX: MAX_WIN_X, capX: CAP_X, idleMs: idleMs(), map: { ...E.MAP, tiers: E.MAP.tiers || E.TIERS }, balances: safeBalances(nk), run: rec ? runView(rec) : null };
+  return { odds: tierOdds(), betLevels: E.BET_LEVELS.slice(), modes: MODES.slice(), rtp: RTP_LABEL, maxWinX: MAX_WIN_X, capX: CAP_X, idleMs: idleMs(), map: { ...E.MAP, tiers: E.MAP.tiers || E.TIERS }, balances: safeBalances(nk), run: rec ? runView(rec) : null };
 }
 function endView(rec, run, reason, win, failedAt) {
   return { roundId: rec.roundId, reason, mode: rec.cur, bet: rec.bet, mx: run.mx, win, at: run.at, failedAt: failedAt || null, trail: run.trail.slice(), steps: run.steps, balances: safeBalances(rec.nk) };
