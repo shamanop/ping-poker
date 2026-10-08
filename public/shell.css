@@ -91,3 +91,13 @@ body.sh-on { --sh-top: 56px; --sh-dock: 64px; }
 .sh-bonus.ready { --btn-edge: var(--gold); --btn-fg: var(--gold); animation: sh-bpulse 1.8s ease-in-out infinite; }
 @keyframes sh-bpulse { 50% { filter: brightness(1.25); } }
 @media (prefers-reduced-motion: reduce) { .sh-bonus.ready { animation: none; } }
+
+/* top bar rhythm (10/8): every control is one height, one gap inside the wallet, money values in fixed-width digits */
+.sh-top { --sh-ctl: 36px; }
+.sh-top .sh-plate, .sh-top .btn, .sh-top [data-money-toggle] .seg, .sh-top [data-money-toggle] .seg > * { height: var(--sh-ctl); min-height: var(--sh-ctl); box-sizing: border-box; }
+.sh-top [data-money-toggle] { display: flex; align-items: center; }
+.sh-wallet { gap: 8px; }
+.sh-plate { padding: 0 14px; align-items: center; }
+.sh-plate .plate__value { font-variant-numeric: tabular-nums; line-height: 1; }
+.sh-plate .plate__label { line-height: 1; }
+.sh-acct { padding: 0 6px; }
