@@ -109,7 +109,7 @@ async function spinsOf(c) { return { cash: await c.spin('play'), chips: await c.
     // ── C. seated socket mid-hand: the seat follows the disconnect rule, the hand is not voided ────────────────
     const bob = await signup('sesbob', '2222'); await cashTo(adm, bob.key, 20000);
     const E = await login('sesown', '246810'); await cashTo(adm, E.key, 20000);
-    const tc = await E.req('table_create', { settings: { name: 'ses cash', mode: 'play', buyIn: { min: 500, max: 100000, default: 1000 }, blinds: { sb: 50, bb: 100 }, autoStart: false, actionTimerSec: 0 } }, 'table_created');
+    const tc = await E.req('table_create', { settings: { name: 'ses cash', mode: 'play', buyIn: { min: 500, max: 100000, default: 1000 }, blinds: { sb: 50, bb: 100 }, autoStart: false, actionTimerSec: 60 } }, 'table_created');
     const tid = tc.p && tc.p.table && tc.p.table.id;
     ok(!!tid, 'C: Cash table created');
     ok((await E.req('table_join', { tableId: tid, buyIn: 1000 }, 'table_joined')).ev === 'table_joined', 'C: owner device seated');
