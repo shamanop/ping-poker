@@ -39,8 +39,10 @@ button:disabled, [aria-disabled="true"] { cursor: default; }
   background: radial-gradient(90% 80% at 50% 45%, rgba(245, 185, 66, .09), transparent 70%), linear-gradient(rgba(184, 137, 58, .07) 1px, transparent 1px) 0 0 / 100% 36px, linear-gradient(90deg, rgba(184, 137, 58, .07) 1px, transparent 1px) 0 0 / 36px 100%, #0f0a07;
   box-shadow: inset 0 0 0 2px #000, inset 0 0 0 3px var(--brass-dk), inset 0 0 40px rgba(0, 0, 0, .8); }
 .map-world { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
-.map-svg { display: block; overflow: visible; }
-.st { stroke: #0b0705; stroke-width: 1; vector-effect: non-scaling-stroke; stroke-linejoin: round; transition: fill-opacity .4s, opacity .4s; }
+.map-svg { position: absolute; left: 0; top: 0; display: block; overflow: visible; pointer-events: none; }
+.map-svg:first-child { pointer-events: auto; }
+.map-hot { animation: pulse 1.15s ease-in-out infinite; }
+.st { stroke: #0b0705; stroke-width: 1; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
 .st.safe.R { fill: var(--safeR); } .st.safe.D { fill: var(--safeD); } .st.lean.R { fill: var(--leanR); } .st.lean.D { fill: var(--leanD); }
 .st.swing { fill: url(#swingFill); } .st.swing.S, .st.swing.R, .st.swing.D { fill: url(#swingFill); }
 #board[data-mode="setup"] .st { cursor: pointer; }
@@ -52,17 +54,17 @@ button:disabled, [aria-disabled="true"] { cursor: default; }
 .st.failed { fill: #a3231a !important; opacity: 1; }
 .st.sel { stroke: var(--gold2); stroke-width: 2; }
 .ov { fill: none; vector-effect: non-scaling-stroke; pointer-events: none; stroke-linejoin: round; }
-.hot { stroke: var(--gold); stroke-width: 3; animation: pulse 1.15s ease-in-out infinite; }
+.hot { stroke: var(--gold); stroke-width: 3; }
 .hot-swing { stroke: #ffe08a; } .hot-ls { stroke: #fff4c4; stroke-width: 4; }
 .curO { stroke: #fff1c4; stroke-width: 3; fill: rgba(245, 185, 66, .22); }
-.failO { stroke: #ff6a4d; stroke-width: 4; animation: pulse .5s ease-in-out 6; }
+.failO { stroke: #ff6a4d; stroke-width: 4; }
 @keyframes pulse { 0%, 100% { opacity: .3; } 50% { opacity: 1; } }
 .air { fill: none; stroke: rgba(241, 230, 204, .38); stroke-width: 1.6; stroke-dasharray: 5 5; vector-effect: non-scaling-stroke; pointer-events: none; }
-.air.hot { stroke: var(--gold); stroke-width: 2.6; animation: pulse 1.15s ease-in-out infinite; }
+.air.hot { stroke: var(--gold); stroke-width: 2.6; }
 .trail-glow, .trail-core, .trail-new, .torn { fill: none; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; pointer-events: none; }
 .trail-glow { stroke: rgba(245, 185, 66, .3); stroke-width: 10; }
 .trail-core { stroke: var(--gold); stroke-width: 3.2; }
-.trail-new { stroke: #fff3cc; stroke-width: 4.5; stroke-dasharray: 1; stroke-dashoffset: 1; animation: draw .7s .15s ease-out forwards; }
+.trail-new { stroke: #fff3cc; stroke-width: 4.5; stroke-dasharray: 1; stroke-dashoffset: 1; animation: draw .5s .85s ease-out forwards; }
 @keyframes draw { to { stroke-dashoffset: 0; } }
 .torn { stroke: var(--scandal); stroke-width: 3.4; }
 .torn-b { opacity: .8; }

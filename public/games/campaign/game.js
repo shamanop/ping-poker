@@ -8,7 +8,7 @@
 
   // ---------------------------------------------------------------- state
   const S = {
-    ready: false, st: null, mode: 'play', wallet: { play: null, chips: null }, run: null, view: 'boot', busy: false, pending: null,
+    seen: {}, ready: false, st: null, mode: 'play', wallet: { play: null, chips: null }, run: null, view: 'boot', busy: false, pending: null,
     home: null, bet: null, again: null, lastEnd: null, whole: false, offline: false, skew: 0, tk: [], events: [], q: '', listOpen: false, wd: 0, askedAt: 0
   };
   window.__campaign = { get ready() { return S.ready; }, get run() { return S.run; }, get busy() { return S.busy; }, get lastEnd() { return S.lastEnd; }, get events() { return S.events; }, get view() { return S.view; }, S };
@@ -76,7 +76,7 @@
 
   function adopt(run, quiet) {
     const isNew = !S.run || S.run.roundId !== run.roundId;
-    S.run = run; S.mode = run.mode || S.mode; S.bet = run.bet; S.home = run.home; S.again = { home: run.home, bet: run.bet, mode: run.mode };
+    rememberOdds(run); S.run = run; S.mode = run.mode || S.mode; S.bet = run.bet; S.home = run.home; S.again = { home: run.home, bet: run.bet, mode: run.mode };
     S.lastEnd = null; setView('run'); if (isNew) { S.tk = []; S.whole = false; }
     if (isNew && !quiet) tick(C.news('open', { S: nameOf(run.home) }, run.roundId));
     else if (isNew) tick(run.steps ? 'Back on the trail in ' + nameOf(run.at) + '.' : 'Polls are open in ' + nameOf(run.home) + '.', true);
@@ -88,8 +88,8 @@
     if (!S.run || p.roundId !== S.run.roundId) { askState(); return; }
     if (!p.run || p.run.steps <= S.run.steps) { log('in', 'ignored_step', { n: p.n }); return; }   // an answer for an old n
     const prev = S.run, op = (prev.options || []).find((o) => o.to === p.to);
-    S.run = p.run; noteFresh(p.run); release();
-    tick(C.news(p.tier || (op && op.tier) || tierOf(p.to), { S: nameOf(p.to), P: C.pctOf(op ? op.g100 : (p.run.mx > prev.mx ? Math.round(p.run.mx * 100 / prev.mx) : 100)) }, p.roundId + ':' + p.run.steps));
+    S.run = p.run; rememberOdds(p.run); noteFresh(p.run); release();
+    tick(C.news(p.tier || (op && op.tier) || tierOf(p.to), { S: nameOf(p.to), P: op ? C.pctOf(op.g100) : C.mxText(p.run.mx) }, p.roundId + ':' + p.run.steps));
     paint(); redrawMap(true); bump('mx'); bump('cards'); if (map) map.pop(p.run.at, op ? C.pctOf(op.g100) : '', p.tier || (op && op.tier) || 'safe');
   }
 
@@ -136,10 +136,10 @@
   }
   function toSetup() { if (S.busy || S.run) return; S.lastEnd = null; setView('setup'); paint(); redrawMap(true); }
   function setHome(code) {
-    if (S.view !== 'setup' || !mapStates()[code]) return; S.home = code; S.q = ''; S.listOpen = false; paint(); redrawMap(false);
+    if (S.view !== 'setup' || !mapStates()[code]) return; S.home = code; S.q = ''; S.listOpen = false; const f = document.getElementById('homeQ'); if (f) f.blur(); paint(); redrawMap(false);
   }
   function setMode(m) { if (S.run || S.busy || (m !== 'play' && m !== 'chips')) return; S.mode = m; toParent({ type: 'mode', mode: m }); paint(); }
-  function setBet(n) { if (S.view === 'setup') { S.bet = n; paint(); } }
+  function setBet(n) { if (S.view === 'setup') { S.bet = n; const f = document.getElementById('homeQ'); if (f) f.blur(); paint(); } }
   function toggleWhole() { S.whole = !S.whole; $('wholeBtn').setAttribute('aria-pressed', S.whole); $('wholeBtn').textContent = S.whole ? 'Follow' : 'Whole map'; redrawMap(true); }
 
   $('app').addEventListener('click', (e) => {
@@ -276,29 +276,34 @@
     const q = S.q.trim().toLowerCase(), st = mapStates();
     return Object.keys(st).filter((c) => !q || st[c].name.toLowerCase().includes(q) || c.toLowerCase() === q).sort((a, b) => st[a].name.localeCompare(st[b].name)).slice(0, 50);
   }
+  function renderList() {
+    const box = document.getElementById('homeListBox'); if (!box) return;
+    if (!S.listOpen) { box.innerHTML = ''; return; }
+    const list = homeList();
+    box.innerHTML = '<div id="homeList" class="hlist" role="listbox">' + (list.length ? list.map((c) => '<button type="button" class="hrow" data-action="home" data-s="' + esc(c) + '" role="option">' + '<b>' + esc(nameOf(c)) + '</b>' + tierChip(tierOf(c)) + '</button>').join('') : '<p class="none">No such state.</p>') + '</div>';
+  }
   function paintSetup(p) {
     const lv = (S.st && S.st.betLevels) || [];
-    const prevQ = document.getElementById('homeQ'), hadFocus = prevQ && document.activeElement === prevQ;
-    const list = S.listOpen ? homeList() : [];
+    const cur = document.getElementById('homeQ');
+    if (cur && document.activeElement === cur) { renderList(); return; }         // never rebuild the field while the player is typing in it
     p.innerHTML =
       '<div class="setup">' +
       '<div class="homeRow"><div class="homeline"><label for="homeQ">HOME</label>' + (S.home ? '<b>' + esc(nameOf(S.home)) + '</b>' + tierChip(tierOf(S.home)) + '<span class="pty p-' + partyOf(S.home) + '"></span>' : '<b class="ph">tap the map, or search</b>') + '</div>' +
-        '<input id="homeQ" class="find" type="search" inputmode="search" autocomplete="off" spellcheck="false" placeholder="Search 50 states" value="' + esc(S.q) + '" aria-label="Search for a home state">' +
-        (S.listOpen ? '<div id="homeList" class="hlist" role="listbox">' + (list.length ? list.map((c) => '<button type="button" class="hrow" data-action="home" data-s="' + c + '" role="option">' + '<b>' + esc(nameOf(c)) + '</b>' + tierChip(tierOf(c)) + '</button>').join('') : '<p class="none">No such state.</p>') + '</div>' : '') +
+        '<input id="homeQ" class="find" type="search" inputmode="search" autocomplete="off" spellcheck="false" placeholder="Search 50 states" value="' + esc(S.q) + '" aria-label="Search for a home state"><div id="homeListBox"></div>' +
       '</div>' +
       '<div class="seg bets" role="radiogroup" aria-label="Stake"><span class="legend">STAKE</span>' + lv.map((n) => '<button type="button" class="segb' + (n === S.bet ? ' on' : '') + '" data-action="bet" data-b="' + n + '" role="radio" aria-checked="' + (n === S.bet) + '">' + fmt(n) + '</button>').join('') + '</div>' +
       '</div>';
+    renderList();
     const q = document.getElementById('homeQ');
-    q.addEventListener('focus', () => { if (!S.listOpen) { S.listOpen = true; paintSetup($('panel')); const n = document.getElementById('homeQ'); n.focus(); } });
-    q.addEventListener('input', () => { S.q = q.value; S.listOpen = true; const pos = q.selectionStart; paintSetup($('panel')); const n = document.getElementById('homeQ'); n.focus(); try { n.setSelectionRange(pos, pos); } catch (e) { /* ignore */ } });
-    q.addEventListener('keydown', (e) => { if (e.key === 'Enter') { const l = homeList(); if (l.length) setHome(l[0]); q.blur(); } if (e.key === 'Escape') { S.listOpen = false; S.q = ''; q.blur(); paintSetup($('panel')); } });
-    if (hadFocus && S.listOpen) q.focus();
+    q.addEventListener('focus', () => { if (!S.listOpen) { S.listOpen = true; renderList(); } });
+    q.addEventListener('input', () => { S.q = q.value; S.listOpen = true; renderList(); });
+    q.addEventListener('keydown', (e) => { if (e.key === 'Enter') { const l = homeList(); if (l.length) setHome(l[0]); q.blur(); } if (e.key === 'Escape') { S.listOpen = false; S.q = ''; q.value = ''; q.blur(); renderList(); } });
   }
   function optCard(o, i, run) {
     const gain = C.pctOf(o.g100), tags = [];
     if (o.deadEnd) tags.push('<i class="tag dead">DEAD END</i>'); if (o.landslide) tags.push('<i class="tag ls">LANDSLIDE</i>');
     const pend = S.pendingTo === o.to && S.busy;
-    return '<button type="button" class="card t-' + o.tier + ' p-' + partyOf(o.to) + (o.landslide ? ' ls' : '') + (o.deadEnd ? ' dead' : '') + (pend ? ' pend' : '') + '" data-action="pick" data-to="' + o.to + '" data-n="' + (i + 1) + '" data-tier="' + o.tier + '"' + (S.busy ? ' aria-disabled="true"' : '') + '>' +
+    return '<button type="button" class="card t-' + o.tier + ' p-' + partyOf(o.to) + (o.landslide ? ' ls' : '') + (o.deadEnd ? ' dead' : '') + (pend ? ' pend' : '') + '" data-action="pick" data-to="' + esc(o.to) + '" data-n="' + (i + 1) + '" data-tier="' + o.tier + '"' + (S.busy ? ' aria-disabled="true"' : '') + '>' +
       '<i class="num">' + (i + 1) + '</i>' + (o.landslide ? '<i class="sheen"></i>' : '') +
       '<span class="nm">' + esc(o.name) + '</span>' + tierChip(o.tier) +
       '<span class="gr">' + (o.landslide ? '<b>FINAL</b> pays ' : '<b>' + gain + '</b> to ') + C.mxText(o.nextMx) + '</span>' +
@@ -327,17 +332,15 @@
   }
 
   // ---------------------------------------------------------------- rules sheet
-  function nominal(g100, first) {   // display only, from the server's numbers: the exact odds of every option arrive with the option
-    const rtp = parseFloat((S.st && S.st.rtp) || '96') / 100, p = first ? 1 - rtp * 100 / g100 : 1 - 100 / g100;
-    return Math.round(p * 1000) / 10;
-  }
+  // Odds shown in the rules sheet are only ever what the server sent for an option in this session (pFail through oddsWords): the client holds no odds formula.
+  function rememberOdds(run) { if (!run) return; const k = run.steps === 0 ? 'first' : 'later'; for (const o of run.options || []) { (S.seen[o.tier] || (S.seen[o.tier] = {}))[k] = o.pFail; } }
   function openSheet() {
-    const st = S.st || {}, tiers = (st.map && st.map.tiers) || {}, row = (t) => tiers[t] ? '<tr><th>' + tierChip(t) + '</th><td>+' + (tiers[t].g100 - 100) + '%</td><td>about ' + nominal(tiers[t].g100, true) + '%</td><td>about ' + nominal(tiers[t].g100, false) + '%</td></tr>' : '';
+    const st = S.st || {}, tiers = (st.map && st.map.tiers) || {}, row = (t) => { if (!tiers[t]) return ''; const sn = S.seen[t] || {}, w = (v) => (typeof v === 'number' ? C.oddsWords(v) : 'on the cards'); return '<tr><th>' + tierChip(t) + '</th><td>+' + (tiers[t].g100 - 100) + '%</td><td>' + w(sn.first) + '</td><td>' + w(sn.later) + '</td></tr>'; };
     const idle = Math.round((st.idleMs || 60000) / 1000);
     $('sheet').innerHTML = '<div class="sh-card"><header><h2>HOW IT WORKS</h2><button type="button" class="ibtn" data-action="close" aria-label="Close">x</button></header><div class="sh-body">' +
       '<ol class="steps"><li><b>Pick a home state</b> and a stake. You start at 1.00x.</li><li><b>Pick the next state</b> from the unvisited states that border where you stand. Each state has a risk tier.</li><li>A step that survives <b>multiplies your multiplier</b>. A step that fails is a <b>SCANDAL</b> and the stake is lost.</li><li>After any surviving step you may <b>declare victory</b> and be paid stake x multiplier. Before the first step, withdrawing gives the stake back.</li><li>A state counts once per run. Carry all 50 and it is a <b>LANDSLIDE</b>.</li></ol>' +
-      '<table class="odds"><thead><tr><th>TIER</th><th>GROWTH</th><th>FIRST STEP SCANDAL</th><th>LATER STEPS</th></tr></thead><tbody>' + row('safe') + row('lean') + row('swing') + '</tbody></table>' +
-      '<p>Every option card shows its exact odds in words. <b>The first step carries the house edge</b>: it is worse than fair. Every step after it is exactly fair.</p>' +
+      '<table class="odds"><thead><tr><th>TIER</th><th>GROWTH</th><th>FIRST STEP</th><th>LATER STEPS</th></tr></thead><tbody>' + row('safe') + row('lean') + row('swing') + '</tbody></table>' +
+      '<p>Every option card shows its exact odds in words (the table above fills in as you see each tier). <b>The first step carries the house edge</b>: it is worse than fair. Every step after it is exactly fair.</p>' +
       '<ul class="facts"><li>Return to player <b>' + esc(st.rtp || '96.0%') + '</b>, on every route and every stop point.</li><li>Largest win <b>' + (st.maxWinX || 1000).toLocaleString('en-US') + 'x</b> (the LANDSLIDE step). Hard cap ' + (st.capX || 10000).toLocaleString('en-US') + 'x.</li><li>Idle for <b>' + idle + ' seconds</b> and you are cashed out automatically at your current multiplier.</li><li>If the server restarts, an open run is <b>cashed out at your current multiplier</b>.</li><li>Alaska and Hawaii are reached by the dashed air links: Washington, Hawaii and California.</li><li>Play $ and Chips never mix. Play money only, no deposits, no payouts.</li></ul>' +
       '<div class="key"><span><i class="lg safeR"></i><i class="lg safeD"></i> SAFE deep red / blue</span><span><i class="lg leanR"></i><i class="lg leanD"></i> LEAN lighter</span><span><i class="lg swing"></i> SWING gold and violet</span></div>' +
       '</div></div>';

@@ -14,13 +14,14 @@
     const states = G.states;
     const world = div('map-world', host);
     world.style.width = G.w + 'px'; world.style.height = G.h + 'px';
-    const svg = el('svg', { viewBox: '0 0 ' + G.w + ' ' + G.h, width: G.w, height: G.h, class: 'map-svg', 'aria-hidden': 'true' }, world);
+    const mk = (cls) => el('svg', { viewBox: '0 0 ' + G.w + ' ' + G.h, width: G.w, height: G.h, class: cls, 'aria-hidden': 'true' }, world);
+    const svg = mk('map-svg'), svgCur = mk('map-svg map-cur'), svgHot = mk('map-svg map-hot');       // base (static) / steady outline / pulsing outlines: the pulse is one opacity animation on its own layer
     const defs = el('defs', null, svg);
     const pat = el('pattern', { id: 'swingFill', width: 5, height: 5, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(45)' }, defs);
     el('rect', { width: 5, height: 5, fill: '#5e3a7a' }, pat); el('rect', { width: 2, height: 5, fill: '#d9a93f', 'fill-opacity': '.75' }, pat);
     const pat2 = el('pattern', { id: 'visFill', width: 6, height: 6, patternUnits: 'userSpaceOnUse' }, defs);
     el('rect', { width: 6, height: 6, fill: '#2a1d13' }, pat2); el('circle', { cx: 3, cy: 3, r: 0.9, fill: '#b8893a', 'fill-opacity': '.5' }, pat2);
-    const gStates = el('g', { class: 'g-states' }, svg), gAir = el('g', { class: 'g-air' }, svg), gTrail = el('g', { class: 'g-trail' }, svg), gHot = el('g', { class: 'g-hot' }, svg);
+    const gStates = el('g', { class: 'g-states' }, svg), gAir = el('g', { class: 'g-air' }, svg), gTrail = el('g', { class: 'g-trail' }, svg), gCur = el('g', { class: 'g-cur' }, svgCur), gHot = el('g', { class: 'g-hot' }, svgHot);
     const marks = div('map-marks', host);
     const paths = {};
     for (const code of Object.keys(states)) {
@@ -87,11 +88,11 @@
     let trailGlow, trailCore, trailNew, tornEls = [];
     function clearScene() {
       for (const c in paths) paths[c].setAttribute('class', 'st ' + ((MAPI.states[c] || {}).tier || 'safe') + ' ' + ((MAPI.states[c] || {}).party || 'R'));
-      while (gHot.firstChild) gHot.removeChild(gHot.firstChild); while (gTrail.firstChild) gTrail.removeChild(gTrail.firstChild);
+      while (gHot.firstChild) gHot.removeChild(gHot.firstChild); while (gCur.firstChild) gCur.removeChild(gCur.firstChild); while (gTrail.firstChild) gTrail.removeChild(gTrail.firstChild);
       hotEls.length = 0; tornEls = []; trailGlow = trailCore = trailNew = null;
       for (const k in airPaths) airPaths[k].setAttribute('class', 'air');
     }
-    function trailD(trail) { let d = ''; for (let i = 0; i < trail.length - 1; i++) d += segD(trail[i], trail[i + 1]); return d; }
+    function trailD(trail, skipLast) { let d = ''; for (let i = 0; i < trail.length - 1 - (skipLast ? 1 : 0); i++) d += segD(trail[i], trail[i + 1]); return d; }
     function draw(sc, opts) {
       const o = opts || {}; scene = sc; clearScene(); host.dataset.mode = sc.mode; inset = insetFor(sc.mode);
       const visited = new Set(sc.trail || []);
@@ -111,13 +112,13 @@
       if (sc.mode === 'run' && sc.at) hotCodes.push([sc.at, 'curO']);
       if (sc.mode === 'setup' && sc.home) hotCodes.push([sc.home, 'curO']);
       if (sc.mode === 'end' && sc.failedAt) hotCodes.push([sc.failedAt, 'failO']);
-      for (const [c, cls] of hotCodes) { const ph = el('path', { d: states[c].d, class: 'ov ' + cls }, gHot); hotEls.push(ph); }
+      for (const [c, cls] of hotCodes) { const ph = el('path', { d: states[c].d, class: 'ov ' + cls }, cls === 'curO' ? gCur : gHot); hotEls.push(ph); }
       // air links that are options right now glow
-      if (sc.mode === 'run' && sc.at) for (const op of sc.options || []) { const k = airPaths[sc.at + op.to] || airPaths[op.to + sc.at]; if (k) k.setAttribute('class', 'air hot'); }
+      if (sc.mode === 'run' && sc.at) for (const op of sc.options || []) { const k = airPaths[sc.at + op.to] || airPaths[op.to + sc.at]; if (k) el('path', { d: k.getAttribute('d'), class: 'air hot' }, gHot); }
       // trail
       const trail = sc.trail || [];
       if (trail.length > 1) {
-        const upto = sc.mode === 'end' ? trail : trail, d = trailD(upto);
+        const d = trailD(trail, !!o.animateLast);
         trailGlow = el('path', { d, class: 'trail-glow' }, gTrail); trailCore = el('path', { d, class: 'trail-core' }, gTrail);
         if (o.animateLast) {
           const a = trail[trail.length - 2], b = trail[trail.length - 1];
