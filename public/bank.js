@@ -14,6 +14,7 @@
 
   const $ = id => document.getElementById(id);
   // one id per confirmed click: a resend of the same click carries the same id and the server writes nothing twice (admin_adjust / admin_set_play opId)
+  const bankOps = new Set(); // op ids sent from this panel: the server's refusal (admin_result with its message) is shown for these only
   const newOpId = () => (window.crypto && crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + '.' + Math.random().toString(36).slice(2, 12));
   // Mode is per view: the Cash view reads cents, the Chips view reads chips; pref decides $ vs chips for 'auto'.
   const bankMode = () => Money.modeFor(Money.pref, isPlay() ? 'cents' : 'chips');
@@ -218,7 +219,8 @@
         if (amount === null) { field.submit(); return; } // stays open with the message; nothing is sent
         const shown = Number(b.dataset.bank) || 0, delta = amount - shown;
         if (state.socket && delta !== 0) {
-          state.socket.emit('admin_adjust', { key: name, delta, cur: 'chips', reason: 'bank panel edit', opId: newOpId() });
+          const opId = newOpId(); bankOps.add(opId);
+          state.socket.emit('admin_adjust', { key: name, delta, cur: 'chips', reason: 'bank panel edit', opId });
           const row = data && data.players.find(p => p.name.toLowerCase() === name.toLowerCase());
           if (row) row.bank = amount;
         }
@@ -360,6 +362,11 @@
       if (d && d.view && d.view !== view) return;
       data = d;
       if (isOpen) render();
+    });
+    state.socket.on('admin_result', r => {
+      if (!r || r.opId == null || !bankOps.delete(r.opId) || r.ok) return;
+      if (typeof toast === 'function') toast(r.message || 'Could not adjust', '', 'err', 4500);
+      request();
     });
     Money.onPrefChange(() => { if (isOpen && data) render(); });
     state.socket.on('game_state', gs => {
