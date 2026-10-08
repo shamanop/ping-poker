@@ -323,10 +323,15 @@ function step(socket, payload) {
   const next = res.run;
   if (!res.ok || next.done) {                                                             // scandal (settle with win 0: the stake goes to the house) or landslide / dead end (an automatic cash-out at the new multiplier)
     rec.memo = null;
+    const old = toStored(rec);
     rec.pend = { run: next, reason: next.done };                                          // the drawn result is final from here: written to the record BEFORE the ledger is asked, so a refused settle,
-    try { store.putOpen(toStored(rec)); store.flush(); }                                      // a restart or a flush error can never turn it into a cash-out, a better result or a new draw
-    catch (e) { logf('campaign: pended result not flushed (kept in memory, the idle and boot paths still close it as drawn when the record is written)', rec.roundId, e && e.message); }
-    closeRun(rec, next, next.done, next.failedAt || null, socket);                        // refused: rec.pend stays, a retry / the idle timer / boot close it as drawn
+    let durable = false;                                                                  // a restart or a flush error can never turn it into a cash-out, a better result or a new draw
+    try { store.putOpen(toStored(rec)); store.flush(); durable = true; }
+    catch (e) { logf('campaign: pended result not flushed (the ledger settle is tried; if that fails too the step did not happen)', rec.roundId, e && e.message); try { store.putOpen(old); } catch {} }
+    if (closeRun(rec, next, next.done, next.failedAt || null, socket) || durable || rec.closed || runs.get(rec.nk) !== rec) return;   // closed; or refused with the drawn result on disk: rec.pend stays, a retry / the idle timer / boot close it as drawn
+    // refused AND the result is on neither disk: the client was told an error, never the result, and a restart would forget it. The step did not happen: the run is back at the step before (disk = memory),
+    // and the retry of this same step gets the SAME draw (memo), so the failure is no re-roll. Record first, client last.
+    rec.pend = null; rec.memo = { n, to, res };
     return;
   }
   // survived and the run goes on: the new record is flushed BEFORE the client hears of the step; a crash before the flush = the step never happened. No ledger line (nothing moved).
