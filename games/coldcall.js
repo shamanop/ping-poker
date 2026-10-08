@@ -16,12 +16,21 @@ const RTP_LABEL = '98.0% (long-run, 200M-spin sim, +-0.22, includes the Callback
 const rtpLabel = () => L.rtp(RTP_LABEL);   // the label that goes with the math in force: the shipped line, the one that came with the overrides, or "custom settings, not measured"
 
 // QA hook: forces a feature so the front end can be driven by a test. It runs ONLY when the server process was started
-// with COLDCALL_TEST=1 (and NODE_ENV is not 'production'); otherwise `force` in a spin payload is ignored. Forced rounds are paid and
+// with COLDCALL_TEST=1 (and NODE_ENV is not 'production'); otherwise `force` in a spin payload is ignored. MONEY 1008 K4-3: and it is CHIPS ONLY, always:
+// a round whose stored currency is Cash (`play`, real money) never honours `force`, whatever the environment says (forceFor below is the only reader of a spin's `force`;
+// runRound and rebuild refuse a Cash round that carries one). Forced rounds are paid and
 // charged through the normal money path, with real engine rounds (bells placed, or whole rounds re-rolled until the condition holds; no hand-made scripts).
 //   bonus1 / bonus2 / bonus3 = 3 / 4 / 5 bells land; phone = phone feature with >= 4 hot leads; close = phone feature with a close and a second reveal round;
 //   big = round pays >= 25x; tease = exactly 2 bells, no bonus.
 const FORCES = Eng.FORCES;
 const testHookOn = () => process.env.COLDCALL_TEST === '1' && process.env.NODE_ENV !== 'production';
+let cashForceSeen = 0;
+// the force a spin may carry: only on a Chips spin that is not a buy, only with the hook on. A Cash spin that asks for one is played as an ordinary round (and logged, a few times).
+function forceFor(mode, buy, f) {
+  if (!testHookOn() || buy !== null || !FORCES.includes(f)) return null;
+  if (mode !== 'chips') { if (cashForceSeen++ < 5) alarm('coldcall: QA force ' + JSON.stringify(f) + ' refused on a ' + (mode === 'play' ? 'Cash' : String(mode)) + ' spin: the hook is Chips only, the round is played as an ordinary one'); return null; }
+  return f;
+}
 const resolveForced = (K, rng, force) => L.resolveRound(K, rng, null, { force });
 
 function cryptoRng() {
@@ -68,6 +77,8 @@ const dayFmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago' })
 const chicagoDay = (ms) => dayFmt.format(new Date(ms));
 const pullCfg = () => Eng.CFG.pull;
 const logf = (...a) => { const f = module.exports.log; if (f) f(...a); };
+// a line that must be seen: through the log hook when one is set (tests), else straight to stderr (server.js sets no hook, so logf alone is silent there)
+const alarm = (...a) => { const f = module.exports.log; if (f) f(...a); else console.error(...a); };
 const M = () => C.money;
 let seedWarned = false;
 
@@ -179,6 +190,7 @@ function runRound(rec, decisions, auto) {
   let j = 0;
   const rnd = () => { if (j < rec.rtape.length) return rec.rtape[j++]; const v = rbase(); rec.rtape.push(v); j++; return v; };
   const len = rec.tape.length, rlen = rec.rtape.length;
+  if (rec.force && rec.mode !== 'chips') throw new Error('QA force on a Cash round');   // unreachable through forceFor; a stored or hand-made record cannot get one past here either
   try {
     return rec.K.eng.playRound(rng, { buy: rec.buy, bet: rec.bet, state: clone(rec.state), now: rec.now, day: rec.day, script: true, auto: !!auto, rnd, ...(rec.force ? { force: rec.force } : {}) }, decisions);
   } catch (e) { rec.tape.length = len; rec.rtape.length = rlen; throw e; }
@@ -239,6 +251,7 @@ function rebuild(o) {
   if (!isFiniteNum(o.now) || !isFiniteNum(o.t) || typeof o.day !== 'string') bad('clock');
   if (!nums(o.tape) || !nums(o.rtape) || !Array.isArray(o.decisions) || !o.state || typeof o.state !== 'object') bad('tapes');
   if (!(o.force === null || o.force === undefined || FORCES.includes(o.force))) bad('force');
+  if (o.force && o.mode !== 'chips') bad('QA force on a Cash round');          // the record is then voided at boot (the stake goes back), never replayed under a force
   const K = L.restoreSnapshot(o.cfg);
   if (!K.cfg.pull) bad('config without a pull block');
   const force = o.force || null;
@@ -467,7 +480,7 @@ function pullSpin(socket, p, buy, now) {
   if (o) return err(socket, 'decision_open', 'Finish your open decision first', { open: o.pending ? pendingView(o) : null });
   const day = chicagoDay(now);
   const state = loadState(nk, mode);
-  const force = testHookOn() && buy === null && FORCES.includes(p.force) ? p.force : null;
+  const force = forceFor(mode, buy, p.force);
   const callback = buy === null && !force && !!state.cb;       // a QA-forced round is a stateless paid spin: the waiting Callback is not played
   if (callback) { try { ensureCbId(nk, mode, state); } catch (e) { logf('coldcall: callback id not flushed', e && e.message); return err(socket, 'bad_request', 'Could not place that bet'); } }
   const rec = {
@@ -533,6 +546,8 @@ module.exports = {
     C = ctx; feed = []; feedSeq = 0; seedWarned = false;
     const file = process.env.COLDCALL_PULL_FILE || files.coldcallPull || null;
     store = createStore(file, { log: logf });
+    cashForceSeen = 0;
+    if (testHookOn()) alarm('coldcall: *** QA FORCE HOOK IS ON (COLDCALL_TEST=1, NODE_ENV=' + (process.env.NODE_ENV || '(unset)') + '): any signed-in player can force Cold Call rounds in CHIPS ONLY; Cash rounds ignore it. Never set COLDCALL_TEST on a real server. ***');
     for (const mode of ['play', 'chips']) { try { syncPot(mode); } catch {} }
   },
   recover, audit,
@@ -556,7 +571,7 @@ module.exports = {
         buyCostX: Object.fromEntries(BUYS.map((b) => [b, Eng.CFG.buyCost[b] / 10])),
         buyPriceCents: L.buyPrices(), cfg: L.publicCfg(),     // LIVECFG: the live pay table, weights and prices (PULL-UI.md 0c); pull.rules above carries the PULL knobs
         wallet: w, balances: w, bets: BET_LEVELS,
-        ...(testHookOn() ? { qaHook: true } : {}),
+        ...(testHookOn() && !(payload && payload.mode === 'play') ? { qaHook: true, qaHookModes: ['chips'] } : {}),   // told for Chips only; a state asked for Cash is never told
         ...extra,
       });
     },
@@ -641,7 +656,7 @@ module.exports = {
       const key = keyOf(socket);
       const rng = module.exports.rng || cryptoRng();
       const roundId = crypto.randomBytes(6).toString('hex');
-      const force = testHookOn() && buy === null && FORCES.includes(p.force) ? p.force : null;
+      const force = forceFor(p.mode, buy, p.force);
       const K = L.snapshot();                     // the live config, whole (a stateless round; nothing is open)
       const r = force ? resolveForced(K, rng, force) : L.resolveRound(K, rng, buy);   // pure; nothing touched yet
       let cost, totalWin, pay;
