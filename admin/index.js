@@ -1,42 +1,41 @@
 'use strict';
-// Admin money operations and the overview payload. Money goes through the service only; there is no "set total" (H5).
+// Admin money operations and the overview payload. Money goes through the service only. "Set Cash to X" sets the player's TOTAL Cash (K1-3); Chips are adjusted by a signed delta.
 
 const MAX_PLAY = 100000000000;
 const isInt = v => Number.isSafeInteger(v);
 
 function createAdmin({ service, ledger, accounts, registry, views, onlineKeys }) {
-  let n = 0;
-  const bootTag = Date.now().toString(36);
-  const op = () => `${bootTag}.${++n}`;
   const bankOf = k => ledger.balance('bank:' + k, 'chips');
   const playOf = k => ledger.balance('play:' + k, 'play');
+  const cents = c => (c / 100).toFixed(2);
 
-  // The ledger ref of an admin edit. A client op id (one per confirmed click, made in the admin page) names the EVENT, so a resend of the same click
-  // (a socket retry, a double click, a reconnect) hits the same ref and writes nothing; no op id keeps the old per-process counter (every call writes).
+  // The ledger ref of an admin edit. The client op id (one per confirmed click, made in the admin page) names the EVENT, so a resend of the same click
+  // (a socket retry, a double click, a reconnect) hits the same ref and writes nothing. An edit WITHOUT an op id is refused: there is no default id, because a
+  // per-call id would make every resend of a crafted or retrying client pay again (Money 1008 K1-2).
   const OPID = /^[A-Za-z0-9._-]{1,64}$/;
-  const validOp = id => id == null || (typeof id === 'string' && OPID.test(id));
-  const refOf = (key, opId) => (opId == null ? `adj:${key}:${op()}` : `adj:${key}:c.${opId}`);
+  const checkOp = id => (id == null
+    ? { ok: false, code: 'op_required', message: 'Every money edit needs an op id (one per confirmed click). Nothing was changed.' }
+    : typeof id === 'string' && OPID.test(id) ? null : { ok: false, code: 'bad_op', message: 'Bad op id. Nothing was changed.' });
+  const refOf = (key, opId) => `adj:${key}:c.${opId}`;
 
-  // A signed delta on the bank (chips) or the Play $ wallet. insufficient is returned as { ok: false, code: 'insufficient' }.
-  // opId (optional): the same op id again is a dup: { ok: true, dup: true }, nothing written. The same op id with other numbers is refused (ref_conflict).
+  // A signed delta on the bank (chips) or the Cash wallet. insufficient is returned as { ok: false, code: 'insufficient' }.
+  // The same op id again is a dup: { ok: true, dup: true }, nothing written. The same op id with other numbers is refused (ref_conflict).
   function adjust(key, delta, cur, reason, opId) {
     if (!key || !accounts.get(key)) return { ok: false, code: 'unknown_player' };
     if (cur !== 'chips' && cur !== 'play') return { ok: false, code: 'bad_cur' };
     if (!isInt(delta) || delta === 0) return { ok: false, code: 'bad_amount' };
     if (typeof reason !== 'string' || !reason.trim()) return { ok: false, code: 'bad_reason' };
-    if (!validOp(opId)) return { ok: false, code: 'bad_op' };
+    const bad = checkOp(opId); if (bad) return bad;
     try { const r = service.adminAdjust(key, delta, cur, reason, refOf(key, opId)); return r && r.dup ? { ok: true, dup: true } : { ok: true }; }
     catch (e) { if (e && e.name === 'MoneyError') return { ok: false, code: e.code === 'insufficient' ? 'insufficient' : e.code }; throw e; }
   }
 
-  // "Set wallet to X": one wallet delta, never table money. The ledger reason carries the target, so the request is in the line: with an op id the ledger already
-  // holds, the same request (same target) is the first answer (ok, dup) whatever the balance is now; any other edit under that op id (another kind, another target) is ref_conflict.
   function setPlay(key, cents, opId) {
     if (!key || !accounts.get(key)) return { ok: false, code: 'unknown_player' };
     if (!isInt(cents) || cents < 0 || cents > MAX_PLAY) return { ok: false, code: 'range' };
-    if (!validOp(opId)) return { ok: false, code: 'bad_op' };
+    const bad = checkOp(opId); if (bad) return bad;
     const reason = `admin set play to ${cents}`;
-    if (opId != null && ledger.has(refOf(key, opId))) {
+    if (ledger.has(refOf(key, opId))) {
       const held = ledger.entriesOf(refOf(key, opId))[0];
       return held && held.cur === 'play' && held.reason === 'admin:' + reason ? { ok: true, dup: true } : { ok: false, code: 'ref_conflict' };
     }
