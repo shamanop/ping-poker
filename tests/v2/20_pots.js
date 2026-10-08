@@ -68,7 +68,9 @@ specs.S8a = { bug: [], title: 'S8a-kick-midhand-keeps-the-bet-in-the-pot', want:
 // P0 1000 (KK), P1 3000 (AA), P2 600 (QQ) all in; P1's top 2000 is never matched. Then P1 stands up (leave) or is kicked during the run-out.
 for (const how of ['leave', 'kick']) specs['S8' + (how === 'leave' ? 'b' : 'c')] = { bug: ['N1'], title: `S8${how === 'leave' ? 'b' : 'c'}-${how === 'leave' ? 'standup' : 'kick'}-of-biggest-contributor-gets-uncalled-layer-back`, want: 0,
   names: nm('S8' + (how === 'leave' ? 'b' : 'c'), 3), stacks: [1000, 3000, 600], deck: rigDeck([['Ks', 'Kd'], ['As', 'Ad'], ['Qs', 'Qd']], DRY),
-  strength: [3, 2, 1], folded: S => new Set([S.names[1]]), committed: S => ({ [S.names[0]]: 1000, [S.names[1]]: 3000, [S.names[2]]: 600 }),
+  // K3-1 (money hardening 1008): neither the stand-up nor the kick folds him any more (the kick used to hand the pot to the next best hand). His AA runs out
+  // and wins the main and side pot; the 2000 nobody called is his anyway.
+  strength: [2, 3, 1], folded: () => new Set(), committed: S => ({ [S.names[0]]: 1000, [S.names[1]]: 3000, [S.names[2]]: 600 }),
   script: async S => {
     await drive(S.bots, [P.allin, P.allin, P.call], () => S.bots[0].gs.players.filter(p => !p.folded).every(p => p.allIn || p.chips === 0) && S.bots[0].gs.street !== undefined && S.bots[0].gs.pot > 0, 15000);
     await sleep(300);

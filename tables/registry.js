@@ -138,8 +138,34 @@ function createRegistry(deps) {
       t.emptySince = clock.now();
     }
     ensurePermanent(registry.savedLegacyBlinds);
+    seedReentry();
     pushLobby();
     return tables.size;
+  }
+
+  // K3-5: what the SERVER cashed out of each seat (boot recovery, the disconnect grace) since the night began, replayed from the ledger,
+  // so a player it sent home can sit down again at a table with a buy-in cap. The re-entry is forgiven up to the amount returned and no
+  // further: the cap keeps counting every buy-in the player makes himself. Only tables with a finite cap need it.
+  function seedReentry() {
+    if (typeof ledger.entries !== 'function') return;
+    const want = new Map();
+    let from = Infinity;
+    for (const t of tables.values()) {
+      if (t.permanent || t.state === 'ended' || !t.finiteCap()) continue;
+      want.set(t.id, t); from = Math.min(from, t.nightFromId || 0);
+    }
+    if (!want.size) return;
+    const isSeat = a => typeof a === 'string' && a.startsWith('seat:');
+    for (const e of ledger.entries(x => isSeat(x.to) || isSeat(x.from), from)) {
+      const rs = typeof e.reason === 'string' ? e.reason : '', ref = typeof e.ref === 'string' ? e.ref : '';
+      if (isSeat(e.to) && rs.startsWith('buyin:')) {
+        const [, tid, key] = e.to.split(':'), t = want.get(tid);
+        if (t && e.id > (t.nightFromId || 0)) t.noteBuyIn(key, e.amount);
+      } else if (isSeat(e.from) && (rs.startsWith('boot:') || ref.startsWith('grace:'))) {
+        const [, tid, key] = e.from.split(':'), t = want.get(tid);
+        if (t && e.id > (t.nightFromId || 0)) t.noteServerReturn(key, e.amount);
+      }
+    }
   }
 
   // ---- queries --------------------------------------------------------------------------------------------------
@@ -216,7 +242,7 @@ function createRegistry(deps) {
   function startSweep() { if (sweepHandle) return; sweepHandle = setInterval(() => sweep(), Math.min(60000, EMPTY_MS)); if (sweepHandle.unref) sweepHandle.unref(); }
   function stop() { if (sweepHandle) { clearInterval(sweepHandle); sweepHandle = null; } for (const t of tables.values()) { t.deadlines.clear(); t.arm(); } }
   const voidAll = reason => { let n = 0; for (const t of tables.values()) if (t.void(reason)) n++; return n; };
-  const pauseAll = () => { for (const t of tables.values()) if (!t.paused && t.phase !== 'ended') t.pause(); };
+  const pauseAll = () => { for (const t of tables.values()) if (!t.paused && t.phase !== 'ended') t.pause(true); };
 
   const registry = {
     tables, create, get, load, save, flush, ensurePermanent, seatOf, card, publicTable, listFor, mineFor, mine, canHost, isParticipant,

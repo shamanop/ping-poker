@@ -118,8 +118,8 @@ t('two consecutive timeouts sit a connected seat out', () => {
   e.clock.advance(5000 + 7000); e.table.hand.toAct != null && e.clock.advance(30000);
   eq(e.table.seatOfKey('ann').timeouts >= 1, true);
 });
-t('M3: pause freezes the turn clock and a preselect; resume gives back the remainder', () => {
-  const e = three(); e.table.startHand(); e.clock.advance(10000); e.table.pause(); e.clock.advance(120000);
+t('M3: a forced pause (safety wrapper) freezes the turn clock and a preselect; resume gives back the remainder (a host pause during a hand is pending: K3-4, tests/money-1008-k3-4-pause.js)', () => {
+  const e = three(); e.table.startHand(); e.clock.advance(10000); e.table.pause(true); e.clock.advance(120000);
   eq(e.table.hand.seats[0].folded, false); e.table.resume(); e.clock.advance(19999); eq(e.table.hand.seats[0].folded, false); e.clock.advance(1); eq(e.table.hand.seats[0].folded, true);
 });
 t('preselect: only for a seat not on turn, fires PRE_MS after its turn arrives, dies when the bet changes', () => {
@@ -144,8 +144,11 @@ t('N1: kick the top bettor mid-hand: cash-out = balance - committed, E1 uncalled
   e.sit('ann', 2000); e.sit('bob', 2000); const T = e.table; T.startHand();
   eq(T.hand.toAct, 0); T.act('ann', { type: 'call' }); T.act('bob', { type: 'raise', to: 500 });
   T.kick('ann', 'bob'); eq(e.events.find(x => x[0] === 'left' && x[2] === 'bob')[1].cashedOut, 1500, 'stack out, committed stays');
+  // K3-1: the kick does not fold him. His raise stands, ann answers it; he is swept when the hand has settled.
+  eq(T.phase, 'betting'); eq(T.seatOfKey('bob').leaving, true); eq(T.hand.seats[1].folded, false); eq(drift(e), []);
+  T.act('ann', { type: 'fold' });
   eq(T.phase, 'between'); eq(T.seatOfKey('bob'), null, 'swept after the batch');
-  eq(bank(e, 'bob'), 9950, 'uncalled 450 back, matched 50 lost'); eq(T.seatOfKey('ann').stack, 2050); eq(drift(e), []); books(e);
+  eq(bank(e, 'bob'), 10050, 'uncalled 450 back, matched 50 won'); eq(T.seatOfKey('ann').stack, 1950); eq(drift(e), []); books(e);
 });
 t('a seat that left mid-hand reports stack 0 to the audit (its stack is already cashed out): no drift, no double count (fuzz finding)', () => {
   const e = three(); const T = e.table; T.startHand(); T.act('ann', { type: 'raise', to: 200 });
