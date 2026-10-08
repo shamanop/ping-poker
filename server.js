@@ -122,13 +122,15 @@ function start(env = process.env) {
     const m = coldcallMod(); if (!m) return res.status(404).json({ error: 'no slot' });
     res.json(m.liveInfo());
   });
-  app.post('/api/admin/coldcall-config', express.json({ limit: '64kb' }), (req, res) => {
+  app.post('/api/admin/coldcall-config', express.json({ limit: '64kb' }), async (req, res) => {
     if (!benderAdminOk(req)) return res.status(403).json({ error: 'forbidden' });
     const m = coldcallMod(); if (!m) return res.status(404).json({ error: 'no slot' });
     const b = req.body, reset = !!b && b.reset === true;               // only the boolean true resets ("false", 1, "yes" are not a reset and do not drop the overrides sent with them)
     if (!b || typeof b !== 'object' || Array.isArray(b) || (!reset && (!b.overrides || typeof b.overrides !== 'object' || Array.isArray(b.overrides)))) return res.status(400).json({ ok: false, error: 'send {overrides: {...}} or {reset: true}' });
     try {
-      const info = m.setLiveConfig(reset ? { overrides: {}, note: b.note || 'reset to defaults' } : { overrides: b.overrides, rtpLabel: b.rtpLabel, note: b.note });
+      const L = require('./games/coldcall-livecfg.js');                 // measured first (async, in slices), then written and swapped in; the shipped label comes from the game module
+      await L.setLiveConfigChecked(reset ? { overrides: {}, note: b.note || 'reset to defaults', who: adminWho(req) } : { overrides: b.overrides, rtpLabel: b.rtpLabel, note: b.note, who: adminWho(req) });
+      const info = m.liveInfo();
       io.emit('g:coldcall:cfg', m.cfgEvent());
       console.log('[coldcall] live config updated:', info.note || '(no note)');
       res.json({ ok: true, ...info });
