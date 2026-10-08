@@ -110,8 +110,6 @@ const proto = {
       this.setDeadline('phase', 'street', this.K.STREET_MS, { hand: true });
       return;
     }
-    const lev = this.playLeaverTurn();                      // a seat that left: its turn is played at once, no clock
-    if (lev) { this.afterEngine(lev); return; }
     this.setPhase('betting');
     this.turnStartAt = this.now();
     this.armTurn();
@@ -202,11 +200,11 @@ const proto = {
     this.afterEngine(engine.dealNext(h));
   },
 
-  // ---- leave / kick while a hand is live (N1, K3-1) ------------------------------------------------------------
+  // ---- leave while a hand is live (N1, K3-1, K3-1b) ----------------------------------------------------------
   // Cash out only what is not committed to this hand now; the committed chips stay in the seat account until the batch.
-  // A kick never changes the result of a live hand: the seat stays in it like a seat that sat out (checks when checking is free, folds
-  // only when it faces a real bet) and is removed when the hand is settled. A seat that is all-in has no decision at all, so its hand
-  // runs out and it is paid what it wins. Only a player who walks out of his own accord with a decision still ahead of him folds.
+  // A KICK never gets here for a seat that still has a hand to play (Table.kick marks it kickPending instead), only for a folded one.
+  // A player who walks out of his own accord with a decision still ahead of him folds (his own choice); all-in or in the run-out he
+  // has no decision, so he stays in the hand and is paid what he wins.
   leaveInHand(seat, kind) {
     const amount = this.money.leaveAmount(this, seat.key, this.committedOf(seat));
     const r = this.money.cashOut(this, seat.key, amount, kind);
@@ -215,25 +213,29 @@ const proto = {
     const hs = this.hand.seats[seat.seat];
     // A decision is still ahead of him only while betting is open and he is not all-in (the run-out has none, and an uncalled layer handed
     // back to an all-in seat clears its allIn flag without giving it a decision).
-    const decides = this.hand.phase === 'betting' && !hs.allIn;
-    if (hs && !hs.folded && kind !== 'kick' && decides) {
-      seat.folded = true;                                   // his own walk-out with chips still to play: the fold he chose
+    const decides = !!hs && !hs.folded && !hs.allIn && this.hand.phase === 'betting';
+    if (decides) {
+      seat.folded = true;
       this.afterEngine(engine.foldOut(this.hand, seat.seat));
-    } else if (hs && !hs.folded && this.hand.phase === 'betting' && this.hand.toAct === seat.seat) {
-      this.afterEngine([]);                                  // afterEngine plays the check / fold for a leaving seat on turn
     } else { this.out.event(this, 'room', {}); this.out.state(this); }
     return { cashedOut: amount, left: false, intent: r.intent };
   },
 
-  // A seat that left (or was kicked) with a decision still ahead of it checks when that is free and folds only against a real bet.
-  playLeaverTurn() {
-    const h = this.hand; if (!h || h.phase !== 'betting' || h.toAct == null) return null;
-    const seat = this.seats.get(h.toAct);
-    if (!seat || !seat.leaving) return null;
-    const la = engine.legalActions(h, h.toAct);
-    if (!la) return null;
-    seat.pre = null;
-    return engine.apply(h, h.toAct, { type: la.canCheck ? 'check' : 'fold' });
+  // The hand is over (settled or voided): a seat whose kick was held back is paid everything it has in the seat account (exactly what it
+  // would have been paid without the kick), removed, and the kick events go out.
+  finishKick(s) {
+    if (s.leaving) {                                        // he walked out himself meanwhile: leaveInHand already paid the stack; the batch sweep pays the rest
+      this.money.sweep(this, s.key); this.removeSeat(s);
+      this.out.event(this, 'table_event', { kind: 'kicked', key: s.key, display: this.displayOf(s.key) });
+      return;
+    }
+    const amount = this.money.seatBalance(this, s.key);
+    const r = this.money.cashOut(this, s.key, amount, 'kick');
+    this.removeSeat(s);
+    this.out.event(this, 'left', { key: s.key, cashedOut: r.noop ? 0 : amount, reason: 'kicked' }, s.key);
+    this.out.event(this, 'table_event', { kind: 'kicked', key: s.key, display: this.displayOf(s.key) });
+    this.out.event(this, 'room', {});
+    this.out.event(this, 'money', { keys: [s.key] });
   },
 
   // ---- settle: the commit point -------------------------------------------------------------------------------
@@ -263,7 +265,8 @@ const proto = {
     this.lastResult = result;
     for (const s of Object.values(bySeat)) {
       s.pre = null;
-      if (s.leaving) best('sweep:' + s.key, () => { this.money.sweep(this, s.key); this.removeSeat(s); this.out.event(this, 'money', { keys: [s.key] }); });
+      if (s.kickPending) best('kick:' + s.key, () => this.finishKick(s));
+      else if (s.leaving) best('sweep:' + s.key, () => { this.money.sweep(this, s.key); this.removeSeat(s); this.out.event(this, 'money', { keys: [s.key] }); });
       else if (s.stack === 0) busted.push(s);
     }
     if (result) { this.history.unshift(result.history); if (this.history.length > 10) this.history.length = 10; }
@@ -312,6 +315,7 @@ const proto = {
     this.hand = null;
     this.clearHandDeadlines();
     for (const s of [...this.players()]) {
+      if (s.kickPending) { try { this.finishKick(s); } catch (e) { console.error('[v2] void kick failed', s.key, e && e.message); } continue; }
       if (s.leaving) { try { this.money.sweep(this, s.key); } catch (e) { console.error('[v2] void sweep failed', s.key, e && e.message); } this.removeSeat(s); continue; }
       if (s.dealt && this.handStartStacks && this.handStartStacks[s.seat] != null) s.stack = this.handStartStacks[s.seat];
       s.dealt = false; s.folded = false; s.pre = null; s.lastAction = null; live.add(s.seat);

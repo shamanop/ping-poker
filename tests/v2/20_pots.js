@@ -57,10 +57,11 @@ specs.S5b = { bug: ['H1'], title: 'S5b-allin-disconnect-covering-stack-has-best-
 // P0 raises 400, P1 and P2 call; flop: P1 bets 300, then the host removes P2 (kick) while it is P2's turn. P0 calls and checks down with AA.
 specs.S8a = { bug: [], title: 'S8a-kick-midhand-keeps-the-bet-in-the-pot', want: 0,
   names: nm('S8a', 3), stacks: [1000, 1000, 1000], deck: rigDeck([['As', 'Ad'], ['Ks', 'Kd'], ['7c', '2d']], DRY),
-  strength: [3, 2, 1], folded: S => new Set([S.names[2]]), committed: S => ({ [S.names[0]]: 700, [S.names[1]]: 700, [S.names[2]]: 400 }),
+  strength: [3, 2, 1], // K3-1b: the kick changes nothing in the live hand: P2 keeps his turn, calls the 300, loses at the showdown; the pot is the same 2,100.
+  folded: () => new Set(), committed: S => ({ [S.names[0]]: 700, [S.names[1]]: 700, [S.names[2]]: 700 }),
   script: async S => {
     const [h, p1, p2] = S.bots;
-    const pol = [P.street({ preflop: P.raiseTo(400), default: P.call }), P.street({ preflop: P.call, flop: P.raiseTo(300), default: P.call }), P.street({ preflop: P.call, default: () => null })];
+    const pol = [P.street({ preflop: P.raiseTo(400), default: P.call }), P.street({ preflop: P.call, flop: P.raiseTo(300), default: P.call }), P.street({ preflop: P.call, default: P.call })];
     await drive(S.bots, pol, () => p2.myTurn() && p2.gs.street === 'flop' && p2.gs.currentBet === 300, 15000);
     h.emit('table_kick', { tableId: S.id, key: p2.key }); await sleep(300);
     await drive(S.bots, pol, () => h.showdowns.length > S.sd0[0], 15000);

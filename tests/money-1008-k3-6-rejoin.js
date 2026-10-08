@@ -20,7 +20,7 @@ const joined = (W, key) => W.events.filter(e => e[1] === 'joined' && e[2] && e[2
 
 for (const mode of ['play', 'chips']) {
   const tag = mode === 'play' ? 'Cash' : 'Chips';
-  for (const how of ['leave', 'kick']) {
+  for (const how of ['leave']) {          // K3-1b: a kick no longer makes a seat 'leaving' during a live hand (see the next test)
     t(`${tag}: after a ${how} mid-hand, sitting again is refused, shows no stack, takes no money, and the seat still goes at the end of the hand`, () => {
       const { W, T } = table(mode);
       if (how === 'leave') quiet(() => T.leave('c', 'leave')); else quiet(() => T.kick('a', 'c', false));
@@ -44,6 +44,19 @@ for (const mode of ['play', 'chips']) {
       eq(W.total(W.cur), W.total(W.cur));
     });
   }
+
+  t(`${tag}: K3-1b after a kick mid-hand the seat is still a live seat (kick only pending): sitting again is an honest reconnect with his real stack, no money moves, and the seat still goes at the end of the hand`, () => {
+    const { W, T } = table(mode);
+    quiet(() => T.kick('a', 'c', false));
+    const wallet = W.ledger.balance((mode === 'play' ? 'play:' : 'bank:') + 'c', W.cur), seat = W.ledger.balance('seat:' + T.id + ':c', W.cur);
+    W.events.length = 0;
+    T.sit('c', { amount: W.stack, socketId: 's2' });
+    const j = joined(W, 'c'); eq(j.length, 1); eq(j[0][2].reconnect, true); eq(j[0][2].stack, seat, 'the shown stack is the ledger stack');
+    eq(W.ledger.balance((mode === 'play' ? 'play:' : 'bank:') + 'c', W.cur), wallet, 'wallet untouched');
+    eq(W.ledger.balance('seat:' + T.id + ':c', W.cur), seat, 'seat account untouched');
+    let g = 0; while (T.handLive() && g++ < 20) { const s = T.seats.get(T.hand.toAct); T.act(s.key, { type: 'fold' }); }
+    eq(T.seatOfKey('c'), null, 'the kick is carried out after the hand'); eq(W.ledger.balance('seat:' + T.id + ':c', W.cur), 0);
+  });
 
   t(`${tag}: a normal reconnect (seat not leaving) is unchanged: joined, same stack, no buy-in`, () => {
     const { W, T } = table(mode);
