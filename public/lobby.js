@@ -903,6 +903,7 @@ function bind() {
   });
   s.on('ok', ({ what } = {}) => { if (what === 'pin') { toast('PIN changed'); closeModal(); } });
   s.on('error', (e0 = {}) => {
+    if (e0 && e0.game === 'campaign') return;               // Campaign Trail words and shows its own errors in its own window: no second toast over the dock
     const { code } = e0, message = window.PingUI ? PingUI.errorText(e0, modeFor(S.view === 'create' && S.form ? S.form.unit : (S.cur && S.cur.unit) || 'chips')) : e0.message;
     if (code === 'taken_over') { // this seat was taken over by another tab or device: leave the table here
       if (window.PingGame && PingGame.isIn && PingGame.isIn()) PingGame.leave();
