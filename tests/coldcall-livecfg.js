@@ -504,7 +504,7 @@ const BIG_SWAP = {
     resetLive();
     const dir = fs.mkdtempSync(path.join(tmp, 'api')); fs.writeFileSync(path.join(dir, 'bank.json'), '{}'); fs.writeFileSync(path.join(dir, 'ledger.json'), '[]');
     delete process.env.COLDCALL_PULL_FILE;
-    Object.assign(process.env, { BANK_FILE: path.join(dir, 'bank.json'), LEDGER_FILE: path.join(dir, 'ledger.json'), PORT: '0' });
+    Object.assign(process.env, { BANK_FILE: path.join(dir, 'bank.json'), LEDGER_FILE: path.join(dir, 'ledger.json'), PORT: '0', ADMIN_WRONG_TOKEN_MAX: '1000' });   // this test sends many wrong tokens on purpose; the limiter has its own test
     const logOrig0 = console.log; console.log = () => {};
     const srv = require('../server.js').start(process.env);                                    // v2: a real boot (ledger, accounts, registry, games recover) listening on an ephemeral port
     console.log = logOrig0;
