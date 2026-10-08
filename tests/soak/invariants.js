@@ -23,7 +23,7 @@ function kindOf(a) {
 const seatParts = a => { const p = a.split(':'); return { table: p[1], key: p[2] }; };
 
 class Checker {
-  constructor(file, opts = {}) {
+  constructor(file) {
     this.file = file;
     this.buf = Buffer.alloc(0);                 // complete lines read so far
     this.tornBytes = 0;
@@ -47,8 +47,6 @@ class Checker {
     this.ablate = new Set((process.env.SOAK_ABLATE || '').split(',').filter(Boolean));
     this.cashBorn = new Set();                  // players whose play: wallet was credited by an admin set or by a win (a game house / the pot): the only two ways Cash may reach a wallet
     this.paidPlay = new Set();                  // players who paid a Cold Call stake in Cash at least once (a free Callback in Cash needs one)
-    this.knownMigration = opts.knownMigration || null;      // { ref, amount }: ONE line (the seed account's first-boot migration mint) the soak lets pass, see README "Findings"
-    this.knownMigrationHits = 0;
   }
 
   // ---------- reading ----------
@@ -171,8 +169,6 @@ class Checker {
     }
     for (const it of items) {
       if (it.cur !== 'play') continue;
-      const known = this.knownMigration && ref === this.knownMigration.ref && it.from === 'mint:signup' && it.amount === this.knownMigration.amount;
-      if (known) { this.knownMigrationHits++; this.cashBorn.add(it.to.slice(5)); continue; }
       for (const a of [it.from, it.to]) if (kindOf(a) === 'source' && !CASH_SOURCES.has(a) && !a.startsWith('fx:')) bad('I11', `Cash ${it.from === a ? 'created' : 'destroyed'} through ${a} (${it.amount})`, { account: a, cur: 'play' }, 'only admin:adjust or a game house touch Cash', a);
       if (it.to.startsWith('play:')) {
         const key = it.to.slice(5);
