@@ -15,7 +15,7 @@ async function scenario(sig, kind) {
     const before = { rex: bal(pre, 'rex'), sue: bal(pre, 'sue'), total: moneyTotal(pre).total };
     let id = 'POKERPING';
     if (kind !== 'legacy') {
-      const c = await a.req('table_create', { settings: { name: 'Night', mode: kind, buyIn: { min: 100, max: 50000, default: 2000 }, blinds: { sb: 25, bb: 50 }, actionTimerSec: 0 } }, 'table_created');
+      const c = await a.req('table_create', { settings: { name: 'Night', mode: kind, buyIn: { min: 100, max: 50000, default: 2000 }, blinds: { sb: 25, bb: 50 }, actionTimerSec: kind === 'play' ? 60 : 0 } }, 'table_created');
       if (c.__err) throw new Error('create ' + c.__err);
       id = c.table.id;
     }

@@ -72,7 +72,7 @@ function createViews({ registry, accounts, presLedger, ledger, service, wallet }
       chips, roundBet: live && hs ? (hs.bet || 0) : 0, folded: !!(inHand && (hs.folded || s.folded)), allIn: !!(live && hs && !hs.folded && (hs.allIn || t.phase === 'runout')),   // run-out: nobody can act, so every live seat reads as all-in (the uncalled layer already sits back in chips)
       sittingOut: !!sittingOut, sitOutRequest: !!s.sitOutNext, connected: !!s.connected, isBot: false,
       isDealer: i === dealerIdx, isActive: curIdx === i, cardCount: inHand && !(hs.folded) ? 2 : (inHand ? 2 : 0), chipsBought: 0, lastAction: s.lastAction || null,
-      seatNo: s.seat, leaving: !!s.leaving,
+      seatNo: s.seat, leaving: !!s.leaving, kickPending: !!s.kickPending, waitingForBB: !!s.missedBlind,
       blind: live && h && s.dealt ? (s.seat === h.sbSeat ? 'SB' : s.seat === h.bbSeat ? 'BB' : null) : null,   // the seats that posted the blinds (engine sbSeat/bbSeat); the client prints it as is
     };
   }
@@ -91,7 +91,7 @@ function createViews({ registry, accounts, presLedger, ledger, service, wallet }
       community: h ? h.board.slice() : [],
       dealerIdx, currentPlayerIdx: curIdx == null || curIdx < 0 ? null : curIdx,
       handNum: Math.max(0, t.handNo - (t.nightHand0 || 0)), status: statusOf(t),
-      ...modeFields(t), paused: !!t.paused, endingNight: !!t.endNightPending, startChips: t.buyIn.default, hostName: hostName(t),
+      ...modeFields(t), paused: !!t.paused, pausePending: !!t.pausePending, endingNight: !!t.endNightPending, startChips: t.buyIn.default, hostName: hostName(t),
       sb: b.sb, bb: b.bb, blindLevel: lv.level, blindsEnabled: !!lv.enabled, blindNextMs: lv.enabled ? lv.nextMs : null, blindMaxLevel: lv.maxLevel,
       turnRemainingMs: turnRemainingMs(t),
       players: players.map((s, i) => seatRow(t, s, i, curIdx == null ? -1 : curIdx, dealerIdx)),

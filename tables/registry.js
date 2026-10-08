@@ -6,7 +6,7 @@
 
 const fs = require('fs');
 const { Table } = require('./table');
-const { validateSettings, defaultsFor } = require('./settings');
+const { validateSettings, defaultsFor, CASH_MIN_TIMER } = require('./settings');
 const { TableError } = require('./errors');
 
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';         // no I, O, 0, 1
@@ -130,7 +130,8 @@ function createRegistry(deps) {
     for (const raw of (j && Array.isArray(j.tables) ? j.tables : [])) {
       if (!raw || !raw.id || tables.has(raw.id) || raw.id === PERMANENT_ID || raw.mode === 'friends') continue;
       if (raw.state === 'ended' && (raw.createdAt || 0) <= cutoff) continue;
-      const v = validateSettings({ ...raw, seats: raw.seats });
+      // K3-9: a Cash table stored before the rule (timer 0 = no clock) is read as 30; Chips tables keep 0.
+      const v = validateSettings({ ...raw, seats: raw.seats, ...(raw.mode === 'play' && !(raw.actionTimerSec >= CASH_MIN_TIMER) ? { actionTimerSec: 30 } : {}) });
       if (!v.ok && raw.state !== 'ended') { console.error('[v2] tables.json: dropping invalid table', raw.id, v.field); continue; }
       const rec = { ...raw, ...(v.ok ? v.value : {}), id: raw.id, hostKey: raw.hostKey, permanent: false, state: raw.state === 'paused' ? 'paused' : raw.state === 'ended' ? 'ended' : 'open' };
       if (!Number.isInteger(rec.seats)) rec.seats = 8;

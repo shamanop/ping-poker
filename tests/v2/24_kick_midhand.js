@@ -7,14 +7,15 @@ const T = suite(__filename);
 const DRY = ['3c', '8d', '9h', '4s', '5h'];
 (async () => {
   const srv = await startServer(0, { handDelayMs: 1200 });
-  await T.check('kick-midhand-the-kicked-best-hand-does-not-take-the-pot', [], async () => {
-    // P0 KK, P1 72, P2 AA. Pre: P0 raises 400, P1 and P2 call. Flop: P1 bets 300, the host kicks P2 on his turn. P0 calls, checks down: KK wins.
+  await T.check('kick-midhand-the-kicked-seat-on-turn-facing-a-bet-keeps-his-turn-and-his-aces-win', ['N1', 'K3-1b'], async () => {
+    // P0 KK, P1 72, P2 AA. Pre: P0 raises 400, P1 and P2 call. Flop: P1 bets 300, the host kicks P2 on his turn, facing that bet. A kick never
+    // changes a live hand: P2 keeps his seat and his turn, calls, and his aces win the 2,100 pot; only then is he cashed out and removed.
     const spec = {
-      names: ['Kia', 'Kib', 'Kic'], stacks: [1000, 1000, 1000], want: 0, deck: rigDeck([['Ks', 'Kd'], ['7c', '2d'], ['As', 'Ad']], DRY),
-      strength: [2, 1, 3], folded: S => new Set([S.names[2]]), committed: S => ({ [S.names[0]]: 700, [S.names[1]]: 700, [S.names[2]]: 400 }),
+      names: ['Kia', 'Kib', 'Kic'], stacks: [1000, 1000, 1000], want: 2, deck: rigDeck([['Ks', 'Kd'], ['7c', '2d'], ['As', 'Ad']], DRY),
+      strength: [2, 1, 3], folded: () => new Set(), committed: S => ({ [S.names[0]]: 700, [S.names[1]]: 700, [S.names[2]]: 700 }),
       script: async S => {
         const [h, p1, p2] = S.bots;
-        const pol = [P.street({ preflop: P.raiseTo(400), default: P.call }), P.street({ preflop: P.call, flop: P.raiseTo(300), default: P.call }), P.street({ preflop: P.call, default: () => null })];
+        const pol = [P.street({ preflop: P.raiseTo(400), default: P.call }), P.street({ preflop: P.call, flop: P.raiseTo(300), default: P.call }), P.street({ preflop: P.call, default: P.call })];
         await drive(S.bots, pol, () => p2.myTurn() && p2.gs.street === 'flop' && p2.gs.currentBet === 300, 15000);
         h.emit('table_kick', { tableId: S.id, key: p2.key }); await sleep(300);
         await drive(S.bots, pol, () => h.showdowns.length > S.sd0[0], 15000);
@@ -23,11 +24,10 @@ const DRY = ['3c', '8d', '9h', '4s', '5h'];
     const r = await runPot(srv, spec);
     expect(r.res.sd, 'no showdown_result');
     const d = diffTotals(r.res.totals, r.exp.totals);
-    expect(!d, d + ' (the kicked AA hand must not win; his 400 stays in the pot)');
+    expect(!d, d + ' (the kicked AA hand keeps its turn, calls and wins; he is removed after the hand)');
   });
-  // K3-1 (money hardening 1008): a kick never changes the result of a live hand. The old rule folded the kicked seat at once (and the host could
-  // take any pot by kicking an all-in caller); now the kicked seat stays in the hand like a seat that sat out: it checks when that is free and folds
-  // only against a real bet, and it is removed when the hand has settled. Here the kicked P1 has raised and the host is still to answer.
+  // K3-1 / K3-1b (money hardening 1008): a kick never changes a live hand. The kicked seat is only marked; it keeps its seat, its stack, its
+  // turn and its clock, and is cashed out and removed when the hand has settled. Here the kicked P1 has raised and the host is still to answer.
   await T.check('kick-midhand-the-kicked-raise-stays-live-the-host-calls-and-the-aces-win', ['N1', 'K3-1'], async () => {
     // heads-up: the host limps, P1 raises to 500, the host kicks P1 before answering, then calls. P1's raise stands; AA beats 72 at the showdown.
     const spec = {
@@ -38,7 +38,7 @@ const DRY = ['3c', '8d', '9h', '4s', '5h'];
         const pol = [(b, i) => (i.currentBet <= i.bb ? [i.toCall ? 'call' : 'check'] : null), P.raiseTo(500)];
         await drive(S.bots, pol, () => h.myTurn() && h.gs.currentBet === 500, 15000);
         h.emit('table_kick', { tableId: S.id, key: p1.key }); await sleep(300);
-        await drive(S.bots, [P.street({ default: P.call }), () => null], () => h.showdowns.length > S.sd0[0], 15000);
+        await drive(S.bots, [P.street({ default: P.call }), P.street({ default: P.call })], () => h.showdowns.length > S.sd0[0], 15000);
       },
     };
     const r = await runPot(srv, spec);

@@ -6,6 +6,7 @@
 const MAX_SEATS = 8;                  // seats 9 used to be accepted and silently clamped (M7): now rejected
 const MIN_SEATS = 2;
 const TIMERS = [0, 15, 30, 45, 60];
+const CASH_MIN_TIMER = 15;           // K3-9: Cash is real money; a table of it always has a turn clock (Chips may run without: 0)
 const EVERY_MIN = [10, 15, 20, 30];
 const MULTS = { standard: [1, 1.5, 2.5, 5, 7.5, 10, 15, 20], turbo: [1, 2, 4, 8, 16, 32, 64, 128] };
 const MAX_UNITS = 100000000;
@@ -52,6 +53,7 @@ function validateSettings(raw) {
   if (!isInt(seats) || seats < MIN_SEATS || seats > MAX_SEATS) return range('seats', 'Seat count is not supported', { min: MIN_SEATS, max: MAX_SEATS, have: seats });
   const timer = raw.actionTimerSec === undefined ? 30 : raw.actionTimerSec;
   if (!TIMERS.includes(timer)) return range('actionTimerSec', 'Action timer is not one of the allowed values', { have: timer });
+  if (mode === 'play' && timer < CASH_MIN_TIMER) return range('actionTimerSec', 'A Cash table needs a turn clock', { min: CASH_MIN_TIMER, have: timer });
   const bool = (v, def) => (v === undefined ? def : v);
   const rebuys = bool(raw.rebuys, true), isPrivate = bool(raw.isPrivate, true), autoStart = bool(raw.autoStart, true);
   if (typeof rebuys !== 'boolean' || typeof isPrivate !== 'boolean' || typeof autoStart !== 'boolean') return invalid('options', 'Bad option');
@@ -60,7 +62,7 @@ function validateSettings(raw) {
   const bin = raw.blindIncrease === undefined ? {} : raw.blindIncrease;
   if (!bin || typeof bin !== 'object') return invalid('blindIncrease', 'Bad blind increase');
   const blindIncrease = { enabled: !!bin.enabled, everyMin: bin.everyMin === undefined ? 15 : bin.everyMin, schedule: bin.schedule === undefined ? 'standard' : bin.schedule };
-  if (!EVERY_MIN.includes(blindIncrease.everyMin) || !MULTS[blindIncrease.schedule]) return invalid('blindIncrease', 'Bad blind increase');
+  if (!EVERY_MIN.includes(blindIncrease.everyMin) || typeof blindIncrease.schedule !== 'string' || !Object.prototype.hasOwnProperty.call(MULTS, blindIncrease.schedule)) return invalid('blindIncrease', 'Bad blind increase');
   const look = raw.look === undefined ? 'basement' : raw.look;
   if (typeof look !== 'string' || !LOOKS.includes(look)) return invalid('look', 'Unknown table look');
   return { ok: true, value: { name, mode, unit, buyIn, blinds, blindIncrease, seats, actionTimerSec: timer, rebuys, rebuyLimit, isPrivate, autoStart, look } };
@@ -94,4 +96,4 @@ function levelAt(s, blindStartAt, now) {
   return { level, maxLevel, sb: sched[level].sb, bb: sched[level].bb, enabled: true, nextMs };
 }
 
-module.exports = { validateSettings, genSchedule, defaultsFor, levelAt, MAX_SEATS, MIN_SEATS, LOOKS, TIMERS, MULTS, MAX_UNITS };
+module.exports = { CASH_MIN_TIMER, validateSettings, genSchedule, defaultsFor, levelAt, MAX_SEATS, MIN_SEATS, LOOKS, TIMERS, MULTS, MAX_UNITS };

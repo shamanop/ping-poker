@@ -8,7 +8,8 @@ const { t, done } = suite(__filename);
 function table(mode, over, W0) {
   const W = W0 || world({ keys: ['a', 'b'], cash: { a: 1000000, b: 1000000 } });
   const cash = mode === 'play';
-  const T = W.registry.create('a', { name: 'Test table', mode, buyIn: cash ? { min: 500, max: 50000, default: 20000 } : { min: 100, max: 50000, default: 2000 }, blinds: cash ? { sb: 50, bb: 100 } : { sb: 25, bb: 50 }, seats: 2, autoStart: false, actionTimerSec: 0, rebuys: false, ...(over || {}) });
+  const T = W.registry.create('a', { name: 'Test table', mode, buyIn: cash ? { min: 500, max: 50000, default: 20000 } : { min: 100, max: 50000, default: 2000 }, blinds: cash ? { sb: 50, bb: 100 } : { sb: 25, bb: 50 }, seats: 2, autoStart: false, actionTimerSec: 60, rebuys: false, ...(over || {}) });
+  T.actionTimerSec = (over && over.actionTimerSec) || 0;             // K3-9: the validator refuses timer 0 for Cash; these tests drive every action by hand, so the clock is switched off after create
   W.cur = cash ? 'play' : 'chips'; W.stack = cash ? 20000 : 2000;
   if (!cash) for (const k of ['a', 'b']) W.service.ensureAccount(k);
   return { W, T };
