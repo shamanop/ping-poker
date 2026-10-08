@@ -259,7 +259,10 @@
     });
     s.on('admin_result', r => {
       if (!r) return;
-      status(r.message || (r.ok ? 'Done' : 'Failed'), r.ok ? 'ok' : 'err');
+      // set Cash answers with where the Cash sits (K1-3): plain text after the message, only the numbers the server sent
+      const cm = () => Money.modeFor(Money.pref, 'cents');
+      const parts = [['wallet', 'wallet'], ['atTable', 'at tables'], ['inRound', 'in rounds'], ['total', 'total']].filter(f => Number.isFinite(r[f[0]])).map(f => f[1] + ' ' + Money.format(r[f[0]], cm()));
+      status((r.message || (r.ok ? 'Done' : 'Failed')) + (r.op === 'set_play' && parts.length ? ' (' + parts.join(', ') + ')' : ''), r.ok ? 'ok' : 'err');
     });
     s.on('error', e => { if (veil && veil.classList.contains('on') && e && e.message) { status(e.message, 'err'); pendingBal = null; pendingBlinds = null; } });
     s.on('auth_out', dropFab);

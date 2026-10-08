@@ -2,7 +2,7 @@
 // The harness' own book of what every player must hold. Numbers only enter from (a) what the harness itself did and
 // (b) what the server told a client (spin results, showdown nets, bonus/achievement events, wallet deltas). It never reads the ledger,
 // except in the two "unacked" cases after a kill (ingest of a ledger line the client could not have seen), see soak.js reconcile().
-const START = { chips: 10000, play: 1000000 };       // signup mint per account (V2-DESIGN "money/")
+const START = { chips: 10000, play: 0 };             // signup mint per account (V2-DESIGN "money/"; bb298d2: a new account starts with 0 Cash, only the admin sets it)
 const CURS = ['chips', 'play'];
 
 class Model {
@@ -17,10 +17,10 @@ class Model {
     this.count = { spins: 0, hands: 0, handsUnacked: 0, handsVoided: 0, bonus: 0, achv: 0, topup: 0, adminAdjust: 0, adminRefused: 0, signups: 0, buyIns: 0, cashOuts: 0 };
   }
   hasPlayer(key) { return this.players.has(key); }
-  addPlayer(key) {
+  addPlayer(key, startPlay = START.play) {
     if (this.players.has(key)) return false;
-    this.players.set(key, { key, held: { chips: START.chips, play: START.play } });
-    this.src.signup.chips += START.chips; this.src.signup.play += START.play; this.count.signups++;
+    this.players.set(key, { key, held: { chips: START.chips, play: startPlay } });
+    this.src.signup.chips += START.chips; this.src.signup.play += startPlay; this.count.signups++;
     return true;
   }
   held(key, cur) { const p = this.players.get(key); return p ? p.held[cur] : 0; }

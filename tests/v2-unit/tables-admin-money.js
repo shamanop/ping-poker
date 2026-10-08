@@ -68,12 +68,12 @@ t('A4: the same op id with other numbers is refused, nothing written', () => {
   eq([r.ok, r.code], [false, 'ref_conflict']); eq(e.bank(), b0 + 100); eq(e.adjLines().length, 1);
 });
 
-t('A4: a request without an op id works as before: every call writes', () => {
-  const e = env(); const b0 = e.bank();
+t('K1-2: a request without an op id is refused (op_required), nothing written, however often it is sent', () => {
+  const e = env(); const b0 = e.bank(); const id = e.ledger.lastId;
   const a = e.send('admin_adjust', { key: 'ann', delta: 100, cur: 'chips', reason: 'x' });
-  eq(a, { op: 'adjust', key: 'ann', ok: true, message: 'Adjusted' }, 'no opId in the answer');
+  eq([a.op, a.key, a.ok, a.code], ['adjust', 'ann', false, 'op_required']);
   e.send('admin_adjust', { key: 'ann', delta: 100, cur: 'chips', reason: 'x' });
-  eq(e.bank(), b0 + 200); eq(e.adjLines().length, 2);
+  eq(e.bank(), b0); eq(e.adjLines().length, 0); eq(e.ledger.lastId, id);
 });
 
 t('A4: a malformed op id is refused and writes nothing', () => {
@@ -97,11 +97,10 @@ t('A4: admin_set_play with an op id: a resend writes nothing and answers the sam
   e.send('admin_set_play', { key: 'ann', cents: 5000, opId: 'op-set-2' }); eq(e.play(), 5000);
 });
 
-t('A4: admin_set_play without an op id works as before', () => {
-  const e = env();
+t('K1-2: admin_set_play without an op id is refused (op_required), nothing written', () => {
+  const e = env(); const id = e.ledger.lastId;
   const a = e.send('admin_set_play', { key: 'ann', cents: 4321 });
-  eq(a, { op: 'set_play', key: 'ann', ok: true, message: 'Play set' }); eq(e.play(), 4321);
-  e.send('admin_set_play', { key: 'ann', cents: 4321 }); eq(e.adjLines().length, 1, 'setting the same value again is a noop, as before');
+  eq([a.op, a.key, a.ok, a.code], ['set_play', 'ann', false, 'op_required']); eq(e.ledger.lastId, id); eq(e.adjLines().length, 0);
 });
 
 // ---- P6 W3b fix round 2 ----

@@ -92,6 +92,7 @@ function createWalletAdapter({ service, ledger, onChange, schedule, log }) {
     const key = keyOf(acct);
     try { const r = service.topUp(key, `topup:${key}:${bootTag}.${++opSeq}`); note(key); return { ...view(key), dup: !!r.dup }; }
     catch (e) {
+      if (e && e.name === 'MoneyError' && e.code === 'disabled') throw fail('disabled', 'Cash is set by the admin: no top up');
       if (e && e.name === 'MoneyError' && (e.code === 'not_needed' || e.code === 'cooldown')) throw fail(e.code, e.code === 'cooldown' ? 'Top up is on cooldown' : 'You do not need a top up', { retryMs: e.retryMs || (e.details && e.details.retryMs) || 0 });
       throw mapMoneyError(e);
     }

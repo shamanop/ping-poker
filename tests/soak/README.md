@@ -4,7 +4,7 @@ One server, several tables in both currencies, Ballot Bender, the slot COLD CALL
 the mirror files, the server's own `__audit` and the harness' own book. It exists to fail loudly when money code is wrong; `prove.js` shows that it does.
 
 ```
-node tests/soak/soak.js [--seed N] [--minutes M | --steps N] [--kills N] [--port 4740] [--server-dir D] [--data D] [--bug NAME] [--kill-kinds a,b] [--players 6]
+node tests/soak/soak.js [--seed N] [--minutes M | --steps N] [--kills N] [--port 4740] [--server-dir D] [--data D] [--bug NAME] [--kill-kinds a,b] [--players 6] [--strict]
 node tests/soak/prove.js [--minutes 1.5] [--kills 3] [--seed 7] [--port 4742] [--only a,b] [--no-clean]
 ```
 
@@ -19,9 +19,9 @@ All choices come from one seeded PRNG (`lib/prng.js`, mulberry32). The same `--s
 | actor | what |
 |---|---|
 | `poker` | the permanent POKERPING table plus created chips and Cash tables; join with random buy-ins and funds (own and cross-currency), LEGAL actions from `legalActions`, leave (also mid-hand), rebuy, host kick, sit out, drop and reconnect a socket, end the night |
-| `bank` | signups mid-run, `wallet_topup` (and its refusals), `bonus:claim` twice, admin plus / minus / minus-too-big / set-play, a non-admin trying an admin event |
-| `bender` | `g:bender:spin` in both currencies, every bet level, with and without buyBonus, an unaffordable spin, two spins back to back |
-| `coldcall` | `g:coldcall:spin` in both currencies at every bet level: plain spins, every buy (call / bonus1 / bonus2 / hunt), QA-forced rounds (`COLDCALL_TEST=1`), a decision answered, a decision left to its 3 s timer (`ready`), a decision left open, the free Callback, the office pot won while another player's round is open (`poolrace`), a live config change while a round is open (`cfg`), a socket dropped while a round is open (`drop`), a spin the player cannot afford, back-to-back spins, a spin while a decision is open |
+| `bank` | signups mid-run (a new account must hold 0 Cash and 10,000 Chips), a daily bonus that must be Chips only, `wallet_topup` (and its refusals), `bonus:claim` twice, admin plus / minus / minus-too-big / set-play, a non-admin trying an admin event |
+| `bender` | `g:bender:spin` in both currencies, every bet level, with and without buyBonus, an unaffordable spin, two spins back to back, a mode switch (Chips, Cash, Chips in one sitting) |
+| `coldcall` | `g:coldcall:spin` in both currencies at every bet level: plain spins, every buy (call / bonus1 / bonus2 / hunt), QA-forced rounds (`COLDCALL_TEST=1`), a decision answered, a decision left to its 3 s timer (`ready`), a decision left open, the free Callback, the office pot won while another player's round is open (`poolrace`), a live config change while a round is open (`cfg`), a socket dropped while a round is open (`drop`), a spin the player cannot afford, back-to-back spins, a spin while a decision is open, a mode switch (a decision open in one currency, the other currency played, then a page reload with the first round still open) |
 | `campaign` | `g:campaign:*` in both currencies at every bet level (CAMPAIGN TRAIL; `CAMPAIGN_TEST=1` and a 2.5 s idle timer `CAMPAIGN_IDLE_MS`): a run with several steps and a cash-out, a run ridden to a scandal (QA-forced), a withdrawal at 0 steps, a run left to the idle timer, a socket dropped with a run open (also for longer than the idle timer, so the run closes unheard), an unaffordable start (a player made poor through the admin), a second start while one is open (`run_open`), a double step / cash, hostile payloads, `state`, and now and then the whole 50-state LANDSLIDE route (1,000x). Every option the server shows is re-derived from the engine |
 | `chaos` | the `--kills` budget, spread over the run: SIGKILL (a quarter SIGTERM) mid-hand, right after a spin was sent, right after a `showdown_result`, during a burst of buy-ins, after a hand batch with the result muted (`settle`), a Bender spin whose answer is dropped (`spinlost`), a slot decision open (`slotopen`), a Callback open or armed (`slotcb`), a slot spin whose answer is dropped (`slotlost`), a Campaign run open at 0 steps (`campopen0`) or at >= 1 step (`campopen1`), a Campaign step sent and unanswered (`campstep`), a Campaign cash-out sent and unanswered (`campcash`). Then restart on the SAME data dir, sign every bot in again, go on |
 
@@ -65,7 +65,7 @@ A start sent and unanswered at the kill may leave nothing, or an `:open` line th
 The checker has its OWN reader of `money.jsonl` and shares no code with `money/`. Ledger-only violations are final; the rest get 1.5 s to clear (a message may still be in flight).
 
 - **I1 file**: every line parses, ids strictly increase, refs unique, amounts positive safe integers, account names of a known shape, no `money.jsonl.quarantine`, the file only grows (a torn last line after SIGKILL excepted).
-- **I2 conservation**: per currency all accounts sum to 0; every source account equals the model (`mint:signup|bonus|achv|topup`, `admin:adjust`, `house:bender`; `house:coldcall` + `pool:coldcall:office` = minus what the players netted); `fx:chips`(chips) + `fx:play`(play) = 0. Also: every Cold Call line is made of the legs the contract allows (spend, feed, prize, credit, open, void with the right accounts); a leg of another shape is an I2 violation even when it sums to zero.
+- **I2 conservation**: per currency all accounts sum to 0; every source account equals the model (`mint:signup|bonus|achv|topup`, `admin:adjust`, `house:bender`; `house:coldcall` + `pool:coldcall:office` = minus what the players netted); `fx:chips`(chips) + `fx:play`(play) = 0. Also: every Cold Call line is made of the legs the contract allows (spend, feed, prize, credit, open, void with the right accounts); a leg of another shape is an I2 violation even when it sums to zero; a `:close` line for a round with no `:open` line (other than a free Callback, round id `cb...`) is an I2 violation too (a payout for a round nobody opened).
 - **I3 no negative holder**: recomputed line by line, in order.
 - **I4 nothing stranded**: no `pot:*` balance; every non-zero `seat:` is a seat the server shows, equal to `chips + handBet` (`audit.drift` empty); right after a restart no seat; every non-zero `escrow:coldcall:*` is an open round the harness was told about AND the game's `audit.games.coldcall.openRounds` lists it (and the other way round); `pool:coldcall:office` equals the game's own figure; the pot is fed by the rate and only by plain paid spins (per round: `floor(cost * feedBps / 10000) <= feed <= ceil(...)`; per stretch between restarts: `floor(sum/10000) <= fed <= floor((sum+9999)/10000)`, because the game carries the sub-cent remainder); a pot prize is paid FROM the pool and equals the prize the client was told.
 - **I5 mirrors**: after the ledger has been quiet, `bank.json` and `wallet.json` equal the fold (V2-DESIGN: bank + seats + orphans + open escrows) at some recent ledger line, at most 1.5 s old.
@@ -73,7 +73,39 @@ The checker has its OWN reader of `money.jsonl` and shares no code with `money/`
 - **I7 the model**: every player's holdings (bank or wallet + seats by fund + open escrows) equal the model; every result the client received is in the ledger as told (Bender, poker, Cold Call); a round told open has its `:open` line and its stake in escrow; a ledger line closes a round no client was told about = violation.
 - **I8 no money in memory**: `audit.walletPending` = 0.
 - **Campaign (inside I2 / I4 / I7)**: `_campLine` takes every `campaign:` line apart: a run writes exactly ONE `:open` line (player -> `escrow:campaign:<key>:<roundId>`) and ONE `:close` line (escrow -> `house:campaign` for the whole stake plus `house:campaign` -> player for the payout, or escrow -> player alone as a void); any other ref (a credit mid-run, a second payout under a new ref) or leg shape is an I2 violation on the spot. `checkCampaign`: every `end` the client received (stake, win, refund) is in the ledger as told; every run told open has its `:open` line, its escrow and no close line; every non-zero `escrow:campaign:*` is a run the client was told about; `audit.games.campaign.openRounds` equals the escrows and `pools` is empty; `house:campaign` equals minus what the players netted. Every runView and step answer is compared with the engine (options, odds to 4 decimals, next multiplier, cash-out amounts) and every `end` obeys the rules of its `reason`.
-- **I9 restart**: lines across a kill are only the kinds a cut-off operation can leave (`hand|bender|coldcall|achv|bonus|signup|buyin|...`); lines written after the process died are only `boot:*` or the slot's own recovery closes; the restarted server's balances equal the file's; every slot round open at the kill has exactly one close line.
+- **I9 restart**: lines across a kill are only the kinds a cut-off operation can leave (`hand|bender|coldcall|achv|bonus|signup|buyin|...`); lines written after the process died are only `boot:*` or the slot's own recovery closes; the restarted server's balances equal the file's; every slot round open at the kill has exactly one close line. A restart finding never hides the ledger-only violations (I1 / I2 / I3 / I10-I13) found at the same time: `reconcile` reports those first, then its own I9 findings (this is why `settle-after-void`, which also fires inside boot recovery, is no longer reported by I9 alone).
+
+
+### Cash and Chips never mix, Cash is never created (I10-I13, money hardening 2026-10-08)
+
+Since bb298d2 / bd615b7: a new account starts with 0 Cash (the soak now runs on the product default, no `SIGNUP_PLAY_CENTS`; `soak.js setup()` gives every player 1,000,000 Cash the only legal way, an admin adjust, so `admin:adjust` is the one source of Cash and the model books it);
+a seat is bought in its table's own currency only (`wrong_fund`); the daily bonus pays Chips; achievements pay no money; the top-up is off. All four checks are ledger-only (final, no 1.5 s grace; `Checker._cashRules`) and share no code with `money/`.
+
+- **I10 one currency**: a line has legs in ONE currency and no `fx:` leg (the Cash <-> Chips conversion is gone); an `escrow:` / `seat:` / `pot:` account never holds both currencies at once; a Cold Call / Campaign round closes in the currency it opened in. The poker actor also flags a NEW buy-in / rebuy from the other currency that the server accepted (it must answer `wrong_fund`; a rejoin of the player's own still-standing seat moves nothing and is not that), the bank actor flags a daily bonus that is not `mint:bonus -> bank:<key>` in chips.
+- **I11 Cash is never created**: a `play` leg whose source or sink is not one of `CASH_SOURCES` = `admin:adjust`, `house:bender`, `house:coldcall`, `house:campaign` (the `SOURCE_ACCOUNTS` of `money/ledger.js` minus every mint) is a violation. The bank actor also checks a fresh signup holds 0 Cash and 10,000 Chips. A new wallet connector that mints Cash must be added to `CASH_SOURCES` on purpose.
+- **I12 a house pays Cash only against a Cash stake**: `house:*` or `pool:*` -> `play:<key>` needs, in the same line, a stake leg of that key in Cash (`play:<key>` or the key's `escrow:` -> `house:*`), or is a free Callback (`cb...`) of a player who has paid a Cash stake before.
+- **I13 no Cash without an admin set or a win**: a `play:<key>` wallet that never got a credit from `admin:adjust`, a game house or the pot never holds Cash > 0.
+- Mode switches: the Bender actor plays Chips, Cash, Chips in one sitting (`mode_switch`); the Cold Call actor holds a decision open in one currency, plays the OTHER currency, and half the time reloads the page (socket dropped, `resume`) with the first round still open (`mode_switch`, `reload`); Campaign's second start in the other currency and its dropped sockets already did both. Poker tries the other currency on 40% of joins and 30% of rebuys.
+- The first line the soak lets pass: see "Findings" (the seed account's migration mint, `KNOWN_MIGRATION` in `soak.js`). `--strict` removes that allowance and the soak then fails at step 0 with I11 + I13 on `signup:play:chris`.
+
+### Ablation (how the seeded bugs for I10-I13 were checked against the older invariants)
+
+`SOAK_ABLATE=I10,I11,I12,I13` (environment of the soak process; `prove.js` passes it on) makes the checker and the actors drop those ids, so the older invariants alone judge the run. Seed 7, 1.5 min, 3 kills, 2026-10-08:
+
+| seeded bug | all invariants on | I10-I13 off |
+|---|---|---|
+| `fx-mix` (seats may be bought through `fx:` again) | I10 at step 3 | NOT CAUGHT in 1203 steps (4 firings): no older invariant sees it. **I10 is needed.** |
+| `cash-bonus` (the daily bonus mints Cash) | I11 | I2 (`mint:bonus` disagrees with the model), I7 |
+| `cash-topup-signup` (a welcome top-up of Cash at signup) | I11, I13 | I2, I7 |
+| `chips-round-paid-in-cash` (a Chips Bender round pays its win in Cash) | I10, I12 | I2, I7 |
+
+Older proofs kept: `paid-twice`, `ghost-mint`, `settle-after-void` and `camp-pays-twice` are now named FIRST by I12 / I11 / I2 (the ledger-only findings are final and reported before the model-based ones), so their `EXPECT` lists gained I12 / I11. With I10-I13 off the same four runs are CAUGHT by their old invariants (`paid-twice` I2,I7; `ghost-mint` I2,I7; `settle-after-void` I2,I9; `camp-pays-twice` I2), so nothing the older proofs showed was lost.
+
+So I11, I12 and I13 are model-free restatements of the rule: today the model (I2 / I7) catches every bug seeded for them, because the model knows signup, bonus and top-up pay no Cash. They are kept because they name the rule at the exact ledger line, do not depend on the model being right, and make the next Cash source (the wallet connector) an explicit edit of `CASH_SOURCES`; if they ever get in the way, they can be deleted without losing a proof of any older bug.
+
+## Findings (real product behaviour the soak met on 886e61a; the product is NOT changed here)
+
+1. **A first boot on an empty data dir mints 1,000,000 Cash (10,000.00) for the seed account `chris`, whatever `SIGNUP_PLAY_CENTS` says.** `server.js:28` passes `signupPlay: 0`, but `boot.migrateIfNeeded` -> `tools/migrate-v2.js:115` mints `START_PLAY` (`mint:signup`, ref `signup:play:<key>`) for every account in `accounts.json` that has no wallet row, and `accounts.js:353` creates `chris` before that. The live ledger is long migrated, so live accounts are not touched; a new volume, a restore without `money.jsonl`, or a staging copy (the wallet-connector test box) would hand Cash to `chris` and to every restored account. Repro: `_scratch/money/soak/repro-migration-cash.js` (exit 0 with the finding printed, 1 line). The soak lets exactly this one line pass (`KNOWN_MIGRATION`, counted in `result.json` as `knownMigrationHits`) so the rest of the run is judged; `--strict` shows it.
 
 ## Seeded bugs (`bugs/inject.js`, run by `prove.js`)
 
@@ -87,13 +119,13 @@ Each fires rarely from its own counter (the soak has to find it) and logs `[soak
 | `skim` | `ledger.batch` of a hand moves 1 unit of one winner's payout to another seat (sums to zero) | I7 (showdown nets), I4 (seat drift) |
 | `mirror-stale` | `service.mirror()` returns a frozen copy after 12 calls (the files stop changing) | I5 |
 | `boot-skip` | `service.bootRecover` leaves every second seat | I4 after a restart |
-| `ghost-mint` | every 4th `ensureAccount` also mints 500 Cash under a `bonus:` ref nobody asked for | I2 (`mint:bonus`), I7 |
+| `ghost-mint` | every 4th `ensureAccount` also mints 500 Cash under a `bonus:` ref nobody asked for | I2 (`mint:bonus`), I7; since I11 it is named first by I11 (and I13) |
 | `view-lies` | the wallet adapter's `get()` says 100 more Cash than the ledger | I6 |
 | `stuck-stake` | on every 6th Bender round booked through `ctx.money.round` (one ledger write), the wallet adapter ALSO parks a 1-unit stake through its real `spend` and the tick flush that would settle it is dropped: "some code path took the old park-then-credit road and the flush never ran" | I8 (and I6) |
 | `neg-holder` | a line appended straight to `money.jsonl` behind the ledger's back takes `bank:chris` below zero | I1 / I3 |
 | `stranded-escrow` | now and then a `settleRound` / `voidRound` of the slot is swallowed after `open`: the game forgets the round, the escrow stays; only a close with a stake in escrow is swallowed, a free round has none to strand | I4 (escrow with no open round) |
 | `pool-skim` | the pot feed leg is dropped, or a prize is paid from `house:coldcall` instead of the pool (both sum to zero) | I4 pool (prize leg, feed rate), I2 |
-| `settle-after-void` | a slot round with a win is voided (stake back) and ALSO settled under a fresh ref: the win is paid on a returned stake | I7, I2 |
+| `settle-after-void` | a slot round with a win is voided (stake back) and ALSO settled under a fresh ref (`<rid>v:close`): the win is paid on a returned stake. It also fires inside boot recovery (which calls the same `settleRound`) | I2 (a `:close` line with no `:open` line), I7; at a boot also I9 and I12 |
 | `camp-pays-scandal` | now and then a scandal (win 0) is settled as a win of the stake | I7 (told win 0), I2 `house:campaign` |
 | `camp-pays-twice` | after a cash-out the same win is credited again under a new ref | I2 (the ref shape), I7 |
 | `camp-cash-plus-step` | a cash-out pays 4% of the stake more than the multiplier the run reached ("one step more than survived") | I7 (told vs ledger), I2 |
@@ -101,6 +133,10 @@ Each fires rarely from its own counter (the soak has to find it) and logs `[soak
 | `camp-record-kept` | the record of a closed run is not dropped now and then: the game keeps reporting a run open that the ledger closed | I4 (`audit` lists a run with no escrow) |
 | `camp-recover-pays-zero` | boot recovery pays a run that sat at 0 steps (+4%) instead of refunding it. Reachable only through a kill with a run open at 0 steps: `prove.js` runs it with `--kill-kinds campopen0,...` (`ARGS` in `bugs/inject.js`) | I9 (a settle where only a refund is allowed), I7 |
 | `camp-step-credit` | a surviving step credits 1 unit to the player under a ref of its own, mid-run (a step moves no money) | I2 (`campaign:<key>:<roundId>:s<n>` is not open / close) |
+| `fx-mix` | `createMoneyPort` is built with `sameFundOnly: false` again: a Cash holder can buy into a Chips table through `fx:` (and back) | I10 (no older invariant: ablation table) |
+| `cash-bonus` | every 2nd daily bonus is minted into `play:` instead of `bank:` | I11 (older: I2, I7) |
+| `cash-topup-signup` | every 3rd `ensureAccount` also mints 2500 Cash as `mint:topup` | I11, I13 (older: I2, I7) |
+| `chips-round-paid-in-cash` | every 4th winning Bender round in Chips takes the stake from `bank:` and pays the win into `play:` (one line, two currencies) | I10, I12 (older: I2, I7) |
 
 `node tests/soak/prove.js` prints one line per run (name, exit code, invariants that fired, step, seconds, firings, verdict) and exits 0 only if the clean soak exits 0 and every bug exits 1 naming an invariant it is expected to break.
 A bug that is not caught is printed as FAILED PROOF, never hidden.

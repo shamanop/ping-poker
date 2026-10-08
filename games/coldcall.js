@@ -16,12 +16,21 @@ const RTP_LABEL = '98.0% (long-run, 200M-spin sim, +-0.22, includes the Callback
 const rtpLabel = () => L.rtp(RTP_LABEL);   // the label that goes with the math in force: the shipped line, the one that came with the overrides, or "custom settings, not measured"
 
 // QA hook: forces a feature so the front end can be driven by a test. It runs ONLY when the server process was started
-// with COLDCALL_TEST=1 (and NODE_ENV is not 'production'); otherwise `force` in a spin payload is ignored. Forced rounds are paid and
+// with COLDCALL_TEST=1 (and NODE_ENV is not 'production'); otherwise `force` in a spin payload is ignored. MONEY 1008 K4-3: and it is CHIPS ONLY, always:
+// a round whose stored currency is Cash (`play`, real money) never honours `force`, whatever the environment says (forceFor below is the only reader of a spin's `force`;
+// runRound and rebuild refuse a Cash round that carries one). Forced rounds are paid and
 // charged through the normal money path, with real engine rounds (bells placed, or whole rounds re-rolled until the condition holds; no hand-made scripts).
 //   bonus1 / bonus2 / bonus3 = 3 / 4 / 5 bells land; phone = phone feature with >= 4 hot leads; close = phone feature with a close and a second reveal round;
 //   big = round pays >= 25x; tease = exactly 2 bells, no bonus.
 const FORCES = Eng.FORCES;
 const testHookOn = () => process.env.COLDCALL_TEST === '1' && process.env.NODE_ENV !== 'production';
+let cashForceSeen = 0;
+// the force a spin may carry: only on a Chips spin that is not a buy, only with the hook on. A Cash spin that asks for one is played as an ordinary round (and logged, a few times).
+function forceFor(mode, buy, f) {
+  if (!testHookOn() || buy !== null || !FORCES.includes(f)) return null;
+  if (mode !== 'chips') { if (cashForceSeen++ < 5) alarm('coldcall: QA force ' + JSON.stringify(f) + ' refused on a ' + (mode === 'play' ? 'Cash' : String(mode)) + ' spin: the hook is Chips only, the round is played as an ordinary one'); return null; }
+  return f;
+}
 const resolveForced = (K, rng, force) => L.resolveRound(K, rng, null, { force });
 
 function cryptoRng() {
@@ -68,6 +77,8 @@ const dayFmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago' })
 const chicagoDay = (ms) => dayFmt.format(new Date(ms));
 const pullCfg = () => Eng.CFG.pull;
 const logf = (...a) => { const f = module.exports.log; if (f) f(...a); };
+// a line that must be seen: through the log hook when one is set (tests), else straight to stderr (server.js sets no hook, so logf alone is silent there)
+const alarm = (...a) => { const f = module.exports.log; if (f) f(...a); else console.error(...a); };
 const M = () => C.money;
 let seedWarned = false;
 
@@ -76,17 +87,25 @@ function clearTimers() { for (const rec of open.values()) if (rec.timer) { clear
 // the player's two balances as the wallet push carries them (ctx.money.balance: what can be spent now; an open stake is in escrow, not in here)
 const balances = (key) => ({ play: M().balance(key, 'play'), chips: M().balance(key, 'chips') });
 
-// A stored state of the wrong shape must never lock an account out: every field is checked, a missing one gets its default, a malformed one resets
-// the whole state (newState). cb.bet is any whole number of cents in [1, 2500] (DENOMS: below an average of 10c the Callback step is 1 cent); warmBet (cents of the bet the warm squares were made at) is 0 when absent, carry (cents, [0, 10)) is 0 when absent or damaged.
+// A stored state of the wrong shape must never lock an account out, and it must never cost a player more than it has to (an armed Callback and the leads are Cash value that lives only in this file):
+// every field is checked on its own; a missing one gets its default, a malformed one is reset ALONE, with a log line that names the player, the field and the value that was dropped (MONEY 1008 K4-2).
+// A state that is not an object of version 1 at all reads as a new one (also logged). cb.bet is any whole number of cents in [1, 2500] (DENOMS: below an average of 10c the Callback step is 1 cent); warmBet (cents of the bet the warm squares were made at) is 0 when absent, carry (cents, [0, 10)) is 0 when absent or
 // cb.id (P6) is the Callback's round id, 'cb' + the id of the round that armed it; a missing or unusable id is not a damaged state, it is given a new one before the Callback may be played.
 const isInt = (n) => Number.isSafeInteger(n);
 const isFiniteNum = (n) => typeof n === 'number' && Number.isFinite(n);
 const validId = (x) => typeof x === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(x);
-function normState(st) {
+const resetSeen = new Set();             // one line per (player, field, value): a state is read on every spin and every state request
+function resetNote(who, field, raw) {
+  let t; try { t = JSON.stringify(raw); } catch { t = String(raw); } t = String(t); if (t.length > 300) t = t.slice(0, 300) + '...(' + t.length + ' chars)';
+  const k = who + '|' + field + '|' + t; if (resetSeen.has(k)) return; if (resetSeen.size > 2000) resetSeen.clear(); resetSeen.add(k);
+  alarm('coldcall: state of ' + who + ': ' + (field ? 'field ' + field + ' is damaged and was reset to its default (was ' + t + ')' : 'the whole state is not a version-1 state and reads as a new one (was ' + t + ')'));
+}
+function normState(st, who) {
   const d = Eng.newState();
-  if (!st || typeof st !== 'object' || Array.isArray(st) || st.v !== 1) return d;
-  const BAD = {}, cells = Eng.N || 30, out = {};
-  const get = (k, dflt, ok, fix) => { const x = st[k]; if (x === undefined || (x === null && dflt === null)) return dflt; return ok(x) ? (fix ? fix(x) : x) : BAD; };
+  if (st === null || st === undefined) return d;
+  if (typeof st !== 'object' || Array.isArray(st) || st.v !== 1) { resetNote(who || '(unknown)', '', st); return d; }
+  const cells = Eng.N || 30, out = {};
+  const get = (k, dflt, ok, fix) => { const x = st[k]; if (x === undefined || (x === null && dflt === null)) return dflt; if (ok(x)) return fix ? fix(x) : x; resetNote(who || '(unknown)', k, x); return dflt; };
   out.lt = get('lt', 0, (x) => isFiniteNum(x) && x >= 0);
   out.avg = get('avg', 0, (x) => isFiniteNum(x) && x >= 0);
   out.cb = get('cb', null, (x) => x && typeof x === 'object' && !Array.isArray(x) && isInt(x.bet) && x.bet >= 1 && x.bet <= 2500, (x) => { const c = { ...x }; if (!validId(c.id)) delete c.id; return c; });
@@ -98,12 +117,11 @@ function normState(st) {
   out.rounds = get('rounds', 0, (x) => isInt(x) && x >= 0);
   out.callbacks = get('callbacks', 0, (x) => isInt(x) && x >= 0);
   out.carry = typeof st.carry === 'number' && st.carry > 0 && st.carry < 10 ? st.carry : 0;   // N1-CARRY: cents left over by the last Callback; missing or damaged reads as 0 and never resets the rest of the state
-  if (Object.values(out).includes(BAD)) return d;
   return Object.assign(clone(st), out, { v: 1 });
 }
 
 // the player's STORED state as the engine should see it (a checked clone; NOT ticked: the engine ticks it itself, so it can report leaked / warmDied)
-const loadState = (nk, mode) => normState(store.player(nk, mode));
+const loadState = (nk, mode) => normState(store.player(nk, mode), nk + '|' + mode);
 
 // the day after a Chicago day string (noon UTC is early morning in Chicago, so +24 h never skips or repeats a day)
 const dayAfter = (d) => chicagoDay(Date.parse(d + 'T12:00:00Z') + 86400000);
@@ -179,6 +197,7 @@ function runRound(rec, decisions, auto) {
   let j = 0;
   const rnd = () => { if (j < rec.rtape.length) return rec.rtape[j++]; const v = rbase(); rec.rtape.push(v); j++; return v; };
   const len = rec.tape.length, rlen = rec.rtape.length;
+  if (rec.force && rec.mode !== 'chips') throw new Error('QA force on a Cash round');   // unreachable through forceFor; a stored or hand-made record cannot get one past here either
   try {
     return rec.K.eng.playRound(rng, { buy: rec.buy, bet: rec.bet, state: clone(rec.state), now: rec.now, day: rec.day, script: true, auto: !!auto, rnd, ...(rec.force ? { force: rec.force } : {}) }, decisions);
   } catch (e) { rec.tape.length = len; rec.rtape.length = rlen; throw e; }
@@ -239,12 +258,13 @@ function rebuild(o) {
   if (!isFiniteNum(o.now) || !isFiniteNum(o.t) || typeof o.day !== 'string') bad('clock');
   if (!nums(o.tape) || !nums(o.rtape) || !Array.isArray(o.decisions) || !o.state || typeof o.state !== 'object') bad('tapes');
   if (!(o.force === null || o.force === undefined || FORCES.includes(o.force))) bad('force');
+  if (o.force && o.mode !== 'chips') bad('QA force on a Cash round');          // the record is then voided at boot (the stake goes back), never replayed under a force
   const K = L.restoreSnapshot(o.cfg);
   if (!K.cfg.pull) bad('config without a pull block');
   const force = o.force || null;
   return {
     id: o.roundId, key: o.key, nk: o.key, mode: o.mode, who: typeof o.who === 'string' && o.who ? o.who : o.key, socket: null, buy: o.buy, bet: o.pbet, betCents: o.bet, callback: !!o.callback,
-    state: normState(o.state), now: o.now, day: o.day, t: o.t, tape: o.tape.slice(), rtape: o.rtape.slice(), decisions: clone(o.decisions), force, forced: force,
+    state: normState(o.state, 'open round ' + o.roundId + ' of ' + o.key + '|' + o.mode), now: o.now, day: o.day, t: o.t, tape: o.tape.slice(), rtape: o.rtape.slice(), decisions: clone(o.decisions), force, forced: force,
     K, cfg: K.cfg.pull, cost: o.cost, costTenths: o.costTenths, stored: true, escrow: o.cost > 0, settled: false,
   };
 }
@@ -328,7 +348,7 @@ function settle(rec, r, autoWhy, extraSocket) {
     try { syncPot(mode); } catch (e) { logf('coldcall: pot mirror not refreshed', rec.id, e && e.message); }
     store.setPlayer(rec.nk, mode, r.newState);
     if (rec.stored) store.delOpen(rec.nk, mode);
-    if (rec.stored || potWon || (r.pull && r.pull.armed)) { try { store.flush(); } catch (e) { flushErr = e; } }
+    try { store.flush(); } catch (e) { flushErr = e; }     // MONEY 1008 K2-5: ALWAYS before the result goes out (write-then-answer, like the ledger): the stake is already in the ledger, so the leads / Callback / pot numbers of this round must be on disk too, not behind a 50 ms debounce
   } catch (e) { logf('coldcall: settle bookkeeping failed', rec.id, e && e.message); }
   if (flushErr) logf('coldcall: store flush failed after the ledger call (the ledger is the truth; recover() replays the stored record)', rec.id, flushErr && flushErr.message);
 
@@ -463,11 +483,12 @@ function ensureCbId(nk, mode, state) {
 function pullSpin(socket, p, buy, now) {
   const key = keyOf(socket), nk = nkey(key), mode = p.mode;
   const ok = nk + '|' + mode;
+  if (store.blocked && store.blocked()) { logf('coldcall: store is blocked (see the boot log), no bet is taken'); return err(socket, 'bad_request', 'Could not place that bet'); }   // nothing could be saved: no stake is taken (K4-2 / K2-5)
   const o = openByKey.get(ok);
   if (o) return err(socket, 'decision_open', 'Finish your open decision first', { open: o.pending ? pendingView(o) : null });
   const day = chicagoDay(now);
   const state = loadState(nk, mode);
-  const force = testHookOn() && buy === null && FORCES.includes(p.force) ? p.force : null;
+  const force = forceFor(mode, buy, p.force);
   const callback = buy === null && !force && !!state.cb;       // a QA-forced round is a stateless paid spin: the waiting Callback is not played
   if (callback) { try { ensureCbId(nk, mode, state); } catch (e) { logf('coldcall: callback id not flushed', e && e.message); return err(socket, 'bad_request', 'Could not place that bet'); } }
   const rec = {
@@ -532,7 +553,9 @@ module.exports = {
     if (store) store.close();
     C = ctx; feed = []; feedSeq = 0; seedWarned = false;
     const file = process.env.COLDCALL_PULL_FILE || files.coldcallPull || null;
-    store = createStore(file, { log: logf });
+    store = createStore(file, { log: logf, alarm });
+    cashForceSeen = 0;
+    if (testHookOn()) alarm('coldcall: *** QA FORCE HOOK IS ON (COLDCALL_TEST=1, NODE_ENV=' + (process.env.NODE_ENV || '(unset)') + '): any signed-in player can force Cold Call rounds in CHIPS ONLY; Cash rounds ignore it. Never set COLDCALL_TEST on a real server. ***');
     for (const mode of ['play', 'chips']) { try { syncPot(mode); } catch {} }
   },
   recover, audit,
@@ -556,7 +579,7 @@ module.exports = {
         buyCostX: Object.fromEntries(BUYS.map((b) => [b, Eng.CFG.buyCost[b] / 10])),
         buyPriceCents: L.buyPrices(), cfg: L.publicCfg(),     // LIVECFG: the live pay table, weights and prices (PULL-UI.md 0c); pull.rules above carries the PULL knobs
         wallet: w, balances: w, bets: BET_LEVELS,
-        ...(testHookOn() ? { qaHook: true } : {}),
+        ...(testHookOn() && !(payload && payload.mode === 'play') ? { qaHook: true, qaHookModes: ['chips'] } : {}),   // told for Chips only; a state asked for Cash is never told
         ...extra,
       });
     },
@@ -641,7 +664,7 @@ module.exports = {
       const key = keyOf(socket);
       const rng = module.exports.rng || cryptoRng();
       const roundId = crypto.randomBytes(6).toString('hex');
-      const force = testHookOn() && buy === null && FORCES.includes(p.force) ? p.force : null;
+      const force = forceFor(p.mode, buy, p.force);
       const K = L.snapshot();                     // the live config, whole (a stateless round; nothing is open)
       const r = force ? resolveForced(K, rng, force) : L.resolveRound(K, rng, buy);   // pure; nothing touched yet
       let cost, totalWin, pay;

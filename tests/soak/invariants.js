@@ -6,6 +6,7 @@ const fs = require('fs');
 
 const CURS = ['chips', 'play'];
 const SOURCES = new Set(['mint:signup', 'mint:bonus', 'mint:achv', 'mint:topup', 'mint:migration', 'house:bender', 'house:coldcall', 'house:campaign', 'admin:adjust', 'fx:chips', 'fx:play']);
+const CASH_SOURCES = new Set(['admin:adjust', 'house:bender', 'house:coldcall', 'house:campaign']);
 const SHAPE = { bank: 2, play: 2, seat: 3, pot: 3, escrow: 4, pool: 3 };      // number of ':' separated parts
 const ONLY_CUR = { bank: 'chips', play: 'play', 'fx:chips': 'chips', 'fx:play': 'play' };
 const isAmount = n => typeof n === 'number' && Number.isSafeInteger(n) && n > 0;
@@ -22,7 +23,7 @@ function kindOf(a) {
 const seatParts = a => { const p = a.split(':'); return { table: p[1], key: p[2] }; };
 
 class Checker {
-  constructor(file) {
+  constructor(file, opts = {}) {
     this.file = file;
     this.buf = Buffer.alloc(0);                 // complete lines read so far
     this.tornBytes = 0;
@@ -42,10 +43,16 @@ class Checker {
     this.campPending = [];                      // closing lines of runs not matched with a run the harness knows yet
     this.slotScan = { idx: 0, S: { chips: 0, play: 0 }, F: { chips: 0, play: 0 }, n: 0 };   // the pot-feed bound, see checkSlot
     this.stat = { lines: 0, checks: 0 };
+    // I10-I13 (Cash and Chips never mix, Cash is never created). SOAK_ABLATE=I10,I11 switches ids OFF: used ONLY to show that a seeded bug is invisible to the older invariants (README, "Ablation").
+    this.ablate = new Set((process.env.SOAK_ABLATE || '').split(',').filter(Boolean));
+    this.cashBorn = new Set();                  // players whose play: wallet was credited by an admin set or by a win (a game house / the pot): the only two ways Cash may reach a wallet
+    this.paidPlay = new Set();                  // players who paid a Cold Call stake in Cash at least once (a free Callback in Cash needs one)
+    this.knownMigration = opts.knownMigration || null;      // { ref, amount }: ONE line (the seed account's first-boot migration mint) the soak lets pass, see README "Findings"
+    this.knownMigrationHits = 0;
   }
 
   // ---------- reading ----------
-  v(id, message, accounts, expected, got, extra) { const o = { id, message, accounts: accounts || {}, expected, got, ...(extra || {}) }; this.pending.push(o); return o; }
+  v(id, message, accounts, expected, got, extra) { if (this.ablate.has(id)) return null; const o = { id, message, accounts: accounts || {}, expected, got, ...(extra || {}) }; this.pending.push(o); return o; }
   take() { const p = this.pending; this.pending = []; return p; }
 
   // Reads the file, checks I1 against what was read before, ingests new complete lines. Returns { added, torn }.
@@ -104,7 +111,7 @@ class Checker {
     if (typeof rec.ref === 'string') { const p = rec.ref.split(':'); if (p.length >= 4 && /^(buyin|rebuy|leave|kick|sweep|grace|night)$/.test(p[0])) { const k = p.slice(0, 3).join(':'); if (!this.opLines.has(k)) this.opLines.set(k, []); this.opLines.get(k).push(L); } }
     this.stat.lines++;
     if (bad) { this.hist.push({ idx: L.idx, seenAt: now, sig: this._sig() }); return; }
-    const touchedPots = new Set();
+    const touchedPots = new Set(), touchedAccts = new Set();
     for (const it of items) {
       const reason = it.reason != null ? it.reason : rec.reason;
       L.items.push({ from: it.from, to: it.to, amount: it.amount, cur: it.cur, reason });
@@ -117,6 +124,7 @@ class Checker {
       m.set(it.from, (m.get(it.from) || 0) - it.amount);
       m.set(it.to, (m.get(it.to) || 0) + it.amount);
       for (const a of [it.from, it.to]) if (m.get(a) === 0) m.delete(a);
+      touchedAccts.add(it.from); touchedAccts.add(it.to);
       for (const a of [it.from, it.to]) { if (kindOf(a) === 'pot') touchedPots.add(a + '|' + it.cur); if (a.startsWith('bank:')) this.known.chips.add(a.slice(5)); else if (a.startsWith('play:')) this.known.play.add(a.slice(5)); }
       if (reason && reason.startsWith('buyin:') && kindOf(it.to) === 'seat') this.buyFund.set(it.to, reason.slice(6));
     }
@@ -133,8 +141,55 @@ class Checker {
     }
     if (typeof rec.ref === 'string' && rec.ref.startsWith('coldcall:')) this._slotLine(L);
     if (typeof rec.ref === 'string' && rec.ref.startsWith('campaign:')) this._campLine(L);
+    this._cashRules(L, touchedAccts);
     this.hist.push({ idx: L.idx, seenAt: now, sig: this._sig() });
     if (this.hist.length > 120) this.hist.splice(0, this.hist.length - 120);
+  }
+
+  // ---------- I10-I13: Cash and Chips never mix, Cash is never created (ledger-only, final) ----------
+  // Since bb298d2 / bd615b7: a seat, a round and a line live in ONE currency; signup, the daily bonus, achievements and the top-up pay no Cash; Cash (`play`) reaches a wallet only by an admin set or by a win.
+  // CASH_SOURCES = the SOURCE_ACCOUNTS of money/ledger.js that may touch `play`.
+  //  I10 one currency per line (no `fx:` leg: the conversion between Cash and Chips is gone), an escrow / seat / pot never holds both currencies, a round closes in the currency it opened in.
+  //  I11 a Cash leg whose source or sink is not admin:adjust or a game house (mint:signup|bonus|achv|topup|migration, fx:*) creates or destroys Cash.
+  //  I12 a game house or the pot pays Cash to a wallet only with a stake in Cash behind it: a stake leg of that player in the same line, or the open round's escrow; a free Callback needs an earlier paid Cash round.
+  //  I13 a wallet that never got an admin set or a win never holds Cash.
+  _cashRules(L, touched) {
+    const ref = L.ref || '', items = L.items;
+    if (!items.length) return;
+    const bad = (id, msg, acc, exp, got) => this.v(id, `line ${L.no} (${ref}): ${msg}`, { ref, ...(acc || {}) }, exp, got);
+    const curs = new Set(items.map(i => i.cur));
+    if (curs.size > 1) bad('I10', `legs in two currencies (${[...curs].join(' and ')}): Cash and Chips mixed in one line`, {}, 'one currency per line', [...curs].join('+'));
+    for (const it of items) for (const a of [it.from, it.to]) if (a.startsWith('fx:')) bad('I10', `a leg through ${a}: Cash converted to Chips or back`, { account: a }, 'no fx leg', a);
+    for (const a of touched) {
+      const k = kindOf(a);
+      if ((k === 'escrow' || k === 'seat' || k === 'pot') && (this.bal.chips.get(a) || 0) > 0 && (this.bal.play.get(a) || 0) > 0) bad('I10', `${a} holds both Chips and Cash`, { account: a }, 'one currency', `chips ${this.bal.chips.get(a)} + play ${this.bal.play.get(a)}`);
+    }
+    for (const kind of ['slot', 'camp']) {
+      const x = L[kind]; if (!x || x.suffix !== 'close') continue;
+      const e = (kind === 'slot' ? this.slotRounds : this.campRounds).get(`${x.key}:${x.rid}`);
+      if (e && e.open && e.open[kind] && e.open[kind].cur !== x.cur) bad('I10', `round ${x.key}:${x.rid} opened in ${e.open[kind].cur} and closed in ${x.cur}`, { key: x.key }, e.open[kind].cur, x.cur);
+    }
+    for (const it of items) {
+      if (it.cur !== 'play') continue;
+      const known = this.knownMigration && ref === this.knownMigration.ref && it.from === 'mint:signup' && it.amount === this.knownMigration.amount;
+      if (known) { this.knownMigrationHits++; this.cashBorn.add(it.to.slice(5)); continue; }
+      for (const a of [it.from, it.to]) if (kindOf(a) === 'source' && !CASH_SOURCES.has(a) && !a.startsWith('fx:')) bad('I11', `Cash ${it.from === a ? 'created' : 'destroyed'} through ${a} (${it.amount})`, { account: a, cur: 'play' }, 'only admin:adjust or a game house touch Cash', a);
+      if (it.to.startsWith('play:')) {
+        const key = it.to.slice(5);
+        if (it.from === 'admin:adjust' || it.from.startsWith('house:') || it.from.startsWith('pool:')) this.cashBorn.add(key);
+        if (it.from.startsWith('house:') || it.from.startsWith('pool:')) {
+          const stake = items.some(j => j.cur === 'play' && j.to.startsWith('house:') && (j.from === 'play:' + key || (j.from.startsWith('escrow:') && j.from.split(':')[2] === key)));
+          const free = L.slot && L.slot.rid.startsWith('cb') && this.paidPlay.has(key);
+          if (!stake && !free) bad('I12', `${it.from} pays ${it.amount} Cash to ${key} with no Cash stake of ${key} behind it`, { key, from: it.from }, 'a stake in Cash in the same line (or an open Cash round)', 'none');
+        }
+      }
+    }
+    if (L.slot && L.slot.cur === 'play' && (L.slot.spend > 0 || L.slot.open > 0)) this.paidPlay.add(L.slot.key);
+    for (const a of touched) {
+      if (!a.startsWith('play:')) continue;
+      const n = this.bal.play.get(a) || 0, key = a.slice(5);
+      if (n > 0 && !this.cashBorn.has(key)) bad('I13', `${key} holds ${n} Cash but never got an admin set or a win`, { key }, 0, n);
+    }
   }
 
   // A Cold Call line (ref coldcall:<key>:<roundId>[:open|:close]) taken apart by the legs ADD-A-GAME.md section 3 allows: spend (player or escrow -> house:coldcall), feed (house -> pool:coldcall:office), prize
@@ -171,6 +226,9 @@ class Checker {
     if (e[kind]) bad(`second ${kind} line for round ${id}`);
     if ((kind === 'instant' && (e.open || e.close)) || (kind !== 'instant' && e.instant)) bad(`round ${id} has both an instant line and open/close lines`);
     if (kind === 'close' && e.close) bad(`round ${id} closed twice`);
+    // a paid decision round writes :open then :close; only the free Callback (round id cb<id>) has a :close alone. Any other :close is a payout for a round that was never opened
+    // (settle-after-void under a fresh ref is exactly this: the credit is booked as a "close" of a round id nobody opened).
+    if (kind === 'close' && !e.open && !rid.startsWith('cb')) bad(`a close line for round ${id} that has no :open line (a payout for a round nobody opened)`);
     e[kind] = L; this.slotRounds.set(id, e);
     if (kind !== 'open') this.slotPending.push({ id, L });
   }

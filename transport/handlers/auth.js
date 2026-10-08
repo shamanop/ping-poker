@@ -52,12 +52,19 @@ function register(ctx, socket, on) {
   on('pin_change', ({ oldPin, newPin } = {}) => {
     const me = auth.requireAuth(socket); if (!me) return;
     const r = accounts.pinChange(me, oldPin, newPin, { ...ctxOf(), sessionH: socket.data.sessionH });
-    r.ok ? socket.emit('ok', { what: 'pin' }) : authFail(r);
+    if (!r.ok) { authFail(r); return; }
+    // K6b-1: the account's other sockets are signed out at once; this one carries on, on a fresh session token
+    auth.signOutSockets(ctx.socketsOf(me).filter(s => s !== socket), 'pin_changed', 'Your PIN was changed on another device. Sign in again with the new PIN.');
+    socket.data.sessionH = crypto.createHash('sha256').update(r.token).digest('hex');
+    socket.emit('ok', { what: 'pin' });
+    socket.emit('auth_ok', { account: accounts.publicAccount(r.account), token: r.token });
   });
   on('account_reset_pin', ({ key, newPin } = {}) => {
     const me = auth.requireAuth(socket); if (!me) return;
     const r = accounts.resetPin(me, key, newPin);
-    r.ok ? socket.emit('ok', { what: 'pin_reset' }) : authFail(r);
+    if (!r.ok) { authFail(r); return; }
+    auth.signOutSockets(ctx.socketsOf(accounts.keyOf(key)), 'pin_reset', 'Your PIN was reset by the admin. Sign in again with the new PIN.');
+    socket.emit('ok', { what: 'pin_reset' });
   });
   on('get_leaderboard', () => { socket.emit('leaderboard_data', views.leaderboard(socket.data.acct)); });
   if (process.env.AUTH_CLOCK_SKEW !== undefined) on('__test_skew', ({ ms } = {}) => { accounts.setSkew(ms); socket.emit('ok', { what: 'skew' }); });
