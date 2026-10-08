@@ -348,7 +348,7 @@ function settle(rec, r, autoWhy, extraSocket) {
     try { syncPot(mode); } catch (e) { logf('coldcall: pot mirror not refreshed', rec.id, e && e.message); }
     store.setPlayer(rec.nk, mode, r.newState);
     if (rec.stored) store.delOpen(rec.nk, mode);
-    if (rec.stored || potWon || (r.pull && r.pull.armed)) { try { store.flush(); } catch (e) { flushErr = e; } }
+    try { store.flush(); } catch (e) { flushErr = e; }     // MONEY 1008 K2-5: ALWAYS before the result goes out (write-then-answer, like the ledger): the stake is already in the ledger, so the leads / Callback / pot numbers of this round must be on disk too, not behind a 50 ms debounce
   } catch (e) { logf('coldcall: settle bookkeeping failed', rec.id, e && e.message); }
   if (flushErr) logf('coldcall: store flush failed after the ledger call (the ledger is the truth; recover() replays the stored record)', rec.id, flushErr && flushErr.message);
 
@@ -483,6 +483,7 @@ function ensureCbId(nk, mode, state) {
 function pullSpin(socket, p, buy, now) {
   const key = keyOf(socket), nk = nkey(key), mode = p.mode;
   const ok = nk + '|' + mode;
+  if (store.blocked && store.blocked()) { logf('coldcall: store is blocked (see the boot log), no bet is taken'); return err(socket, 'bad_request', 'Could not place that bet'); }   // nothing could be saved: no stake is taken (K4-2 / K2-5)
   const o = openByKey.get(ok);
   if (o) return err(socket, 'decision_open', 'Finish your open decision first', { open: o.pending ? pendingView(o) : null });
   const day = chicagoDay(now);
