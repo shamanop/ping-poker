@@ -9,6 +9,7 @@
 // flight and unanswered, exactly three closes are accepted: win 0 (the step was a scandal), the last seen multiplier (the step was never flushed), or the multiplier of that one option (it survived and was flushed).
 // The ledger side (stake, win, escrow, shape) is judged in invariants.js checkCampaign. The math of every option the server shows is re-derived here from the engine (pure math, not money code).
 const { sleep } = require('../lib/bot');
+const { opId } = require('../lib/opid');
 const E = require('../../../games/campaign-engine.js');
 
 const WITNESS = 'ME NH VT MA RI CT NY NJ DE MD PA WV OH MI IN IL WI MN ND MT SD IA NE KS CO WY UT ID WA AK HI CA OR NV AZ NM OK TX LA AR MO KY VA NC SC GA FL AL MS TN'.split(' ');
@@ -357,13 +358,13 @@ module.exports = {
       const bot = W.rng.pick(all); if (B.hasOpen(bot.key)) return null;
       let h = have(W, bot, mode), bet = W.camp.betLevels.slice().reverse().find((b) => b > h), restore = null;
       if (!bet && mode === 'play' && !bot.tableId && !W.model.slot.hasOpen(bot.key) && bot.spinsInFlight === 0 && W.admin.connected()) {      // nobody is poor: make one player poor in Cash through the admin (same book-keeping as the bank actor), then give it back
-        const cents = W.rng.range(0, 99), r = await W.admin.req('admin_set_play', { key: bot.key, cents }, 'admin_result', 4000, { pred: (d) => d.op === 'set_play' });
+        const cents = W.rng.range(0, 99), r = await W.admin.req('admin_set_play', { key: bot.key, cents, opId: opId() }, 'admin_result', 4000, { pred: (d) => d.op === 'set_play' });
         if (!(r.data && r.data.ok)) return null;
         W.model.applyAdmin(bot.key, 'play', cents - h); restore = h; h = cents; bet = 100;
       }
       if (!bet) return null;
       const n0 = markLines(W), r = await startRun(W, bot, { mode, bet, home: 'OH' });
-      if (restore != null) { const now = have(W, bot, 'play'); const rr = await W.admin.req('admin_set_play', { key: bot.key, cents: restore }, 'admin_result', 4000, { pred: (d) => d.op === 'set_play' }); if (rr.data && rr.data.ok && restore !== now) W.model.applyAdmin(bot.key, 'play', restore - now); }
+      if (restore != null) { const now = have(W, bot, 'play'); const rr = await W.admin.req('admin_set_play', { key: bot.key, cents: restore, opId: opId() }, 'admin_result', 4000, { pred: (d) => d.op === 'set_play' }); if (rr.data && rr.data.ok && restore !== now) W.model.applyAdmin(bot.key, 'play', restore - now); }
       if (r.kind === 'run') return rec('start_big', bot, { bet, answer: 'run' });
       { const ls = newCampLines(W, n0, bot.key).filter((L) => L.camp.suffix === 'open'); if (r.code === 'funds' && ls.length) violate(W, 'a refused start (funds) wrote a ledger line', { key: bot.key }, 'nothing', ls.map((L) => L.ref).join(',')); }
       return rec('start_big', bot, { bet, answer: r.code });

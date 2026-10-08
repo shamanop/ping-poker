@@ -2,6 +2,7 @@
 // Actor: bank moves. New signups, Cash top-ups (with the refusal codes), the daily bonus (claimed twice in a row), admin plus / minus /
 // minus-too-big / set-play, and a non-admin trying an admin event. Every expectation is computed from the harness' own model.
 const { sleep } = require('../lib/bot');
+const { opId } = require('../lib/opid');
 const TOPUP_BELOW = 10000, START_PLAY = 1000000, COOLDOWN_MS = 3600000;      // V2-DESIGN "money/" top-up rule
 const lastTopup = new Map();
 let signups = 0, topupSeq = 0;
@@ -75,7 +76,7 @@ async function admin(W) {
   const t = W.rng.pick(bots), key = t.key;
   if (op === 'plus') {
     const cur = W.rng.pick(['chips', 'play']), delta = W.rng.range(1, 50000);
-    const r = await adminCall(W, 'admin_adjust', { key, delta, cur, reason: 'soak plus' }, 'adjust');
+    const r = await adminCall(W, 'admin_adjust', { key, delta, cur, reason: 'soak plus', opId: opId() }, 'adjust');
     if (!(r.data && r.data.ok)) { W.violate('I7', `admin plus ${delta} ${cur} to ${key} refused`, { key }, 'ok', JSON.stringify(r.data || r.error)); return null; }
     W.model.applyAdmin(key, cur, delta);
     return { what: 'admin_plus', who: key, cur, amount: delta };
@@ -85,7 +86,7 @@ async function admin(W) {
     const cur = W.rng.pick(['chips', 'play']), held = walletOf(W, key, cur);
     if (held < 1) return null;
     const delta = -W.rng.range(1, Math.min(held, 40000));
-    const r = await adminCall(W, 'admin_adjust', { key, delta, cur, reason: 'soak minus' }, 'adjust');
+    const r = await adminCall(W, 'admin_adjust', { key, delta, cur, reason: 'soak minus', opId: opId() }, 'adjust');
     if (!(r.data && r.data.ok)) { W.violate('I7', `admin minus ${-delta} ${cur} from ${key} (holds ${held}, unseated) refused`, { key }, 'ok', JSON.stringify(r.data || r.error)); return null; }
     W.model.applyAdmin(key, cur, delta);
     return { what: 'admin_minus', who: key, cur, amount: delta };
@@ -94,7 +95,7 @@ async function admin(W) {
   if (op === 'toobig') {
     const cur = W.rng.pick(['chips', 'play']);
     const delta = -(W.model.held(key, cur) + W.rng.range(1, 1000));    // more than everything the player holds (wallet and seats), so more than the wallet
-    const r = await adminCall(W, 'admin_adjust', { key, delta, cur, reason: 'soak too big' }, 'adjust');
+    const r = await adminCall(W, 'admin_adjust', { key, delta, cur, reason: 'soak too big', opId: opId() }, 'adjust');
     if (!r.data || r.data.ok || r.data.code !== 'insufficient') { W.violate('I7', `admin minus ${-delta} ${cur} from ${key} was not refused with insufficient`, { key }, 'insufficient', JSON.stringify(r.data || r.error)); return null; }
     W.model.count.adminRefused++;
     return { what: 'admin_toobig', who: key, cur, amount: delta, result: 'refused' };
@@ -103,7 +104,7 @@ async function admin(W) {
     if (t.tableId) return null;
     const cents = W.rng.chance(0.3) ? walletOf(W, key, 'play') : W.rng.range(0, 3000000);
     const delta = cents - walletOf(W, key, 'play');
-    const r = await adminCall(W, 'admin_set_play', { key, cents }, 'set_play');
+    const r = await adminCall(W, 'admin_set_play', { key, cents, opId: opId() }, 'set_play');
     if (!(r.data && r.data.ok)) { W.violate('I7', `admin_set_play ${cents} for ${key} refused`, { key }, 'ok', JSON.stringify(r.data || r.error)); return null; }
     if (delta !== 0) W.model.applyAdmin(key, 'play', delta);
     if (walletOf(W, key, 'play') !== cents && !t.tableId) W.warn('setplay_landed_elsewhere', `${key}: wallet ${walletOf(W, key, 'play')} after set_play ${cents}`);
@@ -112,14 +113,14 @@ async function admin(W) {
   // a non-admin sending an admin event must be refused and move nothing (the ledger checks would show it)
   const plain = bots.find(b => !b.key.startsWith('chris'));
   if (!plain) return null;
-  const r = await plain.req('admin_adjust', { key: plain.key, delta: 99999, cur: 'play', reason: 'sneaky' }, 'admin_result', 1500);
+  const r = await plain.req('admin_adjust', { key: plain.key, delta: 99999, cur: 'play', reason: 'sneaky', opId: opId() }, 'admin_result', 1500);
   if (r.data && r.data.ok) { W.violate('I7', `${plain.key} is not an admin and admin_adjust paid out`, { key: plain.key }, 'refused', JSON.stringify(r.data)); return null; }
   return { what: 'admin_nonadmin', who: plain.key, result: r.error ? r.error.code : 'ignored' };
 }
 
 // Setup: the product gives a new account 0 Cash (bb298d2); the soak players get theirs the only legal way, an admin adjust, so admin:adjust is the one source of Cash (the model books it).
 async function grantCash(W, key, cents) {
-  const r = await adminCall(W, 'admin_adjust', { key, delta: cents, cur: 'play', reason: 'soak grant' }, 'adjust');
+  const r = await adminCall(W, 'admin_adjust', { key, delta: cents, cur: 'play', reason: 'soak grant', opId: opId() }, 'adjust');
   if (!(r.data && r.data.ok)) throw new Error(`admin grant of ${cents} Cash to ${key} refused: ${JSON.stringify(r.data || r.error)}`);
   W.model.applyAdmin(key, 'play', cents);
 }
