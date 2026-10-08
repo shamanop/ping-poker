@@ -82,6 +82,8 @@ class Model {
     return true;
   }
   applyAdmin(key, cur, delta) { this._add(key, cur, delta); this.src.admin[cur] += delta; this.count.adminAdjust++; }
+  // An ACCEPTED "Set Cash to X" (K1-3): the player's TOTAL Cash (wallet + seats + open rounds, which is what held['play'] is) becomes X. A refused set is never booked: it changes nothing.
+  applySetCash(key, x) { const d = x - this.held(key, 'play'); if (d !== 0) this.applyAdmin(key, 'play', d); return d; }
   accounts() { return [...this.players.keys()]; }
   expectedSource(cur) {
     return {

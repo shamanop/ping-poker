@@ -359,12 +359,12 @@ module.exports = {
       let h = have(W, bot, mode), bet = W.camp.betLevels.slice().reverse().find((b) => b > h), restore = null;
       if (!bet && mode === 'play' && !bot.tableId && !W.model.slot.hasOpen(bot.key) && bot.spinsInFlight === 0 && W.admin.connected()) {      // nobody is poor: make one player poor in Cash through the admin (same book-keeping as the bank actor), then give it back
         const cents = W.rng.range(0, 99), r = await W.admin.req('admin_set_play', { key: bot.key, cents, opId: opId() }, 'admin_result', 4000, { pred: (d) => d.op === 'set_play' });
-        if (!(r.data && r.data.ok)) return null;
+        if (!(r.data && r.data.ok)) { if (r.data && r.data.code === 'cash_in_play') violate(W, `admin_set_play ${cents} for ${bot.key} refused for cash in play, but the bot has no seat, no open run and no open slot round`, { key: bot.key }, 'ok', JSON.stringify(r.data)); return null; }     // K1-3: a refused set changes nothing, so the model is left alone
         W.model.applyAdmin(bot.key, 'play', cents - h); restore = h; h = cents; bet = 100;
       }
       if (!bet) return null;
       const n0 = markLines(W), r = await startRun(W, bot, { mode, bet, home: 'OH' });
-      if (restore != null) { const now = have(W, bot, 'play'); const rr = await W.admin.req('admin_set_play', { key: bot.key, cents: restore, opId: opId() }, 'admin_result', 4000, { pred: (d) => d.op === 'set_play' }); if (rr.data && rr.data.ok && restore !== now) W.model.applyAdmin(bot.key, 'play', restore - now); }
+      if (restore != null) { const now = have(W, bot, 'play'); const rr = await W.admin.req('admin_set_play', { key: bot.key, cents: restore, opId: opId() }, 'admin_result', 4000, { pred: (d) => d.op === 'set_play' }); if (rr.data && rr.data.ok) { if (restore !== now) W.model.applyAdmin(bot.key, 'play', restore - now); } else violate(W, `admin_set_play ${restore} (give the Cash back) for ${bot.key} was refused`, { key: bot.key }, 'ok', JSON.stringify(rr.data || rr.error)); }       // K1-3: the set is the TOTAL; this bot has no run, seat or round, so the wallet is the total and a refusal is a finding
       if (r.kind === 'run') return rec('start_big', bot, { bet, answer: 'run' });
       { const ls = newCampLines(W, n0, bot.key).filter((L) => L.camp.suffix === 'open'); if (r.code === 'funds' && ls.length) violate(W, 'a refused start (funds) wrote a ledger line', { key: bot.key }, 'nothing', ls.map((L) => L.ref).join(',')); }
       return rec('start_big', bot, { bet, answer: r.code });
