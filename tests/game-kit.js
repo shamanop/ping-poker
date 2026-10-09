@@ -395,7 +395,10 @@ function checkReplay(A, cur) {
         const res = A.play(w.g, s, { cur, bet: A.bets.good[i % A.bets.good.length], i });
         const lines = w.since(id0), round = roundsOf(A, lines).get(res.roundId);
         done.push({ res, msgs: w.log.slice(mark).filter((m) => m.ev !== w.openEv) });
-        if (!round) { t.fail(`${dup} play#${i}: no ledger line for round ${res.roundId}`); continue; }
+        if (!round) {
+          if (res.cost === 0 && !res.win) continue;      // a free round that won nothing writes no line (ADD-A-GAME.md section 4): the same rule roundFacts applies
+          t.fail(`${dup} play#${i}: no ledger line for round ${res.roundId}`); continue;
+        }
         t.ok(round.staked === res.cost, `${dup} play#${i}: staked ${round.staked}, round cost ${res.cost}`);
         if (res.win != null) t.ok(round.returned === res.win, `${dup} play#${i}: shown win ${res.win}, ledger paid ${round.returned}`);
         // every other round the doubled messages may have made must be a whole round of its own: a stake, one escrow or settled
