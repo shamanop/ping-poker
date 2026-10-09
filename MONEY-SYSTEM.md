@@ -115,7 +115,7 @@ Restart: nothing to recover.
 | `auth_login` (the account has no PIN yet) | the same refusal (`:289`) |
 | the real player | cannot sign in either, until the admin resets the PIN |
 | the admin | Admin page > Players > the row > "Reset PIN" (`transport/handlers/admin.js:47` -> `accounts.resetPin`): sets a new PIN, clears `locked`, signs the account's old sessions out. The admin gives the new PIN to the real player (outside the game). The Cash was never touched: it sits in the ledger the whole time. |
-Without the lock the room word would hand the Cash to the first person who typed the name. Tests: `tests/money-1008-r2b-boot.js` (7 scenarios: wallet, Cash seat, Cash round escrow, stray pot, a Chips-only account stays open, admin exempt, the order against recovery), `tests/money-1008-r2b-acctfile.js`.
+Without the lock the room word would hand the Cash to the first person who typed the name. Tests: `tests/money-1008-r2b-boot.js` (Cash in the wallet with `accounts.json` gone; Cash at a seat, in a round escrow and in a stray pot, each with the file gone and with it empty; a Chips-only control that is NOT locked; an unreadable file with no usable `.bak`: the server does not start), `tests/money-1008-r2b-acctfile.js`. That the admin account is exempt is read from `accounts.js:200` and `:465`, no test named for it is claimed.
 
 ### 5.2 Admin sets or adjusts
 1. The client message carries an op id, one per confirmed click (`transport/handlers/admin.js`, `admin_set_play`, `admin_adjust`). No op id = refused `op_required`, nothing written (`admin/index.js:15-21`).
