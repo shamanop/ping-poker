@@ -423,9 +423,23 @@ const BIG_SWAP = {
   });
 
   // ------------------------------------------------------------------------------------------ item 8: stored player state under a changed config
-  await test('item 8a: a smaller list than the stored leads: one Callback arms at the next paid spin, never two, no negative leads, carry intact; every round settles to the cent', async () => {
+  // MONEY 1008 R3C-1 (chris-lead rule): a change of the live config never changes the SHARE of one Callback a player holds. A stored record with no stamp (written before the stamp existed) is counted against the
+  // SHIPPED list (450 = 4500 tenths): 3000 tenths are 0.667 of a Callback, and under list 200 (2000 tenths) they stay 0.667 = 1333 tenths = 133 leads, with NO immediate arm. The stamped twin below plants the same
+  // 3000 tenths as counted against list 200 (ll 2000 = 1.5 Callbacks): that one arms at the next paid spin, never two, as the old item 8a asserted.
+  await test('item 8a: a smaller list than the stored leads (a record with no stamp = the shipped list 450): the share stays, 3000 tenths = 133 leads under list 200, nothing arms by itself or at the next spin', async () => {
     resetLive(); const s = setup({ rng: E.rngFrom(81), roundRng: E.rngFrom(82) }); const a = s.sock('ann'); rich(s, 'ann');
-    const today = () => dayFmt.format(new Date(s.clock.now())), put = (x) => s.store().setPlayer('ann', 'play', Object.assign(E.newState(), { lt: 3000, avg: 100, rounds: 5, carry: 2.5, day: today(), streak: 1 }, x));
+    const today = () => dayFmt.format(new Date(s.clock.now()));
+    s.store().setPlayer('ann', 'play', Object.assign(E.newState(), { lt: 3000, avg: 100, rounds: 5, carry: 2.5, day: today(), streak: 1 })); SRV.setLiveConfig({ overrides: { pull: { list: 200 } } });
+    const v0 = state(s, a).pull.play; assert.strictEqual(v0.leads, 133); assert.strictEqual(v0.list, 200); assert.strictEqual(v0.cb, null, 'nothing arms by itself, only at a paid spin');
+    assert.ok(Math.abs(v0.lt - 3000 * 2000 / 4500) < 1e-6, 'the share is kept: ' + v0.lt + ' tenths of a list of 2000');
+    let w = s.bal('ann', 'play');
+    const r1 = play(s, a, { bet: 100, mode: 'play' }); assert.strictEqual(r1.pull.armed, false, 'no Callback: 0.667 of one is not one'); assert.strictEqual(r1.callback, false);
+    w += -r1.cost + r1.totalWin + (r1.pot ? r1.pot.amount : 0); assert.strictEqual(r1.wallet.play, w);
+    const st = s.store().player('ann', 'play'); assert.strictEqual(st.cb, null); assert.ok(Math.abs(st.lt - (3000 * 2000 / 4500 + r1.pull.filled)) < 1e-6, 'the leads after the spin: the kept share plus what the spin filled: ' + st.lt); assert.strictEqual(st.ll, 2000, 'the record is stamped with the list it is now counted against'); assert.strictEqual(st.carry, 2.5);
+  });
+  await test('item 8a-stamped: a smaller list than the stored leads, leads stamped with the list size they were counted against (ll = the live list, as the server stamps what it writes): one Callback arms at the next paid spin, never two, no negative leads, carry intact; every round settles to the cent', async () => {
+    resetLive(); const s = setup({ rng: E.rngFrom(81), roundRng: E.rngFrom(82) }); const a = s.sock('ann'); rich(s, 'ann');
+    const today = () => dayFmt.format(new Date(s.clock.now())), put = (x) => s.store().setPlayer('ann', 'play', Object.assign(E.newState(), { lt: 3000, ll: 2000, avg: 100, rounds: 5, carry: 2.5, day: today(), streak: 1 }, x));
     put({}); SRV.setLiveConfig({ overrides: { pull: { list: 200 } } });
     const v0 = state(s, a).pull.play; assert.strictEqual(v0.leads, 300); assert.strictEqual(v0.list, 200); assert.strictEqual(v0.cb, null, 'nothing arms by itself, only at a paid spin');
     let w = s.bal('ann', 'play');

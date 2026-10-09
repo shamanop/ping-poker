@@ -62,6 +62,7 @@ function createStore(file, opts = {}) {
   let blocked = null, mustRestore = false, mainGood = false;
   let jseq = 0;                                              // journal mode: the last journal line the main file already contains
   const jfile = file && file + '.journal';
+  const jprev = file && file + '.journal.prev';               // MONEY 1008 R3C-2: the journal segment of the PREVIOUS checkpoint interval (see compact)
 
   // keep the bytes of a file that cannot be used under a dated name; returns the new path, or null when they could not be kept
   function keep(f) {
@@ -190,11 +191,19 @@ function createStore(file, opts = {}) {
   }
   // the checkpoint: the whole main file (jseq says which lines it contains), then the journal is emptied. Never on the per-spin path. Anything written to the journal is in `data` already (the line is
   // written before the ledger call, the memory is changed in the same tick), and a line waiting for its fsync is covered by the checkpoint's own fsync.
+  // MONEY 1008 R3C-2: the checkpoint's .bak is the main file of the checkpoint BEFORE (one checkpoint behind), so a restore from it needs every journal line written since that one: the segment this checkpoint
+  // just folded into the main file is KEPT as <file>.journal.prev (replacing the older segment, which only the .bak before this one needed) and the journal starts empty. Boot restores from the .bak and
+  // replays prev + journal on top, which is the state as of the last durable journal line. Disk: at most two segments, each under the journal bound (MAX_JOURNAL) like the journal itself.
+  function rotate() {
+    if (jfd != null) { try { fs.closeSync(jfd); } catch {} jfd = null; }
+    try { fs.renameSync(jfile, jprev); } catch (e) { if (!e || e.code !== 'ENOENT') { jopen(); throw e; } }     // a failed rename leaves the journal as it was (boot skips what the main file holds); the checkpoint is retried
+    jopen(); jbytes = 0;
+  }
   function compact() {
     if (jtimer) { clearTimeout(jtimer); jtimer = null; }
     if (blocked || !jmode) return;
     writeNow();
-    if (jfd != null) { fs.ftruncateSync(jfd, 0); jbytes = 0; }
+    rotate();
     syncFault = null;
   }
   function journaled() { return jmode && !blocked; }
@@ -253,26 +262,39 @@ function createStore(file, opts = {}) {
   }
   // best effort on a damaged line: the round it names (the line starts {"s":N,"c":{"k":..,"i":..), so the front of a torn line usually still says)
   function refOf(text) { const m = /"c":\{"k":("(?:[^"\\]|\\.)*"),"i":("(?:[^"\\]|\\.)*")/.exec(text); if (!m) return null; try { return { k: JSON.parse(m[1]), i: JSON.parse(m[2]) }; } catch { return null; } }
-  function replay() {
+  // one journal file read and checked: { missing | empty | blocked } or { file, good, bad, torn, damaged, complete (the text up to the last newline) }
+  function parseJournal(f) {
     let txt;
-    try { txt = fs.readFileSync(jfile, 'utf8'); } catch (e) {
-      if (e && e.code === 'ENOENT') return;
-      blocked = 'the journal ' + jfile + ' cannot be read (' + (e && e.message) + ')';
-      alarm('coldcall: store: *** ' + blocked + '. The Cold Call store is BLOCKED: nothing is written; Callbacks and leads are safe on disk until a person fixes this. ***'); return;
+    try { txt = fs.readFileSync(f, 'utf8'); } catch (e) {
+      if (e && e.code === 'ENOENT') return { missing: true };
+      return { blocked: 'the journal ' + f + ' cannot be read (' + (e && e.message) + ')' };
     }
-    if (!txt.length) return;
+    if (!txt.length) return { empty: true };
     const parts = txt.split('\n'); const tail = parts.pop();                      // the text after the last newline: a line that was never completed (never acknowledged)
     const good = [], bad = [];                                                   // good: parsed lines in order; bad: { n, why, text }
     parts.forEach((ln, n) => {
-      if (!ln) { bad.push({ n: n + 1, why: 'an empty line', text: ln }); return; }
+      if (!ln) { bad.push({ n: n + 1, why: 'an empty line', text: ln, file: f }); return; }
       const tab = ln.indexOf('\t'); const sum = tab === 8 ? ln.slice(0, 8) : '', json = tab === 8 ? ln.slice(9) : '';
-      if (!sum || sum !== sum8(json)) { bad.push({ n: n + 1, why: 'the checksum does not match', text: ln }); return; }
-      let j = null; try { j = JSON.parse(json); } catch { bad.push({ n: n + 1, why: 'the checksum matches but it is not JSON', text: ln }); return; }
-      const why = lineShape(j); if (why) { bad.push({ n: n + 1, why: 'the checksum matches but the line has the wrong shape: ' + why, text: ln }); return; }
+      if (!sum || sum !== sum8(json)) { bad.push({ n: n + 1, why: 'the checksum does not match', text: ln, file: f }); return; }
+      let j = null; try { j = JSON.parse(json); } catch { bad.push({ n: n + 1, why: 'the checksum matches but it is not JSON', text: ln, file: f }); return; }
+      const why = lineShape(j); if (why) { bad.push({ n: n + 1, why: 'the checksum matches but the line has the wrong shape: ' + why, text: ln, file: f }); return; }
       good.push(j);
     });
     const torn = tail.length > 0, damaged = bad.length > 0;
-    if (torn) bad.push({ n: parts.length + 1, why: 'a last line that was never completed (' + tail.length + ' bytes after the last newline)', text: tail, tornTail: true });
+    if (torn) bad.push({ n: parts.length + 1, why: 'a last line that was never completed (' + tail.length + ' bytes after the last newline)', text: tail, tornTail: true, file: f });
+    return { file: f, good, bad, torn, damaged, complete: parts.length ? parts.join('\n') + '\n' : '' };
+  }
+  function replay() {
+    // MONEY 1008 R3C-2: after a restore from the .bak (one checkpoint behind) the segment of the previous checkpoint interval is replayed first, then the journal: the state as of the last durable line
+    const restored = mustRestore, segs = [];
+    for (const f of restored ? [jprev, jfile] : [jfile]) {
+      const r = parseJournal(f);
+      if (r.blocked) { blocked = r.blocked; alarm('coldcall: store: *** ' + blocked + '. The Cold Call store is BLOCKED: nothing is written; Callbacks and leads are safe on disk until a person fixes this. ***'); return; }
+      if (!r.missing && !r.empty) segs.push(r);
+    }
+    if (!segs.length) return;
+    const good = [].concat(...segs.map((x) => x.good)), bad = [].concat(...segs.map((x) => x.bad));
+    const torn = segs.some((x) => x.torn), damaged = segs.some((x) => x.damaged);
     const cancelled = new Set(good.filter((j) => j.x !== undefined).map((j) => j.x));
     let applied = 0, skipped = 0, dropped = 0, cancels = 0, maxSeq = jseq;
     for (const j of good) {
@@ -289,23 +311,41 @@ function createStore(file, opts = {}) {
       try { applyLine(j); applied++; } catch (e) { alarm('coldcall: store: *** journal line ' + j.s + ' could not be applied: ' + (e && e.message) + ' ***'); }
     }
     jlast = maxSeq;
+    if (restored) {                                                               // loud, always: the state came from the .bak plus the kept journal segments
+      const seqs = good.filter((j) => j.s > jseq).map((j) => j.s), first = seqs.length ? Math.min(...seqs) : null;
+      alarm('coldcall: store: *** restored from ' + bak + ' and replayed ' + applied + ' journal line(s) of ' + segs.map((x) => x.file).join(' + ') + ' on top of it (' + skipped + ' already in it, ' + dropped + ' dropped, ' + cancels + ' cancelled): the state is as of the last durable journal line. ***');
+      if (first !== null && first > jseq + 1) alarm('coldcall: store: *** the journal lines ' + (jseq + 1) + '..' + (first - 1) + ' are not on disk (the .bak is from before the journal segments were kept, or a segment is gone): what they carried (a played Callback, leads) is NOT restored. ***');
+    }
     // every line that could not be used is ONE log line with its reason; one that names a round the ledger holds is loud (that spin's state could not be restored from it)
     let shown = 0;
     for (const b of bad) {
       let held = null; const ref = refOf(b.text);
       if (ref && typeof opts.confirm === 'function') { try { held = !!opts.confirm(ref.k, ref.i); } catch { held = null; } }
-      const msg = 'journal line ' + b.n + ' of ' + jfile + ' not used: ' + b.why + (ref ? '; it names round ' + JSON.stringify(ref.i) + (held === true ? ', which the LEDGER HOLDS: the stake is there and the leads / state of that spin could not be restored' : held === false ? ', which the ledger does not hold (nothing lost)' : '') : '');
+      const msg = 'journal line ' + b.n + ' of ' + b.file + ' not used: ' + b.why + (ref ? '; it names round ' + JSON.stringify(ref.i) + (held === true ? ', which the LEDGER HOLDS: the stake is there and the leads / state of that spin could not be restored' : held === false ? ', which the ledger does not hold (nothing lost)' : '') : '');
       if (shown++ >= 20) { if (shown === 21) alarm('coldcall: store: ... and ' + (bad.length - 20) + ' more unusable journal line(s)'); continue; }
-      if (held === true || (damaged && !b.tornTail)) alarm('coldcall: store: *** ' + msg + ' ***'); else say('coldcall: store: ' + msg);
+      if (held === true || (segs.find((x) => x.file === b.file).damaged && !b.tornTail)) alarm('coldcall: store: *** ' + msg + ' ***'); else say('coldcall: store: ' + msg);
     }
+    const curSeg = segs.find((x) => x.file === jfile);
     if (damaged) {
-      const kept = keep(jfile);
-      if (!kept) { blocked = 'the damaged journal ' + jfile + ' could not be kept under another name'; alarm('coldcall: store: *** ' + blocked + '. The Cold Call store is BLOCKED: nothing is written. ***'); return; }
-      alarm('coldcall: store: *** the journal had ' + bad.filter((b) => !b.tornTail).length + ' bad line(s), kept as ' + kept + '. The ' + applied + ' good line(s) were applied, the others were not. ***');
+      for (const x of segs) {
+        if (!x.damaged) continue;
+        const kept = keep(x.file);
+        if (!kept) { blocked = 'the damaged journal ' + x.file + ' could not be kept under another name'; alarm('coldcall: store: *** ' + blocked + '. The Cold Call store is BLOCKED: nothing is written. ***'); return; }
+        alarm('coldcall: store: *** the journal ' + x.file + ' had ' + x.bad.filter((b) => !b.tornTail).length + ' bad line(s), kept as ' + kept + '. The ' + applied + ' good line(s) were applied, the others were not. ***');
+      }
     }
-    // whatever the journal added is checkpointed at once; the journal starts empty (and an unfinished tail is gone with it)
+    // whatever the journal added is checkpointed at once; the journal starts empty (and an unfinished tail is gone with it). The .bak this checkpoint leaves is the main file as it was before it, so the
+    // lines written since that one stay on disk (R3C-2): after a restore from the .bak they are appended to the kept segment (the .bak is still the old one), otherwise the journal becomes the kept segment.
     if (applied || damaged || torn || skipped || dropped || cancels) {
-      try { writeNow(); fs.writeFileSync(jfile, ''); jbytes = 0; }
+      try {
+        writeNow();
+        if (restored) { if (curSeg && !curSeg.damaged && curSeg.complete) { const fd = fs.openSync(jprev, 'a'); try { fs.writeSync(fd, curSeg.complete); fs.fsyncSync(fd); } finally { fs.closeSync(fd); } } }
+        else if (curSeg && !curSeg.damaged) {                                       // the complete lines only (an unfinished tail was never acknowledged and must not sit in front of lines appended later)
+          const tp = jprev + '.tmp', fd = fs.openSync(tp, 'w'); try { fs.writeSync(fd, curSeg.complete); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+          fs.renameSync(tp, jprev);
+        }
+        fs.writeFileSync(jfile, ''); jbytes = 0;
+      }
       catch (e) { dirty = true; alarm('coldcall: store: the replayed journal could not be checkpointed to ' + file + ':', e && e.message); }
     }
   }
