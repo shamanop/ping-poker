@@ -107,6 +107,16 @@ Each flow lists its ledger lines in order. "Restart" says what the next boot doe
 3. Safe to repeat: only a currency with no `bank:` / `play:` account yet is minted.
 Restart: nothing to recover.
 
+**A re-made account that holds Cash comes back locked (RV-ACCT-1, `server.js:33-45`, `accounts.js` `migrateLegacy`).** If `accounts.json` was lost or damaged, boot re-creates a missing account for every key the old stores or the ledger know. Before it does, `server.js` reads the ledger (before boot recovery pays anything back) and sums ALL Cash of each key: the wallet `play:<key>`, every Cash seat `seat:<table>:<key>`, every Cash round escrow `escrow:<game>:<key>:<round>`, and the net contribution of a stray `pot:<table>:<hand>` that boot recovery will return. A key with more than 0 in that sum gets `locked: true` on its new account (an admin account is exempt) and one `[SECURITY] accounts: N account(s) were re-made UNCLAIMED for keys that hold Cash and are LOCKED ...` line goes to stderr. What a locked account means:
+| Who | What happens |
+|---|---|
+| a stranger who types the name and the public room word (`auth_claim`) | refused `account_locked`: "This account is locked. Ask the admin to reset its PIN." (`accounts.js:263`) |
+| a stranger who signs up with that name (`auth_signup`) | the same refusal (`:242`) |
+| `auth_login` (the account has no PIN yet) | the same refusal (`:289`) |
+| the real player | cannot sign in either, until the admin resets the PIN |
+| the admin | Admin page > Players > the row > "Reset PIN" (`transport/handlers/admin.js:47` -> `accounts.resetPin`): sets a new PIN, clears `locked`, signs the account's old sessions out. The admin gives the new PIN to the real player (outside the game). The Cash was never touched: it sits in the ledger the whole time. |
+Without the lock the room word would hand the Cash to the first person who typed the name. Tests: `tests/money-1008-r2b-boot.js` (7 scenarios: wallet, Cash seat, Cash round escrow, stray pot, a Chips-only account stays open, admin exempt, the order against recovery), `tests/money-1008-r2b-acctfile.js`.
+
 ### 5.2 Admin sets or adjusts
 1. The client message carries an op id, one per confirmed click (`transport/handlers/admin.js`, `admin_set_play`, `admin_adjust`). No op id = refused `op_required`, nothing written (`admin/index.js:15-21`).
 2. `adjust`: one line `adj:<key>:c.<opId>`, `admin:adjust` to the player (delta > 0) or the player to `admin:adjust` (delta < 0). A resend of the same op id answers `dup`; the same op id with other numbers is `ref_conflict`.
@@ -175,6 +185,18 @@ Restart: every stored run is cashed out at its stored multiplier on the growth t
 | Campaign | Same for a run (`campaign.js:136` `moneyFailed`); a fence code sets `fenced` and every new start or step answers `money_down` until restart (`FENCE_CODES` `:62`, `noteFence` `:126`, checks at `:285` and `:322`). |
 | game money / wallet adapter | `insufficient` on a player account = `funds`; `bad_amount` = `amount`; `round_closed`, `pool_short`, `ref_conflict`, `stake_mismatch` pass through; anything else = `internal` ("Server error") with the cause attached (`transport/game-money.js:14`, `wallet-adapter.js:17`). |
 
+### 5.12 A live slot config change (admin; no ledger line)
+Cold Call and Ballot Bender math can be changed while the server runs: `POST /api/admin/coldcall-config` and `POST /api/admin/bender-config` (header `x-admin-token`; `server.js:153-185`). Nothing is written to the money ledger by a change; the point is that a config can never make a game pay back more than it takes. In order:
+1. Number ranges and shape are checked first, on the server's own thread (Ballot Bender: `RANGES` in `games/bender-engine.js:224`, e.g. `maxSpins` 0-200, `pay.*` 0-1e6, lists of at most 64 entries; Cold Call: `validate` in `games/coldcall-livecfg.js`). A number out of range is refused at once ("must be between ...").
+2. A config equal to the shipped numbers (and `{reset: true}`) needs no measuring and is applied.
+3. Anything else is MEASURED: one check at a time (a second POST while one runs is refused: "cfg: another payback check is running, try again when it has finished"). The measuring runs in a worker thread (`measureInWorker`, `bender-rtp.js` / `coldcall-livecfg.js`), so the game keeps playing. The worker first plays a smoke test: if it does not end in 10 s (`SMOKE_LIMIT_MS`) the config is "too slow to check" and refused. The whole check stops at 300 s (`PB_DEADLINE_MS`) and is refused.
+4. Rule (`BOUND_SE = 3`, `CEILING_PCT = 100.0`): a way is accepted only if measured payback + 3 standard errors is at or under 100. The check's own uncertainty counts against the admin. A way that is undecided after the base budget (measured at or under 100, upper bound above) gets more rounds, for that way only, until it is decided, 8 times its budget was sampled, or 240 s (`EXT_MS`) of wall clock have passed since the check began; still undecided = refused. Ballot Bender ways: the base game, the Election buy and the Landslide buy. Cold Call ways: plain spin, buys, Callback, hunt and the daily gift (at most 5 cents a day to one account, `DAILY_GIFT_MAX_CENTS`).
+5. Ballot Bender buys are charged in whole cents, `round(buyCost x bet)`, at every allowed bet, and the win is paid unscaled; so the check measures every buy at the LOWEST price (in multiples of the bet) any allowed bet is charged (`lowestPrice`, `bender-rtp.js`), and a config is accepted only if the buy is at or under 100 at every bet a player can pick.
+6. Accepted: the file is written (`bender-config.json` / `coldcall-config.json` in the data dir), the config swaps in, the players are told the new cfg and the label players see is the value the server measured (never admin-typed text). Every outcome, accepted or refused, is one `[cfg-audit]` line with who (token fingerprint + address), old and new measured payback.
+7. A reset, or any newer accepted save, CANCELS a running check (the admin who started it is told "another admin change ... was accepted while this check ran; nothing was changed by this one"), so a check that ends late cannot land on top of a later action.
+A check commonly takes 1 to 2 minutes (the shipped Cold Call numbers took about 52 s on a quiet box; a Ballot Bender check 134 s on a loaded one, fixer's measures). The cap is wall clock, so a slow or loaded box refuses a config a quick box accepts. It fails closed: nothing slower than the cap ever goes live. The consequence of 3 standard errors: the shipped Cold Call numbers read about 98.6 +- 0.4 after the extra rounds, so a config very near the shipped one may be refused on a slow box too.
+Boot: a saved Ballot Bender config is loaded only if it is the shipped numbers or carries a passing measurement made for exactly these numbers; a saved config with a number outside the ranges of step 1 (RVC-4) is NOT loaded: the game starts on the shipped numbers with one console line `[bender] live config not loaded, using defaults: ...`. Tests: `tests/money-1008-r2c-bound.js`, `money-1008-r2c-buy.js`, `money-1008-r2c-reset.js`, `money-1008-cfg-bender.js`, `money-1008-cfg-coldcall.js`.
+
 ## 6. Invariants
 
 Each has the check that enforces it. "Soak" ids are in `tests/soak/README.md` (I1-I13, an independent reader of `money.jsonl` that shares no code with `money/`). Run commands are in `RUNBOOK.md` and the test headers.
@@ -201,7 +223,7 @@ Each has the check that enforces it. "Soak" ids are in `tests/soak/README.md` (I
 | 18 | An admin money edit needs an op id; a resend writes nothing; Set Cash is a total | `tests/money-1008-admin-opid.js`, `money-1008-admin-setcash.js`, `money-1008-admin-msg.js` |
 | 19 | An unclaimed admin account cannot be claimed without `ADMIN_CLAIM_PASSWORD` | `tests/money-1008-adminclaim.js` |
 | 20 | The QA force hooks never touch a Cash round | `tests/money-1008-cc-hook.js`; Campaign: `tests/money-1008-campaign.js` |
-| 21 | A live slot config above 100.0% payback is refused for Cold Call and Ballot Bender | `tests/money-1008-cfg-coldcall.js`, `money-1008-cfg-bender.js` |
+| 21 | A live slot config is accepted only when every way to play is measured at or under 100.0% payback with 3 standard errors of margin (section 5.12); Ballot Bender buys are measured at the lowest price any bet is charged | `tests/money-1008-cfg-coldcall.js`, `money-1008-cfg-bender.js`, `money-1008-r2c-bound.js`, `money-1008-r2c-buy.js`, `money-1008-r2c-reset.js` |
 | 22 | A game module reaches money only through `ctx.money`, and passes the kit | `node tests/game-kit.js <gameId>`: pending the kit merge, see `ADD-A-GAME.md` |
 
 ## 7. What the client sees
@@ -224,7 +246,7 @@ No code caps a payout or a house balance: the house accounts have no floor (`mon
 | Campaign Trail | **$25,000** (1,000 x $25, only at LANDSLIDE, step 49) | $25 run | 1 in 1,042 runs played to the end |
 | Poker | no house; the pot is other players' money | n/a | n/a |
 
-The live slot configs are measured before they go live: a Cold Call or Ballot Bender config above 100.0% payback is refused (`games/coldcall-livecfg.js`, `games/bender.js` `setLiveConfigChecked`). Return to players is about 96-98% in all three.
+The live slot configs are measured before they go live: a Cold Call or Ballot Bender config is refused unless every way to play is shown at or under 100.0% payback (section 5.12; `games/coldcall-livecfg.js`, `games/bender.js` `setLiveConfigChecked`). Return to players is about 96-98% in all three.
 
 ## 9. Deposits and withdrawals (not built)
 
