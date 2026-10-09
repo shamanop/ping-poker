@@ -35,7 +35,7 @@ function seed(s) {
   const window = rng.pick([1, 2, 3, 10]);
   const o = { now, fsync: 'none', log: () => {}, window, ckpt: true, ckptEvery: rng.pick([0, 3]), ckptVerify: false };
   let led, ref, svc, port, n = 0;
-  const mk = () => { ref = Ref.open(f + '.ref', { now, fsync: 'none', log: () => {} }); led = New.open(f, o); svc = createService(led, { now }); port = createMoneyPort({ service: svc, ledger: led, bootId: 'bt', afterWrite: () => {}, onFence: () => {} }); };
+  const mk = () => { ref = Ref.open(f + '.ref', { now, fsync: 'none', log: () => {} }); led = New.open(f, o); svc = createService(led, { signupPlay: 1000000, now }); port = createMoneyPort({ service: svc, ledger: led, bootId: 'bt', afterWrite: () => {}, onFence: () => {} }); };
   mk();
   // the same call goes to the frozen ledger and to the D2 ledger; the outcome (id or error code) must agree
   const both = (fn) => {
@@ -92,7 +92,7 @@ function realOldSeed(s) {
   let A, B;
   const open = () => {
     const lo = Ref.open(fo, { fsync: 'none', log: () => {}, now: clk }), ln = New.open(fn, { ...o, now: clk });
-    const so = PreSvc.createService(lo, { now: clk }), sn = createService(ln, { now: clk });
+    const so = PreSvc.createService(lo, { now: clk }), sn = createService(ln, { signupPlay: 1000000, now: clk });
     A = { l: lo, s: so, p: PrePort.createMoneyPort({ service: so, ledger: lo, bootId: 'b', afterWrite: () => {}, onFence: () => {} }) };
     B = { l: ln, s: sn, p: createMoneyPort({ service: sn, ledger: ln, bootId: 'b', afterWrite: () => {}, onFence: () => {} }) };
   };

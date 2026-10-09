@@ -132,6 +132,19 @@
   // The BANK balance of a row: v2 sends it separately from the at-table chips (`balance` there is bank + at table); a legacy row only has `balance`.
   const bankOf = a => (typeof a.bank === 'number' ? a.bank : (a.balance || 0));
 
+  // R2B-6: the Cash the page shows and edits is the player's TOTAL (wallet + Cash at tables + Cash in open rounds), the same number admin_set_play sets.
+  // `playTotal` / `playWallet` / `playInPlay` come from the server; `play` is the wallet alone and is never edited here.
+  const cashUsd = c => '$' + (c / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const cashTotalOf = a => (Number.isFinite(a.playTotal) ? a.playTotal : null);
+  const inPlayWhere = a => {
+    const tbl = Number.isFinite(a.atTablePlay) ? a.atTablePlay : 0, rnd = Math.max(0, a.playInPlay - tbl);
+    return [tbl > 0 ? 'at a table' : '', rnd > 0 ? 'in a round' : ''].filter(Boolean).join(' / ');
+  };
+  function cashCell(a) {
+    const total = cashTotalOf(a); if (total === null) return '--';
+    return cashUsd(total) + (a.playInPlay > 0 ? ' <small class="adm-inplay">' + cashUsd(a.playInPlay) + ' of it ' + inPlayWhere(a) + '</small>' : '');
+  }
+
   // ── accounts ──
   function renderAccounts() {
     const host = $('adm-accounts'); if (!host || tab !== 'accounts') return;
@@ -153,10 +166,10 @@
         acts = `<button type="button" class="btn btn--secondary btn--sm" data-a="bal">Set chips</button><button type="button" class="btn btn--secondary btn--sm" data-a="play">Set Cash</button><button type="button" class="btn btn--secondary btn--sm" data-a="pin">Reset PIN</button>`;
       }
       return `<tr data-k="${k}"><td class="nm"><span class="adm-dot${a.online ? ' on' : ''}" title="${a.online ? 'Connected now' : 'Offline'}"></span><b>${esc(a.display)}</b>${a.isAdmin ? '<i>Owner</i>' : ''}${a.claimed ? '' : '<i>Unclaimed</i>'}</td>
-        <td>${a.online ? 'online now' : ago(a.lastSeen)}</td><td class="n adm-bal">${num(bankOf(a))}</td><td class="n adm-at">${atTable}</td><td class="n adm-play">${a.play == null ? "--" : "$" + (a.play / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td><td class="n"><div class="adm-acts">${acts}</div></td></tr>`;
+        <td>${a.online ? 'online now' : ago(a.lastSeen)}</td><td class="n adm-bal">${num(bankOf(a))}</td><td class="n adm-at">${atTable}</td><td class="n adm-play">${cashCell(a)}</td><td class="n"><div class="adm-acts">${acts}</div></td></tr>`;
     }).join('');
-    host.innerHTML = `<table class="adm-tbl" id="adm-acct-tbl"><thead><tr><th>Player</th><th>Last seen</th><th class="n">Bank (chips)</th><th class="n">At table</th><th class="n">Cash wallet</th><th class="n">Actions</th></tr></thead><tbody>${rows}</tbody></table>
-      <p class="adm-empty" style="padding:14px 0 0;text-align:left">Chips (total) is bank plus whatever is at the table. Cash is the real-money wallet used by the slot and Cash tables. Players see changes instantly. Deleting accounts is not offered here: a player's money, history and table seats are tied together, so it needs a deliberate cleanup.</p>`;
+    host.innerHTML = `<table class="adm-tbl" id="adm-acct-tbl"><thead><tr><th>Player</th><th>Last seen</th><th class="n">Bank (chips)</th><th class="n">At table</th><th class="n">Cash (total)</th><th class="n">Actions</th></tr></thead><tbody>${rows}</tbody></table>
+      <p class="adm-empty" style="padding:14px 0 0;text-align:left">Chips (total) is bank plus whatever is at the table. Cash is real money: the figure is the player's TOTAL (wallet plus whatever is at a Cash table or in an open round), and Set Cash sets that total. Players see changes instantly. Deleting accounts is not offered here: a player's money, history and table seats are tied together, so it needs a deliberate cleanup.</p>`;
     host.querySelectorAll('[data-a]').forEach(b => b.addEventListener('click', () => onAcct(b)));
     const slot = $('adm-edit-slot');
     if (slot && editing && (editing.kind === 'bal' || editing.kind === 'play')) {
@@ -177,7 +190,7 @@
     const tr = b.closest('tr'), key = tr.dataset.k, a = overview.accounts.find(x => x.key === key);
     const act = b.dataset.a, s = sock();
     if (act === 'bal') { editing = { key, kind: 'bal', value: bankOf(a) }; renderAccounts(); }
-    else if (act === 'play') { editing = { key, kind: 'play', value: a.play || 0 }; renderAccounts(); }
+    else if (act === 'play') { editing = { key, kind: 'play', value: cashTotalOf(a) || 0 }; renderAccounts(); }
     else if (act === 'pin') { editing = { key, kind: 'pin' }; renderAccounts(); }
     else if (act === 'cancel') { editing = null; renderAccounts(); }
     else if (act === 'bal-ok') {
@@ -193,7 +206,9 @@
     } else if (act === 'play-ok') {
       const cents = editing && editing.field ? editing.field.value() : null;
       if (cents === null) { editing.field.submit(); status('Enter Cash from 0 to ' + Money.format(MAX_PLAY, editing.field.mode()), 'err'); return; }
-      if (!window.confirm('Set ' + a.display + "'s Cash to " + Money.format(cents, editing.field.mode()) + '?')) return;
+      const inPlay = Number.isFinite(a.playInPlay) ? a.playInPlay : 0, was = cashTotalOf(a);
+      const fmt = c => Money.format(c, editing.field.mode());
+      if (!window.confirm('Set ' + a.display + "'s TOTAL Cash to " + fmt(cents) + '?\n\nNow: ' + (was === null ? 'unknown' : fmt(was) + ' total (' + fmt(Number.isFinite(a.playWallet) ? a.playWallet : was - inPlay) + ' wallet + ' + fmt(inPlay) + ' at tables / in rounds)') + '.\nAfter: ' + fmt(cents) + ' total (' + fmt(Math.max(0, cents - inPlay)) + ' wallet + ' + fmt(inPlay) + ' at tables / in rounds, which stays where it is).')) return;
       editing = null; status('Saving');
       s.emit('admin_set_play', { key, cents, opId: newOpId() });
       setTimeout(refresh, 350);

@@ -268,7 +268,7 @@ const proto = {
     }
     const amount = this.money.seatBalance(this, s.key);
     const r = this.money.cashOut(this, s.key, amount, 'kick');
-    this.removeSeat(s);
+    this.removeSeat(s, 'kick');
     this.out.event(this, 'left', { key: s.key, cashedOut: r.noop ? 0 : amount, reason: 'kicked' }, s.key);
     this.out.event(this, 'table_event', { kind: 'kicked', key: s.key, display: this.displayOf(s.key) });
     this.out.event(this, 'room', {});
@@ -364,8 +364,8 @@ const proto = {
     console.error(`[v2] VOID table=${this.id} hand=${this.handNo} reason=${reason}${err ? ' ' + (err.code || err.name) + ': ' + err.message : ''}`);
     this.out.event(this, 'void', { reason });
     this.out.state(this);
+    this.setDeadline('phase', 'nexthand', 2000, { hand: true });          // R2A-5: set before the forced pause, which freezes it, so resume() re-arms it
     if (this.voids.length >= 3) { this.pause(true); return true; }
-    this.setDeadline('phase', 'nexthand', 2000, { hand: true });
     this.applyPendingPause();
     return true;
   },

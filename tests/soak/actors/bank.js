@@ -122,7 +122,7 @@ async function setCash(W, t) {
   }
   if (t.tableId || t.spinsInFlight > 0 || W.model.camp.hasOpen(key)) return null;             // an accepted set needs a quiet account: a hand, a spin or a run closing between our read and the server's would move the total under us (the model books such a result when the client hears it)
   const total = W.model.held(key, 'play');
-  const cents = W.rng.chance(0.3) ? total : part0 + W.rng.range(0, 3000000);                  // X at or above the part in play: a plain set (the same total is a no-op, nothing written)
+  const cents = W.rng.chance(0.3) ? total : part0 + W.rng.range(0, 3000000);                  // X at or above the part in play: a plain set (the same total is a no-op: no balance moves, but it writes one net-zero mark line that holds the op id)
   return setCashCall(W, t, cents, false);
 }
 

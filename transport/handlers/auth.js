@@ -9,6 +9,7 @@ function register(ctx, socket, on) {
   const authOk = (r, withToken) => {
     const a = r.account;
     ctx.service.ensureAccount(a.key);
+    if (socket.data.acct !== a.key) auth.releaseSeats(socket, a.key);   // R2B-5: the seats of the account this socket was signed in as go with that sign-in
     socket.data.acct = a.key;
     socket.data.sessionH = r.sessionH || crypto.createHash('sha256').update(r.token).digest('hex');
     socket.emit('auth_ok', withToken ? { account: accounts.publicAccount(a), token: r.token } : { account: accounts.publicAccount(a) });
@@ -24,6 +25,7 @@ function register(ctx, socket, on) {
   on('auth_logout', () => {
     if (socket.data.acct) accounts.logoutHash(socket.data.acct, socket.data.sessionH);
     socket.data.acct = null; socket.data.sessionH = null;
+    auth.releaseSeats(socket, null);   // R2B-5
     socket.emit('auth_out', {});
   });
 
@@ -55,6 +57,7 @@ function register(ctx, socket, on) {
     if (!r.ok) { authFail(r); return; }
     // K6b-1: the account's other sockets are signed out at once; this one carries on, on a fresh session token
     auth.signOutSockets(ctx.socketsOf(me).filter(s => s !== socket), 'pin_changed', 'Your PIN was changed on another device. Sign in again with the new PIN.');
+    auth.releaseStraySeats(me, ctx.allSockets());   // R2B-5
     socket.data.sessionH = crypto.createHash('sha256').update(r.token).digest('hex');
     socket.emit('ok', { what: 'pin' });
     socket.emit('auth_ok', { account: accounts.publicAccount(r.account), token: r.token });
@@ -64,10 +67,11 @@ function register(ctx, socket, on) {
     const r = accounts.resetPin(me, key, newPin);
     if (!r.ok) { authFail(r); return; }
     auth.signOutSockets(ctx.socketsOf(accounts.keyOf(key)), 'pin_reset', 'Your PIN was reset by the admin. Sign in again with the new PIN.');
+    auth.releaseStraySeats(accounts.keyOf(key), ctx.allSockets());   // R2B-5
     socket.emit('ok', { what: 'pin_reset' });
   });
   on('get_leaderboard', () => { socket.emit('leaderboard_data', views.leaderboard(socket.data.acct)); });
-  if (process.env.AUTH_CLOCK_SKEW !== undefined) on('__test_skew', ({ ms } = {}) => { accounts.setSkew(ms); socket.emit('ok', { what: 'skew' }); });
+  if (!ctx.production && process.env.AUTH_CLOCK_SKEW !== undefined) on('__test_skew', ({ ms } = {}) => { accounts.setSkew(ms); socket.emit('ok', { what: 'skew' }); });
 }
 
 module.exports = { register };

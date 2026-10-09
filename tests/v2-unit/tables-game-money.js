@@ -25,7 +25,7 @@ let n = 0;
 function env(file, keys = ['ann', 'bob']) {
   const f = file || path.join(dir, 'm' + (++n) + '.jsonl');
   const ledger = open(f, { fsync: 'none', log: () => {} });
-  const service = createService(ledger);
+  const service = createService(ledger, { signupPlay: 1000000 });
   for (const k of keys) service.ensureAccount(k);
   const changed = [];
   const gm = createGameMoney({ service, ledger, onChange: k => changed.push(k), log: () => {} });

@@ -35,7 +35,8 @@ function world(cur) {
   ok(opts.length === 2, 'two live options at step 2');
   return { w, s, s2, run, A: opts[0].to, B: opts[1].to, n: run.steps + 1, id: run.roundId };
 }
-const step = (x, to, who) => H.call(x.w, who || x.s, 'step', { roundId: x.id, n: x.n, to });
+// a second passes before every ask: a step refused for a write fault is answered once a second per account at most (R2D-2, tests/money-1008-campaign-timing.js), an earlier ask would only get the cap's refusal
+const step = (x, to, who) => (x.w.clock.advance(1000), H.call(x.w, who || x.s, 'step', { roundId: x.id, n: x.n, to }));
 // what a client can see of one refused step: the answer, who else was told, whether the idle timer moved, what `state` says
 function seen(x, to) {
   const { w, s, s2 } = x;
