@@ -20,7 +20,7 @@ const GAMES = [
     set: (o, extra) => B.setLiveConfigChecked({ overrides: o, scale: SC, who: 'r2c-test', ...extra }),
     custom: () => JSON.stringify(BE.currentConfig()) !== JSON.stringify(D), live: () => BE.currentConfig(), info: () => B.liveInfo(), file: () => process.env.BENDER_CFG_FILE },
   { name: 'Cold Call',
-    A: { payScale: 0.5 }, Bc: { payScale: 0.4 },
+    A: { payScale: 0.4, buyCost: { bonus1: 1800, bonus2: 5000 } }, Bc: { payScale: 0.5, buyCost: { bonus1: 1500, bonus2: 4500 } },   // far under 100% on every way, so even the small-budget check passes the upper bound (R2C-3)
     set: (o, extra) => L.setLiveConfigChecked({ overrides: o, scale: SC, who: 'r2c-test', ...extra }),
     custom: () => JSON.stringify(CE.CFG) !== JSON.stringify(L.DEFAULT), live: () => CE.CFG, info: () => L.liveInfo('SHIPPED'), file: () => process.env.COLDCALL_CFG_FILE },
 ];
