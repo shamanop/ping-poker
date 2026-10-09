@@ -8,7 +8,7 @@
 // registry (games/index.js, recover() at boot as server.js does) and the game module. The kit knows nothing of any game's rules: the game ships
 // games/<id>.kit.js (the adapter, see ADD-A-GAME.md "the kit"), which plays it with the game's OWN socket messages and never touches money.
 //
-// checks: registration, escrow, restart, replay (double submit), sockets, mix, errors, input, identity, quarantine, ledger (replay == balances)
+// checks: registration, escrow, restart, replay (double submit), sockets, mix, errors, input, identity, quarantine, carry (Chips never feed Cash), ledger (replay == balances)
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -44,8 +44,9 @@ function world(A, opts = {}) {
   let t = 1000000;
   const clock = { now: () => t, advance: (ms) => { t += ms; } };
   const hooks = { seq: 0, crashAt: null, calls: [] };                // crashAt = { k, phase: 'before'|'after' } counted over every ctx.money write call
-  const rng = mulberry(opts.seed || 12345);
-  const w = { A, mod, dir, io, clock, hooks, rng, boots: 0, keys: new Set(), log: [], accepted: 0, g: null, report: null, files: { money: path.join(dir, 'money.jsonl') } };
+  let rngIn = mulberry(opts.seed || 12345);
+  const rng = () => rngIn();                                         // one function for the life of the world: w.reseed() swaps the stream under it
+  const w = { A, mod, dir, io, clock, hooks, rng, reseed: (sd) => { rngIn = mulberry(sd); }, boots: 0, keys: new Set(), log: [], accepted: 0, g: null, report: null, files: { money: path.join(dir, 'money.jsonl') } };
   const openEv = A.open(CURS[0], A.bets.good[0]).ev;
   w.openEv = openEv;
 
@@ -662,6 +663,40 @@ function checkIdentity(A, cur) {
   });
 }
 
+// 11. nothing is carried from Chips into Cash (R2E-3, R2E-4): a token, a pot, a streak kept in memory or in the game's own file pays Cash it did not earn in Cash
+// The same seeded Cash rounds are played on (A) a fresh world, (B) a world that first played Chips rounds on both accounts, (C) a fresh world restarted after every round.
+// What the Cash rounds paid, read off the LEDGER round by round, must be the same in all three.
+function carryRun(A, seed, mode) {
+  const w = world(A, { seed }); let a = w.sock('ann'), b = w.sock('bob'); w.rich('ann'); w.rich('bob');
+  const rounds = (id0) => [...roundsOf(A, w.since(id0)).values()].filter((r) => r.curs.has('play')).map((r) => [r.staked, r.returned]);
+  const n = 3 * playN(A);
+  if (mode === 'chips-first') for (let i = 0; i < n; i++) { try { A.play(w.g, i % 2 ? a : b, { cur: 'chips', bet: A.bets.good[i % A.bets.good.length], i }); } catch (e) { if (!(e instanceof Refused)) throw e; } }
+  w.reseed(seed + 1);
+  const out = { ann: [], bob: [] };
+  for (let i = 0; i < playN(A); i++) {
+    for (const [who, s] of [['ann', a], ['bob', b]]) {
+      const id0 = w.lastId();
+      try { A.play(w.g, s, { cur: 'play', bet: A.bets.good[i % A.bets.good.length], i }); } catch (e) { if (!(e instanceof Refused)) throw e; }
+      out[who].push(rounds(id0));
+    }
+    if (mode === 'restart') { w.reboot(); a = w.sock('ann'); b = w.sock('bob'); }
+  }
+  return out;
+}
+function checkCarry(A) {
+  runCheck(A, 'carry', null, (t) => {
+    const fresh = carryRun(A, 77, 'fresh'), again = carryRun(A, 77, 'fresh');
+    const same = (x, y) => JSON.stringify(x) === JSON.stringify(y);
+    if (!t.ok(same(fresh, again), 'two fresh worlds with the same seed paid different Cash (the game does not draw only from ctx.rng, ADD-A-GAME.md 6.6): the comparison below would mean nothing')) return;
+    const diff = (x, y) => { for (const who of ['ann', 'bob']) for (let i = 0; i < x[who].length; i++) if (!same(x[who][i], y[who][i])) return `${who} Cash round #${i}: fresh world [staked, paid] ${JSON.stringify(x[who][i])}, here ${JSON.stringify(y[who][i])}`; return null; };
+    const chips = carryRun(A, 77, 'chips-first'), d1 = diff(fresh, chips);
+    t.ok(!d1, `Cash pays differ after Chips rounds were played (something earned in Chips was spent in Cash): ${d1}`);
+    const rest = carryRun(A, 77, 'restart'), d2 = diff(fresh, rest);
+    t.ok(!d2, `Cash pays differ after a restart between rounds (something kept in memory changed a later pay): ${d2}`);
+    t.note(`${fresh.ann.length * 2} Cash rounds compared, 3 worlds`);
+  });
+}
+
 // ------------------------------------------------------------------------------------------------------------------------------------ driver
 function loadAdapter(id) {
   const dir = path.join(ROOT, 'games');
@@ -697,6 +732,7 @@ function runAdapter(A, opts) {
     for (const cur of CURS) if (!A.currencies || A.currencies.includes(cur)) {
       checkEscrow(A, cur); checkRestart(A, cur); checkReplay(A, cur); checkSockets(A, cur); checkMix(A, cur); checkErrors(A, cur); checkInput(A, cur); checkIdentity(A, cur); checkQuarantine(A, cur);
     }
+    if (!A.currencies || CURS.every((c) => A.currencies.includes(c))) checkCarry(A);
     for (const cur of CURS) if (!A.currencies || A.currencies.includes(cur)) {
       // 8: every world above ended with an independent replay; report them together with the mixed world
       checkLedger(A);

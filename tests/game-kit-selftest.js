@@ -123,6 +123,8 @@ const VARIANTS = [
 // broken toy GAMES (tests/kit-toys/<name>.js + <name>.kit.js, written by the Opus critic R2-E, each a whole game with its own adapter) -> the check that must fail
 const TOYS = [
   ['proxykey', 'identity', 'plays the round on the account key the CLIENT names (payload.key)'],
+  ['freeflip', 'carry', 'a boost token earned by losing a Chips flip doubles the pay of a later Cash flip'],
+  ['mempot', 'carry', '10% of every stake feeds a jackpot kept in a module variable, one number for Chips and Cash'],
 ];
 function runToy(name) {
   K.RESULTS.length = 0;
