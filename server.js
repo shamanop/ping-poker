@@ -30,7 +30,17 @@ function start(env = process.env) {
   const { createAccounts } = require('./accounts'), { createLedger } = require('./ledger');
   const accounts = createAccounts({ file: paths.ACCOUNTS_FILE, roomPassword: ROOM_PASSWORD });
   const presLedger = createLedger({ file: paths.LEDGER_FILE, keyOf: k => accounts.keyForName(k), displayOf: k => (accounts.get(k) ? accounts.get(k).display : null), onWrite: () => { if (ctx.pushBank) ctx.pushBank(); } });
-  accounts.migrateLegacy({ bank: boot.readJson(paths.BANK_FILE, {}), ledgerEntries: presLedger.entries(), cash: Object.fromEntries(ledger.list('play:', 'play').map(x => [x.account.slice(5), x.balance])) });   // R2B-4: a re-made account that holds Cash comes back LOCKED
+  // R2B-4 / RV-ACCT-1: a re-made account that holds ANY Cash comes back LOCKED. The map is read from the ledger BEFORE boot recovery pays seats, pots and escrows back to wallets, so it counts what the recovery will pay:
+  // the wallet play:<key>, every Play seat seat:<table>:<key>, every Play escrow escrow:<game>:<key>:<round> (the owner is the third part, as service.playHeld / mirror read it), and the net contributors of a stray pot:<table>:<hand> (as bootRecover reads them).
+  const cashAt = new Map(), cashFor = (k, n) => { if (k && n > 0) cashAt.set(k, (cashAt.get(k) || 0) + n); };
+  for (const x of ledger.list('play:', 'play')) cashFor(x.account.slice(5), x.balance);
+  for (const pre of ['seat:', 'escrow:']) for (const x of ledger.list(pre, 'play')) cashFor(x.account.split(':')[2], x.balance);
+  for (const x of ledger.list('pot:', 'play')) {
+    const net = new Map();
+    for (const e of ledger.entries(l => l.cur === 'play' && (l.to === x.account || l.from === x.account))) { const seat = e.to === x.account ? e.from : e.to; if (seat.startsWith('seat:')) net.set(seat, (net.get(seat) || 0) + (e.to === x.account ? e.amount : -e.amount)); }
+    for (const [seat, v] of net) if (v > 0) cashFor(seat.split(':')[2], x.balance);
+  }
+  accounts.migrateLegacy({ bank: boot.readJson(paths.BANK_FILE, {}), ledgerEntries: presLedger.entries(), cash: Object.fromEntries(cashAt) });
   boot.migrateIfNeeded({ ledger, paths, migrate, log });
   // Cash is real money: new accounts start at 0 and the admin sets it (Chris 10/7). Test harnesses set SIGNUP_PLAY_CENTS for their old fixtures.
   // Money 1008 SVC-1a: the variable gives every new signup Cash (real money), so it is honoured only outside production and only as a plain count of cents (digits, a safe integer >= 0); anything else is ignored with one loud line.
