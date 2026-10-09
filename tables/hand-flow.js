@@ -39,7 +39,6 @@ const proto = {
   pickButton(elig) {
     const base = elig.filter(s => !s.missedBlind);
     if (base.length === 0) { for (const s of elig) s.missedBlind = false; return this.nextButton(elig); }
-    if (base.length === 1) return base[0].seat;
     return this.nextButton(base);
   },
   // The seats dealt into this hand: every seat that is free to play, plus the first waiting seat (ring order after the button) that
