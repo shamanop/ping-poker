@@ -23,6 +23,10 @@ function loadRef() {                     // null when the file is missing or was
   try { const r = JSON.parse(require('fs').readFileSync(require('path').join(__dirname, 'bender-ref.json'), 'utf8')); REF = E.DEFAULT_CFG && r.cfgHash === cfgHash(E.DEFAULT_CFG) ? r : false; } catch { REF = false; }
   return REF || null;
 }
+// R2C-1: a buy is charged in whole cents, Math.round(buyCost x bet), at every allowed bet, and its win is paid unscaled (bet x multiple). Its payback at one bet is therefore E[bonus] x bet / round(buyCost x bet), highest
+// where the rounding takes most off the price. The check measures every buy at the LOWEST price in multiples of the bet that any allowed bet pays (a bet whose price rounds to 0 cannot be played, the handler refuses it),
+// so a config is accepted only if the buy is at or under the ceiling at every bet a player can pick.
+const lowestPrice = (cost) => { let lo = Infinity; for (const b of E.BET_LEVELS) { const c = Math.round(cost * b); if (c > 0 && c / b < lo) lo = c / b; } return Number.isFinite(lo) ? Math.min(lo, cost) : cost; };
 const sameDynamics = (a, b) => { const f = (c) => { const x = JSON.parse(JSON.stringify(c)); delete x.pay; delete x.scatterPay; delete x.buyCost; return cfgHash(x); }; return f(a) === f(b); };
 // ways: spin (the base game incl. the scatter-triggered bonus), buyElection, buyLandslide, each in % of its stake. opts: { seed, scale, direct }
 async function measure(cfg, opts = {}) {
@@ -34,7 +38,7 @@ async function measure(cfg, opts = {}) {
   const acc = { base: [], e3: [], l4: [], l5: [], l6: [] };           // direct: bonus mean | base batch; paired: the same with the DIFFERENCE to the shipped config
   let maxStretch = 0, mark = process.hrtime.bigint(), rounds = 0;
   const lap = () => { const t = process.hrtime.bigint(); maxStretch = Math.max(maxStretch, Number(t - mark) / 1e6); mark = t; };
-  const tick = async () => { if (Number(process.hrtime.bigint() - mark) / 1e6 >= SLICE_MS) { lap(); await new Promise((r) => setImmediate(r)); mark = process.hrtime.bigint(); if (Date.now() - t0 > PB_DEADLINE_MS) throw new Error('payback check did not finish in ' + PB_DEADLINE_MS / 1000 + ' s'); } };
+  const tick = async () => { if (Number(process.hrtime.bigint() - mark) / 1e6 >= SLICE_MS) { lap(); await new Promise((r) => setImmediate(r)); mark = process.hrtime.bigint(); if (Date.now() - t0 > PB_DEADLINE_MS) throw new Error('payback check did not finish in ' + PB_DEADLINE_MS / 1000 + ' s'); if (opts.cancelled && opts.cancelled()) throw new Error('payback check cancelled'); } };
   const KINDS = { e3: ['election', 3], l4: ['landslide', 4], l5: ['landslide', 5], l6: ['landslide', 6] };
   const bonusB = async (key, upto) => { const per = plan[key] / J, [kind, n] = KINDS[key]; while (acc[key].length < upto) { const j = acc[key].length, st = 1 + Object.keys(KINDS).indexOf(key), r = rngAt(st, j), rS = paired ? rngAt(st, j) : null; let s = 0; for (let i = 0; i < per; i++) { s += e.playBonus(r, kind, n, E.MAX_WIN_X).total; if (paired) s -= eS.playBonus(rS, kind, n, E.MAX_WIN_X).total; rounds++; await tick(); } acc[key].push(s / per); } };
   const baseB = async (upto) => { const per = plan.base / J; while (acc.base.length < upto) { const j = acc.base.length, r = rngAt(0, j), rS = paired ? rngAt(0, j) : null, b = { n: per, win: 0, sc: [0, 0, 0, 0] }; for (let i = 0; i < per; i++) { const x = e.playSpin(r, { bonus: false, capLeft: E.MAX_WIN_X }); b.win += x.win; if (paired) b.win -= eS.playSpin(rS, { bonus: false, capLeft: E.MAX_WIN_X }).win; if (x.scatters >= 3) b.sc[Math.min(x.scatters, 6) - 3]++; rounds++; if ((i & 63) === 63) await tick(); } acc.base.push(b); } };
@@ -46,14 +50,15 @@ async function measure(cfg, opts = {}) {
       let se2 = varOf(acc.base.map((b) => b.win / b.n)) / acc.base.length;
       for (let i = 0; i < 4; i++) se2 += p[i] ** 2 * B[i].v;
       const sp = { pct: ref.spin.pct + mean(per) * 100, se: Math.hypot(ref.spin.se, Math.sqrt(se2) * 100) };
-      const buy = (i, cost, r) => ({ pct: (ref.B[i].m + B[i].m) / cost * 100, se: Math.hypot(ref.B[i].se, Math.sqrt(B[i].v)) / cost * 100 });
-      return { spin: sp, buyElection: buy(0, cfg.buyCost.election), buyLandslide: buy(1, cfg.buyCost.landslide) };
+      const buy = (i, cost) => ({ pct: (ref.B[i].m + B[i].m) / cost * 100, se: Math.hypot(ref.B[i].se, Math.sqrt(B[i].v)) / cost * 100 });
+      return { spin: sp, buyElection: buy(0, lowestPrice(cfg.buyCost.election)), buyLandslide: buy(1, lowestPrice(cfg.buyCost.landslide)) };
     }
     const c = [0, 1, 2, 3].map((i) => (cfg.scatterPay[i + 3] || 0) + B[i].m);     // scatter pay + the bonus it starts, for 3, 4, 5, 6 scatters
     const per = acc.base.map((b) => b.win / b.n + b.sc.reduce((a, k, i) => a + (k / b.n) * c[i], 0));
     let se2 = varOf(per) / per.length;
     for (let i = 0; i < 4; i++) se2 += mean(acc.base.map((b) => b.sc[i] / b.n)) ** 2 * B[i].v;
-    return { spin: { pct: mean(per) * 100, se: Math.sqrt(se2) * 100 }, buyElection: { pct: B[0].m / cfg.buyCost.election * 100, se: Math.sqrt(B[0].v) / cfg.buyCost.election * 100 }, buyLandslide: { pct: B[1].m / cfg.buyCost.landslide * 100, se: Math.sqrt(B[1].v) / cfg.buyCost.landslide * 100 } };
+    const pE = lowestPrice(cfg.buyCost.election), pL = lowestPrice(cfg.buyCost.landslide);
+    return { spin: { pct: mean(per) * 100, se: Math.sqrt(se2) * 100 }, buyElection: { pct: B[0].m / pE * 100, se: Math.sqrt(B[0].v) / pE * 100 }, buyLandslide: { pct: B[1].m / pL * 100, se: Math.sqrt(B[1].v) / pL * 100 } };
   };
   const worstOf = (ways) => Object.entries(ways).map(([way, x]) => ({ way, pct: x.pct, se: x.se })).sort((a, b) => (b.pct || 0) - (a.pct || 0))[0];
   let ways = null, early = false;
@@ -69,7 +74,7 @@ async function measure(cfg, opts = {}) {
   const worst = worstOf(ways), finite = Object.values(ways).every((x) => Number.isFinite(x.pct) && Number.isFinite(x.se));
   return { ok: finite && worst.pct <= CEILING_PCT, finite, ceilingPct: CEILING_PCT, ways, worst, rounds, ms: Date.now() - t0, maxStretchMs: maxStretch, seed, scale, early, mode: paired ? 'paired' : 'direct' };
 }
-module.exports = { measure, loadRef, cfgHash, CEILING_PCT };
+module.exports = { measure, loadRef, cfgHash, lowestPrice, CEILING_PCT };
 
 if (require.main === module) {
 // BB_CFG='{"scatterW":1.3,"payScale":1.9}' overrides engine CFG for tuning runs (payScale multiplies pay + scatterPay). Workers inherit the env.
