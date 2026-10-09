@@ -6,6 +6,7 @@
 //   step  : validate -> E.step with the server rng -> scandal / run done: the drawn result is written into the record (`pend`, flushed) FIRST, then ledger settle -> drop the record -> emit end;
 //           survived and going on: record updated, FLUSHED, emit (no ledger line). A drawn result is final: a refused settle never un-draws it (retry, idle timer and boot close at the pended result),
 //           and every draw of a step that could not be written is remembered (`memo`, one per step + target state) so a retry returns the same draw, whatever state is asked.
+//           The record write is the ONE probe of a step (scandal and survive alike): when it fails the ledger is not asked, so a refused step does the same work whatever was drawn, and it is answered at most once a second per account (R2D-2).
 //   cash  : steps >= 1 settle at stake x multiplier;  steps === 0 void (a refund: nothing was risked)
 //   idle  : 60 s with no accepted pick = the same as a cash-out (reason 'timeout')
 //   boot  : recover() cashes out every stored run at its stored multiplier (decision D1: a restart is an automatic cash-out) on the growth table the run was opened with, refunds a 0-step run,
@@ -133,6 +134,11 @@ function refused(rec, payload, extraSocket) {
   if (runs.get(rec.nk) === rec && !rec.closed) { emitAcct(rec.nk, 'error', payload, extraSocket); armIdle(rec, rec.idleMs || idleMs()); }
 }
 const INTERNAL = () => ({ message: 'Server error', code: 'internal', game: 'campaign' });
+// A step that is refused for a write fault is answered once a second per account at most; an ask inside that second gets the same refusal and nothing else is done for it (Money 1008 R2D-2: with the work of a refused step
+// the same for every draw, the cap keeps a client from averaging the clock over many asks).
+const STEP_REFUSED_MS = 1000;
+const stepCapped = (rec) => { const t = now(); return rec.refusedAt != null && t >= rec.refusedAt && t - rec.refusedAt < STEP_REFUSED_MS; };
+function stepRefused(rec, socket) { rec.refusedAt = now(); refused(rec, INTERNAL(), socket); }
 function moneyFailed(rec, e, where, extraSocket) {
   noteFence(e);
   logf('campaign: money call failed, the run stays open', rec.roundId, where, e && e.code, e && e.message);
@@ -318,6 +324,7 @@ function step(socket, payload) {
   if (limited(socket, nk, 'step')) return;
   const rec = runFor(socket, nk, payload, 'step');
   if (!rec) return;
+  if (rec.refusedAt && stepCapped(rec)) return void refused(rec, INTERNAL(), socket);   // a step that is being refused for a write fault is worked at most once a second: the same refusal, no work (R2D-2)
   if (rec.pend) return void autoClose(rec, 'timeout');                                    // a result is already drawn for this run: close it as drawn (retry the ledger), never draw again
   if (fenced) return err(socket, 'money_down', MONEY_DOWN);                               // the ledger refuses writes for good: nothing is drawn against a dead ledger
   const n = field(payload, 'n'), to = field(payload, 'to');
@@ -338,11 +345,15 @@ function step(socket, payload) {
     rec.pend = { run: next, reason: next.done };                                          // the drawn result is final from here: written to the record BEFORE the ledger is asked, so a refused settle,
     let durable = false;                                                                  // a restart or a flush error can never turn it into a cash-out, a better result or a new draw
     try { store.putOpen(toStored(rec)); store.flush(); durable = true; rec.memo = null; }
-    catch (e) { logf('campaign: pended result not flushed (the ledger settle is tried; if that fails too the step did not happen)', rec.roundId, e && e.message); try { store.putOpen(old); } catch {} }
-    if (closeRun(rec, next, next.done, next.failedAt || null, socket) || durable || rec.closed || runs.get(rec.nk) !== rec) return;   // closed; or refused with the drawn result on disk: rec.pend stays, a retry / the idle timer / boot close it as drawn
-    // refused AND the result is on neither disk: the client was told an error (closeRun -> moneyFailed), never the result, and a restart would forget it. The step did not happen: the run is back at the step before (disk = memory),
-    // and the retry of this step gets the SAME draw (rec.memo keeps every draw of it), so the failure is no re-roll. Record first, client last.
-    rec.pend = null;
+    catch (e) { logf('campaign: pended result not flushed, the step did not happen yet (the retry of this step gets the same draw)', rec.roundId, e && e.message); try { store.putOpen(old); } catch {} }
+    if (!durable) {
+      // The record write is the ONE probe of a step, the same try for a scandal and for a survive: when it fails the ledger is not asked at all, so a refused step does the same work whatever was drawn (Money 1008 R2D-2).
+      // The result is on neither disk: the client is told the same error as for a refused survive, never the result, and a restart would forget it. The step did not happen: the run is back at the step before (disk = memory),
+      // and the retry of this step gets the SAME draw (rec.memo keeps every draw of it), so the failure is no re-roll. Record first, ledger second, client last.
+      rec.pend = null;
+      return void stepRefused(rec, socket);
+    }
+    closeRun(rec, next, next.done, next.failedAt || null, socket);                          // the drawn result is on disk: closed, or refused (rec.pend stays: a retry / the idle timer / boot close it as drawn)
     return;
   }
   // survived and the run goes on: the new record is flushed BEFORE the client hears of the step; a crash before the flush = the step never happened. No ledger line (nothing moved).
@@ -352,9 +363,9 @@ function step(socket, payload) {
   catch (e) {
     logf('campaign: step not flushed, the step did not happen yet (the retry of this step gets the same draw)', rec.roundId, e && e.message);
     try { store.putOpen(old); } catch {}
-    return void refused(rec, INTERNAL(), socket);                                          // the SAME answer, sockets and timer as a drawn scandal that could not be written (moneyFailed)
+    return void stepRefused(rec, socket);                                                  // the SAME answer, sockets, timer and work as a drawn scandal that could not be written
   }
-  rec.memo = null; rec.run = next; rec.lastAt = t;
+  rec.memo = null; rec.refusedAt = 0; rec.run = next; rec.lastAt = t;
   armIdle(rec, idleMs());
   socket.emit('g:campaign:step', { roundId: rec.roundId, n, to, tier: res.opt.tier, run: runView(rec) });
 }
