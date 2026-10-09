@@ -82,11 +82,12 @@ async function ccDecisionCase(b, acct, mode) {
     else if (!s.busy) { t0 = Date.now(); break; } else { await M.tapDial(p1, f1); await sleep(250); }
     if (Date.now() > tEnd) throw new Error('tab 1 never went idle');
   }
-  let ok = null, last = null;
+  let ok = null, last = null; const trace = [];
   while (Date.now() - t0 < Number(M.argOf('--wait', '6000'))) {
     const want = M.readLedger(DATA).get(M.storeOf(key, mode), mode);
     const s2 = await M.frState(f2), g2 = lastNum(await M.gameBalTxt(f2, 'coldcall')), pl2 = (await M.plates(p2))[mode === 'chips' ? 'chips' : 'play'];
     last = { want, g2, pl2, busy2: s2.busy, prompt2: s2.prompt };
+    if (s2.busy && (!trace.length || Date.now() - trace[trace.length - 1].t > 1000)) trace.push({ t: Date.now(), dt: Date.now() - t0, ...(await f2.evaluate(() => { const c = CC.core, x = c.st.ctx; return { ff: c.st.ff, skip: c.st.skip, ctx: !!x, status: x && x.p.status, modal: c.st.modal, dec: x && x.decisions && x.decisions.length, prompt: x && x.promptOpen, rl: c.st.live, ov: document.querySelector('#ov') && document.querySelector('#ov').children.length, rib: (document.querySelector('#ribL') || {}).textContent, err: CC.dbg && CC.dbg.error }; }).catch((e) => ({ e: String(e) }))) }); last.trace = trace.slice(-25);
     if (M.toUnits(g2, mode) === want && M.toUnits(pl2, mode) === want) { ok = Date.now() - t0; break; }
     await sleep(100);
   }

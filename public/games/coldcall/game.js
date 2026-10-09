@@ -300,7 +300,7 @@
     }
     // autoplay with a server that still asked: take the default, no prompt
     if (st.auto) {
-      const v = k === 'pick' ? Math.min(...pend.choices) : false; T.decide(id, k, v); dbgRow.how = 'auto';
+      const v = k === 'pick' ? Math.min(...pend.choices) : false; ctx.answered = true; T.decide(id, k, v); dbgRow.how = 'auto';
       say('idle', 'AUTO: ' + dflt); const r = await nextResult(ctx, box, LOST_MS); advance(ctx, r); return r;
     }
     const reg = { closed: false, close() {} }, iv = { id: 0 };
@@ -329,7 +329,7 @@
         const why = it.auto || 'other'; reg.close(why); P('expired', why, { k, default: dflt }); ribWhy(ctx, why); say('idle', whyLine(k, it, dflt)); dbgRow.how = it.auto || 'unsolicited';
         advance(ctx, it); await wait(900); return it;
       }
-      reg.close(null); T.decide(id, k, w.v); dbgRow.how = 'player'; dbgRow.v = w.v;
+      reg.close(null); ctx.answered = true; T.decide(id, k, w.v); dbgRow.how = 'player'; dbgRow.v = w.v;
       const r = await nextResult(ctx, box, LOST_MS); advance(ctx, r); st.skip = false; return r;
     } finally { clearInterval(iv.id); ctx.promptOpen = null; if (!reg.closed) reg.close(null); }
   }
@@ -449,7 +449,7 @@
     const row = { id: p.roundId, kind, forced: p.forced || null, tease: !!(S0.spin && S0.spin.bells === 2 && !S0.bonus), cluster: S0.spin ? S0.spin.cluster : 0, bigClose: allSpins(S0).some((s) => s.phone && s.phone.rounds.some((r) => r.collects.some((c) => c.value >= 250))), bonus: S0.bonus ? S0.bonus.kind : null, phone: !!((S0.spin && S0.spin.phone) || (S0.bonus && S0.bonus.spins.some((s) => s.phone))), tier: p.tier, win: p.totalWinTenths, callback: !!p.callback, adopted: !!adopted, first: p.status || 'done' };
     dbg.rounds.push(row);
     let ctx = null, aborted = null, ghostNow = null;
-    try { ctx = makeCtx(p, b, kind); st.ctx = ctx; ctx.rd = inbox.get(p.roundId) || mkBox(p.roundId); await animateRound(ctx); }
+    try { ctx = makeCtx(p, b, kind); st.ctx = ctx; ctx.adopted = !!adopted; ctx.rd = inbox.get(p.roundId) || mkBox(p.roundId); await animateRound(ctx); }
     catch (e) { if (e instanceof Abort) aborted = e; else { console.error(e); dbg.error = String(e && e.stack || e); } }
     if (aborted) return abortRound(p, ctx, aborted, row);
     // finish: whatever happened above, show the exact server total and balance, then clean up
@@ -551,7 +551,12 @@
     if (!p || typeof p !== 'object') return;
     if (p.wallet || p.balances) applyWallet(p.wallet || p.balances);
     const box = p.roundId && inbox.get(p.roundId);
-    if (box) return boxPush(box, p);                            // a result of the round on screen (the answer to a decide, or unsolicited)
+    if (box) {                                                  // a result of the round on screen (the answer to a decide, or unsolicited)
+      // a round this tab only adopted (opened late, or a reload) that the other tab has now closed: the money is settled, the replay is only a movie. Skip to its end and show the wallet balance now
+      // (the replay used to hold the stale balance for as long as the whole bonus took), the same value the screen lands on when the replay finishes.
+      const c = st.ctx; if (c && c.adopted && !c.answered && p.status === 'done' && c.p.roundId === p.roundId) { st.skip = true; if (st.live) setBal(walletBal(), true); }
+      return boxPush(box, p);
+    }
     // U3: the answer to THIS tab's spin is a result that is not `resolved` (a round settled out from under someone), in the mode asked, for the bet asked (a Callback plays at its own)
     const q = pendFirst();
     if (q && !p.resolved && p.mode === q.mode && (p.callback || (p.betCents != null ? p.betCents : p.bet) === q.bet) && ((p.buyBonus || null) === (q.buy || null) || p.callback)) {
