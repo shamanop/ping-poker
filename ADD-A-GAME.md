@@ -200,7 +200,7 @@ Checks, each run in BOTH currencies (output `PASS|FAIL <game> <check>/<cur> <det
 | `quarantine` | lines from an unknown source, a non-existent house and a wrong currency, written in the game's name, are quarantined at boot and change no balance; the game still plays |
 | `ledger-replay` | an independent replay of `money.jsonl` (no ledger code) equals the service balances per currency after every world above and a mixed one; sum over all accounts is 0; no holder account ever negative |
 
-Known limits of the kit (reviewer rows of `review-kit-gaps/VERDICT.md`, all open, none touches a game that exists):
+Known limits of the kit (reviewer rows of `review-kit-gaps/VERDICT.md`, all open in this head, none touches a game that exists; fixes for RVK-1, RVK-2 and RVK-3 are on branch `mf-test-wiring` (`3d16f7f`) and not merged):
 - **RVK-4** `payback` is only as tight as the adapter's own `maxReturn`: a game that overpays by a few points under it passes. Cold Call's ceiling is 1.05 against 94.54% measured at bet 10 (`games/coldcall.kit.js`), so ten points of overpay at the small bet would pass. Campaign's 68.00% comes from three fixed round shapes in its adapter: a pin, not a measure. `payback` closes R2E-6 for an honest adapter only.
 - **RVK-1** a correct game that answers a refusal with an `error` plus one more `g:<id>:*` event (a state re-sync) is read as having played (`collect` at `game-kit.js:122` counts any such event): `errors` and `input` then FAIL a correct game. Send the re-sync before or after in a separate message, or fix the kit.
 - **RVK-2** `ledger-replay` plays both currencies whatever `currencies` says, so no one-currency game can pass the kit yet.
