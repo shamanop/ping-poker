@@ -32,11 +32,13 @@ const proto = {
   // waits, it does not post out of turn, and it can never be the button. A player who stood up and sits again at this table (table.owesBB, kept per
   // player, not per seat number or hand count) is the same case: standing up, and sitting again at once or in another seat, never clears the
   // debt, only being dealt the big blind does (R2A-1). A player who never sat here has missed
-  // nothing and is dealt in at the next hand, in whatever position the button gives it (the rule for new seats is unchanged). With fewer than two seats that are free to play
-  // there is no game to wait behind, so the waiting seats are dealt in at once.
+  // nothing and is dealt in at the next hand, in whatever position the button gives it (the rule for new seats is unchanged). The debt holds at
+  // any table size (R2A-2): with exactly one seat free to play (heads-up) a waiting seat is dealt in as the BIG BLIND and the free seat is the
+  // button / small blind, whatever seat number the waiting player picked; after that big blind the debt is cleared and the button moves on
+  // normally. Only when NOBODY is free to play (every seat waiting) is there no game to wait behind: they are all dealt in at once.
   pickButton(elig) {
-    let base = elig.filter(s => !s.missedBlind);
-    if (base.length < 2) { for (const s of elig) s.missedBlind = false; base = elig; }
+    const base = elig.filter(s => !s.missedBlind);
+    if (base.length === 0) { for (const s of elig) s.missedBlind = false; return this.nextButton(elig); }
     return this.nextButton(base);
   },
   // The seats dealt into this hand: every seat that is free to play, plus the first waiting seat (ring order after the button) that
@@ -46,6 +48,7 @@ const proto = {
     if (!waiting.length) return elig;
     const after = n => (n - button + 1000) % 1000;
     waiting.sort((a, b) => after(a.seat) - after(b.seat));
+    if (base.length === 1) return [base[0], waiting[0]];                               // heads-up: the free seat is the button / small blind, the first waiting seat the big blind
     for (const w of waiting) {
       const trial = [...base, w].sort((a, b) => a.seat - b.seat), nos = trial.map(x => x.seat);
       const ring = nos.filter(n => n > button).concat(nos.filter(n => n <= button));    // seats after the button, wrapping (the button last)
@@ -265,7 +268,7 @@ const proto = {
     }
     const amount = this.money.seatBalance(this, s.key);
     const r = this.money.cashOut(this, s.key, amount, 'kick');
-    this.removeSeat(s);
+    this.removeSeat(s, 'kick');
     this.out.event(this, 'left', { key: s.key, cashedOut: r.noop ? 0 : amount, reason: 'kicked' }, s.key);
     this.out.event(this, 'table_event', { kind: 'kicked', key: s.key, display: this.displayOf(s.key) });
     this.out.event(this, 'room', {});
@@ -361,8 +364,8 @@ const proto = {
     console.error(`[v2] VOID table=${this.id} hand=${this.handNo} reason=${reason}${err ? ' ' + (err.code || err.name) + ': ' + err.message : ''}`);
     this.out.event(this, 'void', { reason });
     this.out.state(this);
+    this.setDeadline('phase', 'nexthand', 2000, { hand: true });          // R2A-5: set before the forced pause, which freezes it, so resume() re-arms it
     if (this.voids.length >= 3) { this.pause(true); return true; }
-    this.setDeadline('phase', 'nexthand', 2000, { hand: true });
     this.applyPendingPause();
     return true;
   },

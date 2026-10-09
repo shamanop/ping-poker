@@ -22,7 +22,7 @@ let n = 0, clock = 1000000;
 const env = (file) => {
   const f = file || path.join(dir, 's' + (++n) + '.jsonl');
   const ledger = open(f, { now: () => clock });
-  return { f, ledger, svc: createService(ledger, { now: () => clock }) };
+  return { f, ledger, svc: createService(ledger, { signupPlay: 1000000, now: () => clock }) };
 };
 // all player-held value across both currencies, and the books for each
 function totals(ledger) {
@@ -424,7 +424,7 @@ t('houseRound: win 0 = spend only, cost 0 = credit only, both 0 = noop, validati
   for (const [c, w] of [[-1, 5], [5, -1], [1.5, 0], [5, 0.5], [NaN, 0], [5, Infinity], ['5', 0], [null, 0], [undefined, 5]]) throwsCode(() => svc.houseRound('bender', 'a', c, w, 'play', 'bad'), 'bad_amount');
   throwsCode(() => svc.houseRound('roulette', 'a', 1, 1, 'play', 'x'), 'bad_game'); throwsCode(() => svc.houseRound('bender', 'a', 1, 1, 'gold', 'x'), 'bad_cur');
   throwsCode(() => svc.houseRound('bender', 'a', 1, 1, 'play', ''), 'bad_ref'); throwsCode(() => svc.houseRound('bender', 'a:b', 1, 1, 'play', 'x'), 'bad_key');
-  throwsCode(() => svc.houseRound('bender', 'a', 2 ** 53 - 1, 2 ** 53 - 1, 'play', 'huge'), 'insufficient');
+  throwsCode(() => svc.houseRound('bender', 'a', 2 ** 53 - 1, 2 ** 53 - 1, 'play', 'huge'), 'bad_amount');
   eq(ledger.lastId, id);
   // houseSpend and houseCredit are unchanged
   svc.houseSpend('bender', 'a', 5, 'play', 'hs'); svc.houseCredit('bender', 'a', 7, 'play', 'hc'); eq(ledger.lastId, id + 2);

@@ -10,7 +10,13 @@ const E = require('./bender-engine.js');
 // can spend (see the report). PAIRED (the config differs from the shipped one ONLY in pay / scatterPay / buyCost, which do not steer the game, so the same random numbers give the same boards): the shipped
 // config and the new one are played on identical streams and only the DIFFERENCE is sampled, on top of games/bender-ref.json (the shipped numbers, from a long offline run). A rigged pay table is a huge difference
 // with a tiny SE, the shipped numbers themselves cost nothing and the error is the reference's.
+// R2C-3: a way is accepted only if its UPPER bound (measured + BOUND_SE standard errors) is at or under the ceiling: the check's own uncertainty counts against the admin, a fixed seed that reads low cannot decide it.
+const BOUND_SE = 3;
 const CEILING_PCT = 100.0, PB_SEED = 20261008, SLICE_MS = 40, PB_DEADLINE_MS = 300000;
+// R2C-3b: a way UNDECIDED after the budget (measured at or under the ceiling, measured + BOUND_SE standard errors above it) gets more rounds, for THAT way only (the parts of its standard error that are largest first),
+// EXT_STEP batches at a time, until it is decided (upper bound at or under the ceiling = accept; measured above it = refuse), each part has been sampled EXT_MAX_X times its budget, or EXT_MS of wall clock have passed
+// since the check began: still undecided then = refused. A way whose uncertainty is mostly the reference's own (the paired mode) cannot be decided by more rounds and is not extended.
+const EXT_MAX_X = 8, EXT_MS = 240000;
 const PB_PLAN = { base: 700000, e3: 60000, l4: 60000, l5: 4000, l6: 1000, batches: 50 };
 const PB_PLAN_PAIRED = { base: 150000, e3: 20000, l4: 20000, l5: 1500, l6: 300, batches: 50 };
 const mean = (a) => a.reduce((x, y) => x + y, 0) / a.length;
@@ -23,6 +29,10 @@ function loadRef() {                     // null when the file is missing or was
   try { const r = JSON.parse(require('fs').readFileSync(require('path').join(__dirname, 'bender-ref.json'), 'utf8')); REF = E.DEFAULT_CFG && r.cfgHash === cfgHash(E.DEFAULT_CFG) ? r : false; } catch { REF = false; }
   return REF || null;
 }
+// R2C-1: a buy is charged in whole cents, Math.round(buyCost x bet), at every allowed bet, and its win is paid unscaled (bet x multiple). Its payback at one bet is therefore E[bonus] x bet / round(buyCost x bet), highest
+// where the rounding takes most off the price. The check measures every buy at the LOWEST price in multiples of the bet that any allowed bet pays (a bet whose price rounds to 0 cannot be played, the handler refuses it),
+// so a config is accepted only if the buy is at or under the ceiling at every bet a player can pick.
+const lowestPrice = (cost) => { let lo = Infinity; for (const b of E.BET_LEVELS) { const c = Math.round(cost * b); if (c > 0 && c / b < lo) lo = c / b; } return Number.isFinite(lo) ? Math.min(lo, cost) : cost; };
 const sameDynamics = (a, b) => { const f = (c) => { const x = JSON.parse(JSON.stringify(c)); delete x.pay; delete x.scatterPay; delete x.buyCost; return cfgHash(x); }; return f(a) === f(b); };
 // ways: spin (the base game incl. the scatter-triggered bonus), buyElection, buyLandslide, each in % of its stake. opts: { seed, scale, direct }
 async function measure(cfg, opts = {}) {
@@ -34,7 +44,7 @@ async function measure(cfg, opts = {}) {
   const acc = { base: [], e3: [], l4: [], l5: [], l6: [] };           // direct: bonus mean | base batch; paired: the same with the DIFFERENCE to the shipped config
   let maxStretch = 0, mark = process.hrtime.bigint(), rounds = 0;
   const lap = () => { const t = process.hrtime.bigint(); maxStretch = Math.max(maxStretch, Number(t - mark) / 1e6); mark = t; };
-  const tick = async () => { if (Number(process.hrtime.bigint() - mark) / 1e6 >= SLICE_MS) { lap(); await new Promise((r) => setImmediate(r)); mark = process.hrtime.bigint(); if (Date.now() - t0 > PB_DEADLINE_MS) throw new Error('payback check did not finish in ' + PB_DEADLINE_MS / 1000 + ' s'); } };
+  const tick = async () => { if (Number(process.hrtime.bigint() - mark) / 1e6 >= SLICE_MS) { lap(); await new Promise((r) => setImmediate(r)); mark = process.hrtime.bigint(); if (Date.now() - t0 > PB_DEADLINE_MS) throw new Error('payback check did not finish in ' + PB_DEADLINE_MS / 1000 + ' s'); if (opts.cancelled && opts.cancelled()) throw new Error('payback check cancelled'); } };
   const KINDS = { e3: ['election', 3], l4: ['landslide', 4], l5: ['landslide', 5], l6: ['landslide', 6] };
   const bonusB = async (key, upto) => { const per = plan[key] / J, [kind, n] = KINDS[key]; while (acc[key].length < upto) { const j = acc[key].length, st = 1 + Object.keys(KINDS).indexOf(key), r = rngAt(st, j), rS = paired ? rngAt(st, j) : null; let s = 0; for (let i = 0; i < per; i++) { s += e.playBonus(r, kind, n, E.MAX_WIN_X).total; if (paired) s -= eS.playBonus(rS, kind, n, E.MAX_WIN_X).total; rounds++; await tick(); } acc[key].push(s / per); } };
   const baseB = async (upto) => { const per = plan.base / J; while (acc.base.length < upto) { const j = acc.base.length, r = rngAt(0, j), rS = paired ? rngAt(0, j) : null, b = { n: per, win: 0, sc: [0, 0, 0, 0] }; for (let i = 0; i < per; i++) { const x = e.playSpin(r, { bonus: false, capLeft: E.MAX_WIN_X }); b.win += x.win; if (paired) b.win -= eS.playSpin(rS, { bonus: false, capLeft: E.MAX_WIN_X }).win; if (x.scatters >= 3) b.sc[Math.min(x.scatters, 6) - 3]++; rounds++; if ((i & 63) === 63) await tick(); } acc.base.push(b); } };
@@ -43,17 +53,18 @@ async function measure(cfg, opts = {}) {
     if (paired) {
       const spS = E.DEFAULT_CFG.scatterPay, p = ref.p, dsp = [0, 1, 2, 3].map((i) => (cfg.scatterPay[i + 3] || 0) - (spS[i + 3] || 0));
       const per = acc.base.map((b) => b.win / b.n + p.reduce((a, pn, i) => a + pn * (dsp[i] + B[i].m), 0));       // the same bonus term in every batch: the spread is the base difference's
-      let se2 = varOf(acc.base.map((b) => b.win / b.n)) / acc.base.length;
-      for (let i = 0; i < 4; i++) se2 += p[i] ** 2 * B[i].v;
-      const sp = { pct: ref.spin.pct + mean(per) * 100, se: Math.hypot(ref.spin.se, Math.sqrt(se2) * 100) };
-      const buy = (i, cost, r) => ({ pct: (ref.B[i].m + B[i].m) / cost * 100, se: Math.hypot(ref.B[i].se, Math.sqrt(B[i].v)) / cost * 100 });
-      return { spin: sp, buyElection: buy(0, cfg.buyCost.election), buyLandslide: buy(1, cfg.buyCost.landslide) };
+      const parts = { base: varOf(acc.base.map((b) => b.win / b.n)) / acc.base.length };
+      for (let i = 0; i < 4; i++) parts[['e3', 'l4', 'l5', 'l6'][i]] = p[i] ** 2 * B[i].v;
+      const se2 = Object.values(parts).reduce((a, b) => a + b, 0), sp = { pct: ref.spin.pct + mean(per) * 100, se: Math.hypot(ref.spin.se, Math.sqrt(se2) * 100), fixed: ref.spin.se, parts: Object.fromEntries(Object.entries(parts).map(([k, v]) => [k, v * 1e4])) };
+      const buy = (i, cost) => ({ pct: (ref.B[i].m + B[i].m) / cost * 100, se: Math.hypot(ref.B[i].se, Math.sqrt(B[i].v)) / cost * 100, fixed: ref.B[i].se / cost * 100, parts: { [['e3', 'l4'][i]]: B[i].v / cost ** 2 * 1e4 } });
+      return { spin: sp, buyElection: buy(0, lowestPrice(cfg.buyCost.election)), buyLandslide: buy(1, lowestPrice(cfg.buyCost.landslide)) };
     }
     const c = [0, 1, 2, 3].map((i) => (cfg.scatterPay[i + 3] || 0) + B[i].m);     // scatter pay + the bonus it starts, for 3, 4, 5, 6 scatters
     const per = acc.base.map((b) => b.win / b.n + b.sc.reduce((a, k, i) => a + (k / b.n) * c[i], 0));
-    let se2 = varOf(per) / per.length;
-    for (let i = 0; i < 4; i++) se2 += mean(acc.base.map((b) => b.sc[i] / b.n)) ** 2 * B[i].v;
-    return { spin: { pct: mean(per) * 100, se: Math.sqrt(se2) * 100 }, buyElection: { pct: B[0].m / cfg.buyCost.election * 100, se: Math.sqrt(B[0].v) / cfg.buyCost.election * 100 }, buyLandslide: { pct: B[1].m / cfg.buyCost.landslide * 100, se: Math.sqrt(B[1].v) / cfg.buyCost.landslide * 100 } };
+    const parts = { base: varOf(per) / per.length };
+    for (let i = 0; i < 4; i++) parts[['e3', 'l4', 'l5', 'l6'][i]] = mean(acc.base.map((b) => b.sc[i] / b.n)) ** 2 * B[i].v;
+    const pE = lowestPrice(cfg.buyCost.election), pL = lowestPrice(cfg.buyCost.landslide);
+    return { spin: { pct: mean(per) * 100, se: Math.sqrt(Object.values(parts).reduce((a, b) => a + b, 0)) * 100, fixed: 0, parts: Object.fromEntries(Object.entries(parts).map(([k, v]) => [k, v * 1e4])) }, buyElection: { pct: B[0].m / pE * 100, se: Math.sqrt(B[0].v) / pE * 100, fixed: 0, parts: { e3: B[0].v / pE ** 2 * 1e4 } }, buyLandslide: { pct: B[1].m / pL * 100, se: Math.sqrt(B[1].v) / pL * 100, fixed: 0, parts: { l4: B[1].v / pL ** 2 * 1e4 } } };
   };
   const worstOf = (ways) => Object.entries(ways).map(([way, x]) => ({ way, pct: x.pct, se: x.se })).sort((a, b) => (b.pct || 0) - (a.pct || 0))[0];
   let ways = null, early = false;
@@ -65,13 +76,50 @@ async function measure(cfg, opts = {}) {
     ways = compute(); const w = worstOf(ways);
     if (upto < J && w.pct - 6 * w.se > CEILING_PCT) { early = true; break; }
   }
+  // R2C-3b: extend the undecided ways (see EXT_MAX_X); not after an early stop, not for a config already over the ceiling on a point estimate, not for a way the reference's own uncertainty already keeps above it.
+  const up = (x) => x.pct + BOUND_SE * x.se, undecided = (x) => x.pct <= CEILING_PCT && up(x) > CEILING_PCT && x.pct + BOUND_SE * (x.fixed || 0) < CEILING_PCT;
+  const grow = (key, upto) => (key === 'base' ? baseB(upto) : bonusB(key, upto)), ext = { rounds: 0, batches: {}, capped: false, ms: 0 }, extT0 = Date.now(), r0 = rounds;
+  while (!identical && !early && !Object.values(ways).some((x) => x.pct > CEILING_PCT)) {
+    const und = Object.entries(ways).filter(([, x]) => up(x) > CEILING_PCT).sort((a, b) => up(b[1]) - up(a[1]));
+    if (!und.length) break;
+    if (!undecided(und[0][1])) { ext.capped = true; break; }                // the worst way cannot be decided by more rounds
+    const cand = Object.entries(und[0][1].parts).filter(([k, v]) => v > 0 && acc[k].length < EXT_MAX_X * J).sort((a, b) => b[1] - a[1]);
+    if (!cand.length || Date.now() - t0 > (opts.extMs || EXT_MS)) { ext.capped = true; break; }
+    const key = cand[0][0], upto = Math.min(EXT_MAX_X * J, acc[key].length + J / 2);
+    await grow(key, upto); ext.batches[key] = upto; ways = compute();
+  }
+  ext.rounds = rounds - r0; ext.ms = Date.now() - extT0;
   lap();
   const worst = worstOf(ways), finite = Object.values(ways).every((x) => Number.isFinite(x.pct) && Number.isFinite(x.se));
-  return { ok: finite && worst.pct <= CEILING_PCT, finite, ceilingPct: CEILING_PCT, ways, worst, rounds, ms: Date.now() - t0, maxStretchMs: maxStretch, seed, scale, early, mode: paired ? 'paired' : 'direct' };
+  const bound = Object.entries(ways).map(([way, x]) => ({ way, pct: x.pct, se: x.se, upper: x.pct + BOUND_SE * x.se })).sort((a, b) => (b.upper || 0) - (a.upper || 0))[0];
+  return { ok: finite && bound.upper <= CEILING_PCT, finite, ceilingPct: CEILING_PCT, boundSe: BOUND_SE, bound, ways, worst, rounds, extraRounds: ext.rounds, extended: ext, ms: Date.now() - t0, maxStretchMs: maxStretch, seed, scale, early, mode: paired ? 'paired' : 'direct' };
 }
-module.exports = { measure, loadRef, cfgHash, CEILING_PCT };
+// R2C-4: the admin path never runs a config's smoke test or its measuring on the server's event loop. A worker thread (this file again, `benderCheck` in workerData) plays the 300-round smoke test of the config and then measure();
+// the server only waits for its message. A config whose smoke test does not end in SMOKE_LIMIT_MS, or whose check does not end in PB_DEADLINE_MS, or that the admin withdrew (opts.cancelled), is stopped (terminate) and refused.
+const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
+const SMOKE_LIMIT_MS = 10000;
+function measureInWorker(cfg, opts = {}) {
+  return new Promise((resolve, reject) => {
+    const w = new Worker(__filename, { workerData: { benderCheck: true, cfg, opts: { scale: opts.scale, seed: opts.seed, extMs: opts.extMs } }, resourceLimits: { maxOldGenerationSizeMb: 256 } });
+    let done = false, smoked = false;
+    const end = (fn, v) => { if (done) return; done = true; clearInterval(poll); clearTimeout(smokeT); clearTimeout(deadT); w.terminate(); fn(v); };
+    const poll = setInterval(() => { if (opts.cancelled && opts.cancelled()) end(reject, new Error('payback check cancelled')); }, 50);
+    const smokeT = setTimeout(() => { if (!smoked) end(reject, new Error('cfg: the config is too slow to check: its smoke test did not finish in ' + SMOKE_LIMIT_MS / 1000 + ' s')); }, SMOKE_LIMIT_MS);
+    const deadT = setTimeout(() => end(reject, new Error('payback check did not finish in ' + PB_DEADLINE_MS / 1000 + ' s')), PB_DEADLINE_MS + 5000);
+    w.on('message', (m) => { if (m.stage === 'smoke') smoked = true; else if (m.ok) end(resolve, m.r); else end(reject, new Error(m.message)); });
+    w.on('error', (e) => end(reject, e));
+    w.on('exit', (c) => end(reject, new Error('payback check worker stopped (' + c + ')')));
+  });
+}
+if (!isMainThread && workerData && workerData.benderCheck) {
+  (async () => {
+    try { E.validateConfig(workerData.cfg); parentPort.postMessage({ stage: 'smoke' }); parentPort.postMessage({ ok: true, r: await measure(workerData.cfg, workerData.opts) }); }
+    catch (e) { parentPort.postMessage({ ok: false, message: String(e && e.message) }); }
+  })();
+}
+module.exports = { measure, measureInWorker, loadRef, cfgHash, lowestPrice, CEILING_PCT, BOUND_SE };
 
-if (require.main === module) {
+if (require.main === module && isMainThread) {              // R2C-4: not inside the checking worker thread, where this file is the entry script too (the CLI forked 12 estimator processes per check)
 // BB_CFG='{"scatterW":1.3,"payScale":1.9}' overrides engine CFG for tuning runs (payScale multiplies pay + scatterPay). Workers inherit the env.
 if (process.env.BB_CFG) {
   const o = JSON.parse(process.env.BB_CFG), k = o.payScale; delete o.payScale;

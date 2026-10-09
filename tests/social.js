@@ -2,7 +2,10 @@
 const fs = require('fs'), os = require('os'), path = require('path');
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ppso-'));
 const { createAccounts } = require('../accounts.js');
-const { createWallet } = require('../wallet.js');
+const { open: openLedger } = require('../money/ledger');
+const { createService } = require('../money/service');
+const { createGameMoney } = require('../transport/game-money');
+const { createWalletAdapter } = require('../transport/wallet-adapter');
 const { createSocial, levelOf, dayOf } = require('../social.js');
 const games = require('../games');
 const Eng = require('../games/bender-engine.js');
@@ -14,15 +17,22 @@ const mkSock = (acct) => { const h = {}; return { data: { acct }, ev: [], emit(e
 const handlers = []; const socks = new Map();
 const io = { sockets: { sockets: socks }, on(e, f) { handlers.push(f); } };
 const accounts = createAccounts({ file: path.join(dir, 'accounts.json') });
-const wallet = createWallet({ file: path.join(dir, 'wallet.json'), now });
+// Money is the real ledger (ledger + service + ctx.money + the wallet adapter), the way tests/bender.js builds it: Bender plays only through ctx.money.
+const ledger = openLedger(path.join(dir, 'money.jsonl'), { fsync: 'none', log: () => {} });
+const service = createService(ledger, { signupPlay: 1000000 });
+let g = null;
+const onChange = (k) => { if (g) g.pushWallet(k); };
+const money = createGameMoney({ service, ledger, onChange, log: () => {} });
+const wallet = createWalletAdapter({ service, ledger, onChange, log: () => {} });
 const social = createSocial({ io, accounts, now });
-const g = games({ io, accounts, social, wallet, now, rng: () => 0.5 });
+g = games({ io, accounts, social, wallet, money, service, now, rng: () => 0.5 });
 social.setWallet(wallet);
-const join = (name) => { const a = accounts.signup(name, '1234', 'a01', { ip: 't-' + name }).account; const s = mkSock(a.key); socks.set(name, s); handlers.forEach(f => f(s)); return s; };
+const join = (name) => { const a = accounts.signup(name, '1234', 'a01', { ip: 't-' + name }).account; service.ensureAccount(a.key); const s = mkSock(a.key); socks.set(name, s); handlers.forEach(f => f(s)); return s; };
 const A = join('Ana'), B = join('Bo'), C = join('Cy');
 const rw = (k) => social.achvView(k).list.filter(x => x.done).reduce((a, x) => a + x.rewardCents, 0); // achievement Cash paid so far
 const rxp = (k) => social.achvView(k).list.filter(x => x.done).reduce((a, x) => a + x.xp, 0);
-const pl = (k) => wallet.get(k).play - rw(k);
+const pl = (k) => wallet.get(k).play;            // Cash: Bender plays in Cash here
+const ch = (k) => wallet.get(k).chips;           // the daily bonus and achievement rewards are minted in chips (social.js credits 'chips'; Chips and Play $ are separate since bb298d2)
 const anon = mkSock(null); socks.set('anon', anon);
 
 // 1. big win broadcast
@@ -54,8 +64,8 @@ const p0 = wallet.get('bo');
 B.fire('bonus:status'); let st = B.last('bonus:status')[1];
 ok(st.available && st.amountCents === 10000 && st.streak === 1, 'status: available $100 streak 1');
 B.fire('bonus:claim'); const cl = B.last('bonus:claimed')[1];
-ok(cl.ok && wallet.get('bo').play === p0.play + 10000, 'claim credits Cash');
-B.fire('bonus:claim'); ok(B.last('bonus:claimed')[1].ok === false && wallet.get('bo').play === p0.play + 10000, 'second claim same day refused');
+ok(cl.ok && wallet.get('bo').chips === p0.chips + 10000, 'claim credits chips');
+B.fire('bonus:claim'); ok(B.last('bonus:claimed')[1].ok === false && wallet.get('bo').chips === p0.chips + 10000, 'second claim same day refused');
 clock += 3600000 * 3; ok(!social.bonusInfo('bo').available, 'still claimed later same Chicago day');
 const cityMidnight = Date.parse('2026-10-06T05:00:00Z'); clock = cityMidnight - 1000; ok(!social.bonusInfo('bo').available, 'not available 1s before Chicago midnight');
 clock = cityMidnight + 1000; let bi = social.bonusInfo('bo'); ok(bi.available && bi.streak === 2 && bi.day === 2 && bi.amountCents === 12500, 'next Chicago day: streak 2, day 2, $125');
@@ -63,7 +73,7 @@ social.claimBonus('bo');
 clock += 86400000; social.claimBonus('bo'); clock += 86400000 * 3; bi = social.bonusInfo('bo');
 ok(bi.available && bi.streak === 1 && bi.amountCents === 10000, 'missed days reset streak');
 // streak calendar (24h steps from noon Chicago so DST changes cannot repeat a date): $100,125,150,200,250,350,1000 then wraps to day 1
-clock = Date.parse(dayOf(clock) + 'T18:00:00Z'); const pay = []; const w0 = () => pl('bo');
+clock = Date.parse(dayOf(clock) + 'T18:00:00Z'); const pay = []; const w0 = () => ch('bo');
 for (let i = 0; i < 8; i++) { const b4 = w0(), r = social.claimBonus('bo'); pay.push([r.day, w0() - b4, r.streak]); clock += 86400000; }
 ok(pay.slice(0, 7).map(x => x[1]).join() === '10000,12500,15000,20000,25000,35000,100000', 'days 1-7 escalate to the $1,000 jackpot');
 ok(pay.slice(0, 7).map(x => x[0]).join() === '1,2,3,4,5,6,7' && pay[6][2] === 7, 'day numbers 1..7, streak 7 on day 7');
@@ -80,8 +90,8 @@ clock += 86400000 * 6;
 // day-7 payout exactly (fresh account walking the calendar)
 clock = Date.parse(dayOf(clock) + 'T18:00:00Z');
 const E = C; for (let i = 0; i < 6; i++) { social.claimBonus('cy'); clock += 86400000; }
-const e0 = pl('cy'); E.fire('bonus:claim'); const d7 = E.last('bonus:claimed')[1];
-ok(d7.ok && d7.day === 7 && d7.amountCents === 100000 && pl('cy') === e0 + 100000, 'day 7 claim pays $1,000 Cash');
+const e0 = ch('cy'); E.fire('bonus:claim'); const d7 = E.last('bonus:claimed')[1];
+ok(d7.ok && d7.day === 7 && d7.amountCents === 100000 && ch('cy') === e0 + 100000, 'day 7 claim pays $1,000 in chips');
 accounts.flush(); const acc2 = createAccounts({ file: path.join(dir, 'accounts.json') });
 ok(acc2.social('bo').bonus && acc2.social('bo').bonus.streak >= 1, 'bonus persisted in account record');
 const un = mkSock(null); handlers.forEach(f => f(un)); un.fire('bonus:claim'); ok(un.last('error') && un.last('error')[1].code === 'auth', 'claim requires sign-in');
@@ -124,15 +134,15 @@ ok(social.feedView()[0].kind === 'feature' && social.feedView()[0].game === 'ben
 social.onJoin({ data: {} }, {}); social.onJoin(null); ok(true, 'onJoin never throws on junk');
 
 // 3. achievements
-const F = join('Fay'); const fw0 = wallet.get('fay').play;
+const F = join('Fay'); const fw0 = wallet.get('fay').chips, pf0 = wallet.get('fay').play;
 const FH = (extra = {}) => ({ bb: 5, unit: 'cents', nightId: 'n1', players: [{ name: 'Fay', acct: 'fay', chips: 300, handStartChips: 200, handBet: 100, ...extra }] });
 social.onHandEnd(FH());
 const unl = F.all('achv:unlocked').map(x => x[1].id);
 ok(unl.includes('first_hand') && unl.includes('win_pot') && unl.length === 2, 'first hand + win a pot unlock once each');
-ok(F.all('achv:unlocked').every(x => x[1].name && x[1].tier && x[1].rewardCents > 0), 'unlock payload has name, tier, reward');
-ok(wallet.get('fay').play === fw0 + 2500 + 2500, 'two bronze unlocks pay $25 each in Cash');
+ok(F.all('achv:unlocked').every(x => x[1].name && x[1].tier && x[1].rewardCents === 0), 'unlock payload has name and tier, reward 0 (badges only since 10/7)');
+ok(wallet.get('fay').chips === fw0 && wallet.get('fay').play === pf0, 'unlocks mint nothing in either currency (TIER_REWARD is 0: no money mid-game)');
 social.checkAchv('fay'); social.checkAchv('fay'); social.onHandEnd(FH());
-ok(F.all('achv:unlocked').filter(x => x[1].id === 'first_hand').length === 1 && wallet.get('fay').play === fw0 + 5000, 'reward idempotent: re-check and more hands pay nothing again');
+ok(F.all('achv:unlocked').filter(x => x[1].id === 'first_hand').length === 1 && wallet.get('fay').chips === fw0, 'reward idempotent: re-check and more hands pay nothing again');
 const xp1 = social.statsView('fay').xp; social.checkAchv('fay'); ok(social.statsView('fay').xp === xp1, 'xp not re-awarded on re-check');
 social.onHandEnd(FH({ winHand: 'Full House' })); social.onHandEnd(FH({ winHand: 'Royal Flush' }));
 const got = () => new Set(F.all('achv:unlocked').map(x => x[1].id));
@@ -159,7 +169,7 @@ const lv5 = social.achvView('fay').list; ok(lv5.find(x => x.id === 'level_5').do
 F.fire('achv:state'); const av = F.last('achv:state')[1]; ok(av.unseen > 0 && av.unlocked === av.list.filter(x => x.done).length, 'achv:state reports unseen count');
 F.fire('achv:seen'); ok(F.last('achv:state')[1].unseen === 0, 'achv:seen clears the hint');
 ok(JSON.stringify(accounts.social('fay').achv).length < 2000 && !/pin/i.test(JSON.stringify(accounts.social('fay').achv)), 'persisted achv object is small and PIN-free');
-const wAfter = wallet.get('fay').play, uAfter = social.achvView('fay').unlocked;
+const wAfter = wallet.get('fay').chips, uAfter = social.achvView('fay').unlocked;
 
 // 4. persistence across restart + biggest win band
 accounts.flush();
@@ -167,7 +177,7 @@ const accounts2 = createAccounts({ file: path.join(dir, 'accounts.json') });
 const bwFile = path.join(dir, 'bigwins.json');
 let social2 = createSocial({ io: null, accounts: accounts2, now, file: bwFile }); social2.setWallet(wallet);
 ok(social2.achvView('fay').unlocked === uAfter, 'unlocked achievements survive a restart');
-social2.checkAchv('fay'); social2.onHandEnd(FH()); ok(wallet.get('fay').play === wAfter, 'no re-reward after restart');
+social2.checkAchv('fay'); social2.onHandEnd(FH()); ok(wallet.get('fay').chips === wAfter, 'no re-reward after restart');
 ok(social2.biggestView().win === null, 'empty band before any big win');
 social2.broadcastBigWin('bender', 'fay', 15000, 'worldisyours', { mode: 'play' });
 clock += 4000; social2.broadcastBigWin('poker', 'ana', 90000, 'bigpot', { unit: 'cents' });

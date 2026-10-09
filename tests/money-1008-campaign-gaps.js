@@ -2,7 +2,8 @@
 // Money 1008 K5-3: five guards of the Campaign money fixes that no test held (mutants N2, N7, N8, N13, N14 of the K5 critic survived tests/campaign.js + campaign-money.js + campaign-engine.js). Plain node, exit 0 on pass.
 //   G1 (N2) a cash-out sent to a run whose result is already drawn (pend), with the ledger WORKING again, must close it as drawn: a scandal pays 0, a drawn win pays the drawn multiplier.
 //           (tests/campaign-money.js F1 sends that cash while the ledger still refuses every settle, so "cash refused" is true with or without the guard.)
-//   G2 (N7) a run that stays open across a boot (the ledger refused the close at boot) keeps stepping on the growth table AND the map it was opened with (Money 1008 K5-2), not those of the new build.
+//   G2 (N7) a run that stays open across a boot (the ledger refused the close at boot) keeps the growth table AND the map it was opened with (Money 1008 K5-2), not those of the new build; since R2D-3 it is closed to STEPS
+//        (its kept draws died with the old process), so what is checked is the stored snapshot it is shown and paid on, and that the step is refused.
 //   G3 (N8) a record whose pend does not pair with its run (another home / trail) is not paid as drawn.
 //   G4 (N13) a surviving step whose flush failed is not on disk after another account's write and a crash.
 //   G5 (N14) the store's OWN write error reaches the caller (flush() throws): the step is answered with an error and did not happen.
@@ -34,7 +35,7 @@ const stepTo = (w, s, run, to) => H.call(w, s, 'step', { roundId: run.roundId, n
   H.call(w, s, 'cash', { roundId: run.roundId }); const end = H.last(s, 'g:campaign:end');
   say(me && me.deadEnd && end && end.reason === 'deadend' && end.win === me.nextCashout && w.bal('ann', 'play') === pre - 2500 + me.nextCashout, 'G1b a cash-out on a run with a drawn dead-end win pays the drawn multiplier', { end, want: me && me.nextCashout, net: w.bal('ann', 'play') - pre });
 }
-// G2: a run kept open across a boot steps on its own growth table
+// G2: a run kept open across a boot keeps its own growth table (R2D-3: it takes no step; its cash-out is paid at the stored multiplier)
 {
   const w = fresh(), s0 = w.sock('ann');
   let run = H.start(w, s0, 'play', 2500, 'OH').payload.run; run = stepTo(w, s0, run).payload.run;
@@ -44,9 +45,9 @@ const stepTo = (w, s, run, to) => H.call(w, s, 'step', { roundId: run.roundId, n
   try {
     w.boot(); w.hooks.before = {};
     kept = w.runs.get('ann');
-    if (kept) { const s = w.sock('ann'); const o = E.options(kept.run, kept.tiers, kept.map).find((x) => !x.deadEnd); st = H.call(w, s, 'step', { roundId: kept.roundId, n: kept.run.steps + 1, to: o.to }); st.want = Math.floor(run.mx * ({ safe: 104, lean: 110, swing: 130 })[o.tier] / 100); }
+    if (kept) { const s = w.sock('ann'); const o = E.options(kept.run, kept.tiers, kept.map).find((x) => !x.deadEnd); st = H.call(w, s, 'step', { roundId: kept.roundId, n: kept.run.steps + 1, to: o.to }); st.want = Math.floor(run.mx * ({ safe: 104, lean: 110, swing: 130 })[o.tier] / 100); st.o = o; st.snap = kept.tiers.safe.g100; st.cash = H.call(w, s, 'cash', { roundId: kept.roundId }); }
   } finally { E.TIERS.safe.g100 = was; E.TIERS.lean.g100 = 110; E.TIERS.swing.g100 = 130; }
-  say(kept && st && st.ev === 'step' && st.payload.run.mx === st.want, 'G2 a run kept open across a boot steps on the growth table it was opened with', { kept: !!kept, got: st && st.payload && st.payload.run && st.payload.run.mx, want: st && st.want, err: st && st.error });
+  say(kept && st && st.snap === 104 && st.o.nextMx === st.want && st.error && st.error.code === 'internal' && st.cash.ev === 'end' && st.cash.payload.win === Math.floor(2500 * run.mx / 100), 'G2 a run kept open across a boot keeps the growth table it was opened with (shown and paid on it), takes no step', { kept: !!kept, snap: st && st.snap, nextMx: st && st.o && st.o.nextMx, want: st && st.want, err: st && st.error, cash: st && st.cash && (st.cash.error || st.cash.payload.win) });
 }
 // G2b (N7 on the map): the same, for the MAP (K5-2): after a boot that left the run open, the build's map changes (TN safe -> swing, the NC-VA border is dropped); the run still steps on its own
 {
@@ -57,9 +58,9 @@ const stepTo = (w, s, run, to) => H.call(w, s, 'step', { roundId: run.roundId, n
   let kept = null, a = null, b = null;
   try {
     w.boot(); w.hooks.before = {}; kept = w.runs.get('ann');
-    if (kept) { const s = w.sock('ann'); a = E.options(kept.run, kept.tiers, kept.map); b = H.call(w, s, 'step', { roundId: kept.roundId, n: kept.run.steps + 1, to: 'TN' }); }
+    if (kept) { const s = w.sock('ann'); a = E.options(kept.run, kept.tiers, kept.map); b = H.call(w, s, 'step', { roundId: kept.roundId, n: kept.run.steps + 1, to: 'TN' }); b.tn = a.find((o) => o.to === 'TN'); b.cash = H.call(w, s, 'cash', { roundId: kept.roundId }); }
   } finally { st.TN.tier = 'safe'; st.NC.adj.push('VA'); st.NC.adj.sort(); st.VA.adj.push('NC'); st.VA.adj.sort(); }
-  say(kept && a.some((o) => o.to === 'VA') && b && b.ev === 'step' && b.payload.run.mx === Math.floor(run.mx * 104 / 100), 'G2b a run kept open across a boot steps on the map it was opened with (the dropped border still exists, TN keeps its tier)', { kept: !!kept, va: a && a.some((o) => o.to === 'VA'), got: b && (b.error || (b.payload && b.payload.run.mx)), want: Math.floor(run.mx * 104 / 100) });
+  say(kept && a.some((o) => o.to === 'VA') && b && b.tn && b.tn.tier === 'safe' && b.tn.nextMx === Math.floor(run.mx * 104 / 100) && b.error && b.error.code === 'internal' && b.cash.ev === 'end' && b.cash.payload.win === Math.floor(2500 * run.mx / 100), 'G2b a run kept open across a boot keeps the map it was opened with (the dropped border still exists, TN keeps its tier), takes no step', { kept: !!kept, va: a && a.some((o) => o.to === 'VA'), tn: b && b.tn, err: b && b.error, cash: b && b.cash && (b.cash.error || b.cash.payload.win) });
 }
 // G3: a pend that belongs to another run (another home) is not paid
 {

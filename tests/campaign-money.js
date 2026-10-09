@@ -377,6 +377,7 @@ t('F1b: the record flush fails too (nothing durable) -> the step did not happen:
     const rec = w.runs.get('ann'); ok(rec && !rec.pend, 'nothing pended in memory'); eq(rec.run.steps, run.steps, 'the run did not move'); eq(w.escrows().length, 1);
     store.flush = realFlush; w.hooks.before = {}; deq(JSON.parse(JSON.stringify(store._data().open.ann.run)), JSON.parse(diskBefore).run, 'the store holds the step before');
     ok(!store._data().open.ann.pend, 'a later write cannot persist the lost step');
+    w.clock.advance(1000);                                                             // a refused step is answered once a second (R2D-2)
     if (via === 'retry') {                                                             // the same step again: the SAME draw (a scandal), not a second one
       let draws = 0; w.RNG.fn = () => { draws++; return 0.999999; };
       const r = H.call(w, s, 'step', { roundId: run.roundId, n: run.steps + 1, to: run.options[0].to }); eq(r.ev, 'end'); eq(r.payload.reason, 'scandal'); eq(r.payload.win, 0); eq(draws, 0); eq(w.bal('ann', 'play'), pre - 500);

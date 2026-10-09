@@ -1,5 +1,6 @@
 'use strict';
-// node tests/bender.js  (self-contained: temp WALLET_FILE, stub accounts, fake io)
+// node tests/bender.js  (self-contained: the wallet.js unit tests on a temp WALLET_FILE, the engine tests, and the Ballot Bender socket tests on a REAL ledger (money/ledger.js +
+// money/service.js + ctx.money + the games registry) on a temp dir, fake io. Bender plays only through ctx.money: there is no wallet in its ctx.)
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -10,6 +11,10 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bender-'));
 process.env.WALLET_FILE = path.join(tmp, 'wallet.json');
 const { createWallet } = require('../wallet.js');
 const games = require('../games');
+const { open: openLedger } = require('../money/ledger');
+const { createService } = require('../money/service');
+const { createGameMoney } = require('../transport/game-money');
+const { createWalletAdapter } = require('../transport/wallet-adapter');
 const E = require('../games/bender-engine.js');
 
 let pass = 0;
@@ -29,6 +34,26 @@ function makeSocket(io, acct) {
 }
 const last = (s, ev) => { for (let i = s.out.length - 1; i >= 0; i--) if (s.out[i][0] === ev) return s.out[i][1]; return null; };
 const all = (s, ev) => s.out.filter((o) => o[0] === ev).map((o) => o[1]);
+
+// A ledger-backed world for the Bender socket tests: everything real except the socket layer. A new account gets the signup mint (10,000.00 Cash, 10,000 chips) like on the site.
+let wn = 0;
+function setupL(opts = {}) {
+  const io = new EventEmitter(); io.sockets = { sockets: new Map() };
+  let t = 1000000;
+  const clock = { now: () => t, advance: (ms) => { t += ms; } };
+  const file = path.join(tmp, 'm' + (++wn) + '.jsonl');
+  const ledger = openLedger(file, { fsync: 'none', log: () => {} });
+  const service = createService(ledger, { signupPlay: 1000000 });
+  let reg = null;
+  const onChange = (k) => { if (reg) reg.pushWallet(k); };
+  const money = createGameMoney({ service, ledger, onChange, log: () => {} });
+  const wallet = createWalletAdapter({ service, ledger, onChange, log: () => {} });
+  reg = games({ io, wallet, money, service, now: clock.now, rng: opts.rng, accounts: {}, tables: {}, rooms: {}, ledger: { log: () => {} } });
+  const bal = (k, c) => ledger.balance((c === 'chips' ? 'bank:' : 'play:') + k, c);
+  const w = (k) => ({ play: bal(k, 'play'), chips: bal(k, 'chips') });
+  const setBal = (k, c, v) => { service.ensureAccount(k); const d = v - bal(k, c); if (d) service.adminAdjust(k, d, c, 'test', 'test:' + (++wn)); };
+  return { io, clock, ledger, service, g: reg, bal, w, setBal, lines: (fn) => [...ledger.entries(fn || null)], sock: (a) => { if (a) service.ensureAccount(a); return makeSocket(io, a); } };
+}
 
 function setup(opts = {}) {
   const io = new EventEmitter(); io.sockets = { sockets: new Map() };
@@ -154,16 +179,18 @@ function setup(opts = {}) {
     const one = N / bonus; assert.ok(one > 85 && one < 115, 'bonus 1 in ' + one.toFixed(0));
   });
 
-  await test('bender: unsigned socket gets auth error, wallet untouched', async () => {
-    const s = setup(); const u = s.sock(null);
+  await test('bender: unsigned socket gets auth error, ledger untouched', async () => {
+    const s = setupL(); const u = s.sock(null);
     u.send('g:bender:spin', { bet: 10, mode: 'play' }); u.send('wallet_get'); u.send('g:bender:state');
     assert.strictEqual(all(u, 'error').length, 3);
     assert.ok(all(u, 'error').every((e) => e.code === 'auth' && e.message === 'Sign in first'));
     assert.strictEqual(all(u, 'g:bender:result').length, 0);
+    assert.strictEqual(s.lines().length, 0);
   });
 
-  await test('bender: play spin debits bet, credits win, chips untouched, result shape', async () => {
-    const s = setup({ rng: E.rngFrom(5) }); const a = s.sock('ann');
+  await test('bender: play spin debits bet, credits win, chips untouched, result shape, ONE ledger batch bender:<key>:<roundId>', async () => {
+    const s = setupL({ rng: E.rngFrom(5) }); const a = s.sock('ann');
+    const id0 = s.ledger.lastId;
     a.send('g:bender:spin', { bet: 100, mode: 'play' }); await tick();
     const r = last(a, 'g:bender:result');
     assert.ok(r, 'result'); assert.strictEqual(r.mode, 'play'); assert.strictEqual(r.bet, 100);
@@ -171,46 +198,64 @@ function setup(opts = {}) {
     assert.ok(Number.isSafeInteger(r.totalWin) && r.totalWin >= 0);
     assert.strictEqual(r.wallet.play, 1000000 - 100 + r.totalWin);
     assert.strictEqual(r.wallet.chips, 10000);
-    assert.deepStrictEqual(s.wallet.get('ann'), r.wallet);
+    assert.deepStrictEqual(s.w('ann'), r.wallet);
     const w = last(a, 'wallet'); assert.deepStrictEqual(w, r.wallet);        // pushed once with final state
     assert.strictEqual(all(a, 'wallet').length, 1);
+    const ls = [...s.ledger.entries(null, id0)];
+    assert.ok(ls.length >= 1 && ls.every((l) => l.ref === 'bender:ann:' + r.roundId && l.cur === 'play'), 'one ref, one currency');
+    assert.strictEqual(s.ledger.balance('house:bender', 'play'), 100 - r.totalWin);
   });
 
   await test('bender: chips spin moves only the chips bank', async () => {
-    const s = setup({ rng: E.rngFrom(6) }); const a = s.sock('ann');
+    const s = setupL({ rng: E.rngFrom(6) }); const a = s.sock('ann');
     a.send('g:bender:spin', { bet: 200, mode: 'chips' }); await tick();
     const r = last(a, 'g:bender:result');
     assert.strictEqual(r.mode, 'chips');
     assert.strictEqual(r.wallet.play, 1000000);
     assert.strictEqual(r.wallet.chips, 10000 - 200 + r.totalWin);
-    assert.strictEqual(s.chips.get('ann'), r.wallet.chips);
+    assert.strictEqual(s.bal('ann', 'chips'), r.wallet.chips);
   });
 
   await test('bender: short chips stop spins with a chips message; no negative balances', async () => {
-    const s = setup({ rng: E.rngFrom(7) }); const a = s.sock('ann');
-    s.wallet.spend('ann', 'chips', 9900);
+    const s = setupL({ rng: E.rngFrom(7) }); const a = s.sock('ann');
+    s.setBal('ann', 'chips', 100);
     for (let i = 0; i < 30; i++) { s.clock.advance(200); a.send('g:bender:spin', { bet: 1000, mode: 'chips' }); }
     const e = all(a, 'error').find((x) => x.code === 'funds');
     assert.ok(e && /chips/.test(e.message));
-    assert.ok(s.chips.get('ann') >= 0);
-    const b = s.sock('bo'); s.wallet.spend('bo', 'play', 999900);
+    assert.ok(s.bal('ann', 'chips') >= 0);
+    const b = s.sock('bo'); s.setBal('bo', 'play', 100);
     s.clock.advance(200); b.send('g:bender:spin', { bet: 500, mode: 'play' });
     assert.strictEqual(last(b, 'error').code, 'funds');
-    assert.strictEqual(s.wallet.get('bo').play, 100);
+    assert.strictEqual(s.bal('bo', 'play'), 100);
   });
 
-  await test('bender: bad bets and modes rejected without touching wallet', async () => {
-    const s = setup(); const a = s.sock('ann');
+  await test('bender: bad bets and modes rejected without a ledger line', async () => {
+    const s = setupL(); const a = s.sock('ann');
+    const id0 = s.ledger.lastId;
     const bad = [{ bet: 0, mode: 'play' }, { bet: -10, mode: 'play' }, { bet: 15, mode: 'play' }, { bet: 1.5, mode: 'play' }, { bet: NaN, mode: 'play' },
       { bet: '100', mode: 'play' }, { bet: 100, mode: 'ledger' }, { bet: 100 }, { mode: 'play' }, null, 'x', { bet: 100, mode: 'play', buyBonus: 'nope' }];
     for (const p of bad) { s.clock.advance(200); a.send('g:bender:spin', p); }
     assert.strictEqual(all(a, 'error').length, bad.length);
     assert.strictEqual(all(a, 'g:bender:result').length, 0);
-    assert.deepStrictEqual(s.wallet.get('ann'), { play: 1000000, chips: 10000 });
+    assert.strictEqual(s.ledger.lastId, id0);
+    assert.deepStrictEqual(s.w('ann'), { play: 1000000, chips: 10000 });
+  });
+
+  await test('bender: a refused ledger write is an error, never a result (fenced ledger)', async () => {
+    const s = setupL({ rng: E.rngFrom(21) }); const a = s.sock('ann');
+    s.clock.advance(200); a.send('g:bender:spin', { bet: 100, mode: 'play' });
+    assert.strictEqual(all(a, 'g:bender:result').length, 1);
+    const before = s.w('ann'), id0 = s.ledger.lastId;
+    fs.appendFileSync(path.join(tmp, 'm' + wn + '.jsonl'), '\n');                 // one foreign byte: the ledger refuses every write from now on
+    for (let i = 0; i < 3; i++) { s.clock.advance(200); a.send('g:bender:spin', { bet: 100, mode: 'play' }); }
+    assert.strictEqual(all(a, 'g:bender:result').length, 1, 'no result for a refused write');
+    assert.ok(all(a, 'error').length >= 3);
+    assert.strictEqual(s.ledger.lastId, id0);
+    assert.deepStrictEqual(s.w('ann'), before);
   });
 
   await test('bender: rate limit 150ms per socket', async () => {
-    const s = setup({ rng: E.rngFrom(8) }); const a = s.sock('ann'), b = s.sock('bo');
+    const s = setupL({ rng: E.rngFrom(8) }); const a = s.sock('ann'), b = s.sock('bo');
     a.send('g:bender:spin', { bet: 10, mode: 'play' });
     s.clock.advance(100);
     a.send('g:bender:spin', { bet: 10, mode: 'play' });
@@ -223,7 +268,7 @@ function setup(opts = {}) {
   });
 
   await test('bender: concurrent spins from many sockets/accounts keep exact accounting', async () => {
-    const s = setup({ rng: E.rngFrom(11) });
+    const s = setupL({ rng: E.rngFrom(11) });
     const socks = [s.sock('ann'), s.sock('ann'), s.sock('bo'), s.sock('bo')];     // two tabs per account
     for (let i = 0; i < 40; i++) { s.clock.advance(200); for (const k of socks) k.send('g:bender:spin', { bet: 50, mode: i % 2 ? 'play' : 'chips' }); }
     await tick();
@@ -231,7 +276,7 @@ function setup(opts = {}) {
       const mine = socks.filter((k) => k.data.acct.key === key);
       const results = mine.flatMap((k) => all(k, 'g:bender:result'));
       const play = results.filter((r) => r.mode === 'play'), led = results.filter((r) => r.mode === 'chips');
-      const w = s.wallet.get(key);
+      const w = s.w(key);
       assert.strictEqual(w.play, 1000000 - play.length * 50 + play.reduce((a, r) => a + r.totalWin, 0));
       assert.strictEqual(w.chips, 10000 - led.length * 50 + led.reduce((a, r) => a + r.totalWin, 0));
       assert.ok(w.play >= 0 && w.chips >= 0);
@@ -240,15 +285,26 @@ function setup(opts = {}) {
   });
 
   await test('bender: state + history (last 20) + wallet_get + topup over the socket', async () => {
-    const s = setup({ rng: E.rngFrom(13) }); const a = s.sock('ann');
+    const s = setupL({ rng: E.rngFrom(13) }); const a = s.sock('ann');
     a.send('g:bender:state'); const st = last(a, 'g:bender:state');
     assert.deepStrictEqual(st.betLevels, [1, 2, 10, 20, 50, 100, 200, 500, 1000, 2500]);
+    assert.deepStrictEqual(st.wallet, { play: 1000000, chips: 10000 }); assert.deepStrictEqual(st.balances, st.wallet);
     for (let i = 0; i < 25; i++) { s.clock.advance(200); a.send('g:bender:spin', { bet: 10, mode: 'play' }); }
     a.send('g:bender:history'); const h = last(a, 'g:bender:history');
     assert.strictEqual(h.rounds.length, 20);
     assert.strictEqual(h.rounds[0].roundId, all(a, 'g:bender:result').slice(-1)[0].roundId);
     a.send('wallet_topup'); assert.strictEqual(last(a, 'error').code, 'topup_off');   // no free Cash since 10/7
-    a.send('wallet_get'); assert.strictEqual(last(a, 'wallet').play, s.wallet.get('ann').play);
+    a.send('wallet_get'); assert.strictEqual(last(a, 'wallet').play, s.w('ann').play);
+  });
+
+  await test('bender: no wallet in the game ctx (ctx.money is the only way to money)', async () => {
+    const BM = require('../games/bender.js');
+    let seen = null; const orig = BM.init;
+    BM.init = function (c) { seen = c; return orig.call(this, c); };
+    try { setupL(); } finally { BM.init = orig; }
+    assert.ok(seen && seen.money && typeof seen.money.round === 'function');
+    assert.ok(!('wallet' in seen), 'ctx.wallet must not exist for Ballot Bender');
+    assert.ok(!/ctx\.wallet/.test(fs.readFileSync(path.join(__dirname, '../games/bender.js'), 'utf8')), 'games/bender.js must not mention ctx.wallet');
   });
 
   console.log(pass + ' passed' + (process.exitCode ? ', with failures' : ''));

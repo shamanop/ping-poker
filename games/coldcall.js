@@ -158,7 +158,7 @@ function syncPot(mode) {
   const bal = M().pool(POOL, mode);
   let p = store.peekPot(mode);
   if (!p) { if (bal === 0) return 0; p = store.pot(mode); }       // no pot record and nothing in the pool: nothing to mirror (a game that never ran a pot leaves none)
-  if (p.bal !== bal) { p.bal = bal; store.potChanged(); }
+  if (p.bal !== bal) { p.bal = bal; store.potChanged(mode); }
   return bal;
 }
 
@@ -302,13 +302,13 @@ function settle(rec, r, autoWhy, extraSocket) {
   const mode = rec.mode, key = rec.key, cfg = rec.cfg, cost = rec.cost, wasOpen = open.has(rec.id);
   const betCents = r.betCents != null ? r.betCents : rec.betCents;
   const plain = cost > 0 && !rec.buy;     // RULE 1 (FIX M1): only a PLAIN paid spin feeds the pot, rolls for it or wins it. A buy and a Callback never pass a pool and never draw potRng
-  let winCents, slice = null, prize = null, wonAt = 0, view, minWinX, minWinCents, pool = null;
+  let winCents, slice = null, prize = null, wonAt = 0, view, minWinX, minWinCents, pool = null, bal0 = 0;
   try {
     winCents = r.pay.win;                    // whole cents from the engine (rounded once, from the recorded rounding numbers); exact at 10c and up
     if (!isInt(winCents) || winCents < 0) throw new Error('bad win cents');
     if (cfg.pot.seed > 0 && !seedWarned) { seedWarned = true; logf('coldcall: pot.seed ignored (a pool is fed only from stakes)', cfg.pot.seed); }
     if (plain) {
-      const bal0 = M().pool(POOL, mode);
+      bal0 = M().pool(POOL, mode);
       slice = Eng.potSlice(cfg.pot.feedBps, cost, store.pot(mode).rem);
       if (!isInt(slice.slice) || !isInt(slice.rem)) throw new Error('bad pot slice');
       const u = (module.exports.potRng || cryptoRng())(), bal = bal0 + slice.slice;
@@ -323,6 +323,21 @@ function settle(rec, r, autoWhy, extraSocket) {
     if (r.pull && r.pull.armed && r.newState && r.newState.cb && !r.newState.cb.id) r.newState.cb.id = 'cb' + rec.id;     // a Callback armed by this round: its round id is fixed now and travels with the state
     view = stateView(r.newState, rec.now, rec.day, viewK(rec));
   } catch (e) { logf('coldcall: settle failed, voiding', rec.id, e && e.message); return voidRound(rec, 'settle_error'); }
+
+  // ---- MONEY 1008 R2C-5 (journal mode): the line of this spin (the state it leaves, the record it drops, the pot numbers) is WRITTEN (one write(2), no fsync: it survives kill -9) BEFORE the ledger call,
+  // and the fsync runs off the event loop after it: the result is held until that fsync returned. Boot applies the line only when the ledger holds the round, so a kill at any point keeps stake AND leads, or neither.
+  let jok = false;
+  if (store.journaled()) {
+    try {
+      const p0 = plain ? store.pot(mode) : null;
+      store.intent({
+        ref: { key: rec.nk, id: rec.id }, player: [rec.nk, mode, r.newState], del: rec.stored ? store.openKey(rec.nk, mode) : null,
+        pot: plain ? [mode, { ...p0, bal: bal0 + slice.slice - (prize || 0), fed: p0.fed + slice.slice, paid: p0.paid + (prize || 0), rem: slice.rem, last: prize != null ? { who: rec.who, amount: prize, at: wonAt } : p0.last }] : null,
+        free: cost === 0 && winCents === 0 && !pool,        // writes nothing to the ledger: nothing to wait for at boot
+      });
+      jok = true;
+    } catch (e) { logf('coldcall: journal line not written, whole-file flush instead', rec.id, e && e.message); }
+  }
 
   // ---- the ledger, ONE call
   let dup = false, closed = false;
@@ -342,13 +357,14 @@ function settle(rec, r, autoWhy, extraSocket) {
       const pot = store.pot(mode);                 // `rem` and the feed are the same for every batch of this round (same stored config, same rem), so they count on a dup AND on a round_closed;
       pot.rem = slice.rem; pot.fed += slice.slice; // a prize is known only for a batch this call wrote or an identical one (dup): on a round_closed the roll may differ from the one that paid, so `paid` / `last` are not touched
       if (prize != null && !closed) { pot.paid += prize; pot.last = { who: rec.who, amount: prize, at: wonAt }; }
-      store.potChanged();
+      store.potChanged(mode);
     }
     if (plain && prize != null && !closed) potWon = { won: true, amount: prize, who: rec.who };
     try { syncPot(mode); } catch (e) { logf('coldcall: pot mirror not refreshed', rec.id, e && e.message); }
     store.setPlayer(rec.nk, mode, r.newState);
     if (rec.stored) store.delOpen(rec.nk, mode);
-    try { store.flush(); } catch (e) { flushErr = e; }     // MONEY 1008 K2-5: ALWAYS before the result goes out (write-then-answer, like the ledger): the stake is already in the ledger, so the leads / Callback / pot numbers of this round must be on disk too, not behind a 50 ms debounce
+    if (jok && !dup && !closed) store.covered(rec.nk, mode, rec.stored ? store.openKey(rec.nk, mode) : null, plain ? mode : null);   // the line above holds exactly this; its fsync is waited for below, off the event loop
+    else { jok = false; try { store.flush(); } catch (e) { flushErr = e; } }     // MONEY 1008 K2-5: ALWAYS before the result goes out (write-then-answer, like the ledger): the stake is already in the ledger, so the leads / Callback / pot numbers of this round must be on disk too, not behind a 50 ms debounce
   } catch (e) { logf('coldcall: settle bookkeeping failed', rec.id, e && e.message); }
   if (flushErr) logf('coldcall: store flush failed after the ledger call (the ledger is the truth; recover() replays the stored record)', rec.id, flushErr && flushErr.message);
 
@@ -376,6 +392,12 @@ function settle(rec, r, autoWhy, extraSocket) {
     pull: { ...(r.pull || {}), state: view }, pot: potWon,
     ...(rec.forced ? { forced: rec.forced } : {}),
   };
+  // MONEY 1008 R2C-5: in journal mode the result (and what follows it) leaves only after the fsync of this spin's line returned (off the event loop); the spins that finished meanwhile share that fsync
+  if (jok) store.durable((e) => { if (e) logf('coldcall: journal fsync failed, the result goes out anyway (the ledger is the truth; recover() replays the stored record)', rec.id, e && e.message); deliver(); });
+  else deliver();
+  return result;
+
+  function deliver() {
   if (wasOpen) emitAcct(rec, 'g:coldcall:result', result, extraSocket);   // a defaulted / decided round: every tab of the account hears it
   else if (rec.socket) { try { rec.socket.emit('g:coldcall:result', result); } catch {} }
 
@@ -388,7 +410,7 @@ function settle(rec, r, autoWhy, extraSocket) {
     if (potWon) pushFeed('pot', rec, potWon.amount / betCents, potWon.amount);
     if (plain && (slice.slice > 0 || potWon)) broadcast('floor:pot', { mode, bal: store.pot(mode).bal });
   } catch (e) { logf('coldcall: feed failed', rec.id, e && e.message); }
-  return result;
+  }
 }
 
 // Void a round (a round the engine could not default or settle, a failed open): the escrow goes back to the player in ONE call, then the record is dropped and flushed, then the client hears it.
@@ -553,7 +575,9 @@ module.exports = {
     if (store) store.close();
     C = ctx; feed = []; feedSeq = 0; seedWarned = false;
     const file = process.env.COLDCALL_PULL_FILE || files.coldcallPull || null;
-    store = createStore(file, { log: logf, alarm });
+    // MONEY 1008 R2C-5: journal mode (append-only lines + off-loop fsync) is on under server.js; COLDCALL_JOURNAL=0|1 or `coldcall.journal = true|false` decides otherwise (tests run the whole-file path by default)
+    const jEnv = process.env.COLDCALL_JOURNAL, jOn = jEnv === '1' ? true : jEnv === '0' ? false : typeof module.exports.journal === 'boolean' ? module.exports.journal : !!(require.main && path.basename(require.main.filename || '') === 'server.js');
+    store = createStore(file, { log: logf, alarm, journal: jOn, confirm: (k, id) => C.money.closed(k, id) });
     cashForceSeen = 0;
     if (testHookOn()) alarm('coldcall: *** QA FORCE HOOK IS ON (COLDCALL_TEST=1, NODE_ENV=' + (process.env.NODE_ENV || '(unset)') + '): any signed-in player can force Cold Call rounds in CHIPS ONLY; Cash rounds ignore it. Never set COLDCALL_TEST on a real server. ***');
     for (const mode of ['play', 'chips']) { try { syncPot(mode); } catch {} }

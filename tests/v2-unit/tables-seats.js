@@ -44,7 +44,7 @@ function fakeClock() {
 
 function env(over, recOver) {
   const ledger = open(path.join(dir, 'm' + (++n) + '.jsonl'), { fsync: 'none', log: () => {} });
-  const service = createService(ledger);
+  const service = createService(ledger, { signupPlay: 1000000 });
   const events = [];
   const port = createMoneyPort({ service, ledger, bootId: 'bt' });
   for (const k of KEYS) service.ensureAccount(k);

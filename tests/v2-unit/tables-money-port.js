@@ -25,7 +25,7 @@ let n = 0;
 function env(extra) {
   const file = path.join(dir, 'm' + (++n) + '.jsonl');
   const ledger = open(file, { fsync: 'none', log: () => {} });
-  const service = createService(ledger);
+  const service = createService(ledger, { signupPlay: 1000000 });
   const touched = [], fences = [];
   const port = createMoneyPort({ service, ledger, bootId: 'bt', afterWrite: k => touched.push(k.join(',')), onFence: e => fences.push(e.code), ...(extra || {}) });
   for (const k of ['ann', 'bob']) service.ensureAccount(k);
@@ -112,7 +112,7 @@ t('buyInCount counts buy-ins since a ledger id and survives a reopen', () => {
   e.port.buyIn(e.T, 'ann', 500, null); e.port.buyIn(e.T, 'ann', 500, 'play'.replace('play', 'chips'));
   eq(e.port.buyInCount(e.T, 'ann', 0), 3); eq(e.port.buyInCount(e.T, 'ann', mark), 2); eq(e.port.buyInCount(e.T, 'bob', 0), 0); eq(e.port.buyInCount(e.P, 'ann', 0), 0);
   e.ledger.close();
-  const l2 = open(e.file, { fsync: 'none', log: () => {} }); const p2 = createMoneyPort({ service: createService(l2), ledger: l2, bootId: 'b2' });
+  const l2 = open(e.file, { fsync: 'none', log: () => {} }); const p2 = createMoneyPort({ service: createService(l2, { signupPlay: 1000000 }), ledger: l2, bootId: 'b2' });
   eq(p2.buyInCount(e.T, 'ann', 0), 3);
 });
 t('buyInCount counts a Play-funded buy-in once (batch has two legs)', () => {
@@ -126,7 +126,7 @@ t('lastHandNo is the highest settled hand of THAT table, 0 if none, and survives
   e.port.settleHand(e.P, 99, { committed: { ann: 10, bob: 10 }, payouts: { bob: 20 }, returned: {} });
   eq(e.port.lastHandNo('T1'), 10); eq(e.port.lastHandNo('P1'), 99); eq(e.port.lastHandNo('T'), 0);
   e.ledger.close(); const l2 = open(e.file, { fsync: 'none', log: () => {} });
-  eq(createMoneyPort({ service: createService(l2), ledger: l2 }).lastHandNo('T1'), 10);
+  eq(createMoneyPort({ service: createService(l2, { signupPlay: 1000000 }), ledger: l2 }).lastHandNo('T1'), 10);
 });
 t('drift: clean when memory matches, reports each mismatch and strays', () => {
   const e = env(); e.port.buyIn(e.T, 'ann', 1000, null); e.port.buyIn(e.T, 'bob', 1000, null);

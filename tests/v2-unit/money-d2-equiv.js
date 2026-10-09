@@ -43,7 +43,7 @@ function runSeed(seed) {
   const item = () => {
     const cur = rng.chance(0.03) ? 'gold' : rng.pick(['chips', 'play']);
     const c = SOURCE[cur] ? cur : 'chips';
-    const amount = rng.chance(0.04) ? rng.pick([0, -1, 1.5, '5', 2 ** 53 - 1, NaN]) : (rng.chance(0.2) ? rng.range(50, 400) : rng.range(1, 40));
+    const amount = rng.chance(0.04) ? rng.pick([0, -1, 1.5, '5', 1e9, NaN]) : (rng.chance(0.2) ? rng.range(50, 400) : rng.range(1, 40));
     return { from: pickAcct(c, 'from'), to: pickAcct(c, 'to'), amount, cur, reason: rng.chance(0.03) ? '' : rng.pick(REASONS) };
   };
   const mkCall = () => {

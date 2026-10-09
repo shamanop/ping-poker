@@ -232,3 +232,4 @@ A game with a decision or feature in the middle of a round replaces line 36 by `
 - The exposure line: the largest single payout at the top bet and how often (`MONEY-SYSTEM.md` section 8). The ledger has no cap, so the engine is the cap.
 - A live config route, if any, refuses a payback above 100.0% and logs every change.
 - The rollback note: the old build's `SOURCE_ACCOUNTS` must know `house:<id>` before a rollback (`RUNBOOK.md`).
+>>>>>>> money-hardening

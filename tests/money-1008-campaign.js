@@ -121,11 +121,14 @@ t('K2-Cdisk-a: the disk is full for the ledger AND the Campaign file: the scanda
 t('K2-Cdisk-b: after that error the same step again gets the SAME draw (a scandal): the failure is no re-roll', () => {
   const { w, s, id, run, before, to, set } = diskScene({ ledger: true, store: true });
   set(0.999999);                                                                    // a fresh draw would survive; the memo must win
+  w.clock.advance(1000);                                                            // a refused step is answered once a second (R2D-2)
   const r = H.call(w, s, 'step', { roundId: id, n: run.steps + 1, to }); eq(r.ev, 'end'); eq(r.payload.reason, 'scandal'); eq(r.payload.win, 0); eq(w.bal('ann', 'play') - before, 0); eq(w.escrows().length, 0);
 });
-t('K2-Cdisk-c: only the Campaign file is full (the ledger works): the result is in the ledger, so it may be shown; a restart pays nothing more', () => {
-  const { w, s, id, run, before, x } = diskScene({ store: true });
-  eq(x.ev, 'end'); eq(x.payload.reason, 'scandal'); eq(x.payload.win, 0); eq(w.escrows().length, 0); eq(w.bal('ann', 'play') - before, 0);
+t('K2-Cdisk-c: only the Campaign file is full (the ledger works): the record write is the one probe of a step (R2D-2), so the scandal is NOT settled and not shown: same refusal as a survive, the ledger is not asked; the same step a second later lands as drawn', () => {
+  const { w, s, id, run, before, to, x, set } = diskScene({ store: true });
+  ok(x.error && x.error.code === 'internal', 'an error, no result'); eq(H.all(s, 'g:campaign:end').length, 0); eq(w.escrows().length, 1, 'the ledger was not asked: the stake is still in escrow');
+  set(0.999999); w.clock.advance(1000);                                              // a fresh draw would survive; the kept draw wins; the disk is back
+  const r = H.call(w, s, 'step', { roundId: id, n: run.steps + 1, to }); eq(r.ev, 'end'); eq(r.payload.reason, 'scandal'); eq(r.payload.win, 0); eq(w.escrows().length, 0); eq(w.bal('ann', 'play') - before, 0, 'the scandal costs the stake once');
   w.reboot(); eq(w.bal('ann', 'play') - before, 0, 'a restart forgets nothing the ledger has'); eq(w.escrows().length, 0); eq(w.audit().openRounds.length, 0);
 });
 t('K2-Cdisk-d: only the ledger is full (the Campaign file works): the scandal is pended on disk, a restart closes it as drawn (a loss)', () => {
@@ -136,7 +139,7 @@ t('K2-Cdisk-e: a surviving step on a full disk: error, the step did not happen, 
   let u = 0.999999; const w = world(['ann'], () => u), s = w.sock('ann'); hook(true);
   let r = H.start(w, s, 'play', 2500, 'TX'); const id = r.payload.run.roundId; r = H.call(w, s, 'step', { roundId: id, n: 1, to: r.payload.run.options[0].to });
   const run = r.payload.run, to = run.options[0].to, heal = fullDisk({ ledger: true, store: true }); let x; try { x = H.call(w, s, 'step', { roundId: id, n: 2, to }); } finally { heal(); }
-  ok(x.error); eq(w.runs.get('ann').run.steps, 1); u = 0; const y = H.call(w, s, 'step', { roundId: id, n: 2, to }); eq(y.ev, 'step', 'the memo of the surviving draw'); eq(y.payload.run.steps, 2);
+  ok(x.error); eq(w.runs.get('ann').run.steps, 1); u = 0; w.clock.advance(1000); const y = H.call(w, s, 'step', { roundId: id, n: 2, to }); eq(y.ev, 'step', 'the memo of the surviving draw'); eq(y.payload.run.steps, 2);
 });
 
 // ---- K5-F
