@@ -117,9 +117,13 @@ function world(A, opts = {}) {
   // ---- the driver an adapter plays through
   const g = w.g = { rng, now: clock.now, dup: null, tamper: null, extra: null, same: false, world: w };
   const collect = (sock, n0) => {
-    const got = sock.out.slice(n0);
-    const errs = got.filter((o) => o[0] === 'error'), res = got.filter((o) => o[0].startsWith('g:' + A.id + ':'));
-    return { got, error: errs.length ? errs[errs.length - 1][1] : null, ev: res.length ? res[res.length - 1][0].slice(('g:' + A.id + ':').length) : null, payload: res.length ? res[res.length - 1][1] : null, ok: res.length > 0, errored: errs.length > 0 };   // a result event = the round was played, whatever else came with it (an error event beside it is a lie, not a refusal)
+    const got = sock.out.slice(n0), pre = 'g:' + A.id + ':';
+    const errs = got.filter((o) => o[0] === 'error'), res = got.filter((o) => o[0].startsWith(pre));
+    // With no error event, any game event is the answer (the games' step replies do not all name a round). Beside an error event a game event only counts as a result when it names a round
+    // (payload.roundId): a refusal answered with `error` plus a bare state re-sync is a refusal (RVK-1), `error` plus a round event is still a lie that the client was shown a result (R2E-13).
+    const named = res.filter((o) => o[1] && typeof o[1] === 'object' && o[1].roundId !== undefined && o[1].roundId !== null);
+    const played = errs.length ? named : res, top = errs.length && named.length ? named[named.length - 1] : res.length ? res[res.length - 1] : null;
+    return { got, error: errs.length ? errs[errs.length - 1][1] : null, ev: top ? top[0].slice(pre.length) : null, payload: top ? top[1] : null, ok: played.length > 0, errored: errs.length > 0 };
   };
   const send1 = (sock, ev, payload, advance) => {
     if (advance) clock.advance(200);
@@ -605,12 +609,13 @@ function finalAudit(t, w, cur, label) {
 }
 const FINAL = { n: 0, fails: [] };
 function checkLedger(A) {
-  // a mixed world: both currencies, rounds, a kill, doubles
-  for (const cur of CURS) runCheck(A, 'ledger', cur, (t) => {
+  // a mixed world: the adapter's currencies (one or both), rounds, a kill, doubles. A currency the adapter leaves out is not played here (the refuse check asks the game about it)
+  const curs = CURS.filter((c) => !A.currencies || A.currencies.includes(c));
+  for (const cur of curs) runCheck(A, 'ledger', cur, (t) => {
     const w = world(A, { seed: 10 }), s = w.sock('ann'), s2 = w.sock('bob'); w.rich('ann'); w.rich('bob');
-    for (const c of CURS) for (let i = 0; i < 6; i++) playOne(w, i % 2 ? s : s2, c, i);
+    for (const c of curs) for (let i = 0; i < 6; i++) playOne(w, i % 2 ? s : s2, c, i);
     for (const pt of A.heldPoints) { holdOne(w, s, pt, cur); w.reboot(); }
-    for (const pt of A.heldPoints) { const h = holdOne(w, w.sock('ann'), pt, other(cur)); try { pt.finish(w.g, w.sock('ann'), h); } catch {} }
+    if (curs.includes(other(cur))) for (const pt of A.heldPoints) { const h = holdOne(w, w.sock('ann'), pt, other(cur)); try { pt.finish(w.g, w.sock('ann'), h); } catch {} }
     w.g.dup = 'imm'; for (let i = 0; i < 4; i++) { try { playOne(w, w.sock('bob'), cur, i); } catch {} } w.g.dup = null;
     finalAudit(t, w, cur, 'mixed world');
     t.n += 1;
