@@ -195,7 +195,7 @@ jq -r --arg a play:ann '. as $r | (.batch // [.])[] | select(.cur=="play" and (.
 8   ...              leave:T1:ann:b1.3        +10500
 9   ...              coldcall:ann:r1          -500
 ```
-What happened inside a poker hand is not in the ledger (only the totals per seat: `hand:<table>:<n>`); the table's hand log and the presentation ledger (`ledger.json`, nights and nets) have the rest.
+(The sample was made before the RV-1 rule: an admin edit made today reads `adj:c.op1`.) What happened inside a poker hand is not in the ledger (only the totals per seat: `hand:<table>:<n>`); the table's hand log and the presentation ledger (`ledger.json`, nights and nets) have the rest.
 
 ## 8. Open escrow or stuck round?
 
