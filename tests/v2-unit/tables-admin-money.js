@@ -22,7 +22,7 @@ let n = 0;
 
 function env() {
   const ledger = open(path.join(dir, 'm' + (++n) + '.jsonl'), { fsync: 'none', log: () => {} });
-  const service = createService(ledger);
+  const service = createService(ledger, { signupPlay: 1000000 });
   service.ensureAccount('ann'); service.ensureAccount('bob');
   const accounts = { get: (k) => (k === 'ann' || k === 'bob' ? { key: k } : null), keyOf: (s) => String(s).toLowerCase().trim(), displayOf: (k) => k, all: () => ({}) };
   const adm = createAdmin({ service, ledger, accounts, registry: { tables: new Map() }, views: {}, onlineKeys: () => new Set() });
