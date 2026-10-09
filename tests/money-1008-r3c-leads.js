@@ -70,6 +70,7 @@ const near = (x, y, tag) => assert.ok(Math.abs(x - y) < 1e-6, tag + ': share ' +
       accept(SHORT);
       const a = await spin(w, s, cur, 1); assert.strictEqual(a.listNow, 45);
       near(a.share, 4005 / 4500, 'after the swap to list 45');
+      assert.strictEqual(a.r.pull.leaked, 0, 'a rescale across a list swap is not leakage (RL-4): pull.leaked stays 0 on the first spin under list 45');
       // the whole way: from 0.89 of one Callback no more than ONE Callback comes in the next 16 spins (the fault paid 8)
       let cbs = 0; for (let i = 0; i < 16; i++) { const b = await spin(w, s, cur, 10 + i); if (b.callback) cbs++; }
       assert.ok(cbs <= 1, cur + ': ' + cbs + ' Callbacks from 0.89 of one');
@@ -81,6 +82,7 @@ const near = (x, y, tag) => assert.ok(Math.abs(x - y) < 1e-6, tag + ': share ' +
       accept(LONG);
       const a = await spin(w, s, cur, 1); assert.strictEqual(a.listNow, 4500);
       near(a.share, 4005 / 4500, 'after the swap to list 4500');
+      assert.strictEqual(a.r.pull.leaked, 0, 'a rescale across a list swap is not leakage (RL-4): pull.leaked stays 0 on the first spin under list 4500');
     });
   }
   await test('RESET to the shipped numbers keeps the share (from list 45 and from list 4500)', async () => {
