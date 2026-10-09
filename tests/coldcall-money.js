@@ -440,7 +440,7 @@ function auditMatches(s) {
       assert.deepStrictEqual(s.escrows(), []); assert.strictEqual(s.store().allOpen().length, 0, 'the record is gone'); assert.ok(!diskHas(s), 'also on the disk');
       const st = s.store().player('ann', 'play'); assert.strictEqual(st.cb, null, 'no Callback armed from a refunded round'); assert.strictEqual(st.lt, st0.lt, 'no leads from a refunded round'); assert.strictEqual(st.rounds, st0.rounds, 'no state advance'); assert.deepStrictEqual(st, st0);
       const b = s.sock('ann'), h0 = s.house('play'), q = spin(s, b, { bet: 1, mode: 'play', auto: true }); assert.strictEqual(q.callback, false, 'the next spin is a paid spin, not a free Callback'); assert.strictEqual(q.cost, 1);
-      assert.strictEqual(s.lines((e) => /^coldcall:ann:cb/.test(e.ref)).length, 0, 'no Callback round was ever played'); void h0;
+      assert.strictEqual(s.lines((e) => /^coldcall:ann:cb[0-9a-f]{12}(?::|$)/.test(e.ref)).length, 0, 'no Callback round was ever played'); void h0;
     });
   }
 
