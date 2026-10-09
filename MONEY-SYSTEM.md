@@ -32,7 +32,7 @@ Companions: `ADD-A-GAME.md` (plug a game in), `RUNBOOK.md` (operate it), `MONEY-
 | Ledger | `money/ledger.js` | One append-only file of transfers, `money.jsonl`. `transfer()` (`:544`) writes one line, `batch()` (`:554`) writes several legs as ONE line (all or nothing). Memory changes only after the line is on disk (`write`, `:535`). A `ref` string on every line makes a retry harmless (`refCheck`, `:523`): same ref and same content = `dup`, no write; same ref and other content = `ref_conflict`. Player accounts cannot go below 0 (`validateItems`, `:109`); source accounts can. Fsync on every write (`fsync: 'all'`, `server.js:21`). |
 | Source accounts | `money/ledger.js:28` `SOURCE_ACCOUNTS` | The only accounts that may go negative: `mint:signup`, `mint:bonus`, `mint:achv`, `mint:topup`, `mint:migration`, `house:bender`, `house:coldcall`, `house:campaign`, `admin:adjust`, `fx:chips`, `fx:play`. Every other name must match a shape in `PLAYER_KINDS` (`:27`) or the line is refused (`bad_account`). |
 | The fence | `money/ledger.js:497` `fence()` | One writer only. The newest opener writes a token to `money.jsonl.lock` (`:280-283`). Before every append the ledger re-reads the lock and the file size. A lost lock throws `lost_lock`; a file size that is not what this process wrote throws `foreign_write`; both are refused for good until the process restarts (`refused`). A failed write throws `write_failed` after truncating the file back to the last good size (`:504-516`); that one is not sticky. |
-| Quarantine | `money/ledger.js:446-485` | At open, a line that does not parse or does not validate is NOT applied. It is copied (once) to `money.jsonl.quarantine` and logged `QUARANTINED n line(s)`; the journal is never rewritten. A torn last line (no newline) is truncated. `ledger.check()` (`:720`) reports the count separately. |
+| Quarantine | `money/ledger.js:446-485` | At open, a line that does not parse or does not validate is NOT applied. It is copied (once) to `money.jsonl.quarantine` and logged `QUARANTINED n line(s)`; the journal is never rewritten. A torn last line (no newline) is truncated. One exception for history (R2E-14, `money/ledger.js:39-46,68-69,505`): at replay a well-formed `house:<id>` that this build's `SOURCE_ACCOUNTS` does not list (a game taken out, or a rollback to a build from before the game) is NOT quarantined when the line's reason starts with `<id>:`; it is applied as written and the open logs `UNREGISTERED HOUSE in <file>: house:x (N line(s) replayed as written) ...`. NEW writes naming an unlisted house are still `bad_account`: the list stays the permission. A typo house, a foreign reason or `house:Bad Name` stays quarantined. `ledger.check()` (`:720`) reports the count separately. |
 | Checkpoint | `money/ledger.js:732` `checkpoint()` | `money.jsonl.ckpt` is a verified shortcut for boot. It is believed only if the journal bytes it covers hash to its sha256 and the code that wrote it is the same code (`RULES_ID`, `:74-83`: any edit to `money/ledger.js`, including a new source account, forces one full replay on the next boot). Never the truth; the journal is. |
 | Service | `money/service.js` | Named operations on top of the ledger (`createService`). Table half: `buyIn`, `cashOut`, `settleHand`, `bootRecover`, `seatFund`, `nightSummary`. Game half: `houseRound`, `openRound`, `settleRound`, `voidRound`, `openRounds`, `roundClosed`, `poolBalance`, `sweepEscrows`. Shared: `ensureAccount`, `mint`, `adminAdjust`, `balances`, `mirror`. The game ids it knows are in `GAMES` (`:13`). |
 | Table port | `tables/money-port.js` | The ONLY place a table money `ref` is built and the only caller of the service for tables. Turns a fence into `TableError('money_down')` plus `onFence` (`server.js` pauses all tables). |
@@ -74,7 +74,7 @@ single: {"id":412,"ts":1791...,"from":"play:ann","to":"house:coldcall","amount":
 batch : {"id":413,"ts":...,"batch":[{"from":..,"to":..,"amount":..,"cur":..,"reason":..},...],"ref":"hand:POKERPING:57","reason":"hand"}
 ```
 
-`id` rises by 1 per applied line (a gap is allowed in an old file). `ref` is unique in the file. Amounts are positive safe integers. The ledger accepts legs of both currencies in one batch (that was the `fx:` path); nothing live writes one and soak I10 flags it.
+`id` rises by 1 per applied line (a gap is allowed in an old file). `ref` is unique in the file. Amounts are positive safe integers, at most 1e12 cents each (`MAX_AMOUNT`, `money/ledger.js:36`, R2E-2); a write that would take ANY account (player, house, pool, admin) past +-`Number.MAX_SAFE_INTEGER` is refused `balance_overflow` (`ctx.money` answers it `internal`). The ledger accepts legs of both currencies in one batch (that was the `fx:` path); nothing live writes one and soak I10 flags it.
 
 ### Refs and reasons written today
 
@@ -155,7 +155,7 @@ Each cash-out is one transfer `seat -> bank:` or `seat -> play:` of the stack. A
 ### 5.8 Instant game round (Ballot Bender spin, Cold Call spin with no decision, Campaign: not used)
 1. The game decides cost and win in memory (nothing is spent yet), checks funds, then calls `ctx.money.round(key, cur, roundId, { cost, win, pool? })`.
 2. ONE batch `<game>:<key>:<roundId>`: `player -> house:<game>` (cost), then pool legs (`feed`: house to pool, `prize`: pool to player), then `house:<game> -> player` (win). A crash can never take a stake and lose the win.
-3. The same call again is `dup`; the same round id with other numbers is `round_closed` ("already played").
+3. The same call again is `dup`; the same round id with other numbers is `round_closed` ("already played"). A round id that was paid on ANY path is closed to every other path (R2E-1): an instant `round()` on an id whose `:open` or `:close` ref exists is `round_closed`, and `open` / `settle` on an id that was paid as an instant round is too (`money/service.js:281,296,335`). `tests/money-1008-r2e-contract.js`.
 Restart: nothing open; the round is whole or absent.
 
 ### 5.9 Escrowed round with a held feature (Cold Call decisions, Callback, bonus buy; the pot)
@@ -225,6 +225,8 @@ Each has the check that enforces it. "Soak" ids are in `tests/soak/README.md` (I
 | 20 | The QA force hooks never touch a Cash round | `tests/money-1008-cc-hook.js`; Campaign: `tests/money-1008-campaign.js` |
 | 21 | A live slot config is accepted only when every way to play is measured at or under 100.0% payback with 3 standard errors of margin (section 5.12); Ballot Bender buys are measured at the lowest price any bet is charged | `tests/money-1008-cfg-coldcall.js`, `money-1008-cfg-bender.js`, `money-1008-r2c-bound.js`, `money-1008-r2c-buy.js`, `money-1008-r2c-reset.js` |
 | 22 | A game module reaches money only through `ctx.money`, and passes the kit | `node tests/game-kit.js <gameId>`: pending the kit merge, see `ADD-A-GAME.md` |
+| 23 | A re-made account that holds any Cash is locked | `tests/money-1008-r2b-boot.js` |
+| 24 | No amount above 1e12 cents, no balance past the safe-integer range; a paid round id is closed to every write path; an unlisted house replays as written | `tests/money-1008-r2e-contract.js` |
 
 ## 7. What the client sees
 

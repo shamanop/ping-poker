@@ -65,6 +65,8 @@ Written for `money-hardening` (2026-10-08): read at `69a44f6`, line cites rechec
 Rolling back means starting an OLDER build on the SAME `money.jsonl`. The older build reads every line with its own rules (`SOURCE_ACCOUNTS` and `PLAYER_KINDS` in `money/ledger.js:27-31`). A line it does not understand is not applied.
 
 **What the old build does with a line it does not know** (RUN on a temp copy): at open it writes `QUARANTINED n line(s) ... They were NOT applied` to the log and copies the line to `money.jsonl.quarantine`. Then every later line that depended on it fails too: a player whose win came from an unknown `house:<newgame>` has a balance that is too low by the win, and the line where he spent it is quarantined as `insufficient` (the sample: 100 Chips balance instead of 150, the 140 spend quarantined). The file itself is not rewritten.
+**Since R2E-14 (merged `0d776d1`) the build at this head behaves differently from the older ones.** A build WITH the R2E-14 ledger that meets `house:<game>` lines it does not list (a game taken out, or a rollback to a build from before the game) applies them as written, so no balance is rewritten, and logs `UNREGISTERED HOUSE in <file>: house:x (N line(s) replayed as written) ...` (`money/ledger.js:505`); but that build still cannot open or pay rounds for that game. The quarantine behaviour below is what an OLDER build (for example live `master` `886e61a`, before R2E-14) does. Check which ledger the target build has before relying on either.
+
 It gets worse in two ways. (a) The old build keeps appending, and its ids continue after its last APPLIED line, so its new lines reuse the ids of the quarantined ones. (b) If you then roll FORWARD again, the new build reads the reused id as "not after" the last one and quarantines the old build's line: in the sample, 10 Chips the old build paid out vanished after rolling forward (`id 2 is not after 3`). So a rollback that skips step 1 loses data both ways.
 
 **Steps**
@@ -131,7 +133,7 @@ Lines the ledger would refuse are not applied. `jq` does not know the rules, so 
 ```
 jq -c '{lineNo,reason}' money.jsonl.quarantine
 ```
-Reasons: `bad_account` (unknown source or malformed name), `insufficient: <account> has X, needs Y` (a spend that the earlier, refused lines would have covered), `id N is not after M`, `duplicate ref`, `unparseable`. Quarantined lines are never applied and the file is never rewritten. A torn last line (no newline, after a crash) is not quarantined: it is cut off at boot. Check `.quarantine` is absent in a healthy data dir (the soak treats its existence as a failure, invariant I1).
+The log line `UNREGISTERED HOUSE in ...` (builds with R2E-14) is not a quarantine: it names a house that this build's list lacks and whose lines were applied as written. Reasons: `bad_account` (unknown source or malformed name), `insufficient: <account> has X, needs Y` (a spend that the earlier, refused lines would have covered), `id N is not after M`, `duplicate ref`, `unparseable`. Quarantined lines are never applied and the file is never rewritten. A torn last line (no newline, after a crash) is not quarantined: it is cut off at boot. Check `.quarantine` is absent in a healthy data dir (the soak treats its existence as a failure, invariant I1).
 
 ## 5. Replaying the file to balances
 
