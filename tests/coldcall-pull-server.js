@@ -679,7 +679,7 @@ const potOk = (p, s, mode) => { assert.strictEqual(p.fed, p.paid + p.bal, 'pot s
 
   await test('F7: pull.leaked and pull.warmDied are reported after idle days (the server hands the engine the stored, un-ticked state)', async () => {
     const s = setup({ rng: E.rngFrom(83) }); const a = s.sock('ann');
-    const st = E.newState(); st.lt = 300; st.avg = 100; st.warm = [3, 4]; st.coldAt = s.clock.now() + 1000; st.day = '2000-01-01';
+    const st = E.newState(); st.lt = 300; st.ll = Math.round(E.CFG.pull.list * 10); st.avg = 100; st.warm = [3, 4]; st.coldAt = s.clock.now() + 1000; st.day = '2000-01-01';
     s.store().setPlayer('ann', 'play', st);
     s.clock.advance(3 * dayMs);
     const r = play(s, a, { bet: 100, mode: 'play' });
@@ -702,7 +702,7 @@ const potOk = (p, s, mode) => { assert.strictEqual(p.fed, p.paid + p.bal, 'pot s
       const r2 = play(s, a, { bet: 100, mode: other }); assert.strictEqual(r2.status, 'done');
     }
     // a good state is kept as it is (leads, warm squares), an old one without warmBet gets 0
-    const s = setup({ rng: E.rngFrom(85) }); const a = s.sock('ann'); const g = E.newState(); g.lt = 120; g.avg = 100; g.warm = [3, 4];
+    const s = setup({ rng: E.rngFrom(85) }); const a = s.sock('ann'); const g = E.newState(); g.lt = 120; g.ll = Math.round(E.CFG.pull.list * 10); g.avg = 100; g.warm = [3, 4];
     s.store().setPlayer('ann', 'play', g); a.send('g:coldcall:state'); const v = last(a, 'g:coldcall:state').pull.play;
     assert.strictEqual(v.lt, 120); assert.deepStrictEqual(v.warm, [3, 4]);
   });
@@ -712,7 +712,7 @@ const potOk = (p, s, mode) => { assert.strictEqual(p.fed, p.paid + p.bal, 'pot s
     // per currency: Cash and Chips lists arm at their own pace, each keeps its own carry
     const s = setup({ rng: E.rngFrom(66) }); const a = s.sock('ann'); rich(s, 'ann'); rich(s, 'ann', 'chips');
     E.CFG.pull.list = 5; E.CFG.pull.daily.base = 0; E.CFG.pull.daily.perStreak = 0;
-    const seedSt = (carry, avg) => Object.assign(E.newState(), { lt: 40, avg, carry, day: '2026-10-06' });
+    const seedSt = (carry, avg) => Object.assign(E.newState(), { lt: 40, ll: Math.round(E.CFG.pull.list * 10), avg, carry, day: '2026-10-06' });
     s.store().setPlayer('ann', 'play', seedSt(3.5, 99.96)); s.store().setPlayer('ann', 'chips', seedSt(8.25, 19.99));
     let n = 0; while (!stored(s, 'play').cb && n++ < 60) { const r = spin(s, a, { bet: 100, mode: 'play', auto: true }); assert.ok(!r.error, JSON.stringify(r.error)); }
     assert.ok(stored(s, 'play').cb, 'play armed'); assert.strictEqual(stored(s, 'chips').carry, 8.25, 'the chips carry did not move when the Cash list armed');
@@ -725,7 +725,7 @@ const potOk = (p, s, mode) => { assert.strictEqual(p.fed, p.paid + p.bal, 'pot s
     // garbage carry: reads as 0, the rest of the state is kept, both currencies keep working, money moves only by cost and win
     for (const bad of [NaN, -3, 'x', null, 50, 10, {}, [], true, Infinity, 1e300]) for (const mode of ['play', 'chips']) {
       const t = setup({ rng: E.rngFrom(86) }); const b = t.sock('ann'); rich(t, 'ann', mode); E.CFG.pull.list = 5;
-      const g = Object.assign(E.newState(), { lt: 40, avg: 99.96, warm: [3, 4], warmBet: 100, day: '2026-10-06' }); g.carry = bad;   // NaN / Infinity become null in the store file; the raw object covers the in-memory case
+      const g = Object.assign(E.newState(), { lt: 40, ll: Math.round(E.CFG.pull.list * 10), avg: 99.96, warm: [3, 4], warmBet: 100, day: '2026-10-06' }); g.carry = bad;   // NaN / Infinity become null in the store file; the raw object covers the in-memory case
       t.store().setPlayer('ann', mode, g);
       b.send('g:coldcall:state'); const vv = last(b, 'g:coldcall:state').pull[mode]; assert.strictEqual(vv.lt, 40, 'garbage carry ' + String(bad) + ' does not reset the list'); assert.deepStrictEqual(vv.warm, [3, 4]);
       assert.ok(!all(b, 'error').length);
@@ -735,7 +735,7 @@ const potOk = (p, s, mode) => { assert.strictEqual(p.fed, p.paid + p.bal, 'pot s
     // a store file written by the old code (no carry at all) loads as carry 0
     const dir = fs.mkdtempSync(path.join(tmp, 'old')); const old = Object.assign(E.newState(), { lt: 12, avg: 100 }); delete old.carry;
     fs.writeFileSync(path.join(dir, 'coldcall-pull.json'), JSON.stringify({ v: 1, players: { ann: { play: old } }, pot: {}, open: {} }));
-    const o = setup({ dir, rng: E.rngFrom(87) }); const oa = o.sock('ann'); rich(o, 'ann'); oa.send('g:coldcall:state'); assert.strictEqual(last(oa, 'g:coldcall:state').pull.play.lt, 12, 'an old state keeps its leads');
+    const o = setup({ dir, rng: E.rngFrom(87) }); const oa = o.sock('ann'); rich(o, 'ann'); oa.send('g:coldcall:state'); assert.ok(Math.abs(last(oa, 'g:coldcall:state').pull.play.lt - 12 * Math.round(E.CFG.pull.list * 10) / E.SHIPPED_FULL) < 1e-9, 'an old record with no stamp is counted against the shipped list and rescaled to the live one (R3C-1)');
     const r0 = play(o, oa, { bet: 100, mode: 'play' }); assert.strictEqual(r0.status, 'done'); assert.strictEqual(o.store().player('ann', 'play').carry, 0, 'missing carry reads as 0 and is written back as 0');
   });
 
@@ -1125,7 +1125,7 @@ const potOk = (p, s, mode) => { assert.strictEqual(p.fed, p.paid + p.bal, 'pot s
   });
 
   await test('DENOMS stored state: normState accepts cb.bet 1..2500 (any whole number of cents) and a carry in [0, 10); damaged values read as safe defaults; the Callback at 1c is played at 1c', async () => {
-    const mk = (extra) => Object.assign(E.newState(), { lt: 120, avg: 3, warm: [3, 4], warmBet: 2, rounds: 7 }, extra);
+    const mk = (extra) => Object.assign(E.newState(), { lt: 120, ll: Math.round(E.CFG.pull.list * 10), avg: 3, warm: [3, 4], warmBet: 2, rounds: 7 }, extra);
     for (const [cb, carry] of [[{ bet: 1 }, 0], [{ bet: 2 }, 0.5], [{ bet: 5 }, 0.99], [{ bet: 7 }, 3.3], [{ bet: 15 }, 9.9], [{ bet: 2500 }, 0], [{ bet: 10 }, 0]]) {
       const s = setup({ rng: E.rngFrom(318), roundRng: E.rngFrom(319) }); const a = s.sock('ann'); rich(s, 'ann');
       s.store().setPlayer('ann', 'play', mk({ cb, carry })); a.send('g:coldcall:state'); const v = last(a, 'g:coldcall:state').pull.play;
