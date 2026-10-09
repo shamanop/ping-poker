@@ -648,7 +648,7 @@
   function modeUi() {
     const bar = $('modebar'); if (!bar) return;
     bar.querySelectorAll('button').forEach((x) => x.classList.toggle('on', st.live && x.dataset.m === st.mode));
-    $('modenote').textContent = !st.live ? 'Practice (no wallet)' : st.mode === 'chips' ? 'Real poker chips from your bank.' : 'Pretend money.';
+    $('modenote').textContent = !st.live ? 'Practice (no wallet)' : st.mode === 'chips' ? 'Free-play chips.' : 'Cash. Set by the house.';
     $('balL').textContent = !st.live ? 'PRACTICE' : st.mode === 'chips' ? 'CHIPS' : 'BALANCE';
     $('fine').textContent = !st.live ? 'Practice (no wallet). Free play only.' : 'Chips have no cash value.';
   }
