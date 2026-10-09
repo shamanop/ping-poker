@@ -74,6 +74,8 @@ function makeToy(variant) {
             rec.delete(key); return socket.emit('g:toy:result', { roundId: id, win: r.bet * 2 });
           }
           if (variant === 'errresult') { bad(socket, 'internal'); return socket.emit('g:toy:result', { roundId: id, win }); }   // reports the money error AND shows the win
+          if (variant === 'errresultid') { bad(socket, 'internal'); return socket.emit('g:toy:result', { id, win }); }          // the same lie, the round named `id` (the reviewer's mutant M3)
+          if (variant === 'errpaid') { bad(socket, 'internal'); return socket.emit('g:toy:paid', { win }); }             // the same lie, no round id at all: a `paid` event with the win
           if (variant === 'keepdoomed') carried += win;                         // the result the ledger refused is kept to be paid with the next round
           return bad(socket, 'internal');
         }
@@ -119,6 +121,8 @@ const VARIANTS = [
   ['bootbonus', 'restart', 'boot recovery pays twice the stake instead of refunding it'],
   ['redraw', 'restart', 'a round record outlives the restart and the round is played again under a fresh ref'],
   ['errresult', 'errors', 'on a money error sends the error event AND the result event (the client is shown a win nobody paid)'],
+  ['errresultid', 'errors', 'the same lie with the round named `id`, not `roundId` (the kit must not hang on one field name)'],
+  ['errpaid', 'errors', 'the same lie with no round in it: a `paid` event with the win'],
   ['unregistered', 'registration', 'not in MODULES, house account not registered'],
 ];
 
@@ -131,13 +135,23 @@ const TOYS = [
   ['ceilwin', 'payback', 'rounds a fractional win UP: a 90% table pays 119% at the 1 unit bet'],
   ['walk2', 'registration', 'a copy of the example: registered nowhere, and its adapter kept `example: true` (the line that switched the registration check off)'],
   ['mempot', 'carry', '10% of every stake feeds a jackpot kept in a module variable, one number for Chips and Cash'],
+  ['chipscarry', 'carry', 'a boost token earned in Chips is kept in a FILE (survives a restart) and spent in Cash: ONLY the Chips-to-Cash half of carry', 'chips'],
+  ['freeclean', 'carry', 'a free-round token with a currency per token, kept in memory and lost at a restart: ONLY the restart half of carry', 'restart'],
 ];
+// CORRECT toy games the kit must not refuse (false alarms): every check passes
+const GOOD_TOYS = [
+  ['statecho', 'answers every refusal with an error AND a bare state event (no round in it): not a result, not a lie'],
+  ['chipsonly', 'a correct game with one currency (adapter currencies: [chips]) that refuses Cash'],
+];
+// which half of `carry` a failure message belongs to
+const HALF = { chips: /after Chips rounds/, restart: /after a restart/ };
 const NOT_REGISTERED = new Set(['walk2']);               // toys whose registration is what the kit must check; every other toy is registered by the kit for the run
 function runToy(name) {
   K.RESULTS.length = 0;
   const file = path.join(__dirname, 'kit-toys', name + '.kit.js');
   K.runAdapter(K.finishAdapter(require(file), file), { register: !NOT_REGISTERED.has(name) });
-  return K.RESULTS.filter((r) => !r.ok).map((r) => r.check + (r.cur ? '/' + r.cur : ''));
+  runToy.last = K.RESULTS.filter((r) => !r.ok);
+  return runToy.last.map((r) => r.check + (r.cur ? '/' + r.cur : ''));
 }
 
 let failed = 0;
@@ -157,10 +171,21 @@ for (const [v, check, what] of VARIANTS) {
   const hit = f.some((x) => x === check || x.startsWith(check + '/'));
   rows.push([v, check, hit ? `caught on ${check} (all failing: ${[...new Set(f)].join(',')})` : `NOT CAUGHT on ${check}; failing: ${f.join(',') || 'nothing'}`, hit, what]);
 }
-for (const [v, check, what] of TOYS) {
+for (const [v, check, what, half] of TOYS) {
   const f = runToy(v);
-  const hit = f.some((x) => x === check || x.startsWith(check + '/'));
-  rows.push([v, check, hit ? `caught on ${check} (all failing: ${[...new Set(f)].join(',')})` : `NOT CAUGHT on ${check}; failing: ${f.join(',') || 'nothing'}`, hit, what]);
+  let hit = f.some((x) => x === check || x.startsWith(check + '/'));
+  let note = '';
+  if (hit && half) {                                      // a toy for ONE half of the check must trip that half and not the other
+    const mine = runToy.last.filter((r) => r.check === check).map((r) => String(r.detail)).join(' || ');
+    const other = half === 'chips' ? 'restart' : 'chips';
+    hit = HALF[half].test(mine) && !HALF[other].test(mine);
+    note = hit ? ` on its own half (${half})` : ` but NOT on its own half (${half} only): ${mine.slice(0, 200)}`;
+  }
+  rows.push([v, check, hit ? `caught on ${check}${note} (all failing: ${[...new Set(f)].join(',')})` : (note ? `NOT CAUGHT on ${check}${note}` : `NOT CAUGHT on ${check}; failing: ${f.join(',') || 'nothing'}`), hit, what]);
+}
+for (const [v, what] of GOOD_TOYS) {
+  const f = runToy(v), ok = !f.length;
+  rows.push([v, '(none)', ok ? 'PASS: every check passes' : `FAIL: ${runToy.last.map((r) => r.check + (r.cur ? '/' + r.cur : '') + ' :: ' + String(r.detail).slice(0, 160)).join(' || ')}`, ok, what]);
 }
 console.log('variant         expected-check  result');
 for (const r of rows) { console.log(`${r[3] ? 'PASS' : 'FAIL'} ${r[0].padEnd(13)} ${String(r[1]).padEnd(14)} ${r[2]}${r[4] ? '  -- ' + r[4] : ''}`); if (!r[3]) failed++; }

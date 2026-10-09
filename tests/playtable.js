@@ -1,7 +1,7 @@
 // Cash tables draw buy-ins from and cash out to the Cash wallet. Throwaway server, port 4873.
 const { spawn } = require('child_process');
 const fs = require('fs'), os = require('os'), path = require('path');
-const { io } = require(process.env.SIO_CLIENT || '/home/isabelle/.cache/node_modules/socket.io-client');
+const { io } = (() => { try { return require(process.env.SIO_CLIENT || 'socket.io-client'); } catch { return require('/home/isabelle/.cache/node_modules/socket.io-client'); } })();   // SIO_CLIENT, else the repo's own node_modules, else Isabelle's cache dir
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ppms-'));
 const PORT = Number(process.env.TEST_PORT || 4873), ROOT = path.join(__dirname, '..');

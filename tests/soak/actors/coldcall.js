@@ -11,8 +11,12 @@ const { sleep } = require('../lib/bot');
 const BUYS = ['call', 'bonus1', 'bonus2', 'hunt'];
 const FORCES = ['bonus1', 'bonus2', 'bonus3', 'phone', 'close', 'big', 'tease'];
 const ADMIN_TOKEN = 'soak-admin-token';
-// the live config the soak plays on: a Callback after a handful of spins, a pot that is fed 1.5% and hit often (the validator caps a hit at capCents x 3 <= oneInPerDollar x 5), decisions that default after 3 s, ONE MORE CALL offered from a 1x bonus up
-const SETUP_CFG = { pull: { list: 2, pot: { feedBps: 150, oneInPerDollar: 30, minBal: 20, capCents: 50 }, decision: { timeoutMs: 3000 }, more: { minTenths: 10 } } };
+// the live config the soak plays on: a pot that is fed 1.5% and hit often (the validator caps a hit at capCents x 3 <= oneInPerDollar x 5), decisions that default after 3 s, ONE MORE CALL offered from a 1x bonus up.
+// Since K4-1 the server MEASURES a config (about 45 s here, in slices that yield) and refuses one above the 100% pay-back ceiling. The old `list: 2` (a Callback after a handful of spins) measured 5084% and the soak
+// could not start (RV-5). The lead list stays at the shipped 450 (a Callback is rare by itself) and payScale starts at 0.8. Measured at full scale on this config: worst way 97.0% (0.6), 97.2% (0.7), 97.3% (0.75, 0.8),
+// 97.7% (0.85); 0.9 measured 99.8% at a tenth of the budget (no margin) and 1.0 measured 101.9% (refused). PAY_SCALES, which the cfg step swaps between with a round open, must stay inside that band.
+const PAY_SCALES = [0.6, 0.7, 0.75, 0.8, 0.85];
+const SETUP_CFG = { payScale: 0.8, pull: { pot: { feedBps: 150, oneInPerDollar: 30, minBal: 20, capCents: 50 }, decision: { timeoutMs: 3000 }, more: { minTenths: 10 } } };
 const k2 = (key, cur) => `${key}|${cur}`;
 const acct = (key, cur) => (cur === 'chips' ? 'bank:' : 'play:') + key;
 
@@ -321,7 +325,7 @@ async function cfgStep(W) {
   const mode = W.rng.chance(0.5) ? 'play' : 'chips';
   let o = W.model.slot.openOf(bot.key, mode);
   if (!o && W.rng.chance(0.7)) o = await openDecision(W, bot, mode, 4);
-  const scale = W.rng.pick([0.8, 0.9, 1, 1.1, 1.25]);
+  const scale = W.rng.pick(PAY_SCALES);
   await postCfg(W, { overrides: { ...SETUP_CFG, payScale: scale }, note: `soak payScale ${scale}` });      // a POST REPLACES the override set: send the soak's own knobs again
   S.c.cfg++;
   let after = '';

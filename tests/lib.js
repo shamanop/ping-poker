@@ -2,7 +2,7 @@
 const { authJoin } = require('./authjoin');
 const path = require('path'), fs = require('fs');
 const { spawn } = require('child_process');
-const { io } = require('/home/isabelle/.cache/node_modules/socket.io-client');
+const { io } = (() => { try { return require('socket.io-client'); } catch { return require('/home/isabelle/.cache/node_modules/socket.io-client'); } })();   // the repo's own node_modules first; Isabelle's box keeps it in a cache dir
 const ROOT = path.join(__dirname, '..');
 const ROOM = 'POKERPING', PASS = 'ping';
 const sleep = ms => new Promise(r => setTimeout(r, ms));

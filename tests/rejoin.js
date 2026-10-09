@@ -2,7 +2,7 @@ const { authJoin, authAs } = require('./authjoin');
 // Same-name rejoin checks. Spawns a throwaway server on PORT 4777 with temp bank/ledger.
 const { spawn } = require('child_process');
 const fs = require('fs'), os = require('os'), path = require('path');
-const { io } = require(process.env.SIO_CLIENT || '/home/isabelle/.cache/node_modules/socket.io-client');
+const { io } = (() => { try { return require(process.env.SIO_CLIENT || 'socket.io-client'); } catch { return require('/home/isabelle/.cache/node_modules/socket.io-client'); } })();   // SIO_CLIENT, else the repo's own node_modules, else Isabelle's cache dir
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const waitFor = async (f, ms) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (f()) return true; await sleep(50); } return false; };
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pprj-'));

@@ -2,13 +2,13 @@ const { authJoin } = require('./authjoin');
 // Tables: create/validate, lobby, join/leave, host controls, nights, settle-up, rebuy, modes. Temp data files, port 4802.
 const { spawn } = require('child_process');
 const fs = require('fs'), os = require('os'), path = require('path');
-const { io } = require(process.env.SIO_CLIENT || '/home/isabelle/.cache/node_modules/socket.io-client');
+const { io } = (() => { try { return require(process.env.SIO_CLIENT || 'socket.io-client'); } catch { return require('/home/isabelle/.cache/node_modules/socket.io-client'); } })();   // SIO_CLIENT, else the repo's own node_modules, else Isabelle's cache dir
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pptb-'));
-const PORT = 4802, ROOT = path.join(__dirname, '..');
+const PORT = Number(process.env.TABLES_PORT || 4802), ROOT = path.join(__dirname, '..');
 const F = { bank: path.join(dir, 'bank.json'), ledger: path.join(dir, 'ledger.json'), acc: path.join(dir, 'accounts.json'), tables: path.join(dir, 'tables.json') };
 fs.writeFileSync(F.bank, JSON.stringify({ chris: 100000 }));
-const env = { ...process.env, PORT: String(PORT), AUTO_START_MS: '300', HAND_DELAY_MS: '400', TABLE_EMPTY_MS: '2500', AUTH_CLOCK_SKEW: '0', AUTH_SIGNUP_LIMIT: '100', BANK_FILE: F.bank, LEDGER_FILE: F.ledger, ACCOUNTS_FILE: F.acc, TABLES_FILE: F.tables };
+const env = { SIGNUP_PLAY_CENTS: '1000000', ...process.env, PORT: String(PORT), AUTO_START_MS: '300', HAND_DELAY_MS: '400', TABLE_EMPTY_MS: '2500', AUTH_CLOCK_SKEW: '0', AUTH_SIGNUP_LIMIT: '100', BANK_FILE: F.bank, LEDGER_FILE: F.ledger, ACCOUNTS_FILE: F.acc, TABLES_FILE: F.tables };
 let proc = spawn('node', ['server.js'], { cwd: ROOT, env });
 let out = ''; proc.stdout.on('data', d => { out += d; }); proc.stderr.on('data', d => { out += d; });
 let fails = 0; const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails++; };
@@ -57,7 +57,7 @@ async function signup(label) {
   c.key = d.account.key;
   return c;
 }
-const settings = (over = {}) => ({ name: 'Friday Night', mode: 'play', buyIn: { min: 500, max: 5000, default: 1000 }, blinds: { sb: 5, bb: 10 }, seats: 8, actionTimerSec: 0, rebuys: true, isPrivate: true, autoStart: false, ...over });
+const settings = (over = {}) => ({ name: 'Friday Night', mode: 'play', buyIn: { min: 500, max: 5000, default: 1000 }, blinds: { sb: 5, bb: 10 }, seats: 8, actionTimerSec: 60, rebuys: true, isPrivate: true, autoStart: false, ...over });
 async function waitFor(fn, ms = 6000) { for (let t = 0; t < ms; t += 40) { if (fn()) return true; await sleep(40); } return false; }
 const sum = a => a.reduce((s, x) => s + x, 0);
 const ledgerRows = () => JSON.parse(fs.readFileSync(F.ledger, 'utf8'));
@@ -131,7 +131,9 @@ const ledgerRows = () => JSON.parse(fs.readFileSync(F.ledger, 'utf8'));
 
     // pause: finish hand, then hold
     [e, d] = await A.call('table_pause', { tableId: T, paused: true }, 'table_event', 'error');
-    ok(e === 'table_event' && d.kind === 'paused', 'host pauses');
+    // K3-4: a pause asked for during a live hand answers 'pause_pending' and takes effect (kind 'paused') once the hand has settled; between hands it is at once
+    ok(e === 'table_event' && (d.kind === 'paused' || d.kind === 'pause_pending'), 'host pauses (now, or pending until the hand has settled)');
+    ok(await waitFor(() => A.ev.some(([ev, dd]) => ev === 'table_event' && dd && dd.kind === 'paused')), 'the pause takes effect (table_event paused)');
     ok(await waitFor(() => A.gs.paused === true), 'table holds (betting and dealing frozen) when paused');
     const hn = A.gs.handNum; await sleep(900);
     ok(A.gs.handNum === hn, 'no new hand while paused');
