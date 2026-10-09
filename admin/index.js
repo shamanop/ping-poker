@@ -27,6 +27,12 @@ function createAdmin({ service, ledger, accounts, registry, views, onlineKeys })
   };
   const CONFLICT = { ok: false, code: 'ref_conflict' };
 
+  // R3AB-2: an account that exists but has no PIN yet (claimed false) is opened by anyone who has the public room word (accounts.claim), so Cash given to it would belong to
+  // whoever claims it first. An admin edit that RAISES Cash on such an account is refused before any write; lowering it, or setting it to 0, stays allowed (it takes money back).
+  // Not refused: an admin account (its claim never takes the room word) and a boot-LOCKED account (claim and signup are refused for it; only the admin PIN reset opens it).
+  const UNCLAIMED = { ok: false, code: 'account_unclaimed', message: 'This name has no PIN yet. The player must sign in and set a PIN before Cash can be given. Nothing was changed.' };
+  const openToStranger = key => { const a = accounts.get(key); return !!a && a.claimed === false && a.locked !== true && !a.isAdmin; };
+
   // A signed delta on the bank (chips) or the Cash wallet. insufficient is returned as { ok: false, code: 'insufficient' }.
   // The same op id again is a dup: { ok: true, dup: true }, nothing written. The same op id with other numbers is refused (ref_conflict).
   function adjust(key, delta, cur, reason, opId) {
@@ -36,6 +42,7 @@ function createAdmin({ service, ledger, accounts, registry, views, onlineKeys })
     if (typeof reason !== 'string' || !reason.trim()) return { ok: false, code: 'bad_reason' };
     const bad = checkOp(opId); if (bad) return bad;
     const f = refOf(key, opId); if (f.conflict) return CONFLICT;
+    if (cur === 'play' && delta > 0 && !ledger.has(f.ref) && openToStranger(key)) return UNCLAIMED;
     // RV-4: an adjust cannot take the TOTAL Cash (wallet + seats + open rounds) past the Set Cash maximum; a removal never does. A resend (the ref is held) is the ledger's to answer: dup, or ref_conflict.
     if (cur === 'play' && delta > 0 && !ledger.has(f.ref) && cashOf(key).total + delta > MAX_PLAY) return { ok: false, code: 'range' };
     try { const r = service.adminAdjust(key, delta, cur, reason, f.ref); return r && r.dup ? { ok: true, dup: true } : { ok: true }; }
@@ -70,6 +77,7 @@ function createAdmin({ service, ledger, accounts, registry, views, onlineKeys })
       return { ok: false, code: 'cash_in_play', message: `Cannot set Cash to ${cents(target)}: ${where} (${cents(part)}) is in play and cannot be taken. End the night or wait for the round, then set it. Nothing was changed.`, ...c };
     }
     const delta = target - part - c.wallet;
+    if (delta > 0 && openToStranger(key)) return UNCLAIMED;
     // R2B-3: a Set Cash that changes nothing still holds its op id (a net-zero line under the same ref), so its resend is a dup after the balance moved and after a restart.
     if (delta === 0) {
       // RV-2: a refused write (closed / write_failed / lost_lock) is an answer here, as in adjust(), not a throw
