@@ -56,7 +56,8 @@ const unchanged = () => { assert.strictEqual(JSON.stringify(E.CFG), SHIPPED, 'En
   await test('K4-1: an accepted config shows the MEASURED value as its label, writes one audit line (who, when, old, new), never blocks the loop for 250 ms, and a second POST meanwhile is refused', async () => {
     let maxGap = 0, last = Date.now(); const probe = setInterval(() => { const t = Date.now(); maxGap = Math.max(maxGap, t - last); last = t; }, 5);
     try {
-      const first = quiet(() => L.setLiveConfigChecked({ overrides: { buyCost: { bonus1: 1000 } }, rtpLabel: '98% (long-run, typed by an admin)', note: 'dearer bonus1 buy', who: 'test-admin#5678' }));
+      const p94 = preset('rtp94').overrides;   /* R2C-3: a config needs margin on every way to pass the upper bound; the rtp94 numbers have it */
+      const first = quiet(() => L.setLiveConfigChecked({ overrides: { ...p94, buyCost: { ...(p94.buyCost || {}), bonus1: 1000 } }, rtpLabel: '98% (long-run, typed by an admin)', note: 'dearer bonus1 buy', who: 'test-admin#5678' }));
       await new Promise((r) => setTimeout(r, 50));
       await assert.rejects(quiet(() => L.setLiveConfigChecked({ overrides: { buyCost: { bonus1: 1100 } }, who: 'second' })), /another payback check is running/);
       const info = await first;

@@ -322,7 +322,7 @@ async function setLiveConfigChecked({ overrides, rtpLabel, note, who, scale, see
   if (token.cancelled) { log({ outcome: 'refused', why: SUPERSEDED, new: null }); throw new Error('cfg: refused, ' + SUPERSEDED); }
   const summary = pbSummary(m), nw = { worst: { way: m.worst.way, pct: round2(m.worst.pct), se: round2(m.worst.se) }, plain: summary.plain, ways: summary, ms: m.ms, maxStretchMs: round2(m.maxStretchMs), seed: m.seed };
   if (!m.ok) {
-    const b = m.bound, why = b.upper <= CEILING_PCT && !m.giftOk ? 'the daily gift is worth ' + round2(m.ways.daily.giftCents) + ' cents a day (limit ' + DAILY_GIFT_MAX_CENTS + ')' : 'the ' + b.way + ' way is not shown to be at or under the ' + CEILING_PCT + '% ceiling: measured ' + round2(b.pct) + '% with a standard error of ' + round2(b.se) + ' points, so its upper bound (measured + ' + BOUND_SE + ' standard errors) is ' + round2(b.upper) + '%, above the ' + CEILING_PCT + '% ceiling';
+    const b = m.bound, why = !m.giftOk ? 'the daily gift is worth ' + round2(m.ways.daily.giftCents) + ' cents a day (limit ' + DAILY_GIFT_MAX_CENTS + ')' : 'the ' + b.way + ' way is not shown to be at or under the ' + CEILING_PCT + '% ceiling: measured ' + round2(b.pct) + '% with a standard error of ' + round2(b.se) + ' points, so its upper bound (measured + ' + BOUND_SE + ' standard errors) is ' + round2(b.upper) + '%, above the ' + CEILING_PCT + '% ceiling';
     log({ outcome: 'refused', why, new: nw }); throw new Error('cfg: refused, ' + why + (m.early ? ' (stopped early)' : ''));
   }
   const measured = { hash: configHash(next), ok: true, ceilingPct: CEILING_PCT, label: measuredLabel(m), summary, worst: nw.worst, seed: m.seed, at: new Date().toISOString() };
