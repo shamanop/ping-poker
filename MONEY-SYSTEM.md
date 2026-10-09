@@ -81,7 +81,7 @@ batch : {"id":413,"ts":...,"batch":[{"from":..,"to":..,"amount":..,"cur":..,"rea
 | Event | ref | reason | Written by |
 |---|---|---|---|
 | signup | `signup:bank:<key>`, `signup:play:<key>` (Cash only if `signupPlay` > 0) | `signup` | `service.ensureAccount` (`:138`) |
-| daily bonus | `bonus:<key>:<YYYY-MM-DD>` | `bonus` | `social.js:268` via the wallet adapter |
+| daily bonus | `bonus:<key>:<YYYY-MM-DD>` (the day in America/Chicago, `social.js:8-9`) | `bonus` | `social.js:268` via the wallet adapter |
 | achievement | `achv:<key>:<achievementId>` | `achv` (never written, reward is 0) | `social.js:147` |
 | admin edit | `adj:<key>:c.<opId>` | `admin:<reason>`; Set Cash writes `admin:admin set play to <cents>` | `admin/index.js:23`, `service.adminAdjust` (`:403`) |
 | buy-in, rebuy | `buyin:<tableId>:<key>:<boot>.<n>`, `rebuy:...` | `buyin:<fund>` | `tables/money-port.js` `buyIn` |
@@ -150,7 +150,7 @@ Restart: nothing open; the round is whole or absent.
 
 ### 5.9 Escrowed round with a held feature (Cold Call decisions, Callback, bonus buy; the pot)
 1. A Cold Call spin whose result needs a player decision (a pending feature) opens the round: `ctx.money.open(key, cur, roundId, cost)` writes `<game>:<key>:<roundId>:open`, player to `escrow:coldcall:<key>:<roundId>`. The game keeps the record of the round (tape, decisions) in `coldcall-pull.json` before the next step.
-2. The round closes with ONE batch under `...:close` (`settle`): the WHOLE escrow goes to `house:coldcall` (`coldcall:spend`), then pool feed, pool prize, win. A bonus buy is the same with a bigger cost; a buy never feeds or wins the pot (`coldcall.js` "RULE 1": only a plain paid spin passes a pool).
+2. The round closes with ONE batch under `...:close` (`settle`): the WHOLE escrow goes to `house:coldcall` (`coldcall:spend`), then pool feed, pool prize, win. A bonus buy costs more and takes the same two paths (instant `round`, or escrowed if it ends in a decision); a buy never feeds or wins the pot (`coldcall.js` "RULE 1": only a plain paid spin passes a pool).
 3. The office pot `pool:coldcall:office`: a plain paid spin feeds a slice of its stake (`feedBps`) in the same batch as the stake; a prize is paid out of the pool and never beyond what it holds (`pool_short`). A pool can only be fed out of the stake of the same batch (`needFeed`, `service.js:248`).
 4. Callback: a free round (cost 0, no escrow) with its own round id `cb<id of the round that armed it>`; `settle` with stake 0 writes only the win legs under its `:close` ref.
 5. A round with no escrow found at close, or an identical close again, is `dup`; any other close of a closed round is `round_closed`; an escrow that does not hold the stake the game believes is `stake_mismatch` and the game voids it.
