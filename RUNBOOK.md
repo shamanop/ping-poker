@@ -239,6 +239,8 @@ All in the data directory (`RAILWAY_VOLUME_MOUNT_PATH` or `DATA_DIR`). I found n
 
 Checkpoints are written at boot, at shutdown and (with `LEDGER_CKPT_EVERY`) every n lines. To rebuild the books from nothing but the journal, delete `money.jsonl.ckpt` and start the server: the full replay is the proof that the file is self-consistent (a damaged file shows as `QUARANTINED`).
 
+**Section 10 (its heading is not numbered because the text below is the builder's, word for word).**
+
 ## Fresh start at zero
 
 Variant chosen by Chris 2026-10-08: KEEP player names + PINs (accounts.json stays), ZERO the money (the money ledger starts empty), Chris sets each player's Cash by hand from an export record. Cash = ledger currency `play` (real money, only an admin sets it); Chips are free play.
