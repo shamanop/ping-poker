@@ -17,7 +17,15 @@ function createAdmin({ service, ledger, accounts, registry, views, onlineKeys })
   const checkOp = id => (id == null
     ? { ok: false, code: 'op_required', message: 'Every money edit needs an op id (one per confirmed click). Nothing was changed.' }
     : typeof id === 'string' && OPID.test(id) ? null : { ok: false, code: 'bad_op', message: 'Bad op id. Nothing was changed.' });
-  const refOf = (key, opId) => `adj:${key}:c.${opId}`;
+  // RV-1: an op id is used ONCE, for one account. New edits are written under `adj:c.<opId>` (no account in it), so the ledger itself answers ref_conflict when the same op id comes
+  // for another account (its legs name another wallet). Lines written before this rule are under `adj:<key>:c.<opId>`: they are still found, for their own account (a resend = dup)
+  // and for any other account (ref_conflict). Returns { ref } or { conflict: true }.
+  const refOf = (key, opId) => {
+    const old = k => `adj:${k}:c.${opId}`;
+    for (const a of Object.values(accounts.all())) if (a && a.key !== key && ledger.has(old(a.key))) return { conflict: true };
+    return { ref: ledger.has(old(key)) ? old(key) : `adj:c.${opId}` };
+  };
+  const CONFLICT = { ok: false, code: 'ref_conflict' };
 
   // A signed delta on the bank (chips) or the Cash wallet. insufficient is returned as { ok: false, code: 'insufficient' }.
   // The same op id again is a dup: { ok: true, dup: true }, nothing written. The same op id with other numbers is refused (ref_conflict).
@@ -27,7 +35,8 @@ function createAdmin({ service, ledger, accounts, registry, views, onlineKeys })
     if (!isInt(delta) || delta === 0) return { ok: false, code: 'bad_amount' };
     if (typeof reason !== 'string' || !reason.trim()) return { ok: false, code: 'bad_reason' };
     const bad = checkOp(opId); if (bad) return bad;
-    try { const r = service.adminAdjust(key, delta, cur, reason, refOf(key, opId)); return r && r.dup ? { ok: true, dup: true } : { ok: true }; }
+    const f = refOf(key, opId); if (f.conflict) return CONFLICT;
+    try { const r = service.adminAdjust(key, delta, cur, reason, f.ref); return r && r.dup ? { ok: true, dup: true } : { ok: true }; }
     catch (e) { if (e && e.name === 'MoneyError') return { ok: false, code: e.code === 'insufficient' ? 'insufficient' : e.code }; throw e; }
   }
 
@@ -47,9 +56,11 @@ function createAdmin({ service, ledger, accounts, registry, views, onlineKeys })
     if (target < 0 || target > MAX_PLAY) return { ok: false, code: 'range' };
     const bad = checkOp(opId); if (bad) return bad;
     const reason = `admin set play to ${target}`;
-    if (ledger.has(refOf(key, opId))) {
-      const held = ledger.entriesOf(refOf(key, opId))[0];
-      return held && held.cur === 'play' && held.reason === 'admin:' + reason ? { ok: true, dup: true, ...cashOf(key) } : { ok: false, code: 'ref_conflict' };
+    const f = refOf(key, opId); if (f.conflict) return CONFLICT;
+    if (ledger.has(f.ref)) {
+      // the held line must be THIS account's Cash edit to this target (a leg names this wallet), else the op id belongs to another edit
+      const held = ledger.entriesOf(f.ref)[0];
+      return held && held.cur === 'play' && held.reason === 'admin:' + reason && (held.from === 'play:' + key || held.to === 'play:' + key) ? { ok: true, dup: true, ...cashOf(key) } : CONFLICT;
     }
     const c = cashOf(key), part = c.atTable + c.inRound;
     if (target < part) {
@@ -58,7 +69,7 @@ function createAdmin({ service, ledger, accounts, registry, views, onlineKeys })
     }
     const delta = target - part - c.wallet;
     // R2B-3: a Set Cash that changes nothing still holds its op id (a net-zero line under the same ref), so its resend is a dup after the balance moved and after a restart.
-    if (delta === 0) { service.adminMark(key, 'play', reason, refOf(key, opId)); return { ok: true, noop: true, ...c }; }
+    if (delta === 0) { service.adminMark(key, 'play', reason, f.ref); return { ok: true, noop: true, ...c }; }
     const r = adjust(key, delta, 'play', reason, opId);
     return r.ok ? { ...r, ...cashOf(key) } : r;
   }

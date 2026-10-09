@@ -84,5 +84,48 @@ t('R2B-6 a total below the part in play is refused with a message that names it,
   w.close();
 });
 
+// ---- RV-1: one op id, one account ----
+const noWrite = (w, fn) => { const id = w.lines(); const r = fn(); eq(w.lines(), id, 'ledger line written'); return r; };
+t('RV-1 the same op id for ANOTHER account is ref_conflict, nothing written (adjust Chips, adjust Cash, set Cash)', () => {
+  const w = world(); w.adj(500, 'chips', 'X1'); w.adj(700, 'play', 'X2'); w.set(900, 'X3');
+  const b0 = w.ledger.balance('bank:bob', 'chips');
+  for (const [label, fn] of [['adjust chips', () => w.adj(500, 'chips', 'X1', 'bob')], ['adjust cash', () => w.adj(700, 'play', 'X2', 'bob')], ['set cash', () => w.set(900, 'X3', 'bob')],
+    ['cash op id used for chips', () => w.adj(500, 'chips', 'X2', 'bob')]]) {
+    const r = noWrite(w, fn); eq([label, r.ok, r.code], [label, false, 'ref_conflict']);
+  }
+  eq([w.ledger.balance('bank:bob', 'chips'), w.play('bob')], [b0, 0], 'bob untouched');
+  w.close();
+});
+t('RV-1 a no-op Set Cash holds its op id for the account it was sent for; another account is ref_conflict', () => {
+  const w = world(); w.set(0, 'N1');            // vic is at 0: a no-op, one net-zero line
+  eq(noWrite(w, () => w.adm.setPlay('vic', 0, 'N1')).dup, true, 'same account resend');
+  const r = noWrite(w, () => w.set(0, 'N1', 'bob')); eq([r.ok, r.code], [false, 'ref_conflict']);
+  w.close();
+});
+t('RV-1 also after a restart', () => {
+  const w = world(); w.adj(500, 'chips', 'R1'); w.set(0, 'R2', 'bob'); const file = w.file; w.close();
+  const v = world(file);
+  eq(noWrite(v, () => v.adj(500, 'chips', 'R1', 'bob')).code, 'ref_conflict'); eq(noWrite(v, () => v.set(0, 'R2')).code, 'ref_conflict');
+  eq(noWrite(v, () => v.adm.adjust('vic', 500, 'chips', 'x', 'R1')).dup, true, 'same account, same op: dup');
+  v.close();
+});
+t('RV-1 a line written under the OLD ref form still counts: the same account\'s resend is dup, another account is ref_conflict', () => {
+  const w = world();
+  w.service.adminAdjust('vic', 5000, 'play', 'admin set play to 5000', 'adj:vic:c.OLD1');            // what the shipped code wrote
+  w.service.adminAdjust('vic', 300, 'chips', 'admin console', 'adj:vic:c.OLD2');
+  const a = noWrite(w, () => w.adm.setPlay('vic', 5000, 'OLD1')); eq([a.ok, a.dup, a.code], [true, true, undefined]);
+  const b = noWrite(w, () => w.adm.adjust('vic', 300, 'chips', 'admin console', 'OLD2')); eq([b.ok, b.dup], [true, true]);
+  eq(noWrite(w, () => w.adj(999, 'chips', 'OLD2')).code, 'ref_conflict', 'other numbers under an old op id');
+  eq(noWrite(w, () => w.set(5000, 'OLD1', 'bob')).code, 'ref_conflict', 'another account, old op id (set Cash)');
+  eq(noWrite(w, () => w.adj(300, 'chips', 'OLD2', 'bob')).code, 'ref_conflict', 'another account, old op id (adjust)');
+  eq([w.play(), w.play('bob')], [5000, 0]);
+  w.close();
+});
+t('RV-1 a new edit is written under the op-id-only ref', () => {
+  const w = world(); w.adj(500, 'chips', 'F1');
+  eq([w.ledger.has('adj:c.F1'), w.ledger.has('adj:vic:c.F1')], [true, false]);
+  w.close();
+});
+
 console.log(`${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
