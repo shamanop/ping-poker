@@ -63,12 +63,14 @@ function createAdmin({ service, ledger, accounts, registry, views, onlineKeys })
     return r.ok ? { ...r, ...cashOf(key) } : r;
   }
 
+  // R2B-6: a row carries Cash three ways: playTotal (wallet + seats + open rounds = what "Set Cash" sets and the page edits), playWallet and playInPlay (seats + open rounds).
+  // `play` stays the wallet alone (old readers); the page must never edit it.
   function overview() {
     const online = onlineKeys();
     const rows = Object.values(accounts.all()).map(a => {
       const seen = Math.max(a.lastLoginAt || 0, ...(a.sessions || []).map(x => x.lastSeen || 0));
       const held = service.balances(a.key);
-      return { key: a.key, display: a.display, isAdmin: !!a.isAdmin, claimed: !!a.claimed, lastSeen: seen || null, online: online.has(a.key), balance: bankOf(a.key) + held.atTable.chips, play: playOf(a.key), bank: bankOf(a.key), atTable: held.atTable.chips, atTablePlay: held.atTable.play };
+      return { key: a.key, display: a.display, isAdmin: !!a.isAdmin, claimed: !!a.claimed, lastSeen: seen || null, online: online.has(a.key), balance: bankOf(a.key) + held.atTable.chips, play: playOf(a.key), playWallet: held.play, playInPlay: held.atTable.play + held.inRound.play, playTotal: held.play + held.atTable.play + held.inRound.play, bank: bankOf(a.key), atTable: held.atTable.chips, atTablePlay: held.atTable.play };
     }).sort((x, y) => (y.online - x.online) || ((y.lastSeen || 0) - (x.lastSeen || 0)) || x.display.localeCompare(y.display));
     const t = registry.tables.get('POKERPING');
     const b = t ? (t.hand ? { sb: t.hand.sb, bb: t.hand.bb } : t.blinds) : null;
