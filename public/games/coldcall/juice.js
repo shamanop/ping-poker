@@ -66,7 +66,9 @@
   // (r1) judge r0: 'it has glow, swell, popup and mascot reaction, but no ring, no dimming of losers, no counter punch.' (chris 10-06 FB6): a gold ring + stars from the middle of the winning cluster
   function hitRing(cells) {
     let sx = 0, sy = 0; for (const c of cells) { const [x, y] = K().stagePt(c); sx += x; sy += y; } const x = sx / cells.length, y = sy / cells.length;
-    FX().ring(x, y, { n: 2, r1: 150 + Math.min(80, cells.length * 6), w: 14 }); FX().burst(x, y, { n: 7, speed: 260, size: 8, shape: 'star', life: 0.7 });
+    // (money-client item 4) a 2-3 cell win threw a 150 px ring (2nd ring 210 px) over most of the 540 px stage: the ring grows with the cluster, one thin ring for a small one
+    const small = cells.length <= 4;
+    FX().ring(x, y, { n: small ? 1 : 2, r1: 60 + Math.min(100, cells.length * 9), w: small ? 8 : 14 }); FX().burst(x, y, { n: 7, speed: 260, size: 8, shape: 'star', life: 0.7 });
   }
   function popPuffs(reels, nodes) {   // the popped cells are already out of the DOM: place the smoke from their left / top (relative to #reels) and #reels' own position on the stage
     const st = K().st, r = reels.getBoundingClientRect(), sr = K().stage.getBoundingClientRect(), ox = (r.left - sr.left) / st.s, oy = (r.top - sr.top) / st.s, half = 32;
