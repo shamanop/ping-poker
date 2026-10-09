@@ -22,7 +22,7 @@ let n = 0, clock = 1000000;
 const env = (file) => {
   const f = file || path.join(dir, 's' + (++n) + '.jsonl');
   const ledger = open(f, { now: () => clock });
-  return { f, ledger, svc: createService(ledger, { now: () => clock }) };
+  return { f, ledger, svc: createService(ledger, { signupPlay: 1000000, now: () => clock }) };
 };
 // all player-held value across both currencies, and the books for each
 function totals(ledger) {

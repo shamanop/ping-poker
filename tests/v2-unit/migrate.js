@@ -109,7 +109,7 @@ t('normal: balances land exactly, zero rows are registered, nothing minted by de
   eq(l.balance('mint:signup', 'chips'), 0, 'no default minted'); eq(l.balance('mint:migration', 'chips'), -68401);
   eq(report.zeroRows.length, 1); eq(report.zeroRows[0].key, 'sam'); eq(report.defaults.chips.length, 0);
   // sam's 0 bank row is registered: ensureAccount must not mint him 10,000, and the rollback mirror shows 0
-  const svc = createService(l);
+  const svc = createService(l, { signupPlay: 1000000 });
   ok(!svc.ensureAccount('sam').created); eq(l.balance('bank:sam', 'chips'), 0);
   eq(svc.mirror().bank.sam, 0);
   deq(svc.mirror().bank, { chris: 52000, raj: 6400, pia: 10000, sam: 0, lee: 1 }, 'mirror reproduces bank.json');
@@ -125,7 +125,7 @@ t('orphans: name-keyed rows go to orphan:<name> and are listed, nothing dropped'
   eq(l.balance('orphan:hr', 'chips'), 0);
   eq(l.balance('bank:raj', 'chips'), 10000, 'raj has no exact-key row: lazy default');
   deq(report.defaults.chips, ['raj']);
-  const svc = createService(l);
+  const svc = createService(l, { signupPlay: 1000000 });
   eq(svc.mirror().bank['dial-up'], 9546, 'orphans survive in the rollback file under their old name');
 });
 
@@ -149,7 +149,7 @@ t('account with no bank row / no wallet gets today\'s lazy default from mint:sig
   let r = check('no-bank-row'); let l = open(r.f);
   eq(l.balance('bank:newbie', 'chips'), 10000); eq(l.balance('play:newbie', 'play'), 1000000); eq(l.balance('mint:signup', 'chips'), -10000);
   deq(r.report.defaults, { chips: ['newbie'], play: [] }); eq(l.balance('mint:signup', 'play'), 0);
-  ok(!createService(l).ensureAccount('newbie').created, 'signup ref shared with ensureAccount: no second mint');
+  ok(!createService(l, { signupPlay: 1000000 }).ensureAccount('newbie').created, 'signup ref shared with ensureAccount: no second mint');
   r = check('no-wallet'); l = open(r.f);
   eq(l.balance('bank:newbie', 'chips'), 12345); eq(l.balance('play:newbie', 'play'), 1000000); eq(l.balance('mint:signup', 'play'), -1000000);
   deq(r.report.defaults, { chips: [], play: ['newbie'] });
@@ -165,7 +165,7 @@ t('bad rows: non-integer, negative, wrong type are rejected, listed, never minte
   for (const k of ['chris', 'raj', 'pia', 'sam']) eq(l.balance('bank:' + k, 'chips'), 0, 'rejected row leaves 0 for ' + k);
   eq(l.balance('play:chris', 'play'), 0); eq(l.balance('play:lee', 'play'), 0);
   eq(report.defaults.chips.length, 0, 'a rejected row is not "missing": no free default on top');
-  const svc = createService(l);
+  const svc = createService(l, { signupPlay: 1000000 });
   for (const k of ['chris', 'raj', 'pia', 'sam', 'lee']) ok(!svc.ensureAccount(k).created, k);
   eq(l.balance('bank:chris', 'chips'), 0);
   ok(report.zeroRows.some(z => z.source === 'wallet' && z.key === 'sam') && report.zeroRows.some(z => z.source === 'stacks' && z.key === 'chris'));

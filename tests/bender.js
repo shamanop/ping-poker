@@ -43,7 +43,7 @@ function setupL(opts = {}) {
   const clock = { now: () => t, advance: (ms) => { t += ms; } };
   const file = path.join(tmp, 'm' + (++wn) + '.jsonl');
   const ledger = openLedger(file, { fsync: 'none', log: () => {} });
-  const service = createService(ledger);
+  const service = createService(ledger, { signupPlay: 1000000 });
   let reg = null;
   const onChange = (k) => { if (reg) reg.pushWallet(k); };
   const money = createGameMoney({ service, ledger, onChange, log: () => {} });

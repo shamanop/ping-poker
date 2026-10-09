@@ -24,7 +24,7 @@ const quiet = () => {};
 function env(file) {
   const f = file || path.join(dir, 'r' + (++n) + '.jsonl');
   const ledger = open(f, { now: () => clock, log: quiet });
-  const svc = createService(ledger, { now: () => clock });
+  const svc = createService(ledger, { signupPlay: 1000000, now: () => clock });
   return { f, ledger, svc };
 }
 function player(file, keys = ['ann']) { const e = env(file); for (const k of keys) e.svc.ensureAccount(k); return e; }
@@ -386,7 +386,7 @@ t('playHeld and top-up eligibility count an open Play escrow; balances() lists e
 function rng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let x = Math.imul(a ^ (a >>> 15), 1 | a); x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x; return ((x ^ (x >>> 14)) >>> 0) / 4294967296; }; }
 
 t('random walk: 4000 ops over open / settle / void / round / resends / wrong closes keep the books, the holders and a model', () => {
-  const { svc, ledger } = (() => { const f = path.join(dir, 'walk.jsonl'); const l = open(f, { fsync: 'none', now: () => clock, log: quiet }); return { svc: createService(l, { now: () => clock }), ledger: l }; })();
+  const { svc, ledger } = (() => { const f = path.join(dir, 'walk.jsonl'); const l = open(f, { fsync: 'none', now: () => clock, log: quiet }); return { svc: createService(l, { signupPlay: 1000000, now: () => clock }), ledger: l }; })();
   const R = rng(20261006), pick = (a) => a[Math.floor(R() * a.length)], rint = (lo, hi) => lo + Math.floor(R() * (hi - lo + 1));
   const keys = ['ann', 'bob'], curs = ['chips', 'play'];
   for (const k of keys) svc.ensureAccount(k);

@@ -140,7 +140,7 @@ t('multi-chunk journal (> 1 MB), a line larger than a chunk, afterId through the
 t('normal play through the service does no cold scan after boot: buy-in, cash-out, dup retries, seatFund, topUp, closeOf, night summary', () => {
   const { createService } = require('../../money/service');
   const led = OPEN(file(), { window: 50 });
-  const svc = createService(led, { now });
+  const svc = createService(led, { signupPlay: 1000000, now });
   for (let i = 0; i < 60; i++) led.transfer('mint:signup', 'bank:filler' + (i % 3), 1 + i, 'chips', 'noise', 'noise' + i);
   svc.mint('bonus', 'ann', 1000, 'chips', 'sign-ann');
   svc.balances('ann');                                    // first refresh (boot-time work, cold is allowed here)
