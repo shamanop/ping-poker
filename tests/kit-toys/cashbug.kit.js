@@ -1,6 +1,6 @@
 'use strict';
 module.exports = {
-  id: 'cashbug', module: 'cashbug.js', example: true,
+  id: 'cashbug', module: 'cashbug.js',
   currencies: ['chips'],                    // "optional" in ADD-A-GAME.md section 9
   bets: { good: [100, 500, 1000, 5000], min: 100, max: 5000 },
   open: (cur, bet) => ({ ev: 'flip', payload: { mode: cur, bet, call: 'heads' } }),

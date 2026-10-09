@@ -1,6 +1,6 @@
 'use strict';
 // THE GAME CONFORMANCE KIT (MONEY HARDENING, ADD-A-GAME.md "the kit"). A new game is pluggable = it passes this + the 4-line registration.
-//   node tests/game-kit.js <gameId>        one registered game (or an example, e.g. coinflip)
+//   node tests/game-kit.js <gameId>        one registered game (or the example, coinflip)
 //   node tests/game-kit.js --all           every game in games/index.js MODULES
 //   node tests/game-kit.js --all --examples  ... plus the example games
 // Output: one line per check per currency, `PASS|FAIL <game> <check>[/<cur>] <detail>`, a summary, exit 0 / 1.
@@ -245,18 +245,23 @@ function roundFacts(t, w, who, cur, key, o) {
   t.ok(!o.lines.some((l) => !isKit(l) && l.cur === other_), `${who}: a line in ${other_} was written`);
 }
 
+const EXAMPLE_ADAPTER = path.join(ROOT, 'games', '_example-coinflip.kit.js');
+const registrationByKit = (A) => !!(A.isExample || RUN_OPTS.register);      // register: the self-test's way to run a toy whose registration is not the point
+
 // ------------------------------------------------------------------------------------------------------------------------------------ the checks
 function checkRegistration(A) {
   runCheck(A, 'registration', null, (t) => {
     const mods = registry.MODULES || [];
-    if (A.example) t.note('example game: house account registered by the kit for the run');
+    const skip = registrationByKit(A);                                    // only the example adapter file, or the self-test's own toys, get their registration from the kit
+    t.ok(!A.example || A.isExample, '`example: true` is set on an adapter that is not games/_example-coinflip.kit.js: a copy of the example must not copy that line (the registration check would be off)');
+    if (skip) t.note('example game: house account registered by the kit for the run');
     else t.ok(mods.some((m) => path.basename(m, '.js') === path.basename(A.modPath, '.js')), `games/index.js MODULES does not list ./${path.basename(A.modPath)}`);
     const m = A.mod;
     t.ok(m && m.id === A.id, `module id ${m && m.id} != adapter id ${A.id}`);
     t.ok(m && m.handlers && typeof m.handlers === 'object', 'module has no handlers');
     t.ok(typeof m.audit === 'function', 'module has no audit()');
     t.ok(typeof m.init === 'function', 'module has no init(ctx)');
-    if (!A.example) {
+    if (!skip) {
       t.ok(L.SOURCE_ACCOUNTS.has('house:' + A.id), `house:${A.id} is not in SOURCE_ACCOUNTS (money/ledger.js)`);
       t.ok(GAMES.includes(A.id), `"${A.id}" is not in GAMES (money/service.js)`);
     }
@@ -761,7 +766,7 @@ function loadAdapter(id) {
 }
 function finishAdapter(a, file) {
   const modFile = a.mod ? (a.modPath || a.id + '.js') : path.join(path.dirname(file), a.module || (a.id + '.js'));   // a.mod given = the self-test's toy
-  a = Object.assign({}, a, { modPath: modFile, mod: a.mod || require(modFile), oneOpen: !!a.oneOpen });
+  a = Object.assign({}, a, { modPath: modFile, mod: a.mod || require(modFile), oneOpen: !!a.oneOpen, file, isExample: path.resolve(file) === EXAMPLE_ADAPTER });
   if (!a.heldPoints) a.heldPoints = [];
   return a;
 }
@@ -776,7 +781,7 @@ function runAdapter(A, opts) {
   const savedEnv = {}, env = Object.assign({ NODE_ENV: undefined }, A.env || {});
   for (const k of Object.keys(env)) { savedEnv[k] = process.env[k]; if (env[k] === undefined) delete process.env[k]; else process.env[k] = env[k]; }
   // an example / toy game is not in the money rules: the kit registers it for the run (a real game must already be: the registration check)
-  const addedHouse = A.example && !L.SOURCE_ACCOUNTS.has('house:' + A.id), addedGame = A.example && !GAMES.includes(A.id);
+  const byKit = registrationByKit(A), addedHouse = byKit && !L.SOURCE_ACCOUNTS.has('house:' + A.id), addedGame = byKit && !GAMES.includes(A.id);
   if (addedHouse) L.SOURCE_ACCOUNTS.add('house:' + A.id);
   if (addedGame) GAMES.push(A.id);
   FINAL.n = 0; FINAL.fails = [];

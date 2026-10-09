@@ -89,7 +89,7 @@ function makeToy(variant) {
 function adapterFor(variant) {
   const mod = makeToy(variant);
   return {
-    id: 'toy', mod, modPath: 'toy.js', example: variant !== 'unregistered' || undefined, oneOpen: true, playVariants: 1,
+    id: 'toy', mod, modPath: 'toy.js', oneOpen: true, playVariants: 1,
     files: (dir) => ({ dir }),
     bets: { good: BETS, min: 100, max: 1000 },
     open: (cur, bet) => ({ ev: 'deal', payload: { mode: cur, bet } }),
@@ -128,12 +128,14 @@ const TOYS = [
   ['freeflip', 'carry', 'a boost token earned by losing a Chips flip doubles the pay of a later Cash flip'],
   ['dropper', 'disconnect', 'forgets the open round when the socket drops and does not refund it: the stake sits in an escrow nothing knows'],
   ['cashbug', 'refuse', "the adapter says currencies: ['chips'] and the game takes Cash bets (and pays them double)"],
+  ['walk2', 'registration', 'a copy of the example: registered nowhere, and its adapter kept `example: true` (the line that switched the registration check off)'],
   ['mempot', 'carry', '10% of every stake feeds a jackpot kept in a module variable, one number for Chips and Cash'],
 ];
+const NOT_REGISTERED = new Set(['walk2']);               // toys whose registration is what the kit must check; every other toy is registered by the kit for the run
 function runToy(name) {
   K.RESULTS.length = 0;
   const file = path.join(__dirname, 'kit-toys', name + '.kit.js');
-  K.runAdapter(K.finishAdapter(require(file), file));
+  K.runAdapter(K.finishAdapter(require(file), file), { register: !NOT_REGISTERED.has(name) });
   return K.RESULTS.filter((r) => !r.ok).map((r) => r.check + (r.cur ? '/' + r.cur : ''));
 }
 
@@ -142,7 +144,7 @@ const rows = [];
 function runVariant(variant) {
   K.RESULTS.length = 0;
   const A = K.finishAdapter(adapterFor(variant), __filename);
-  K.runAdapter(A, { onBoot: (w) => { backdoor = w.service; } });
+  K.runAdapter(A, { onBoot: (w) => { backdoor = w.service; }, register: variant !== 'unregistered' });
   carried = 0;
   return K.RESULTS.filter((r) => !r.ok).map((r) => r.check + (r.cur ? '/' + r.cur : ''));
 }
