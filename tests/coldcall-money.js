@@ -11,6 +11,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const assert = require('assert');
+const crypto = require('crypto');
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'coldcall-money-'));
 delete process.env.COLDCALL_PULL_FILE;
@@ -420,9 +421,12 @@ function auditMatches(s) {
   }
   const answerTo = (s, a, r, kind) => { let g = 0; while (r.status === 'pending' && r.pending.k !== kind && g++ < 6) r = decide(s, a, r, pick0(r.pending)); return r; };
 
+  // A round id is 12 random hex digits, so one in 256 starts with "cb" like a Callback id (cb + 12 hex). The stub forces that case: every 6-byte draw starts with 0xcb, for the whole body of fn.
+  const withCbLookalikeIds = async (fn) => { const orig = crypto.randomBytes; crypto.randomBytes = (n, ...r) => { const b = orig.call(crypto, n, ...r); if (n === 6) b[0] = 0xcb; return b; }; try { return await fn(); } finally { crypto.randomBytes = orig; } };
+
   // C1: the round the ledger closed by a VOID is not replayed at boot
   for (const crash of [true, false]) {
-    await test(`C1: a round the ledger VOIDED (stake back) and whose record was not dropped (${crash ? 'the process died right after the void' : 'the drop could not be written, later restart'}) gives nothing at boot: no ledger line, no state advance, no Callback armed, record dropped; the record was still on disk when the void was written (ledger first)`, async () => {
+    await test(`C1: a round the ledger VOIDED (stake back) and whose record was not dropped (${crash ? 'the process died right after the void' : 'the drop could not be written, later restart'}) gives nothing at boot: no ledger line, no state advance, no Callback armed, record dropped; the record was still on disk when the void was written (ledger first)`, () => withCbLookalikeIds(async () => {
       const { seed } = findSeed({ buy: null, bet: R1_BET, state: NEAR(), auto: false }, (r) => r.status === 'pending');
       const s = setup({ rng: E.rngFrom(seed), roundRng: E.rngFrom(5) }); const a = s.sock('ann');
       s.store().setPlayer('ann', 'play', NEAR()); s.flush();
@@ -440,8 +444,8 @@ function auditMatches(s) {
       assert.deepStrictEqual(s.escrows(), []); assert.strictEqual(s.store().allOpen().length, 0, 'the record is gone'); assert.ok(!diskHas(s), 'also on the disk');
       const st = s.store().player('ann', 'play'); assert.strictEqual(st.cb, null, 'no Callback armed from a refunded round'); assert.strictEqual(st.lt, st0.lt, 'no leads from a refunded round'); assert.strictEqual(st.rounds, st0.rounds, 'no state advance'); assert.deepStrictEqual(st, st0);
       const b = s.sock('ann'), h0 = s.house('play'), q = spin(s, b, { bet: 1, mode: 'play', auto: true }); assert.strictEqual(q.callback, false, 'the next spin is a paid spin, not a free Callback'); assert.strictEqual(q.cost, 1);
-      assert.strictEqual(s.lines((e) => /^coldcall:ann:cb/.test(e.ref)).length, 0, 'no Callback round was ever played'); void h0;
-    });
+      assert.strictEqual(s.lines((e) => /^coldcall:ann:cb[0-9a-f]{12}(:|$)/.test(e.ref)).length, 0, 'no Callback round was ever played');   // a Callback ref is coldcall:<key>:cb + 12 hex [:open|:close]; a plain round id (12 hex) that starts with "cb" is not one void h0;
+    }));
   }
 
   // D3 (critic round 2, mutant N3): the probe that tells a void from a settle cannot answer at boot: the record is LEFT, nothing is replayed (the replay of a voided round advances the state and arms a Callback)

@@ -140,15 +140,22 @@ async function fuzz() {
   const survived = srv.alive();
   clearInterval(auditor); clearInterval(ticker); await sleep(300);
   // everyone stands up; then all money must be back in banks/wallets
-  let fin = null, fm = null, leftOnTables = [];
+  let fin = null, fm = null, leftOnTables = [], clearMs = null, clearAudits = 0; const totalOff = [];
   if (survived) {
     for (const b of Object.values(bots)) { b.onState = null; if (seatOf[b.name]) await b.leave(seatOf[b.name]); }
-    await sleep(800);
-    fin = await audit(auditor_); fm = moneyTotal(fin);
-    leftOnTables = fin.rooms.flatMap(r => r.players.filter(p => !p.isBot && (p.chips || (r.status === 'playing' && p.handBet))).map(p => `${r.id}:${p.name}:${p.chips}`));
+    // Seats that left mid-hand while all-in stay in the hand until the run-out ends (K3-1 / K3-1b, on purpose), so one audit 800 ms later is a race: audit every 400 ms until no human
+    // seat holds chips or a live bet (at most FUZZ_CLEAR_LIMIT_MS, 15 s), and hold the total to the base at every one of those audits.
+    const leftOf = f => f.rooms.flatMap(r => r.players.filter(p => !p.isBot && (p.chips || (r.status === 'playing' && p.handBet))).map(p => `${r.id}:${p.name}:${p.chips}`));
+    const limit = Number(process.env.FUZZ_CLEAR_LIMIT_MS || 15000), tl = Date.now();
+    for (;;) {
+      await sleep(400); fin = await audit(auditor_); fm = moneyTotal(fin); leftOnTables = leftOf(fin); clearAudits++;
+      if (fm.total !== base) totalOff.push(`${Date.now() - tl}ms:${fm.total - base}`);
+      if (!leftOnTables.length || Date.now() - tl >= limit) break;
+    }
+    clearMs = Date.now() - tl;
   }
   const report = { seed: seed0, long: LONG, hands: fin ? handsOf(fin) : hands, audits, seconds: Math.round((Date.now() - t0) / 1000), survived, violations: violations.length, totalLeak: violations.reduce((s, v) => s + v.diff, 0),
-    finalDiffVsLastBase: fm ? fm.total - base : null, leftOnTables, notes, noteSamples, topErrors: Object.entries(errCounts).sort((a, b) => b[1] - a[1]).slice(0, 15), crashLog: survived ? '' : srv.logText().split('\n').filter(l => /Error|at /.test(l)).slice(0, 4).join(' | ') };
+    finalDiffVsLastBase: fm ? fm.total - base : null, leftOnTables, clearMs, clearAudits, totalOff, notes, noteSamples, topErrors: Object.entries(errCounts).sort((a, b) => b[1] - a[1]).slice(0, 15), crashLog: survived ? '' : srv.logText().split('\n').filter(l => /Error|at /.test(l)).slice(0, 4).join(' | ') };
   fs.mkdirSync(RUN_ROOT, { recursive: true });
   fs.writeFileSync(path.join(RUN_ROOT, `fuzz-s${seed0}${LONG ? '-long' : ''}.json`), JSON.stringify({ report, violations }, null, 1));
   await srv.stop();
@@ -165,8 +172,10 @@ async function fuzz() {
   await T.check('fuzz-no-table-stalls', [], async () => { const r = need(); expect(!(r.notes.STALL), `${r.notes.STALL} stalled table(s): ${JSON.stringify(r.noteSamples.STALL)}`); });
   await T.check('fuzz-everyone-standing-up-returns-all-money-to-banks', [], async () => {
     const r = need(); expect(r.survived, 'server died');
-    expect(!r.leftOnTables.length, 'money left at tables after everyone left: ' + r.leftOnTables.join(' '));
+    expect(!r.leftOnTables.length, `money left at tables ${r.clearMs} ms after everyone left (${r.clearAudits} audits): ` + r.leftOnTables.join(' '));
+    expect(!r.totalOff.length, 'the money total differed from the base at ' + r.totalOff.join(' '));
     expect(r.finalDiffVsLastBase === 0, 'final total differs from the last audited base by ' + r.finalDiffVsLastBase);
+    return `cleared ${r.clearMs} ms after everyone left, ${r.clearAudits} audits, total == base at each, final diff 0`;
   });
   await T.done();
 })();

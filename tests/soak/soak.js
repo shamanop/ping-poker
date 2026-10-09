@@ -41,7 +41,8 @@ async function main() {
   const serverDir = path.resolve(arg('server-dir', ROOT));
   const dataDir = path.resolve(arg('data', path.join(SCRATCH, `run-s${seed}-${Date.now()}`)));
   if (minutes === null && maxSteps === null) throw new HarnessError('give --minutes M or --steps N');
-  if (port < 4740 || port > 4759) throw new HarnessError('ports 4740-4759 only');
+  const [pLo, pHi] = (process.env.SOAK_PORT_RANGE || '4740-4759').split('-').map(Number);       // 4740-4759 unless the box assigns this run another block (SOAK_PORT_RANGE=5580-5589)
+  if (!(pLo <= pHi) || port < pLo || port > pHi) throw new HarnessError(`ports ${pLo}-${pHi} only`);
   fs.mkdirSync(dataDir, { recursive: true });
   const stepsFile = path.join(dataDir, 'steps.jsonl');
   fs.writeFileSync(stepsFile, '');

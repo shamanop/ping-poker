@@ -4,7 +4,7 @@ const { authJoin } = require('../authjoin');
 // in a temp dir with a throwaway bank.json. Usage: node tests/mp.js [groupName ...]
 const path = require('path'), fs = require('fs'), os = require('os');
 const { spawn } = require('child_process');
-const { io } = require(process.env.SIO_CLIENT || '/home/isabelle/.cache/node_modules/socket.io-client');
+const { io } = (() => { try { return require(process.env.SIO_CLIENT || 'socket.io-client'); } catch { return require('/home/isabelle/.cache/node_modules/socket.io-client'); } })();   // SIO_CLIENT, else the repo's own node_modules, else Isabelle's cache dir
 
 const ROOT = path.join(__dirname, '..', '..');
 const ROOM = 'POKERPING', PASS = 'ping';
