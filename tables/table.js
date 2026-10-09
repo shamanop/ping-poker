@@ -19,7 +19,8 @@ class Table {
     this.cur = this.mode === 'chips' ? 'chips' : 'play';
     this.state = this.state || 'open';             // lobby state: open | paused | ended
     this.paused = this.state === 'paused';
-    this.reentry = {};                            // key -> { remaining, forgiven }: what the SERVER cashed out and the player may bring back (K3-5)
+    this.reentry = {};                            // key -> { amount }: the ONE stack the SERVER cashed out that the player may bring back (K3-5, R2A-4)
+    this.forgiven = {};                           // key -> how many of his buy-ins were such a return: they do not count against the cap
     this.pausePending = false;                    // pause asked for during a live hand (K3-4)
     this.owesBB = {};                             // key -> true once his seat was removed: the player (not the seat number) waits for the big blind when he sits again, however fast and in whatever seat (K3-8, R2A-1)
     this.handNo = this.handNo || 0;
@@ -163,34 +164,38 @@ class Table {
   seatsMax() { return this.maxSeats || 8; }
 
   // ---- buy-in rules -----------------------------------------------------------------------------------------
-  // K3-5: a cash-out by the SERVER (boot recovery, the disconnect grace) is not the player's choice, so the buy-in that brings that money
-  // back is not his rebuy: it is forgiven, up to the amount the server returned (`reentry[key].remaining`), and does not count against
-  // the cap. Every other buy-in counts as before. The registry rebuilds `reentry` from the ledger at load.
+  // K3-5 + R2A-4: a cash-out by the SERVER (boot recovery, the disconnect grace) is not the player's choice, so the buy-in that brings that money
+  // back is not his rebuy. The allowance is ONE return: it exists only after the server returned a stack (`reentry[key] = { amount }`), the
+  // player's first buy-in after that spends it WHOLE whatever its size (that buy-in is forgiven: it does not count against the cap), the amount
+  // may be at most what the server returned, and a buy-in or a leave by choice clears it. After it is spent the normal rules apply. R2A-3: an
+  // amount below the table minimum is allowed only when the stack the server returned was itself below it. The registry replays this from the ledger.
   finiteCap() { return !this.rebuys || this.rebuyLimit > 0; }
-  buyInAllowed(key, amount) {
+  returnCovers(key, amount) {
     const re = this.reentry[key];
-    if (re && amount > 0 && re.remaining >= amount) return true;
-    const n = this.money.buyInCount(this, key, this.nightFromId) - (re ? re.forgiven : 0);
+    return !!(re && amount > 0 && amount <= re.amount);
+  }
+  buyInAllowed(key, amount) {
+    if (this.returnCovers(key, amount)) return true;
+    const n = this.money.buyInCount(this, key, this.nightFromId) - (this.forgiven[key] || 0);
     if (!this.rebuys) return n === 0;
     return this.rebuyLimit === 0 || n < 1 + this.rebuyLimit;
   }
   noteBuyIn(key, amount) {
-    const re = this.reentry[key];
-    if (re && amount > 0 && re.remaining >= amount) { re.remaining -= amount; re.forgiven += 1; }
+    if (!this.reentry[key]) return;
+    if (this.returnCovers(key, amount)) this.forgiven[key] = (this.forgiven[key] || 0) + 1;
+    delete this.reentry[key];                                         // spent whole, or cleared by a buy-in the return did not cover
   }
+  noteLeave(key) { delete this.reentry[key]; }
   noteServerReturn(key, amount) {
     if (!(amount > 0) || !this.finiteCap()) return;
-    const re = this.reentry[key] || (this.reentry[key] = { remaining: 0, forgiven: 0 });
-    re.remaining += amount;
+    this.reentry[key] = { amount };                                   // ONE return: a newer return replaces an older one
   }
-  // R2A-3: a seat-back that uses the server-return allowance may be for LESS than the table minimum (a stack that fell below it before the
-  // server cashed it out), up to exactly what the server returned. Anyone else, and any amount past the allowance, keeps min and max.
   checkAmount(amount, key) {
     const { min, max } = this.buyIn;
     if (!Number.isSafeInteger(amount) || amount > max) throw new TableError('range', { min, max, have: amount });
     if (amount >= min) return;
     const re = key != null ? this.reentry[key] : null;
-    if (!(amount > 0 && re && re.remaining >= amount)) throw new TableError('range', { min, max, have: amount });
+    if (!(this.returnCovers(key, amount) && re.amount < min)) throw new TableError('range', { min, max, have: amount });
   }
   checkFund(fund) {
     if (fund === undefined || fund === null || fund === '') return null;
@@ -274,9 +279,10 @@ class Table {
     const seat = this.seatOfKey(key);
     if (!seat) return { cashedOut: 0, left: false };
     kind = kind || 'leave';
+    this.noteLeave(key);
     if (this.liveSeat(seat)) return this.leaveInHand(seat, kind);
     const r = this.money.cashOut(this, key, this.money.seatBalance(this, key), kind);
-    this.removeSeat(seat);
+    this.removeSeat(seat, kind);
     if (key === this.hostKey && !this.permanent) this.setDeadline('host', 'host', this.K.HOST_GRACE_MS);
     this.out.event(this, 'left', { key, cashedOut: r.noop ? 0 : this.lastCash(r), reason: kind === 'kick' ? 'kicked' : kind }, key);
     this.out.event(this, 'room', {});
@@ -307,7 +313,9 @@ class Table {
     return r;
   }
 
-  removeSeat(seat) {
+  // Every removal keeps the debt (K3-8, R2A-1, R2A-2), a host kick included: clearing it heads-up let a host with a second account
+  // kick that account before each hand and seat-hop debt-free (RR-1). `kind` is kept for callers.
+  removeSeat(seat, kind) {
     this.owesBB[seat.key] = true;
     this.seats.delete(seat.seat);
     this.clearDeadline('grace:' + seat.seat);
