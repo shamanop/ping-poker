@@ -18,10 +18,12 @@ const pick = a => a[Math.floor(rnd() * a.length)];
 const ri = (a, b) => a + Math.floor(rnd() * (b - a + 1));
 const BETS = [10, 20, 50, 100];
 
+const HOST_GRACE_MS = 500; // the server's host-grace close of an emptied table (passed to startServer below; the late audit waits past it)
+
 async function fuzz() {
   const names = ['Fa', 'Fb', 'Fc', 'Fd', 'Fe', 'Ff', 'Fg'].map(n => n + 'zz');
   // seeded bank rows become claimable accounts with 200,000 chips; if a server cannot claim them the bots sign up instead
-  const srv = await startServer(0, { handDelayMs: 120, autoStartMs: 150, env: { HOST_GRACE_MS: '500' }, bank: Object.fromEntries(names.map(n => [n.toLowerCase(), 200000])) });
+  const srv = await startServer(0, { handDelayMs: 120, autoStartMs: 150, env: { HOST_GRACE_MS: String(HOST_GRACE_MS) }, bank: Object.fromEntries(names.map(n => [n.toLowerCase(), 200000])) });
   const bots = {};
   for (const n of names) {
     const b = await new Bot(srv, n).connect(); let r = await b.claim();
@@ -140,7 +142,7 @@ async function fuzz() {
   const survived = srv.alive();
   clearInterval(auditor); clearInterval(ticker); await sleep(300);
   // everyone stands up; then all money must be back in banks/wallets
-  let fin = null, fm = null, leftOnTables = [], clearMs = null, clearAudits = 0; const totalOff = [];
+  let fin = null, fm = null, leftOnTables = [], clearMs = null, clearAudits = 0, lateLeft = [], lateMs = null; const totalOff = [];
   if (survived) {
     for (const b of Object.values(bots)) { b.onState = null; if (seatOf[b.name]) await b.leave(seatOf[b.name]); }
     // Seats that left mid-hand while all-in stay in the hand until the run-out ends (K3-1 / K3-1b, on purpose), so one audit 800 ms later is a race: audit every 400 ms until no human
@@ -153,9 +155,13 @@ async function fuzz() {
       if (!leftOnTables.length || Date.now() - tl >= limit) break;
     }
     clearMs = Date.now() - tl;
+    // The poll can clear ~400 ms after the stand-up, before the host-grace close of the emptied tables: look once more after it, held to the same two rules.
+    await sleep(HOST_GRACE_MS + 100); fin = await audit(auditor_); fm = moneyTotal(fin); lateLeft = leftOf(fin); lateMs = Date.now() - tl;
+    if (fm.total !== base) totalOff.push(`late ${lateMs}ms:${fm.total - base}`);
+    console.log(`late audit ${lateMs} ms after everyone left: total ${fm.total === base ? '==' : '!='} base, ${lateLeft.length} seat(s) holding money`);
   }
   const report = { seed: seed0, long: LONG, hands: fin ? handsOf(fin) : hands, audits, seconds: Math.round((Date.now() - t0) / 1000), survived, violations: violations.length, totalLeak: violations.reduce((s, v) => s + v.diff, 0),
-    finalDiffVsLastBase: fm ? fm.total - base : null, leftOnTables, clearMs, clearAudits, totalOff, notes, noteSamples, topErrors: Object.entries(errCounts).sort((a, b) => b[1] - a[1]).slice(0, 15), crashLog: survived ? '' : srv.logText().split('\n').filter(l => /Error|at /.test(l)).slice(0, 4).join(' | ') };
+    finalDiffVsLastBase: fm ? fm.total - base : null, leftOnTables, clearMs, clearAudits, lateLeft, lateMs, totalOff, notes, noteSamples, topErrors: Object.entries(errCounts).sort((a, b) => b[1] - a[1]).slice(0, 15), crashLog: survived ? '' : srv.logText().split('\n').filter(l => /Error|at /.test(l)).slice(0, 4).join(' | ') };
   fs.mkdirSync(RUN_ROOT, { recursive: true });
   fs.writeFileSync(path.join(RUN_ROOT, `fuzz-s${seed0}${LONG ? '-long' : ''}.json`), JSON.stringify({ report, violations }, null, 1));
   await srv.stop();
@@ -173,9 +179,10 @@ async function fuzz() {
   await T.check('fuzz-everyone-standing-up-returns-all-money-to-banks', [], async () => {
     const r = need(); expect(r.survived, 'server died');
     expect(!r.leftOnTables.length, `money left at tables ${r.clearMs} ms after everyone left (${r.clearAudits} audits): ` + r.leftOnTables.join(' '));
+    expect(!r.lateLeft.length, `money at tables ${r.lateMs} ms after everyone left (late audit, after the host-grace close): ` + r.lateLeft.join(' '));
     expect(!r.totalOff.length, 'the money total differed from the base at ' + r.totalOff.join(' '));
     expect(r.finalDiffVsLastBase === 0, 'final total differs from the last audited base by ' + r.finalDiffVsLastBase);
-    return `cleared ${r.clearMs} ms after everyone left, ${r.clearAudits} audits, total == base at each, final diff 0`;
+    return `cleared ${r.clearMs} ms after everyone left, ${r.clearAudits} audits, total == base at each, late audit at ${r.lateMs} ms clean, final diff 0`;
   });
   await T.done();
 })();
