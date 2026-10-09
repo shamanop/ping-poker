@@ -153,6 +153,11 @@ async function spinsOf(c) { return { cash: await c.spin('play'), chips: await c.
     const oldPin = await client(); const lo = await oldPin.req('auth_login', { name: 'sesown', pin: '135790' }, ['auth_ok', 'auth_error']);
     ok(lo.ev === 'auth_error', 'D: login with the PIN before the reset is refused');
     const newPin = await login('sesown', '555555'); ok((await spinsOf(newPin)).cash, 'D: the new PIN signs in and spins');
+    // R2-B m13: the stored sessions go with the reset, so a device that was offline (still holding its token) cannot resume afterwards
+    for (const [n, c] of [['F', F], ['G', G]]) {
+      const rz = await client(); const rr = await rz.req('auth_resume', { key: A.key, token: c.token }, ['auth_ok', 'auth_error']);
+      ok(rr.ev === 'auth_error', `D: the token socket ${n} held before the admin reset no longer resumes (${rr.ev})`);
+    }
 
     // ── E. account_reset_pin (admin through the account route) signs out the target's sockets too ──────────────
     const H = await login('sesown', '555555');

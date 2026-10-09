@@ -14,13 +14,14 @@ const PROCS = new Set();
 process.on('exit', () => { for (const p of PROCS) try { p.kill('SIGKILL'); } catch {} });
 const portOpen = port => new Promise(res => { const s = net.connect(port, '127.0.0.1'); s.once('connect', () => { s.destroy(); res(true); }); s.once('error', () => res(false)); });
 
+let SEQ = 0;
 async function boot(n, env) {
-  const port = BASE + n, dir = path.join(TMP, 'run' + n); fs.mkdirSync(dir, { recursive: true });
+  const port = BASE + n, dir = path.join(TMP, 'run' + (++SEQ)); fs.mkdirSync(dir, { recursive: true });   // a fresh data dir per boot (the port numbers cycle, the dirs must not)
   const f = x => path.join(dir, x);
   fs.writeFileSync(f('b.json'), '{}'); fs.writeFileSync(f('l.json'), '[]');
   const e = { ...process.env, PORT: String(port), DATA_DIR: dir, BANK_FILE: f('b.json'), LEDGER_FILE: f('l.json'), ACCOUNTS_FILE: f('a.json'), TABLES_FILE: f('t.json'), WALLET_FILE: f('w.json'), STACKS_FILE: f('s.json'),
     BIGWINS_FILE: f('bw.json'), MONEY_FILE: f('money.jsonl'), AUTH_SIGNUP_LIMIT: '100000', COLDCALL_TEST: '', ...env };
-  for (const k of ['NODE_OPTIONS', 'SIGNUP_PLAY_CENTS', 'RIG', 'NODE_ENV']) if (!(k in env)) delete e[k];
+  for (const k of ['NODE_OPTIONS', 'SIGNUP_PLAY_CENTS', 'RIG', 'NODE_ENV', 'AUTH_CLOCK_SKEW', 'RAILWAY_ENVIRONMENT', 'RAILWAY_ENVIRONMENT_NAME', 'RAILWAY_VOLUME_MOUNT_PATH', 'RAILWAY_SERVICE_ID']) if (!(k in env)) delete e[k];
   const out = fs.openSync(f('server.log'), 'a');
   const proc = spawn('node', ['server.js'], { cwd: ROOT, stdio: ['ignore', out, out], env: e }); PROCS.add(proc);
   let up = false;
@@ -49,6 +50,9 @@ async function rigAnswers(srv) {
   s.close();
   return { audit: !!audit, rig: !!rig, auditKeys: audit ? Object.keys(audit).length : 0 };
 }
+
+// an unauthenticated socket sends __test_skew; returns whether it was answered
+async function skewAnswered(srv) { const s = await connect(srv); const r = await ask(s, '__test_skew', { ms: 0 }, 'ok', 2000); s.close(); return !!(r && r.what === 'skew'); }
 
 const results = [];
 async function run(label, fn) { const t = Date.now(); try { await fn(); results.push([label, true]); console.log('ok   ' + label + ' (' + (Date.now() - t) + ' ms)'); } catch (e) { results.push([label, false]); console.log('FAIL ' + label + ': ' + (e && e.message)); } }
@@ -84,6 +88,22 @@ const ignoredLine = (log, name) => log.split('\n').filter(l => l.includes(name) 
         assert.strictEqual(cash, 0, 'Cash minted from a bad value: ' + cash); assert.strictEqual(l.length, 1, 'one ignore line: ' + JSON.stringify(l)); } finally { await srv.stop(); }
     });
   }
+  // REV-SG-1: the guards fail CLOSED. One helper, isProduction(env): NODE_ENV trimmed + lower-cased is "production", OR any Railway variable is present.
+  const guardedBoot = async (label, env) => run('production (' + label + '): SIGNUP_PLAY_CENTS, RIG and AUTH_CLOCK_SKEW are all ignored in ONE boot', async () => {
+    const srv = await boot(n++ % 10, { SIGNUP_PLAY_CENTS: '1000000', RIG: '1', AUTH_CLOCK_SKEW: '0', ...env });
+    try { const cash = await signupCash(srv, 'Stranger'); const a = await rigAnswers(srv); const sk = await skewAnswered(srv); const log = srv.log(); await srv.stop();
+      assert.strictEqual(cash, 0, 'Cash minted at signup: ' + cash); assert.ok(!a.audit && !a.rig, 'rig answered: ' + JSON.stringify(a)); assert.ok(!sk, '__test_skew answered');
+      assert.strictEqual(ignoredLine(log, 'SIGNUP_PLAY_CENTS').length, 1, 'one SIGNUP_PLAY_CENTS line'); assert.strictEqual(ignoredLine(log, 'RIG').length, 1, 'one RIG line'); } finally { await srv.stop(); }
+  });
+  await guardedBoot('NODE_ENV=production', { NODE_ENV: 'production' });
+  await guardedBoot('NODE_ENV=" Production " (case and spaces)', { NODE_ENV: ' Production ' });
+  await guardedBoot('NODE_ENV misspelled "prod" + RAILWAY_ENVIRONMENT', { NODE_ENV: 'prod', RAILWAY_ENVIRONMENT: 'production' });
+  await guardedBoot('NODE_ENV=test + RAILWAY_SERVICE_ID', { NODE_ENV: 'test', RAILWAY_SERVICE_ID: 'abc' });
+  for (const v of ['RAILWAY_ENVIRONMENT', 'RAILWAY_ENVIRONMENT_NAME', 'RAILWAY_VOLUME_MOUNT_PATH', 'RAILWAY_SERVICE_ID']) await guardedBoot('NODE_ENV not set, only ' + v, { [v]: v === 'RAILWAY_VOLUME_MOUNT_PATH' ? path.join(TMP, 'vol') : 'x' });
+  await run('outside production: AUTH_CLOCK_SKEW=0 still registers __test_skew (tests/accounts.js, profile.js, tables.js need it)', async () => {
+    const srv = await boot(n++ % 10, { AUTH_CLOCK_SKEW: '0' });
+    try { const sk = await skewAnswered(srv); await srv.stop(); assert.ok(sk, '__test_skew not answered'); } finally { await srv.stop(); }
+  });
   const failed = results.filter(r => !r[1]);
   console.log(`money-1008-server-guard: ${results.length - failed.length}/${results.length} passed`);
   try { fs.rmSync(TMP, { recursive: true, force: true }); } catch {}
