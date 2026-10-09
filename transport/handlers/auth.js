@@ -71,7 +71,7 @@ function register(ctx, socket, on) {
     socket.emit('ok', { what: 'pin_reset' });
   });
   on('get_leaderboard', () => { socket.emit('leaderboard_data', views.leaderboard(socket.data.acct)); });
-  if (process.env.AUTH_CLOCK_SKEW !== undefined) on('__test_skew', ({ ms } = {}) => { accounts.setSkew(ms); socket.emit('ok', { what: 'skew' }); });
+  if (!ctx.production && process.env.AUTH_CLOCK_SKEW !== undefined) on('__test_skew', ({ ms } = {}) => { accounts.setSkew(ms); socket.emit('ok', { what: 'skew' }); });
 }
 
 module.exports = { register };
