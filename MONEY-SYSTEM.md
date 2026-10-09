@@ -136,6 +136,7 @@ No money. The reward is 0 for every tier; `credit` with 0 returns without a line
 2. One line `buyin:...` (or `rebuy:...`): `bank:<key>` to `seat:<tableId>:<key>` for a Chips table, `play:<key>` to the seat for a Cash table. The player's own currency only: any other fund is `wrong_fund`.
 3. A seat keeps one fund while it holds chips (`fund_mismatch`, `service.js:109`).
 Restart: see 5.9.
+A socket holds a seat only while it is signed in as that seat's account (R2B-5, `auth/index.js:21-35` `releaseSeats`, `transport/handlers/auth.js`): signing in as another account, logging out, a PIN change or an admin PIN reset releases the seats through the table's disconnect rule (`tests/money-1008-r2b-seat-socket.js`).
 
 ### 5.6 Poker: a hand
 1. The engine tracks blinds, bets, side pots and the odd chip in memory (`engine/hand.js`, `engine/pots.js`). The ledger sees nothing until the hand ends.
@@ -236,7 +237,7 @@ Each has the check that enforces it. "Soak" ids are in `tests/soak/README.md` (I
 - The `money` event (`views.js:23` `moneyView`) carries `bank` (Chips in the bank), `atTable` (Chips at seats), `inRound` (Chips in open rounds), `chips` (the sum of the three) and the same `wallet` object. It is pushed after every write that touches the player's money (`transport/index.js:15,27`).
 - Game state events carry `balances` (`{ play, chips }` from `ctx.money.balance`; an open stake is in escrow, not in the balance).
 - On `money_down` the client gets `{ code: 'money_down' }` and the tables are paused.
-- Pending at this head: M's client branch (`money-client` 5fe7bb6 and later) keeps the Cash / Chips mode per game and per tab; until it is merged, `public/shell.js:14` still has one `let wmode = 'play'` (finding LEGS-C1).
+- The Cash / Chips mode is kept PER GAME and per browser tab (`MODES[g]` in `sessionStorage`, `public/shell.js:21,24`, merged in `ffe6d08`; finding LEGS-C1): flipping one game to Chips does not flip another. A second tab of the same player follows the ledger (the late tab gets the current balance, item 2 of the client report), and the Campaign rules page shows the odds the server sends. Default mode is Cash.
 
 ## 8. Exposure in Cash
 
