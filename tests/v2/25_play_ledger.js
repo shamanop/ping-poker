@@ -7,7 +7,7 @@ async function run(sig) {
   const srv = await startServer(0, { handDelayMs: 600000 });
   try {
     const deck = rigDeck([['As', 'Ad'], ['7c', '2d']], ['3c', '8d', '9h', '4s', 'Kh']);
-    const { id, bots, table } = await tableWith(srv, ['Pla' + sig[3], 'Plb' + sig[3]], [2000, 2000], { mode: 'play' }, { decks: [deck] });
+    const { id, bots, table } = await tableWith(srv, ['Pla' + sig[3], 'Plb' + sig[3]], [2000, 2000], { mode: 'play', actionTimerSec: 60 }, { decks: [deck] });
     await drive(bots, [P.allin, P.call], () => bots[0].showdowns.length > 0, 20000);
     expect(bots[0].showdowns.length > 0, 'no showdown');
     await sleep(2300);
