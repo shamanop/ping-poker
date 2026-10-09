@@ -241,8 +241,11 @@ function recoverOne(o, escrows) {
   dropIt();
 }
 // the run stays open in memory with an idle timer that retries the close (the record is on disk; audit() lists it). A record that failed its check is not held in memory: it cannot be played.
+// It is closed to STEPS: a restart is an automatic cash-out (D1), the run is open only because the ledger refused it, and the draws the old process kept for a step that was never written died with it: a step now
+// would draw that step again (Money 1008 R2D-3). Cash-out and the idle close stay open to it: both pay at the stored multiplier once the ledger takes the write.
 function keepOpen(rec, usable) {
   if (!usable) return;
+  rec.noSteps = true;
   runs.set(rec.nk, rec); armIdle(rec, idleMs());
 }
 function recover(rounds) {
@@ -326,6 +329,7 @@ function step(socket, payload) {
   if (!rec) return;
   if (rec.refusedAt && stepCapped(rec)) return void refused(rec, INTERNAL(), socket);   // a step that is being refused for a write fault is worked at most once a second: the same refusal, no work (R2D-2)
   if (rec.pend) return void autoClose(rec, 'timeout');                                    // a result is already drawn for this run: close it as drawn (retry the ledger), never draw again
+  if (rec.noSteps) return void stepRefused(rec, socket);                                   // kept open by boot after a refused close: no step is drawn (R2D-3), the answer is the one of any refused step
   if (fenced) return err(socket, 'money_down', MONEY_DOWN);                               // the ledger refuses writes for good: nothing is drawn against a dead ledger
   const n = field(payload, 'n'), to = field(payload, 'to');
   if (!isInt(n) || n !== rec.run.steps + 1) return err(socket, 'bad_step', 'That step is not next');
