@@ -268,7 +268,7 @@ const proto = {
     }
     const amount = this.money.seatBalance(this, s.key);
     const r = this.money.cashOut(this, s.key, amount, 'kick');
-    this.removeSeat(s);
+    this.removeSeat(s, 'kick');
     this.out.event(this, 'left', { key: s.key, cashedOut: r.noop ? 0 : amount, reason: 'kicked' }, s.key);
     this.out.event(this, 'table_event', { kind: 'kicked', key: s.key, display: this.displayOf(s.key) });
     this.out.event(this, 'room', {});

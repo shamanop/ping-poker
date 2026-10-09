@@ -119,4 +119,67 @@ for (const mode of ['play', 'chips']) {
     eq(sit(S.T, 'a', S.stackA), 'none');
   });
 }
+// ---- shared helpers for the blinds / pause tests ----
+function blindSetup(mode, keys, seats, host) {
+  const isCash = mode === 'play', cash = {}; for (const k of keys) cash[k] = 1000000;
+  const W = world({ keys, cash });
+  if (!isCash) for (const k of keys) W.service.adminAdjust(k, 1000000, 'chips', 'seed', 'seedc:' + k);
+  const T = W.registry.create(host || keys[0], { name: 'HU', mode, buyIn: { min: 500, max: 60000, default: 50000 }, blinds: { sb: 100, bb: 200 }, seats: 8, autoStart: false, actionTimerSec: 30 });
+  keys.forEach((k, i) => T.sit(k, { amount: 50000, seat: seats[i], socketId: 's' + k }));
+  return { W, T, cur: isCash ? 'play' : 'chips', total0: W.total(isCash ? 'play' : 'chips') };
+}
+function play(T, W) {
+  quiet(() => T.startHand());
+  if (!T.handLive()) return null;
+  const h = T.hand, r = { button: h.button, bb: h.bbSeat, sb: h.sbSeat, dealt: T.players().filter(s => s.dealt).map(s => s.key), bbKey: T.seats.get(h.bbSeat).key, sbKey: T.seats.get(h.sbSeat).key };
+  for (let g = 0; g < 20 && T.handLive() && T.hand.phase === 'betting'; g++) { const la = engine.legalActions(T.hand, T.hand.toAct); T.act(T.seats.get(T.hand.toAct).key, { type: la.canCheck ? 'check' : 'call' }); }
+  for (let g = 0; g < 10 && T.handLive(); g++) W.clock.advance(2000);
+  return r;
+}
+
+for (const mode of ['play', 'chips']) {
+  const tag = mode === 'play' ? 'Cash' : 'Chips';
+
+  // ---- RV-3 ----
+  t(`${tag}: RV-3 heads-up, the host kicks the other player between hands every hand: 20 / 20 big blinds in 40 hands`, () => {
+    const { W, T, cur, total0 } = blindSetup(mode, ['d', 'a'], [0, 1]);       // d is the host
+    const bb = { d: 0, a: 0 };
+    for (let i = 0; i < 40; i++) {
+      if (i > 0) { quiet(() => T.kick('d', 'a', false)); eq(T.seatOfKey('a'), null, 'kicked'); eq(code(() => T.sit('a', { amount: 50000, seat: 1, socketId: 'sa' + i })), 'none'); }
+      const r = play(T, W);
+      ok(r, 'a hand is dealt at hand ' + i);
+      eq(r.dealt.sort(), ['a', 'd']);
+      bb[r.bbKey]++;
+    }
+    eq(bb, { d: 20, a: 20 }, 'the kick leaves no debt, as on base');
+    eq(W.total(cur), total0);
+  });
+
+  t(`${tag}: RV-3 the debt stays for a leave by choice heads-up, for a kick at three seats, and for a kick of the third player`, () => {
+    let S = blindSetup(mode, ['d', 'a'], [0, 1]);
+    quiet(() => S.T.leave('a', 'leave'));
+    eq(S.T.owesBB.a, true, 'leave by choice heads-up: debt stays (R2A-2)');
+    S = blindSetup(mode, ['d', 'a', 'c'], [0, 1, 2]);
+    quiet(() => S.T.kick('d', 'c', false));
+    eq(S.T.owesBB.c, true, 'kick at three seats: debt stays (R2A-1)');
+    eq(code(() => S.T.sit('c', { amount: 50000, seat: 2, socketId: 'sc2' })), 'none');
+    eq(S.T.seatOfKey('c').missedBlind, true);
+    S = blindSetup(mode, ['d', 'a', 'c'], [0, 1, 2]);
+    quiet(() => S.T.kick('d', 'c', false));                  // now two seats left: a kick of a at two seats clears HIS debt only
+    quiet(() => S.T.kick('d', 'a', false));
+    eq(S.T.owesBB.a, undefined, 'heads-up kick: no debt');
+    eq(S.T.owesBB.c, true, 'the earlier kick at three seats keeps its debt');
+  });
+
+  t(`${tag}: RV-3 a kick held back until the hand ends (finishKick) heads-up leaves no debt either`, () => {
+    const { W, T } = blindSetup(mode, ['d', 'a'], [0, 1]);
+    quiet(() => T.startHand());
+    const r = quiet(() => T.kick('d', 'a', false));
+    eq(r.pending, true);
+    for (let g = 0; g < 20 && T.handLive() && T.hand.phase === 'betting'; g++) { const la = engine.legalActions(T.hand, T.hand.toAct); T.act(T.seats.get(T.hand.toAct).key, { type: la.canCheck ? 'check' : 'call' }); }
+    for (let g = 0; g < 10 && T.handLive(); g++) W.clock.advance(2000);
+    eq(T.seatOfKey('a'), null, 'kicked after the hand');
+    eq(T.owesBB.a, undefined, 'no debt');
+  });
+}
 done();

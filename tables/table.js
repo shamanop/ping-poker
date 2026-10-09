@@ -282,7 +282,7 @@ class Table {
     this.noteLeave(key);
     if (this.liveSeat(seat)) return this.leaveInHand(seat, kind);
     const r = this.money.cashOut(this, key, this.money.seatBalance(this, key), kind);
-    this.removeSeat(seat);
+    this.removeSeat(seat, kind);
     if (key === this.hostKey && !this.permanent) this.setDeadline('host', 'host', this.K.HOST_GRACE_MS);
     this.out.event(this, 'left', { key, cashedOut: r.noop ? 0 : this.lastCash(r), reason: kind === 'kick' ? 'kicked' : kind }, key);
     this.out.event(this, 'room', {});
@@ -313,8 +313,11 @@ class Table {
     return r;
   }
 
-  removeSeat(seat) {
-    this.owesBB[seat.key] = true;
+  // RV-3: the host's kick between hands, with exactly two seats taken, leaves no debt (the kicked player did not choose to miss the blind, and
+  // the host could otherwise make him the big blind every hand). Every other removal keeps the debt (K3-8, R2A-1, R2A-2).
+  removeSeat(seat, kind) {
+    if (kind === 'kick' && this.seats.size === 2) delete this.owesBB[seat.key];
+    else this.owesBB[seat.key] = true;
     this.seats.delete(seat.seat);
     this.clearDeadline('grace:' + seat.seat);
   }
