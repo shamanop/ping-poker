@@ -221,7 +221,7 @@ if (typeof module === 'object' && module.exports) {
   const clone = (o) => JSON.parse(JSON.stringify(o));
   // R2C-4: every number has a range, checked before anything is built or measured (an out-of-range config is refused at once, nothing runs). The loop bounds keep a bonus finite, the money knobs keep a typo (one extra
   // zero) out: the shipped value of every key is inside its range. [min, max]; a key not listed here is [0, 1e6].
-  const RANGES = { guaranteeP: [0, 1], maxSticky: [0, 30], growCap: [0, 100], maxSpins: [0, 200], maxTumbles: [0, 100], 'spinsFor.*': [0, 100], 'retrigger.*': [0, 40], 'buyCost.*': [0, 1e5], 'pay.*': [0, Eng.MAX_WIN_X], 'scatterPay.*': [0, Eng.MAX_WIN_X], 'weights.*': [0, 1e6], landslideStart: [0, 29] };
+  const RANGES = { guaranteeP: [0, 1], maxSticky: [0, 30], growCap: [0, 100], maxSpins: [0, 200], maxTumbles: [0, 100], 'spinsFor.*': [0, 100], 'retrigger.*': [0, 40], 'buyCost.*': [0, 1e5], 'pay.*': [0, 1e6], 'scatterPay.*': [0, 1e6], 'weights.*': [0, 1e6], landslideStart: [0, 29] };
   const rangeFor = (at, pairCol) => { const p = at.replace(/^cfg\./, ''); if (RANGES[p]) return RANGES[p]; if (pairCol === 0) return [0, 1000]; const q = p.replace(/\.[^.]+$/, '.*'); return RANGES[q] || [0, 1e6]; };
   const inRange = (x, at, col) => { const [lo, hi] = rangeFor(at, col); if (typeof x !== 'number' || !Number.isFinite(x) || x < lo || x > hi) throw new Error(at + ': must be between ' + lo + ' and ' + hi + ' (got ' + (typeof x === 'number' ? x : typeof x) + ')'); return x; };
   function mergeChecked(base, over, at) {
