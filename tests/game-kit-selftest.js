@@ -120,6 +120,17 @@ const VARIANTS = [
   ['unregistered', 'registration', 'not in MODULES, house account not registered'],
 ];
 
+// broken toy GAMES (tests/kit-toys/<name>.js + <name>.kit.js, written by the Opus critic R2-E, each a whole game with its own adapter) -> the check that must fail
+const TOYS = [
+  ['proxykey', 'identity', 'plays the round on the account key the CLIENT names (payload.key)'],
+];
+function runToy(name) {
+  K.RESULTS.length = 0;
+  const file = path.join(__dirname, 'kit-toys', name + '.kit.js');
+  K.runAdapter(K.finishAdapter(require(file), file));
+  return K.RESULTS.filter((r) => !r.ok).map((r) => r.check + (r.cur ? '/' + r.cur : ''));
+}
+
 let failed = 0;
 const rows = [];
 function runVariant(variant) {
@@ -134,6 +145,11 @@ const good = runVariant('ok');
 rows.push(['ok', '(none)', good.length ? 'FAIL: ' + good.join(',') : 'PASS: every check passes', !good.length]);
 for (const [v, check, what] of VARIANTS) {
   const f = runVariant(v);
+  const hit = f.some((x) => x === check || x.startsWith(check + '/'));
+  rows.push([v, check, hit ? `caught on ${check} (all failing: ${[...new Set(f)].join(',')})` : `NOT CAUGHT on ${check}; failing: ${f.join(',') || 'nothing'}`, hit, what]);
+}
+for (const [v, check, what] of TOYS) {
+  const f = runToy(v);
   const hit = f.some((x) => x === check || x.startsWith(check + '/'));
   rows.push([v, check, hit ? `caught on ${check} (all failing: ${[...new Set(f)].join(',')})` : `NOT CAUGHT on ${check}; failing: ${f.join(',') || 'nothing'}`, hit, what]);
 }

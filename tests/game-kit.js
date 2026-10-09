@@ -8,7 +8,7 @@
 // registry (games/index.js, recover() at boot as server.js does) and the game module. The kit knows nothing of any game's rules: the game ships
 // games/<id>.kit.js (the adapter, see ADD-A-GAME.md "the kit"), which plays it with the game's OWN socket messages and never touches money.
 //
-// checks: registration, escrow, restart, replay (double submit), sockets, mix, errors, input, quarantine, ledger (replay == balances)
+// checks: registration, escrow, restart, replay (double submit), sockets, mix, errors, input, identity, quarantine, ledger (replay == balances)
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -115,7 +115,7 @@ function world(A, opts = {}) {
   w.reboot = () => { w.crash(); return boot(); };
 
   // ---- the driver an adapter plays through
-  const g = w.g = { rng, now: clock.now, dup: null, tamper: null, same: false, world: w };
+  const g = w.g = { rng, now: clock.now, dup: null, tamper: null, extra: null, same: false, world: w };
   const collect = (sock, n0) => {
     const got = sock.out.slice(n0);
     const errs = got.filter((o) => o[0] === 'error'), res = got.filter((o) => o[0].startsWith('g:' + A.id + ':'));
@@ -125,6 +125,7 @@ function world(A, opts = {}) {
     if (advance) clock.advance(200);
     let p = payload;
     if (g.tamper && ev !== openEv && p && typeof p === 'object') p = { ...p, ...g.tamper };
+    if (g.extra && p && typeof p === 'object' && !Array.isArray(p)) p = { ...g.extra, ...p };     // every message (the opening one too); the game's own fields win
     const n0 = sock.out.length;
     w.log.push({ key: sock.key, ev, payload: jclone(p) });
     sock.send('g:' + A.id + ':' + ev, p);
@@ -637,6 +638,30 @@ function checkInput(A, cur) {
   });
 }
 
+
+// 10. the account a round is played on is the SIGNED-IN socket's, never one the message names (R2E-5)
+const ID_FIELDS = ['key', 'acct', 'account', 'name', 'user', 'username', 'userId', 'player', 'owner', 'email'];
+function checkIdentity(A, cur) {
+  runCheck(A, 'identity', cur, (t) => {
+    const w = world(A, { seed: 13 }), s = w.sock('mallory'); w.sock('victim'); w.rich('mallory'); w.rich('victim');
+    const extra = {}; for (const f of ID_FIELDS) extra[f] = 'victim';
+    const vb = CURS.map((c) => w.bal('victim', c)), id0 = w.lastId();
+    w.g.extra = extra;                                                      // every message carries the victim's key in every likely field
+    let played = 0;
+    const tryRound = (fn) => { try { fn(); played++; } catch (e) { if (!(e instanceof Refused)) throw e; } };
+    for (let i = 0; i < Math.min(playN(A), 6); i++) tryRound(() => playOne(w, s, cur, i));
+    for (const pt of A.heldPoints) tryRound(() => { const held = holdOne(w, s, pt, cur); pt.finish(w.g, s, held); });
+    w.g.extra = null;
+    const lines = w.since(id0).filter((l) => !isKit(l));
+    const bad = lines.filter((l) => /victim/.test(`${l.from} ${l.to} ${l.ref}`));
+    for (const l of bad.slice(0, 3)) t.fail(`a message from mallory naming "victim" wrote line ${l.id} ${l.ref} (${l.from} -> ${l.to}, ${l.amount})`);
+    t.ok(CURS.every((c, i) => w.bal('victim', c) === vb[i]), `the victim's balance moved (${vb} -> ${CURS.map((c) => w.bal('victim', c))}) though the victim sent nothing`);
+    t.ok(lines.every((l) => !l.ref || new RegExp('^' + A.id + ':mallory:').test(l.ref)), 'a ledger line of the run is not on the sender\'s own key');
+    t.note(`${played} round(s) played with ${ID_FIELDS.length} identity fields set`);
+    finalAudit(t, w, cur, 'identity');
+  });
+}
+
 // ------------------------------------------------------------------------------------------------------------------------------------ driver
 function loadAdapter(id) {
   const dir = path.join(ROOT, 'games');
@@ -670,7 +695,7 @@ function runAdapter(A, opts) {
   try {
     checkRegistration(A);
     for (const cur of CURS) if (!A.currencies || A.currencies.includes(cur)) {
-      checkEscrow(A, cur); checkRestart(A, cur); checkReplay(A, cur); checkSockets(A, cur); checkMix(A, cur); checkErrors(A, cur); checkInput(A, cur); checkQuarantine(A, cur);
+      checkEscrow(A, cur); checkRestart(A, cur); checkReplay(A, cur); checkSockets(A, cur); checkMix(A, cur); checkErrors(A, cur); checkInput(A, cur); checkIdentity(A, cur); checkQuarantine(A, cur);
     }
     for (const cur of CURS) if (!A.currencies || A.currencies.includes(cur)) {
       // 8: every world above ended with an independent replay; report them together with the mixed world
