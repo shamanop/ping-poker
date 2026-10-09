@@ -103,7 +103,7 @@ Cold Call and Ballot Bender math is changed with `POST /api/admin/coldcall-confi
 - **Cancelled.** A reset, or any newer save that is accepted, cancels a check in flight; the older POST answers "refused, another admin change (a reset or a new config) was accepted while this check ran; nothing was changed by this one". To abort a running check: POST `{reset: true}`.
 - **Audit.** Every accepted or refused POST is a console line `[cfg-audit] {...}` (who = `admin#<8 hex of the token hash>@<address>`, old and new measured payback, seed); the files `bender-config.json` and `coldcall-config.json` in the data dir hold the live numbers.
 - **After a deploy**, a saved Bender config that no longer passes the number ranges is not loaded (section 1, "Before a deploy", step 3).
-- Run one yourself (rehearsal on this box only, never on the live site): start a server on a scratch data dir, `curl -s -H "x-admin-token: $T" -H 'content-type: application/json' -d '{"overrides":{"maxSpins":400000}}' localhost:$PORT/api/admin/bender-config` answers 400 `maxSpins: must be between 0 and 200` within a second.
+- Run one yourself (rehearsal on this box only, never on the live site): start a server on a scratch data dir, `curl -s -H "x-admin-token: $T" -H 'content-type: application/json' -d '{"overrides":{"maxSpins":400000}}' localhost:$PORT/api/admin/bender-config` answers HTTP 400 `{"ok":false,"error":"cfg.maxSpins: must be between 0 and 200 (got 400000)"}` at once (RUN on a scratch server, port 5641, throwaway token; without the header: 403 `forbidden`).
 
 ## 3c. A player is told `account_locked`
 
