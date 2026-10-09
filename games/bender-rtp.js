@@ -10,6 +10,8 @@ const E = require('./bender-engine.js');
 // can spend (see the report). PAIRED (the config differs from the shipped one ONLY in pay / scatterPay / buyCost, which do not steer the game, so the same random numbers give the same boards): the shipped
 // config and the new one are played on identical streams and only the DIFFERENCE is sampled, on top of games/bender-ref.json (the shipped numbers, from a long offline run). A rigged pay table is a huge difference
 // with a tiny SE, the shipped numbers themselves cost nothing and the error is the reference's.
+// R2C-3: a way is accepted only if its UPPER bound (measured + BOUND_SE standard errors) is at or under the ceiling: the check's own uncertainty counts against the admin, a fixed seed that reads low cannot decide it.
+const BOUND_SE = 3;
 const CEILING_PCT = 100.0, PB_SEED = 20261008, SLICE_MS = 40, PB_DEADLINE_MS = 300000;
 const PB_PLAN = { base: 700000, e3: 60000, l4: 60000, l5: 4000, l6: 1000, batches: 50 };
 const PB_PLAN_PAIRED = { base: 150000, e3: 20000, l4: 20000, l5: 1500, l6: 300, batches: 50 };
@@ -72,9 +74,10 @@ async function measure(cfg, opts = {}) {
   }
   lap();
   const worst = worstOf(ways), finite = Object.values(ways).every((x) => Number.isFinite(x.pct) && Number.isFinite(x.se));
-  return { ok: finite && worst.pct <= CEILING_PCT, finite, ceilingPct: CEILING_PCT, ways, worst, rounds, ms: Date.now() - t0, maxStretchMs: maxStretch, seed, scale, early, mode: paired ? 'paired' : 'direct' };
+  const bound = Object.entries(ways).map(([way, x]) => ({ way, pct: x.pct, se: x.se, upper: x.pct + BOUND_SE * x.se })).sort((a, b) => (b.upper || 0) - (a.upper || 0))[0];
+  return { ok: finite && bound.upper <= CEILING_PCT, finite, ceilingPct: CEILING_PCT, boundSe: BOUND_SE, bound, ways, worst, rounds, ms: Date.now() - t0, maxStretchMs: maxStretch, seed, scale, early, mode: paired ? 'paired' : 'direct' };
 }
-module.exports = { measure, loadRef, cfgHash, lowestPrice, CEILING_PCT };
+module.exports = { measure, loadRef, cfgHash, lowestPrice, CEILING_PCT, BOUND_SE };
 
 if (require.main === module) {
 // BB_CFG='{"scatterW":1.3,"payScale":1.9}' overrides engine CFG for tuning runs (payScale multiplies pay + scatterPay). Workers inherit the env.

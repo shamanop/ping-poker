@@ -73,7 +73,7 @@ async function setLiveConfigChecked({ overrides, rtpLabel, note, who, scale, see
   if (token.cancelled) { log({ outcome: 'refused', why: SUPERSEDED, new: null }); throw new Error('cfg: refused, ' + SUPERSEDED); }
   const summary = summaryOf(m), nw = { worst: { way: m.worst.way, pct: round2(m.worst.pct), se: round2(m.worst.se) }, spin: summary.spin, ways: summary, ms: m.ms, maxStretchMs: round2(m.maxStretchMs), seed: m.seed };
   if (!m.ok) {
-    const why = !m.finite ? 'the payback could not be measured (not a finite number: the symbol weights or pay table are degenerate)' : 'the ' + m.worst.way + ' way pays back ' + round2(m.worst.pct) + '% (+-' + round2(1.96 * m.worst.se) + '), above the ' + rtpTool.CEILING_PCT + '% ceiling';
+    const b = m.bound, why = !m.finite ? 'the payback could not be measured (not a finite number: the symbol weights or pay table are degenerate)' : 'the ' + b.way + ' way is not shown to be at or under the ' + rtpTool.CEILING_PCT + '% ceiling: measured ' + round2(b.pct) + '% with a standard error of ' + round2(b.se) + ' points, so its upper bound (measured + ' + rtpTool.BOUND_SE + ' standard errors) is ' + round2(b.upper) + '%, above the ' + rtpTool.CEILING_PCT + '% ceiling';
     log({ outcome: 'refused', why, new: nw }); throw new Error('cfg: refused, ' + why + (m.early ? ' (stopped early)' : ''));
   }
   const measured = { hash: hashOf(next), ok: true, ceilingPct: rtpTool.CEILING_PCT, label: round2(m.ways.spin.pct).toFixed(1) + '% (measured by the server when this was set: base game, +-' + round2(1.96 * m.ways.spin.se).toFixed(1) + '; highest way ' + m.worst.way + ' ' + round2(m.worst.pct).toFixed(1) + '%)', summary, worst: nw.worst, seed: m.seed, at: new Date().toISOString() };

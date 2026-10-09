@@ -173,7 +173,8 @@ function validate(overrides) { const next = merge(overrides); return { next, smo
 // with a stated standard error; the SE of the product is the sum of the factors' SE by the delta rule. A config is refused when any way's estimate is above the ceiling. The simulation yields to the event
 // loop every ~SLICE_MS ms (setImmediate), so no stretch blocks the server for more than that plus one engine step; the longest stretch seen is reported with every result.
 // Policy of the player (the one the shipped prices were set against): PICK = the hot square with the most hot neighbours; ONE MORE CALL = bank (its EV is rtp x W, never above banking: relation rule).
-const CEILING_PCT = 100.0;               // refuse any way whose measured payback is above this
+const CEILING_PCT = 100.0;               // refuse any way whose payback is not shown to be at or under this
+const BOUND_SE = 3;                      // R2C-3: a way is accepted only if measured + BOUND_SE standard errors is at or under the ceiling (the check's own uncertainty counts against the admin; a fixed seed that reads low cannot decide it)
 const PB_SEED = 20261008;                // fixed: the same config always measures the same
 const SLICE_MS = 40;                     // longest synchronous stretch the check asks for
 const PB_DEADLINE_MS = 300000;           // a check that has not finished by then refuses (fail closed)
@@ -250,7 +251,8 @@ async function measurePayback(cfg, opts = {}) {
   lap();
   const worst = worstOf(ways);
   const giftOk = !ways.daily || ways.daily.giftCents <= DAILY_GIFT_MAX_CENTS;
-  return { ok: worst.pct <= CEILING_PCT && giftOk, giftOk, ceilingPct: CEILING_PCT, ways, worst, rounds, ms: Date.now() - t0, maxStretchMs: maxStretch, seed, scale, early };
+  const bound = Object.entries(ways).filter(([w, x]) => x.judged !== 'gift').map(([way, x]) => ({ way, pct: x.pct, se: x.se, upper: x.pct + BOUND_SE * x.se })).sort((a, b) => b.upper - a.upper)[0];
+  return { ok: bound.upper <= CEILING_PCT && giftOk, giftOk, ceilingPct: CEILING_PCT, boundSe: BOUND_SE, bound, ways, worst, rounds, ms: Date.now() - t0, maxStretchMs: maxStretch, seed, scale, early };
 }
 const round2 = (x) => Math.round(x * 100) / 100;
 const pbSummary = (r) => Object.fromEntries(Object.entries(r.ways).map(([w, x]) => [w, { pct: round2(x.pct), se: round2(x.se), ...(x.giftCents !== undefined ? { giftCents: round2(x.giftCents) } : {}) }]));
@@ -320,7 +322,7 @@ async function setLiveConfigChecked({ overrides, rtpLabel, note, who, scale, see
   if (token.cancelled) { log({ outcome: 'refused', why: SUPERSEDED, new: null }); throw new Error('cfg: refused, ' + SUPERSEDED); }
   const summary = pbSummary(m), nw = { worst: { way: m.worst.way, pct: round2(m.worst.pct), se: round2(m.worst.se) }, plain: summary.plain, ways: summary, ms: m.ms, maxStretchMs: round2(m.maxStretchMs), seed: m.seed };
   if (!m.ok) {
-    const why = m.worst.pct <= CEILING_PCT && !m.giftOk ? 'the daily gift is worth ' + round2(m.ways.daily.giftCents) + ' cents a day (limit ' + DAILY_GIFT_MAX_CENTS + ')' : 'the ' + m.worst.way + ' way pays back ' + round2(m.worst.pct) + '% (+-' + round2(1.96 * m.worst.se) + '), above the ' + CEILING_PCT + '% ceiling';
+    const b = m.bound, why = b.upper <= CEILING_PCT && !m.giftOk ? 'the daily gift is worth ' + round2(m.ways.daily.giftCents) + ' cents a day (limit ' + DAILY_GIFT_MAX_CENTS + ')' : 'the ' + b.way + ' way is not shown to be at or under the ' + CEILING_PCT + '% ceiling: measured ' + round2(b.pct) + '% with a standard error of ' + round2(b.se) + ' points, so its upper bound (measured + ' + BOUND_SE + ' standard errors) is ' + round2(b.upper) + '%, above the ' + CEILING_PCT + '% ceiling';
     log({ outcome: 'refused', why, new: nw }); throw new Error('cfg: refused, ' + why + (m.early ? ' (stopped early)' : ''));
   }
   const measured = { hash: configHash(next), ok: true, ceilingPct: CEILING_PCT, label: measuredLabel(m), summary, worst: nw.worst, seed: m.seed, at: new Date().toISOString() };
