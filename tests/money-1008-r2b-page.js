@@ -158,5 +158,24 @@ t('RV-4 an adjust that lands exactly on the maximum is allowed; Chips have no su
   w.close();
 });
 
+// ---- RV-3: the soak checker does not count a net-zero mark line as Cash born ----
+const { Checker } = require('./soak/invariants');
+const poll = w => { const c = new Checker(w.file); c.poll(); return { c, v: c.take() }; };
+t('RV-3 Checker: a no-op Set Cash mark is not "born" Cash: I13 still watches that wallet; a mark alone is no violation', () => {
+  const w = world(); w.set(0, 'M1', 'bob');            // bob has 0 Cash: a mark line (1 in, 1 out)
+  let { c, v } = poll(w);
+  eq(v.filter(x => /^I(1|3|1[0-3])$/.test(x.id)), [], 'a mark alone'); eq(c.cashBorn.has('bob'), false, 'bob is not born');
+  w.ledger.transfer('mint:signup', 'play:bob', 500, 'play', 'signup', 'leak.1');   // Cash that reaches the wallet from nowhere legitimate
+  ({ c, v } = poll(w));
+  eq(v.filter(x => x.id === 'I13').map(x => x.accounts.key), ['bob'], 'I13 must report bob');
+  w.close();
+});
+t('RV-3 Checker: a real admin credit still makes the key born (no I13), also when a mark follows', () => {
+  const w = world(); w.adj(700, 'play', 'M2', 'bob'); w.set(700, 'M3', 'bob');   // credit, then a no-op mark
+  const { c, v } = poll(w);
+  eq(c.cashBorn.has('bob'), true); eq(v.filter(x => x.id === 'I13'), []);
+  w.close();
+});
+
 console.log(`${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

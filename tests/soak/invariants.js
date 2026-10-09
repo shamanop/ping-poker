@@ -172,7 +172,9 @@ class Checker {
       for (const a of [it.from, it.to]) if (kindOf(a) === 'source' && !CASH_SOURCES.has(a) && !a.startsWith('fx:')) bad('I11', `Cash ${it.from === a ? 'created' : 'destroyed'} through ${a} (${it.amount})`, { account: a, cur: 'play' }, 'only admin:adjust or a game house touch Cash', a);
       if (it.to.startsWith('play:')) {
         const key = it.to.slice(5);
-        if (it.from === 'admin:adjust' || it.from.startsWith('house:') || it.from.startsWith('pool:')) this.cashBorn.add(key);
+        // RV-3: a net-zero admin MARK (a no-op Set Cash: 1 in from admin:adjust, 1 back out, same line) puts no Cash into the wallet, so it does not make the key "born"; only an admin credit that nets above zero in its line does
+        const adminNet = items.reduce((n, j) => n + (j.cur === 'play' && j.from === 'admin:adjust' && j.to === 'play:' + key ? j.amount : 0) - (j.cur === 'play' && j.from === 'play:' + key && j.to === 'admin:adjust' ? j.amount : 0), 0);
+        if ((it.from === 'admin:adjust' && adminNet > 0) || it.from.startsWith('house:') || it.from.startsWith('pool:')) this.cashBorn.add(key);
         if (it.from.startsWith('house:') || it.from.startsWith('pool:')) {
           const stake = items.some(j => j.cur === 'play' && j.to.startsWith('house:') && (j.from === 'play:' + key || (j.from.startsWith('escrow:') && j.from.split(':')[2] === key)));
           const free = L.slot && L.slot.rid.startsWith('cb') && this.paidPlay.has(key);
