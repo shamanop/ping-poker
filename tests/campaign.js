@@ -304,7 +304,7 @@ t('a failed record flush at start refunds the stake; a failed flush at a step me
   ok(w.campaignLines().some((l) => /:close$/.test(l.ref)));
   store.flush = real; hook(true); const run = open(w, s); boom = 1; store.flush = () => { if (boom-- > 0) throw new Error('disk full'); return real(); };
   r = step(w, s, run, run.options[0].to, 'survive'); eq(r.error.code, 'internal'); eq(H.all(s, 'g:campaign:step').length, 0); eq(w.runs.get('ann').run.steps, 0); eq(w.disk().open.ann.run.steps, 0);
-  store.flush = real; r = step(w, s, run, run.options[0].to, 'survive'); eq(r.ev, 'step'); eq(w.disk().open.ann.run.steps, 1);
+  store.flush = real; w.clock.advance(1000); r = step(w, s, run, run.options[0].to, 'survive'); eq(r.ev, 'step'); eq(w.disk().open.ann.run.steps, 1);   // (a refused step is answered once a second: R2D-2)
   hook(false);
 });
 
@@ -354,11 +354,11 @@ t('C3: a surviving step whose record flush failed: the retry of the same step re
   let boom = 1; store.flush = () => { if (boom-- > 0) throw new Error('disk full'); return real(); };
   w.RNG.v = 0.999999; let r = step(w, s, run, to); eq(r.error.code, 'internal'); eq(w.runs.get('ann').run.steps, 0, 'the step did not happen yet');
   w.RNG.v = 0;                                                                                 // a fresh draw would be a scandal
-  r = step(w, s, run, to); eq(r.ev, 'step', 'the retry gets the draw that was made: a survive'); eq(r.payload.run.steps, 1); eq(w.runs.get('ann').run.steps, 1);
+  w.clock.advance(1000); r = step(w, s, run, to); eq(r.ev, 'step', 'the retry gets the draw that was made: a survive');   // (a refused step is answered once a second: R2D-2) eq(r.payload.run.steps, 1); eq(w.runs.get('ann').run.steps, 1);
   ok(w.disk().open.ann.run.steps === 1, 'durable now'); eq(w.runs.get('ann').memo, null);
   // a different step after a failed flush is a new decision: it draws
   const run2 = r.payload.run, to2 = run2.options.find((o) => !o.deadEnd).to; boom = 1; w.RNG.v = 0.999999; r = step(w, s, run2, to2); eq(r.error.code, 'internal');
-  w.RNG.v = 0; const other = run2.options.find((o) => o.to !== to2 && !o.deadEnd); r = step(w, s, run2, other.to); eq(r.ev, 'end', 'another destination draws afresh'); eq(r.payload.reason, 'scandal');
+  w.RNG.v = 0; w.clock.advance(1000); const other = run2.options.find((o) => o.to !== to2 && !o.deadEnd); r = step(w, s, run2, other.to); eq(r.ev, 'end', 'another destination draws afresh'); eq(r.payload.reason, 'scandal');
   store.flush = real;
 });
 
@@ -371,7 +371,7 @@ t('C3: one failed flush on the first attempt does not change a step\'s odds (see
     const run = open(w, s, 'play', 100, 'GA'), o = run.options.find((x) => x.tier === 'swing'); design = 1 - o.pFail;
     let boom = 1; store.flush = () => { if (boom-- > 0) throw new Error('disk full'); return real(); };
     let r = step(w, s, run, o.to);
-    if (r.error) r = step(w, s, run, o.to);                                                    // the client retries the same message
+    if (r.error) { w.clock.advance(1000); r = step(w, s, run, o.to); }                         // the client retries the same message (a second later: a refused step is answered once a second, R2D-2)
     store.flush = real;
     if (r.ev === 'step') { surv++; H.call(w, s, 'cash', { roundId: run.roundId }); }
   }
