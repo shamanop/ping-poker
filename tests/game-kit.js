@@ -8,7 +8,7 @@
 // registry (games/index.js, recover() at boot as server.js does) and the game module. The kit knows nothing of any game's rules: the game ships
 // games/<id>.kit.js (the adapter, see ADD-A-GAME.md "the kit"), which plays it with the game's OWN socket messages and never touches money.
 //
-// checks: registration, escrow, restart, replay (double submit), sockets, mix, errors, input, identity, quarantine, carry (Chips never feed Cash), ledger (replay == balances)
+// checks: registration, escrow, restart, replay (double submit), sockets, mix, errors, input, identity, quarantine, disconnect, carry (Chips never feed Cash), ledger (replay == balances)
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -697,6 +697,38 @@ function checkCarry(A) {
   });
 }
 
+// 12. a dropped socket strands no stake (R2E-12): open a held round, drop the socket (the page reloaded, the phone lost its signal). Then either the stake is back / settled
+// (escrow 0, lines consistent) or the round is still open, audit() lists it, and signing in again lets the player finish it. An escrow nothing knows about is a failure.
+function checkDisconnect(A, cur) {
+  if (!A.heldPoints.length) { if (cur === CURS[0]) RESULTS.push({ game: A.id, check: 'disconnect', cur: null, ok: true, skip: true, detail: 'no held round: an instant game has nothing open when a socket drops' }); return; }
+  runCheck(A, 'disconnect', cur, (t) => {
+    for (const pt of A.heldPoints) {
+      const w = world(A, { seed: 14 }), s = w.sock('ann'); w.rich('ann');
+      const who = `drop at ${pt.name}`, held = holdOne(w, s, pt, cur);
+      s.send('disconnect');                                                  // what socket.io emits on the server side when the client goes away
+      const esc = w.escrowOf('ann', held.roundId, cur), knows = (w.audit().openRounds || []).some((r) => r.roundId === held.roundId);
+      if (esc !== 0) {
+        t.ok(knows, `${who}: escrow ${held.roundId} still holds ${esc} after the socket dropped and audit() does not list the round: nothing knows about this money`);
+        let fin = null; try { fin = pt.finish(w.g, w.sock('ann'), held); } catch (e) { if (!(e instanceof Refused)) throw e; t.fail(`${who}: the round is open in the ledger (${esc}) but the player, signed in again, cannot finish it: ${JSON.stringify(e.reply && e.reply.error)}`); }
+        if (fin) {
+          const r = roundsOf(A, w.since(held.id0)).get(held.roundId);
+          t.ok(w.escrowOf('ann', held.roundId, cur) === 0, `${who}: finishing the round after signing in again left its escrow open`);
+          if (r && fin.win != null) t.ok(r.returned === fin.win, `${who}: shown win ${fin.win}, ledger paid ${r.returned}`);
+        }
+      } else {
+        const r = roundsOf(A, w.since(held.id0)).get(held.roundId);
+        t.ok(!!r && r.staked === held.cost, `${who}: escrow is 0 but the round has no ledger lines of ${held.cost} (the stake went nowhere)`);
+        t.ok(!knows, `${who}: the round is closed in the ledger and audit() still lists it`);
+        if (r) t.ok(w.bal('ann', cur) === held.b0 - r.staked + r.returned, `${who}: balance ${held.b0} -> ${w.bal('ann', cur)} does not match stake ${r.staked} / pay ${r.returned}`);
+      }
+      auditMatchesLedger(t, w, who);
+      t.ok(!w.since(held.id0).some((l) => !isKit(l) && l.cur === other(cur)), `${who}: a ${other(cur)} line was written for a ${cur} round`);
+      for (const m of lineProblems(A, w.since(held.id0)).slice(0, 2)) t.fail(`${who}: ${m}`);
+      finalAudit(t, w, cur, who);
+    }
+  });
+}
+
 // ------------------------------------------------------------------------------------------------------------------------------------ driver
 function loadAdapter(id) {
   const dir = path.join(ROOT, 'games');
@@ -730,7 +762,7 @@ function runAdapter(A, opts) {
   try {
     checkRegistration(A);
     for (const cur of CURS) if (!A.currencies || A.currencies.includes(cur)) {
-      checkEscrow(A, cur); checkRestart(A, cur); checkReplay(A, cur); checkSockets(A, cur); checkMix(A, cur); checkErrors(A, cur); checkInput(A, cur); checkIdentity(A, cur); checkQuarantine(A, cur);
+      checkEscrow(A, cur); checkRestart(A, cur); checkReplay(A, cur); checkSockets(A, cur); checkMix(A, cur); checkErrors(A, cur); checkInput(A, cur); checkIdentity(A, cur); checkDisconnect(A, cur); checkQuarantine(A, cur);
     }
     if (!A.currencies || CURS.every((c) => A.currencies.includes(c))) checkCarry(A);
     for (const cur of CURS) if (!A.currencies || A.currencies.includes(cur)) {
@@ -749,9 +781,9 @@ function runAdapter(A, opts) {
 }
 
 function report() {
-  let pass = 0, fail = 0;
-  for (const r of RESULTS) { console.log(`${r.ok ? 'PASS' : 'FAIL'} ${r.game} ${r.check}${r.cur ? '/' + r.cur : ''} ${r.detail}`); if (r.ok) pass++; else fail++; }
-  console.log(`kit: ${pass} PASS, ${fail} FAIL (${[...new Set(RESULTS.map((r) => r.game))].join(', ')})`);
+  let pass = 0, fail = 0, skip = 0;
+  for (const r of RESULTS) { console.log(`${r.skip ? 'SKIP' : r.ok ? 'PASS' : 'FAIL'} ${r.game} ${r.check}${r.cur ? '/' + r.cur : ''} ${r.detail}`); if (r.skip) skip++; else if (r.ok) pass++; else fail++; }
+  console.log(`kit: ${pass} PASS, ${fail} FAIL${skip ? ', ' + skip + ' SKIP' : ''} (${[...new Set(RESULTS.map((r) => r.game))].join(', ')})`);
   return fail ? 1 : 0;
 }
 
