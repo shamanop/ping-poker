@@ -149,18 +149,41 @@ const near = (x, y, tag) => assert.ok(Math.abs(x - y) < 1e-6, tag + ': share ' +
     w.reboot(); const s2 = w.sock('ann'); assert.strictEqual(E.CFG.pull.list, 450, 'the unmeasured file is not trusted at boot');
     const b = await spin(w, s2, 'play', 2); near(b.share, lt / 450, 'after the boot back on list 450: the leads the spin left under list 45, as a share of 45');
   });
-  await test('an OLD record with no stamp reads as the shipped list size (450): 0.89 stays 0.89 under list 45 and under list 4500', async () => {
-    for (const [o, list] of [[SHORT, 45], [LONG, 4500], [null, 450]]) {
+  // RL-2: an unstamped record (written before the stamp, under a list this code cannot know) is counted against Math.max(shipped list 450, the live list): never scaled UP.
+  await test('an OLD record with no stamp: kept under the shipped list and under a LONGER one (share 0.089 of 4500, no Callback, nothing leaked), scaled down under a SHORTER one (0.89 of 45)', async () => {
+    for (const [o, list, want] of [[SHORT, 45, 4005 / 4500], [LONG, 4500, 4005 / 45000], [null, 450, 4005 / 4500]]) {
       const w = world(), { s, rec } = await holder(w, 'play', 4005, false);
       delete rec.ll; w.store().setPlayer('ann', 'play', rec); w.flush();
       if (o) accept(o);
       const a = await spin(w, s, 'play', 1); assert.strictEqual(a.listNow, list);
-      near(a.share, 4005 / 4500, 'old record under list ' + list);
+      near(a.share, want, 'old record under list ' + list); assert.strictEqual(a.r.pull.armed, false, 'no Callback armed by the deploy under list ' + list); assert.ok(!a.callback); assert.strictEqual(a.r.pull.leaked, 0, 'nothing reported as leaked under list ' + list);
+      assert.strictEqual(w.store().player('ann', 'play').cb, null);
     }
     // and through a restart (the record comes back from disk with no stamp)
     const w = world(), { rec } = await holder(w, 'chips', 4005, false); delete rec.ll; w.store().setPlayer('ann', 'chips', rec); w.flush();
     accept(SHORT); w.reboot(); const s2 = w.sock('ann'); const a = await spin(w, s2, 'chips', 1); near(a.share, 4005 / 4500, 'old record, boot, list 45');
   });
+  await test('an OLD record with no stamp under a SHORTER live list (45): scaled down to the exact value, no Callback', async () => {
+    const w = world(), { s, rec } = await holder(w, 'play', 4005, false); delete rec.ll; w.store().setPlayer('ann', 'play', rec); w.flush();
+    accept(SHORT);
+    const a = await spin(w, s, 'play', 1); const st = w.store().player('ann', 'play');
+    assert.ok(Math.abs(st.lt - (4005 * 450 / 4500 + a.r.pull.filled)) < 1e-6, 'stored ' + st.lt + ': 400.5 tenths of the list of 450 plus the fill ' + a.r.pull.filled);
+    assert.strictEqual(a.r.pull.armed, false); assert.strictEqual(st.cb, null); assert.strictEqual(a.r.pull.leaked, 0);
+  });
+  // the repo's own presets are LONGER lists than the shipped one (rtp94 = 550, rtp96 = 495): saved as an accepted config, an unstamped record at 0.89 of that list, a boot (the deploy), one spin
+  for (const name of ['rtp94', 'rtp96']) {
+    await test('PRESET ' + name + ': an unstamped record at 0.89 of the preset list keeps its share at the deploy (no leads handed out, no Callback armed)', async () => {
+      const preset = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'cold-call', 'presets', name + '.json'), 'utf8')), ov = preset.overrides || preset.config || preset;
+      const w = world(); accept(ov); const s0 = w.sock('ann'); w.fund('ann', 'play', 1e8);
+      const full = Math.round(E.CFG.pull.list * 10); assert.ok(full > 4500, name + ' is a list longer than 450: ' + full);
+      await spin(w, s0, 'play');
+      const rec = clone(w.store().player('ann', 'play')); delete rec.ll; rec.lt = Math.round(0.89 * full); rec.avg = BET; rec.cb = null; rec.warm = []; rec.warmBet = 0; rec.coldAt = null; rec.carry = 0;
+      w.store().setPlayer('ann', 'play', rec); w.flush();
+      w.reboot(); const s = w.sock('ann'); assert.strictEqual(Math.round(E.CFG.pull.list * 10), full, 'the preset is loaded at boot');
+      const a = await spin(w, s, 'play', 1);
+      assert.ok(Math.abs(a.share - rec.lt / full) < 1e-9, name + ': share ' + a.share + ', wanted ' + rec.lt / full); assert.strictEqual(a.r.pull.armed, false); assert.ok(!a.callback); assert.strictEqual(w.store().player('ann', 'play').cb, null); assert.strictEqual(a.r.pull.leaked, 0);
+    });
+  }
   console.log('\n' + passed + ' passed' + (process.exitCode ? ', FAILED' : ''));
   process.exit(process.exitCode || 0);
 })();

@@ -117,9 +117,11 @@ function normState(st, who) {
   out.rounds = get('rounds', 0, (x) => isInt(x) && x >= 0);
   out.callbacks = get('callbacks', 0, (x) => isInt(x) && x >= 0);
   // MONEY 1008 R3C-1: `ll` = the list size (tenths) the stored leads are counted against (the engine rescales `lt` when the live list differs). A record with leads and no valid stamp (an old record, a damaged
-  // stamp) is counted against the SHIPPED list size, which is what every record was before the stamp existed; a record with no leads takes the live one.
+  // stamp) was written before the stamp existed, under a list this code cannot know. RL-2: it is counted against Math.max(SHIPPED_FULL, the live list): never scaled UP. Under a longer live list (a preset
+  // such as rtp94 = 550 or rtp96 = 495, or any accepted config) it keeps the count it has today, so a deploy hands out no leads (a player at 0.89 of a list stays at 0.89, no Callback arms because of it);
+  // under a shorter live list it is scaled down as the share rule says. A record with no leads takes the live list.
   out.ll = get('ll', 0, (x) => isInt(x) && x >= 1);
-  if (!out.ll) { const lp = L.snapshot().cfg.pull, live = lp && Math.round(lp.list * 10); out.ll = (isFiniteNum(out.lt) && out.lt > 0) ? Eng.SHIPPED_FULL : (live > 0 ? live : 0); }
+  if (!out.ll) { const lp = L.snapshot().cfg.pull, live = lp && Math.round(lp.list * 10); out.ll = (isFiniteNum(out.lt) && out.lt > 0) ? Math.max(Eng.SHIPPED_FULL, live > 0 ? live : 0) : (live > 0 ? live : 0); }
   out.carry = typeof st.carry === 'number' && st.carry > 0 && st.carry < 10 ? st.carry : 0;   // N1-CARRY: cents left over by the last Callback; missing or damaged reads as 0 and never resets the rest of the state
   return Object.assign(clone(st), out, { v: 1 });
 }
