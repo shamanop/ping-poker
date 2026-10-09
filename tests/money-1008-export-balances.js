@@ -168,6 +168,14 @@ t('an EMPTY ledger (the zero start) exports every account at 0 and exits 0', () 
   eq([j.totals.cash.total, j.totals.chips.total, j.accounts.length], [0, 0, 5]); eq(snap(root), s, 'nothing written next to it');
 });
 
+t('--expect-zero: exit 4 and names the accounts on a ledger with money; 0 on the empty ledger (cash and all)', () => {
+  const s = snap(data), r = run(['--ledger', moneyFile, '--accounts', accountsFile, '--csv', '-', '--expect-zero', 'cash']);
+  eq(r.status, 4, 'exit'); if (!/NOT ZERO: .*ann cash=250000/.test(r.stderr)) throw new Error(r.stderr.slice(-300)); sameSnap(s, snap(data));
+  const e = path.join(root, 'empty2.jsonl'); fs.writeFileSync(e, '');
+  const z = run(['--ledger', e, '--accounts', accountsFile, '--csv', '-', '--expect-zero']); eq(z.status, 0, 'empty ledger'); if (!/expect-zero \(all\): OK, 5 account row/.test(z.stderr)) throw new Error(z.stderr);
+  const c = run(['--ledger', moneyFile, '--accounts', accountsFile, '--csv', '-', '--expect-zero', 'chips']); eq(c.status, 4, 'chips are not zero either');
+});
+
 console.log(`${pass} passed, ${fail} failed`);
 try { ledger.close(); } catch {}
 process.exit(fail ? 1 : 0);

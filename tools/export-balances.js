@@ -18,7 +18,7 @@ const boot = require('../transport/boot');
 const ROOT = path.join(__dirname, '..');
 const KNOWN_GAMES = ['bender', 'coldcall', 'campaign'];
 
-const HELP = `usage: node tools/export-balances.js [--ledger money.jsonl] [--accounts accounts.json] [--csv out.csv|-] [--json out.json|-] [--tmpdir dir] [--strict]
+const HELP = `usage: node tools/export-balances.js [--ledger money.jsonl] [--accounts accounts.json] [--csv out.csv|-] [--json out.json|-] [--tmpdir dir] [--strict] [--expect-zero [cash|chips|all]]
 
 Read-only: one row per account (name, key, Cash in cents, Chips, open escrow per game, seat stacks), then TOTAL rows. Nothing in the data dir is written.
   --ledger    the money ledger (money.jsonl). Default: the same path the server uses: MONEY_FILE, else money.jsonl next to BANK_FILE, else <DATA_DIR>/money.jsonl
@@ -28,19 +28,21 @@ Read-only: one row per account (name, key, Cash in cents, Chips, open escrow per
               With neither flag the CSV goes to stdout. Both may be given (at most one may be '-'). An output path inside the data dir is refused.
   --tmpdir D  where the private working copy of the journal goes (default: the OS temp dir; removed at the end; never inside the data dir).
   --strict    exit 3 if the ledger quarantined any line (balances may then be short; the default is a loud warning on stderr and "quarantined" in the JSON).
+  --expect-zero [cash|chips|all]  a check, for a fresh start: exit 4 and list every account with a non-zero balance (default all; cash = ledger 'play'). Prints "expect-zero: ... OK" when all are 0.
 Columns: cash_* = ledger currency 'play' (real money, cents); chips_* = free play. wallet = the account's own balance, escrow = open game rounds, seats = poker table stacks,
 other = pots / pools / orphan rows. escrow_<cur>_<game> = open escrow per game; escrow_detail and seats_detail list every round / table.
-Exit: 0 ok, 1 usage, 2 a file is missing or unreadable, 3 quarantined lines under --strict. Every error leaves the data dir untouched.`;
+Exit: 0 ok, 1 usage, 2 a file is missing or unreadable, 3 quarantined lines under --strict, 4 --expect-zero found a balance. Every error leaves the data dir untouched.`;
 
 class Fail extends Error { constructor(code, msg) { super(msg); this.exitCode = code; } }
 
 function parseArgs(argv) {
-  const o = { csv: null, json: null, ledger: null, accounts: null, tmpdir: null, strict: false, help: false };
+  const o = { expectZero: null, csv: null, json: null, ledger: null, accounts: null, tmpdir: null, strict: false, help: false };
   const flags = { '--ledger': 'ledger', '--accounts': 'accounts', '--csv': 'csv', '--json': 'json', '--tmpdir': 'tmpdir' };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--help' || a === '-h') o.help = true;
     else if (a === '--strict') o.strict = true;
+    else if (a === '--expect-zero') { const w = argv[i + 1]; o.expectZero = ['cash', 'chips', 'all'].includes(w) ? (i++, w) : 'all'; }
     else if (flags[a]) { if (i + 1 >= argv.length || argv[i + 1] === undefined) throw new Fail(1, a + ' needs a value'); o[flags[a]] = argv[++i]; }
     else throw new Fail(1, 'unknown argument ' + a);
   }
@@ -204,7 +206,15 @@ function main(argv, io = { out: (s) => process.stdout.write(s), err: (s) => proc
     if (o.json === '-') io.out(json); else if (o.json != null) fs.writeFileSync(o.json, json);
     const T = b.totals;
     io.err(`export: ${b.rows.filter(r => r.kind === 'account').length} accounts, ledger id ${rep.lastId}; Cash total ${T.cash.total} cents (wallets ${T.cash.wallet}, escrow ${T.cash.escrow}, seats ${T.cash.seats}), Chips total ${T.chips.total}`);
-    return o.strict && rep.quarantined.length ? 3 : 0;
+    if (o.strict && rep.quarantined.length) return 3;
+    if (o.expectZero) {
+      const curs = o.expectZero === 'all' ? ['cash', 'chips'] : [o.expectZero];
+      const bad = [];
+      for (const r of b.rows) for (const L of curs) if (r[L].total !== 0) bad.push(`${r.key} ${L}=${r[L].total}`);
+      if (bad.length) { io.err(`expect-zero (${o.expectZero}): NOT ZERO: ${bad.length} balance(s): ${bad.slice(0, 20).join(', ')}${bad.length > 20 ? ', ...' : ''}`); return 4; }
+      io.err(`expect-zero (${o.expectZero}): OK, ${b.rows.length} account row(s), every one is 0`);
+    }
+    return 0;
   } catch (e) {
     if (e instanceof Fail) { io.err('export-balances: ' + e.message); if (e.exitCode === 1) io.err('try --help'); return e.exitCode; }
     io.err('export-balances: ' + (e && e.message ? e.message : e));
