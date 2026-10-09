@@ -42,7 +42,7 @@ async function scenario() {
 
   // 2. server down: one open coldcall escrow in each currency plus a pool balance in each, written the way the service writes them
   const ledger = open(file, { fsync: 'all', log: () => {} });
-  const svc = createService(ledger);
+  const svc = createService(ledger, { signupPlay: 1000000 });
   svc.ensureAccount(key);
   // balances that differ from the signup default, so the mirror and audit checks below cannot pass on a default row
   svc.mint('bonus', key, 777, 'chips', 'seed-bonus-c');

@@ -1,6 +1,7 @@
 'use strict';
 // Accounts: username + PIN (scrypt), sessions, rate limits, legacy migration. Persisted to ACCOUNTS_FILE.
 const fs = require('fs');
+const path = require('path');
 const crypto = require('crypto');
 
 const KDF = { alg: 'scrypt', N: 16384, r: 8, p: 1, len: 32 };
@@ -55,11 +56,62 @@ function createAccounts({ file, roomPassword = 'ping' }) {
   const sameSecret = (a, b) => { const x = sha(a), y = sha(b); return crypto.timingSafeEqual(Buffer.from(x), Buffer.from(y)); };
   const listeners = { auth: [] };
 
+  // R2B-4: the accounts file holds every PIN hash and every claimed flag, and the money ledger holds each key's Cash. A file that exists but does not parse is NEVER read as "no accounts"
+  // (the names would come back unclaimed and the public room word would take their Cash). Rules:
+  //   - a save is temp file + fsync + the previous good file kept as <file>.bak (hard link) + rename + fsync of the directory;
+  //   - main unusable and .bak good: the damaged bytes are kept as <file>.damaged-<UTC stamp>, ONE loud line, the state is restored from .bak;
+  //   - main missing and .bak good: restored, loud; main missing and no .bak: a fresh data dir, quiet;
+  //   - neither usable: the loader THROWS (the server does not start); the damaged bytes are copied (main is left in place, so the next boot fails the same way until a person restores a file).
+  const bakFile = file + '.bak';
+  const stamp = () => new Date().toISOString().replace(/[-:]/g, '').replace('.', '');
+  const fsyncPath = p => { const fd = fs.openSync(p, 'r'); try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); } };
+  const readDb = f => {   // { j } usable, { missing: true }, or { err }
+    let txt;
+    try { txt = fs.readFileSync(f, 'utf8'); } catch (e) { return e && e.code === 'ENOENT' ? { missing: true } : { err: e }; }
+    if (!txt.trim()) return { err: new Error('the file is empty (' + Buffer.byteLength(txt) + ' bytes)') };
+    let j; try { j = JSON.parse(txt); } catch (e) { return { err: new Error('not valid JSON: ' + (e && e.message)) }; }
+    if (!j || typeof j !== 'object' || Array.isArray(j) || !j.accounts || typeof j.accounts !== 'object' || Array.isArray(j.accounts)) return { err: new Error('valid JSON but not an accounts file') };
+    return { j };
+  };
+  // keep the bytes of an unusable file under a dated name; rename = true moves it (main is about to be rewritten), false copies it (main stays). Returns the path or null.
+  const keepBytes = (f, rename) => {
+    let dst;
+    try {
+      const sum = sha(fs.readFileSync(f)).slice(0, 8);
+      const have = fs.readdirSync(path.dirname(f)).find(n => n.startsWith(path.basename(f) + '.damaged-') && n.endsWith('-' + sum));
+      dst = path.join(path.dirname(f), path.basename(f) + '.damaged-' + stamp() + '-' + sum);
+      if (have && !rename) return path.join(path.dirname(f), have);
+    } catch { return null; }
+    try { if (rename) { fs.renameSync(f, dst); try { fsyncPath(path.dirname(f)); } catch {} } else fs.copyFileSync(f, dst, fs.constants.COPYFILE_EXCL); return dst; } catch {}
+    if (rename) { try { fs.copyFileSync(f, dst, fs.constants.COPYFILE_EXCL); return dst; } catch {} }
+    return null;
+  };
   let db = { version: 1, accounts: Object.create(null) };
-  try {
-    const j = JSON.parse(fs.readFileSync(file, 'utf8'));
-    if (j && typeof j === 'object' && j.accounts && typeof j.accounts === 'object') db = j;
-  } catch { /* fresh */ }
+  let mainGood = false, mustRestore = false;
+  {
+    const r = readDb(file);
+    if (r.j) { db = r.j; mainGood = true; }
+    else {
+      const b = readDb(bakFile);
+      if (r.missing && b.missing) { /* a fresh data dir: a normal quiet start */ }
+      else if (b.j) {
+        let kept = null;
+        if (!r.missing) {
+          kept = keepBytes(file, true);
+          if (!kept) throw new Error(`accounts: ${file} cannot be used (${r.err.message}) and its bytes could not be kept under another name; the server does NOT start. Fix the data directory and restart.`);
+        }
+        db = b.j; mustRestore = true;
+        console.error(`[SECURITY] accounts: *** ${r.missing ? file + ' is missing' : file + ' cannot be used (' + r.err.message + '), kept as ' + kept}. Restored the accounts from ${bakFile} (the version before the last save: a PIN set or a signup since then is lost). ***`);
+      } else {
+        const keptMain = r.missing ? null : keepBytes(file, false), keptBak = b.missing ? null : keepBytes(bakFile, false);
+        const why = [r.missing ? `${file} is missing` : `${file} cannot be used (${r.err.message})${keptMain ? ', copied to ' + keptMain : ''}`,
+          b.missing ? `there is no ${bakFile}` : `${bakFile} cannot be used either (${b.err.message})${keptBak ? ', copied to ' + keptBak : ''}`].join('; ');
+        const msg = `accounts: *** ${why}. The server does NOT start (real money: no guessing). Restore a good accounts file (${file}, or ${bakFile} renamed to ${path.basename(file)}) from a backup into ${path.dirname(file)} and start again. ***`;
+        console.error('[SECURITY] ' + msg);
+        throw new Error(msg);
+      }
+    }
+  }
   // The map is rebuilt as a null-prototype map; a stored account under a reserved key is dropped (loud), never served.
   const dropped = Object.keys(db.accounts).filter(isReservedName);
   if (dropped.length) console.error(`[SECURITY] accounts file holds account(s) under reserved key(s) [${dropped.join(', ')}]: not loaded.`);
@@ -68,13 +120,27 @@ function createAccounts({ file, roomPassword = 'ping' }) {
   if (!db.version) db.version = 1;
 
   let timer = null;
+  // temp file + fsync, the previous good file kept as .bak (hard link of the old inode: one write behind, never written again), rename over main, fsync of the directory.
+  // A crash at any point leaves a whole old or a whole new file. A refused write keeps the data dirty (the next save / flush tries again).
   function writeNow() {
+    const tmp = file + '.tmp';
     try {
-      const tmp = file + '.tmp';
-      fs.writeFileSync(tmp, JSON.stringify(db));
+      const fd = fs.openSync(tmp, 'w');
+      try { fs.writeFileSync(fd, JSON.stringify(db)); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+      if (mainGood) {
+        const bt = bakFile + '.tmp';
+        try {
+          try { fs.rmSync(bt, { force: true }); } catch {}
+          try { fs.linkSync(file, bt); } catch { fs.copyFileSync(file, bt); }
+          fs.renameSync(bt, bakFile);
+        } catch (e) { try { fs.rmSync(bt, { force: true }); } catch {} console.error('accounts: could not keep the previous version as ' + bakFile + ':', e && e.message); }
+      }
       fs.renameSync(tmp, file);
-    } catch (e) { console.error('accounts save failed:', e.message); }
+      try { fsyncPath(path.dirname(file)); } catch (e) { console.error('accounts: directory fsync failed:', e && e.message); }
+      mainGood = true;
+    } catch (e) { try { fs.rmSync(tmp, { force: true }); } catch {} console.error('accounts save failed:', e.message); }
   }
+  if (mustRestore) writeNow();
   function save() {
     dispIdx = null;
     if (timer) return;
@@ -129,6 +195,10 @@ function createAccounts({ file, roomPassword = 'ping' }) {
   }
   // Own properties only: an inherited claimed / pinHash / salt never opens an account.
   const ownClaimed = a => hasOwn(a, 'claimed') && a.claimed === true;
+  // R2B-4(d): an account the boot re-made for a key whose ledger Cash is above 0 is LOCKED: the public room word does not claim it, signup is refused, only the admin PIN reset opens it.
+  // Own property only; admin accounts are exempt (their claim never takes the room word, only ADMIN_CLAIM_PASSWORD).
+  const isLocked = a => hasOwn(a, 'locked') && a.locked === true && !(hasOwn(a, 'isAdmin') && a.isAdmin);
+  const lockedErr = () => err('account_locked', 'This account is locked. Ask the admin to reset its PIN.');
   function pinOk(a, pin) {
     if (!ownClaimed(a) || !hasOwn(a, 'pinHash') || typeof a.pinHash !== 'string' || !a.pinHash || !hasOwn(a, 'salt') || typeof a.salt !== 'string' || !PIN_RE.test(String(pin))) { burn(pin); return false; }
     const got = scrypt(pin, a.salt);
@@ -169,7 +239,7 @@ function createAccounts({ file, roomPassword = 'ping' }) {
     const key = n.toLowerCase();
     const ex = get(key);
     if (!ex && keyForName(key) !== key) return err('name_taken', 'That name is taken');
-    if (ex) return ownClaimed(ex) ? err('name_taken', 'That name is taken') : err('claim_required', 'This name belongs to an existing player. Claim it with the table password.');
+    if (ex) return ownClaimed(ex) ? err('name_taken', 'That name is taken') : isLocked(ex) ? lockedErr() : err('claim_required', 'This name belongs to an existing player. Claim it with the table password.');
     recent.push(t); signups.set(ip, recent);
     const a = blank(key, n);
     if (AVATAR_RE.test(String(avatar))) a.avatar = avatar;
@@ -190,6 +260,7 @@ function createAccounts({ file, roomPassword = 'ping' }) {
     const a = get(key);
     if (!a) return err('bad_name', 'No such player to claim');
     if (ownClaimed(a)) return err('name_taken', 'That name is taken');
+    if (isLocked(a)) return lockedErr();
     const given = String(password == null ? '' : password).trim();
     const fail = (code, message) => { recordFail(ids); const m = lockedMs(ids); return m ? limited(m) : err(code, message); };
     if (isAdmin(key)) {
@@ -215,6 +286,7 @@ function createAccounts({ file, roomPassword = 'ping' }) {
     let good = false;
     if (a) good = pinOk(a, pin); else burn(pin);
     if (good) { recordOk(ids); const token = newSession(a, ctx.ua); save(); return { ok: true, account: a, token }; }
+    if (a && !ownClaimed(a) && isLocked(a)) return lockedErr();
     if (a && !ownClaimed(a)) return err('claim_required', 'This name belongs to an existing player. Claim it with the table password.');
     recordFail(ids);
     const m = lockedMs(ids);
@@ -310,6 +382,7 @@ function createAccounts({ file, roomPassword = 'ping' }) {
     if (!a) return err('bad_name', 'No such account');
     if (!PIN_RE.test(String(newPin))) return err('bad_pin', 'PIN is 4-6 digits');
     setPin(a, newPin);
+    delete a.locked;
     a.sessions = [];
     fails.delete(a.key);
     save();
@@ -368,7 +441,7 @@ function createAccounts({ file, roomPassword = 'ping' }) {
   }
 
   // ── legacy migration (idempotent) ─────────────────────────────────────────
-  function migrateLegacy({ bank = {}, ledgerEntries = [] } = {}) {
+  function migrateLegacy({ bank = {}, ledgerEntries = [], cash = {} } = {}) {
     const groups = new Map(); // key -> { display, t, raw[] }
     const seen = (raw) => { const k = raw.trim().toLowerCase(); if (!k || BOT_NAME_RE.test(k) || isReservedName(k)) return null; if (!groups.has(k)) groups.set(k, { display: null, t: Infinity, raw: new Set() }); groups.get(k).raw.add(raw); return groups.get(k); };
     const bankRaw = Object.create(null);
@@ -378,17 +451,23 @@ function createAccounts({ file, roomPassword = 'ping' }) {
       const g = seen(e.name);
       if (g && e.type !== 'bank-start' && (e.t || 0) < g.t) { g.t = e.t || 0; g.display = e.name.trim(); }
     }
-    let created = 0, merged = 0;
+    // R2B-4(d): keys whose ledger wallet (play:<key>) holds Cash are known even when no old store names them
+    const cashKeys = Object.keys(cash || {}).filter(k => Number(cash[k]) > 0);
+    for (const k of cashKeys) seen(String(k));
+    const cashOf = k => (hasOwn(cash, k) ? Number(cash[k]) : 0);
+    let created = 0, merged = 0, locked = 0;
     for (const [k, g] of groups) {
       merged += Math.max(0, (bankRaw[k] || 0) - 1);
       if (get(k)) continue;
       let display = cleanName(g.display || (k.charAt(0).toUpperCase() + k.slice(1))).replace(/[^A-Za-z0-9 _.\-']/g, '').slice(0, 16).trim();
       if (display.length < 2) continue;
       db.accounts[k] = { ...blank(k, display), key: k };
+      if (cashOf(k) > 0 && !db.accounts[k].isAdmin) { db.accounts[k].locked = true; locked++; }
       created++;
     }
     if (!get('chris')) { db.accounts.chris = blank('chris', 'Chris'); created++; }
     if (created) { flush(); console.log(`migrated ${created} accounts, merged ${merged} duplicates`); }
+    if (locked) console.error(`[SECURITY] accounts: ${locked} account(s) were re-made UNCLAIMED for keys that hold Cash and are LOCKED (the room word does not claim them): the admin must reset each PIN (Admin > Players > reset PIN). Was accounts.json lost or damaged?`);
     warnAdminClaim();
     return { created, merged };
   }

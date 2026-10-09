@@ -17,7 +17,7 @@ let n = 0;
 function env() {
   const file = path.join(dir, 'm' + (++n) + '.jsonl');
   const ledger = open(file, { fsync: 'none', log: () => {} });
-  const service = createService(ledger);
+  const service = createService(ledger, { signupPlay: 1000000 });
   service.ensureAccount('ann');
   const pushed = [], q = [];
   const wallet = createWalletAdapter({ service, ledger, onChange: k => pushed.push(k), schedule: fn => q.push(fn), log: () => {} });

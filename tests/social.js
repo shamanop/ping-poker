@@ -19,7 +19,7 @@ const io = { sockets: { sockets: socks }, on(e, f) { handlers.push(f); } };
 const accounts = createAccounts({ file: path.join(dir, 'accounts.json') });
 // Money is the real ledger (ledger + service + ctx.money + the wallet adapter), the way tests/bender.js builds it: Bender plays only through ctx.money.
 const ledger = openLedger(path.join(dir, 'money.jsonl'), { fsync: 'none', log: () => {} });
-const service = createService(ledger);
+const service = createService(ledger, { signupPlay: 1000000 });
 let g = null;
 const onChange = (k) => { if (g) g.pushWallet(k); };
 const money = createGameMoney({ service, ledger, onChange, log: () => {} });

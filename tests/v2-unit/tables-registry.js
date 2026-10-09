@@ -32,7 +32,7 @@ function env(opts) {
   opts = opts || {};
   const mfile = opts.mfile || path.join(dir, 'm' + (++n) + '.jsonl'), tfile = opts.tfile || path.join(dir, 't' + n + '.json');
   const ledger = open(mfile, { fsync: 'none', log: () => {} });
-  const service = createService(ledger);
+  const service = createService(ledger, { signupPlay: 1000000 });
   const port = createMoneyPort({ service, ledger, bootId: 'bt' });
   for (const k of KEYS) service.ensureAccount(k);
   const clock = opts.clock || fakeClock(), events = [], decks = []; let lobby = 0;

@@ -53,7 +53,7 @@ function world(A, opts = {}) {
     w.boots++;
     if (A.prepare) A.prepare(mod, { rng, log: () => {} });
     const ledger = w.ledger = L.open(w.files.money, { fsync: 'none', log: () => {} });
-    const service = w.service = createService(ledger);
+    const service = w.service = createService(ledger, { signupPlay: 1000000 });
     for (const k of w.keys) service.ensureAccount(k);
     let reg = null;
     const onChange = (k) => { if (reg) reg.pushWallet(k); };

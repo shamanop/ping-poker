@@ -11,6 +11,14 @@ const { bestHand, compareHands, evaluate5 } = require('./engine/evaluate');
 
 const ROOM_PASSWORD = 'ping';
 
+// REV-SG-1: ONE answer to "is this a production box", used by every guard below and handed to the handlers through ctx.production. It fails CLOSED: NODE_ENV trimmed and lower-cased
+// is "production", OR any Railway variable is present (a Railway deploy with NODE_ENV missing or misspelled is still production). Test boxes set none of them.
+const RAILWAY_VARS = ['RAILWAY_ENVIRONMENT', 'RAILWAY_ENVIRONMENT_NAME', 'RAILWAY_VOLUME_MOUNT_PATH', 'RAILWAY_SERVICE_ID'];
+function isProduction(env = process.env) {
+  if (String((env && env.NODE_ENV) || '').trim().toLowerCase() === 'production') return true;
+  return RAILWAY_VARS.some(k => env && env[k] !== undefined);
+}
+
 function start(env = process.env) {
   const log = (...a) => console.log(...a);
   const boot = require('./transport/boot');
@@ -22,15 +30,15 @@ function start(env = process.env) {
   const { createAccounts } = require('./accounts'), { createLedger } = require('./ledger');
   const accounts = createAccounts({ file: paths.ACCOUNTS_FILE, roomPassword: ROOM_PASSWORD });
   const presLedger = createLedger({ file: paths.LEDGER_FILE, keyOf: k => accounts.keyForName(k), displayOf: k => (accounts.get(k) ? accounts.get(k).display : null), onWrite: () => { if (ctx.pushBank) ctx.pushBank(); } });
-  accounts.migrateLegacy({ bank: boot.readJson(paths.BANK_FILE, {}), ledgerEntries: presLedger.entries() });
+  accounts.migrateLegacy({ bank: boot.readJson(paths.BANK_FILE, {}), ledgerEntries: presLedger.entries(), cash: Object.fromEntries(ledger.list('play:', 'play').map(x => [x.account.slice(5), x.balance])) });   // R2B-4: a re-made account that holds Cash comes back LOCKED
   boot.migrateIfNeeded({ ledger, paths, migrate, log });
   // Cash is real money: new accounts start at 0 and the admin sets it (Chris 10/7). Test harnesses set SIGNUP_PLAY_CENTS for their old fixtures.
   // Money 1008 SVC-1a: the variable gives every new signup Cash (real money), so it is honoured only outside production and only as a plain count of cents (digits, a safe integer >= 0); anything else is ignored with one loud line.
-  const production = env.NODE_ENV === 'production';
+  const production = isProduction(env);
   let signupPlay = 0;
   if (env.SIGNUP_PLAY_CENTS != null) {
     const raw = String(env.SIGNUP_PLAY_CENTS), n = /^\d+$/.test(raw) ? Number(raw) : NaN;
-    if (production) console.error('[v2] SIGNUP_PLAY_CENTS IGNORED: NODE_ENV is production, new accounts start with 0 Cash (the admin sets Cash)');
+    if (production) console.error('[v2] SIGNUP_PLAY_CENTS IGNORED: production (NODE_ENV or a Railway variable), new accounts start with 0 Cash (the admin sets Cash)');
     else if (!Number.isSafeInteger(n)) console.error(`[v2] SIGNUP_PLAY_CENTS IGNORED: ${JSON.stringify(raw.slice(0, 40))} is not a safe integer >= 0, new accounts start with 0 Cash`);
     else signupPlay = n;
   }
@@ -46,7 +54,7 @@ function start(env = process.env) {
   boot.legacyImport({ presLedger, bank: bankMap, accounts, paths, env, keyOf: k => accounts.keyForName(String(k).toLowerCase().trim()) });
 
   const app = express(), server = http.createServer(app), io = new Server(server, { cors: { origin: '*' } });
-  const ctx = { io, accounts, service, ledger, presLedger, paths, bootId, env, ROOM_PASSWORD };
+  const ctx = { io, accounts, service, ledger, presLedger, paths, bootId, env, ROOM_PASSWORD, production };
 
   const { createSocial } = require('./social');
   ctx.social = createSocial({ io, accounts, now: () => Date.now(), file: paths.BIGWINS_FILE });
@@ -66,7 +74,7 @@ function start(env = process.env) {
   const viewlog = createViewlog({ presLedger, accounts, social: ctx.social, bankOf: k => ledger.balance('bank:' + k, 'chips'), profileOf, nightNets: t => registryRef.current.nightOf(t) });
   ctx.money = createMoneyPort({ service, ledger, bootId, sameFundOnly: true, afterWrite: k => ctx.afterWrite(k), onFence: e => { console.error('[v2] MONEY FENCED', e && e.code); registryRef.current.pauseAll(); }, onWrite: w => viewlog.onWrite(w) });
   // Money 1008 FOUND-1: the rig needs no sign-in (decks of the next hands, every balance and seat): never created in production, like the QA force hooks of Cold Call and Campaign.
-  if (env.RIG === '1' && production) console.error('[v2] RIG IGNORED: NODE_ENV is production, no rig hooks (__rig, __audit) are registered');
+  if (env.RIG === '1' && production) console.error('[v2] RIG IGNORED: production (NODE_ENV or a Railway variable), no rig hooks (__rig, __audit) are registered');
   ctx.rig = env.RIG === '1' && !production ? createRig(ctx) : null;
   const clock = { now: () => Date.now(), setTimeout: (f, ms) => setTimeout(f, ms), clearTimeout: h => clearTimeout(h) };
   const rngSource = () => crypto.randomBytes(6).readUIntBE(0, 6) / 2 ** 48;
