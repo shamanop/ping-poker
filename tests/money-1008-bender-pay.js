@@ -146,15 +146,15 @@ function world(seed) {
   }
 }
 
-// ---------------------------------------------------------------------------------------------------- pay-5 the 10,000 x clamp, on the live path
-// A cap round is a 1-in-millions event on the shipped math, so the live config (the same path an operator tunes) is set to a pay table that
-// reaches the cap on most rounds. The ledger must then show the cap, never more, and a capped round pays exactly cap x bet.
+// ---------------------------------------------------------------------------------------------------- pay-5 the 10,000 x clamp, settled on the live path
+// A cap round is a 1-in-millions event on the shipped math, so the engine config is set to a pay table that
+// reaches the cap on most rounds (E.setConfig, the engine's own door; the game still resolves and settles through the live path). The ledger must then show the cap, never more, and a capped round pays exactly cap x bet.
 {
-  const MAX = E.MAX_WIN_X, bender = require('../games/bender.js');
+  const MAX = E.MAX_WIN_X;
   check('pay-5 the engine cap is 10,000x', MAX === 10000, String(MAX));
   const w = world(11), s = w.sock('ed'); w.fund('ed', 1e12);
   const huge = {}; for (const sym of E.REG) huge[sym] = [1e5, 1e5, 1e5, 1e5, 1e5, 1e5, 1e5, 1e5, 1e5];
-  bender.setLiveConfig({ overrides: { pay: huge }, note: 'money-1008-bender-pay: cap test' });
+  E.setConfig({ pay: huge });                      // at the engine, not through the admin path: that path refuses an unmeasured pay table (the payback ceiling), and must keep doing so
   let rounds = 0, capped = 0, over = 0, notExact = 0, worst = 0, errs = [];
   try {
     for (const [mode, buy] of [['chips', null], ['play', null], ['chips', 'election'], ['play', 'landslide']]) for (const bet of [1, 100, 2500]) for (let i = 0; i < 40; i++) {
@@ -166,7 +166,7 @@ function world(seed) {
       if (win > MAX * bet) over++;
       if (r.res.maxed) { capped++; if (win !== MAX * bet) notExact++; }
     }
-  } finally { bender.setLiveConfig({ overrides: {} }); }
+  } finally { E.resetConfig(); }
   check('pay-5 every cap-test spin answered', errs.length === 0, errs.slice(0, 2).join(' | '));
   check('pay-5 no round ever pays more than 10,000 x the bet on the ledger', rounds === 480 && over === 0, `rounds ${rounds}, over ${over}, worst ${worst}x`);
   check('pay-5 the test reaches the cap (the pin is sensitive)', capped >= 100, `capped ${capped} of ${rounds}`);
