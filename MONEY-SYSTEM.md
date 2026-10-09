@@ -230,7 +230,7 @@ Each has the check that enforces it. "Soak" ids are in `tests/soak/README.md` (I
 | 19 | An unclaimed admin account cannot be claimed without `ADMIN_CLAIM_PASSWORD` | `tests/money-1008-adminclaim.js` |
 | 20 | The QA force hooks never touch a Cash round | `tests/money-1008-cc-hook.js`; Campaign: `tests/money-1008-campaign.js` |
 | 21 | A live slot config is accepted only when every way to play is measured at or under 100.0% payback with 3 standard errors of margin (section 5.12); Ballot Bender buys are measured at the lowest price any bet is charged | `tests/money-1008-cfg-coldcall.js`, `money-1008-cfg-bender.js`, `money-1008-r2c-bound.js`, `money-1008-r2c-buy.js`, `money-1008-r2c-reset.js` |
-| 22 | A game module reaches money only through `ctx.money`, and passes the kit | `node tests/game-kit.js <gameId>`: pending the kit merge, see `ADD-A-GAME.md` |
+| 22 | A game module reaches money only through `ctx.money`, and passes the kit | `node tests/game-kit.js <gameId>`; `npm test` runs the kit on every game (`npm run test:kit`); see `ADD-A-GAME.md` section 9 |
 | 23 | A re-made account that holds any Cash is locked | `tests/money-1008-r2b-boot.js` |
 | 24 | No amount above 1e12 cents, no balance past the safe-integer range; a paid round id is closed to every write path; an unlisted house replays as written | `tests/money-1008-r2e-contract.js` |
 | 25 | A Cold Call spin killed at any point keeps stake and leads, or neither; a store that cannot be written refuses every draw with no stake taken | `tests/money-1008-r2c-flush-kill.js`, `money-1008-r2c-flush-rw.js` |
