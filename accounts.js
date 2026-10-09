@@ -457,10 +457,12 @@ function createAccounts({ file, roomPassword = 'ping' }) {
     const cashKeys = Object.keys(cash || {}).filter(k => Number(cash[k]) > 0);
     for (const k of cashKeys) { if (!seen(String(k), true)) console.error(`[SECURITY] accounts: the ledger holds Cash under ${JSON.stringify(String(k).slice(0, 40))}, a name no account can have (reserved or empty): no account is made for it; the Cash stays in the ledger for the admin.`); }
     const cashOf = k => (hasOwn(cash, k) ? Number(cash[k]) : 0);
-    let created = 0, merged = 0, locked = 0;
+    let created = 0, merged = 0, locked = 0, relocked = 0;
     for (const [k, g] of groups) {
       merged += Math.max(0, (bankRaw[k] || 0) - 1);
-      if (get(k)) continue;
+      const ex = get(k);
+      // R3AB-2: an account that already exists but was never claimed with a PIN (an old-bank name, or one re-made at an earlier boot while it held no Cash) and holds Cash is locked too, so the room word cannot claim it.
+      if (ex) { if (cashOf(k) > 0 && !ownClaimed(ex) && !ex.isAdmin && !isLocked(ex)) { ex.locked = true; relocked++; } continue; }
       let display = cleanName(g.display || (k.charAt(0).toUpperCase() + k.slice(1))).replace(/[^A-Za-z0-9 _.\-']/g, '').slice(0, 16).trim();
       if (display.length < 2) continue;
       db.accounts[k] = { ...blank(k, display), key: k };
@@ -468,7 +470,8 @@ function createAccounts({ file, roomPassword = 'ping' }) {
       created++;
     }
     if (!get('chris')) { db.accounts.chris = blank('chris', 'Chris'); created++; }
-    if (created) { flush(); console.log(`migrated ${created} accounts, merged ${merged} duplicates`); }
+    if (created || relocked) { flush(); if (created) console.log(`migrated ${created} accounts, merged ${merged} duplicates`); }
+    if (relocked) console.error(`[SECURITY] accounts: ${relocked} existing UNCLAIMED account(s) hold Cash and are now LOCKED (the room word does not claim them): the admin must reset each PIN (Admin > Players > reset PIN).`);
     if (locked) console.error(`[SECURITY] accounts: ${locked} account(s) were re-made UNCLAIMED for keys that hold Cash and are LOCKED (the room word does not claim them): the admin must reset each PIN (Admin > Players > reset PIN). Was accounts.json lost or damaged?`);
     warnAdminClaim();
     return { created, merged };

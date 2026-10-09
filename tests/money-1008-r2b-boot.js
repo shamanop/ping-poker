@@ -103,6 +103,36 @@ async function unreadable(off) {
   ok(fs.readFileSync(f, 'utf8') === '{"accounts":{"chris":{', 'the damaged bytes are left where they were');
 }
 
+// R3AB-2: a healthy accounts file with an account that EXISTS but was never claimed with a PIN (a legacy name) and holds Cash: the boot locks it too, not only the accounts it re-makes.
+// Dave = unclaimed with 500.00 Cash (locked), Eve = claimed with 500.00 Cash (untouched, signs in with her PIN), Fay = unclaimed with no Cash (control: the room word still claims her).
+async function unclaimedCash(off) {
+  const tag = 'unclaimed/valid file';
+  const srv = await L.startServer(off, { env: { SIGNUP_PLAY_CENTS: '0' } });
+  const adm = new L.Bot(srv, 'chris'); await adm.connect(); await adm.claimAdmin();
+  for (const [n, pin] of [['Dave', '1111'], ['Eve', '2222'], ['Fay', '3333']]) { const b = new L.Bot(srv, n); await b.connect(); await b.signup(pin); }
+  for (const k of ['dave', 'eve']) { const r = await adm.req('admin_set_play', { key: k, cents: 50000, opId: 'r3ab2.' + k }, 'admin_result', 3000); ok(r.ok, tag + ': admin gave ' + k + ' 500.00 Cash'); }
+  await L.sleep(400);
+  const f = path.join(srv.dir, 'a.json');
+  await srv.stop();
+  const j = JSON.parse(fs.readFileSync(f, 'utf8'));
+  for (const k of ['dave', 'fay']) Object.assign(j.accounts[k], { kdf: null, salt: null, pinHash: null, claimed: false, sessions: [] });   // what blank() writes for a legacy name
+  delete j.accounts.dave.locked; fs.writeFileSync(f, JSON.stringify(j)); fs.rmSync(f + '.bak', { force: true });
+  const srv2 = await srv.restart();
+  const st = new L.Bot(srv2, 'Dave'); await st.connect(); const pe = st.wait('auth_error', 3000).catch(() => null);
+  let c = await st.req('auth_claim', { name: 'Dave', pin: '9999', avatar: 'a02', roomPassword: 'ping' }, 'auth_ok', 3000); const ce = c.account ? null : await pe;
+  ok(!c.account && ce && ce.code === 'account_locked', tag + ': the room word does not claim Dave, who holds Cash (got ' + JSON.stringify(ce && ce.code) + ')');
+  const st2 = new L.Bot(srv2, 'Dave'); await st2.connect(); const pe2 = st2.wait('auth_error', 3000).catch(() => null);
+  const s = await st2.req('auth_signup', { name: 'Dave', pin: '9999', avatar: 'a02' }, 'auth_ok', 3000); const se = s.account ? null : await pe2;
+  ok(!s.account && se && se.code === 'account_locked', tag + ': signup as Dave is refused account_locked (got ' + JSON.stringify(se && se.code) + ')');
+  const ev = new L.Bot(srv2, 'Eve'); await ev.connect(); const pe3 = ev.wait('auth_error', 3000).catch(() => null);
+  const l = await ev.req('auth_login', { name: 'Eve', pin: '2222' }, 'auth_ok', 3000); ok(!!l.account, tag + ': Eve (claimed, 500.00 Cash) signs in with her PIN (' + JSON.stringify(l.account ? 'ok' : (await pe3))  + ')');
+  const fy = new L.Bot(srv2, 'Fay'); await fy.connect(); const pe4 = fy.wait('auth_error', 3000).catch(() => null);
+  const fc = await fy.req('auth_claim', { name: 'Fay', pin: '4444', avatar: 'a02', roomPassword: 'ping' }, 'auth_ok', 3000); ok(!!fc.account, tag + ': Fay (unclaimed, no Cash) is still claimed by the room word (control) (' + (fc.account ? 'ok' : JSON.stringify(await pe4)) + ')');
+  await srv2.stop();
+  const j2 = JSON.parse(fs.readFileSync(f, 'utf8')).accounts;
+  ok(j2.dave.locked === true && !j2.eve.locked && !j2.fay.locked, tag + ': a.json: dave locked, eve and fay not');
+}
+
 (async () => {
   await cashed(0, 'empty');
   await cashed(1, 'half');
@@ -116,6 +146,7 @@ async function unreadable(off) {
   await heldCash(2, 'seat', 'gone', 'Bottle');
   await heldCash(3, 'escrow', 'gone', 'Botha');
   await heldCash(4, 'chips', 'gone', 'Demi');
+  await unclaimedCash(5);
   console.log(fails ? fails + ' FAILED' : 'all passed');
   process.exit(fails ? 1 : 0);
 })().catch(e => { console.error('SCRIPT ERROR', e); process.exit(2); });
