@@ -443,7 +443,9 @@ function createAccounts({ file, roomPassword = 'ping' }) {
   // ── legacy migration (idempotent) ─────────────────────────────────────────
   function migrateLegacy({ bank = {}, ledgerEntries = [], cash = {} } = {}) {
     const groups = new Map(); // key -> { display, t, raw[] }
-    const seen = (raw) => { const k = raw.trim().toLowerCase(); if (!k || BOT_NAME_RE.test(k) || isReservedName(k)) return null; if (!groups.has(k)) groups.set(k, { display: null, t: Infinity, raw: new Set() }); groups.get(k).raw.add(raw); return groups.get(k); };
+    // R3AB-1: the bot / demo / test filter is for the old bank / ledger NAMES only. A key that holds Cash (the `cash` map) is never filtered by its look: signup allows Tester / Demon / Bottle, and such a player's account must be re-made and locked like any other.
+    // A reserved name (an Object.prototype member, R2B-1) is refused by signup, claim, login and the admin (validName, get()) and is not loaded from the file, so it cannot hold Cash and nobody can take it; if the ledger shows Cash under one anyway, it is said loudly, not served.
+    const seen = (raw, holdsCash) => { const k = raw.trim().toLowerCase(); if (!k || (!holdsCash && BOT_NAME_RE.test(k)) || isReservedName(k)) return null; if (!groups.has(k)) groups.set(k, { display: null, t: Infinity, raw: new Set() }); groups.get(k).raw.add(raw); return groups.get(k); };
     const bankRaw = Object.create(null);
     for (const raw of Object.keys(bank)) { const g = seen(String(raw)); if (g) bankRaw[raw.trim().toLowerCase()] = (bankRaw[raw.trim().toLowerCase()] || 0) + 1; }
     for (const e of ledgerEntries) {
@@ -453,7 +455,7 @@ function createAccounts({ file, roomPassword = 'ping' }) {
     }
     // R2B-4(d): keys whose ledger wallet (play:<key>) holds Cash are known even when no old store names them
     const cashKeys = Object.keys(cash || {}).filter(k => Number(cash[k]) > 0);
-    for (const k of cashKeys) seen(String(k));
+    for (const k of cashKeys) { if (!seen(String(k), true)) console.error(`[SECURITY] accounts: the ledger holds Cash under ${JSON.stringify(String(k).slice(0, 40))}, a name no account can have (reserved or empty): no account is made for it; the Cash stays in the ledger for the admin.`); }
     const cashOf = k => (hasOwn(cash, k) ? Number(cash[k]) : 0);
     let created = 0, merged = 0, locked = 0;
     for (const [k, g] of groups) {
