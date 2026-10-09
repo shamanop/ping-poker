@@ -13,12 +13,14 @@ const DATA_DIR = process.env.DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH |
 const CFG_FILE = process.env.BENDER_CFG_FILE || path.join(DATA_DIR, 'bender-config.json');
 const RTP_LABEL = '98% (long-run, 56M spin stratified sim, +-0.11; bonus about 1 in 100)';
 let live = { overrides: {}, rtpLabel: null, note: '', updatedAt: null, measured: null };
+// R2C-2: the payback check that is running (null when none). Any accepted swap (a reset included) cancels it, so a check that finishes later cannot land on top of a later admin action.
+let checking = null;
 const clone = (o) => JSON.parse(JSON.stringify(o));
 const deepEq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const hashOf = (cfg) => crypto.createHash('sha256').update(JSON.stringify(cfg)).digest('hex');
 // the full merged config for some overrides (validated by the engine first; same merge rule as the engine's own)
 function mergeOver(over) {
-  Eng.validateConfig(over || {});
+  Eng.validateConfig(over || {}, { skipSmoke: true });          // R2C-4: ranges and shape only; the 300-round smoke test runs in the checking worker (or inside Eng.setConfig for a config nobody measured)
   const next = clone(Eng.DEFAULT_CFG);
   (function m(b, o) { for (const k of Object.keys(o)) { if (b[k] && typeof b[k] === 'object' && !Array.isArray(b[k])) m(b[k], o[k]); else b[k] = o[k]; } })(next, over || {});
   return next;
@@ -39,7 +41,8 @@ function loadLiveConfig() {
 function setLiveConfig({ overrides, rtpLabel, note, measured } = {}) {
   const over = overrides || {}, next = mergeOver(over), reset = isDefaultCfg(next), proven = !!(measured && measured.ok === true && measured.hash === hashOf(next));
   if (!reset && !proven) throw new Error('cfg: refused, no passing payback measurement for these numbers (use setLiveConfigChecked)');
-  Eng.setConfig(over);                             // throws on a bad config; nothing changes in that case
+  Eng.setConfig(over, { skipSmoke: reset || proven });   // throws on a bad config; nothing changes in that case. A measured or shipped config was smoke-tested in the worker / is the shipped one
+  if (checking) { checking.cancelled = true; checking = null; }   // R2C-2: an accepted change supersedes the check in flight
   const rec = { overrides: over, rtpLabel: null, note: String(note || '').slice(0, 300), updatedAt: new Date().toISOString(), measured: !reset && proven ? measured : null };
   const tmp = CFG_FILE + '.tmp';
   fs.writeFileSync(tmp, JSON.stringify({ overrides: rec.overrides, note: rec.note, updatedAt: rec.updatedAt, ...(rec.measured ? { measured: rec.measured } : {}) }, null, 2)); fs.renameSync(tmp, CFG_FILE);
@@ -52,9 +55,9 @@ function audit(rec) {                              // one line per accepted or r
   console.log('[cfg-audit] ' + line);
   try { fs.appendFileSync(auditFile(), line + '\n'); } catch {}
 }
+const SUPERSEDED = 'another admin change (a reset or a new config) was accepted while this check ran; nothing was changed by this one';
 const round2 = (x) => Math.round(x * 100) / 100;
 const summaryOf = (r) => Object.fromEntries(Object.entries(r.ways).map(([w, x]) => [w, { pct: round2(x.pct), se: round2(x.se) }]));
-let checking = false;
 // The admin path: validate, measure (async, in slices), refuse above the ceiling, then write + swap. `who` names the caller (token fingerprint + address). Every outcome is one audit line.
 async function setLiveConfigChecked({ overrides, rtpLabel, note, who, scale, seed } = {}) {
   const over = overrides || {}, old = live.measured ? { pct: live.measured.summary.spin.pct, worst: live.measured.worst, source: 'measured when set' } : { pct: 98.0, source: isDefaultCfg(Eng.CFG) ? 'shipped label (56M-spin sim)' : 'unmeasured custom (pre-check file)' };
@@ -63,13 +66,14 @@ async function setLiveConfigChecked({ overrides, rtpLabel, note, who, scale, see
   try { next = mergeOver(over); } catch (e) { log({ outcome: 'refused', why: String(e.message).slice(0, 200), new: null }); throw e; }
   if (isDefaultCfg(next)) { try { const info = setLiveConfig({ overrides: over, note }); log({ outcome: 'accepted', new: { pct: 98.0, source: 'shipped' } }); return info; } catch (e) { log({ outcome: 'refused', why: String(e.message).slice(0, 200), new: null }); throw e; } }
   if (checking) { const e = new Error('cfg: another payback check is running, try again when it has finished'); log({ outcome: 'refused', why: e.message, new: null }); throw e; }
-  checking = true;
+  const token = checking = { cancelled: false };
   let m;
-  try { m = await rtpTool.measure(next, { scale, seed }); } catch (e) { checking = false; log({ outcome: 'refused', why: 'check failed: ' + String(e.message).slice(0, 200), new: null }); throw e; }
-  checking = false;
-  const summary = summaryOf(m), nw = { worst: { way: m.worst.way, pct: round2(m.worst.pct), se: round2(m.worst.se) }, spin: summary.spin, ways: summary, ms: m.ms, maxStretchMs: round2(m.maxStretchMs), seed: m.seed };
+  try { m = await rtpTool.measureInWorker(next, { scale, seed, cancelled: () => token.cancelled }); } catch (e) { if (checking === token) checking = null; const why = token.cancelled ? SUPERSEDED : 'check failed: ' + String(e.message).slice(0, 200); log({ outcome: 'refused', why, new: null }); throw token.cancelled ? new Error('cfg: refused, ' + why) : e; }
+  if (checking === token) checking = null;
+  if (token.cancelled) { log({ outcome: 'refused', why: SUPERSEDED, new: null }); throw new Error('cfg: refused, ' + SUPERSEDED); }
+  const summary = summaryOf(m), nw = { worst: { way: m.worst.way, pct: round2(m.worst.pct), se: round2(m.worst.se) }, spin: summary.spin, ways: summary, ms: m.ms, maxStretchMs: round2(m.maxStretchMs), extraRounds: m.extraRounds, seed: m.seed };
   if (!m.ok) {
-    const why = !m.finite ? 'the payback could not be measured (not a finite number: the symbol weights or pay table are degenerate)' : 'the ' + m.worst.way + ' way pays back ' + round2(m.worst.pct) + '% (+-' + round2(1.96 * m.worst.se) + '), above the ' + rtpTool.CEILING_PCT + '% ceiling';
+    const b = m.bound, why = !m.finite ? 'the payback could not be measured (not a finite number: the symbol weights or pay table are degenerate)' : 'the ' + b.way + ' way is not shown to be at or under the ' + rtpTool.CEILING_PCT + '% ceiling: measured ' + round2(b.pct) + '% with a standard error of ' + round2(b.se) + ' points, so its upper bound (measured + ' + rtpTool.BOUND_SE + ' standard errors) is ' + round2(b.upper) + '%, above the ' + rtpTool.CEILING_PCT + '% ceiling' + (m.extraRounds ? ' (after ' + m.extraRounds + ' extra rounds on the undecided ways' + (m.extended.capped ? ', the limit for extra rounds was reached' : '') + ')' : '');
     log({ outcome: 'refused', why, new: nw }); throw new Error('cfg: refused, ' + why + (m.early ? ' (stopped early)' : ''));
   }
   const measured = { hash: hashOf(next), ok: true, ceilingPct: rtpTool.CEILING_PCT, label: round2(m.ways.spin.pct).toFixed(1) + '% (measured by the server when this was set: base game, +-' + round2(1.96 * m.ways.spin.se).toFixed(1) + '; highest way ' + m.worst.way + ' ' + round2(m.worst.pct).toFixed(1) + '%)', summary, worst: nw.worst, seed: m.seed, at: new Date().toISOString() };

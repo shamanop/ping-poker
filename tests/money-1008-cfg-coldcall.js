@@ -56,7 +56,8 @@ const unchanged = () => { assert.strictEqual(JSON.stringify(E.CFG), SHIPPED, 'En
   await test('K4-1: an accepted config shows the MEASURED value as its label, writes one audit line (who, when, old, new), never blocks the loop for 250 ms, and a second POST meanwhile is refused', async () => {
     let maxGap = 0, last = Date.now(); const probe = setInterval(() => { const t = Date.now(); maxGap = Math.max(maxGap, t - last); last = t; }, 5);
     try {
-      const first = quiet(() => L.setLiveConfigChecked({ overrides: { buyCost: { bonus1: 1000 } }, rtpLabel: '98% (long-run, typed by an admin)', note: 'dearer bonus1 buy', who: 'test-admin#5678' }));
+      const p94 = preset('rtp94').overrides;   /* R2C-3: a config needs margin on every way to pass the upper bound; the rtp94 numbers have it */
+      const first = quiet(() => L.setLiveConfigChecked({ overrides: { ...p94, buyCost: { ...(p94.buyCost || {}), bonus1: 1000 } }, rtpLabel: '98% (long-run, typed by an admin)', note: 'dearer bonus1 buy', who: 'test-admin#5678' }));
       await new Promise((r) => setTimeout(r, 50));
       await assert.rejects(quiet(() => L.setLiveConfigChecked({ overrides: { buyCost: { bonus1: 1100 } }, who: 'second' })), /another payback check is running/);
       const info = await first;
@@ -82,7 +83,7 @@ const unchanged = () => { assert.strictEqual(JSON.stringify(E.CFG), SHIPPED, 'En
   await test('the shipped numbers measure under the ceiling on every way (prove-it, full budget), and the daily gift is under its limit', async () => {
     const r = await L.measurePayback(L.merge({})); const s = L.pbSummary(r);
     console.log('     shipped: ' + JSON.stringify(s) + ' in ' + Math.round(r.ms / 1000) + ' s, longest stretch ' + Math.round(r.maxStretchMs) + ' ms');
-    assert.strictEqual(r.ok, true, JSON.stringify(s)); for (const w of ['plain', 'call', 'hunt', 'bonus1', 'bonus2']) assert.ok(s[w].pct <= 100, w + ' ' + s[w].pct);
+    assert.strictEqual(r.ok, true, JSON.stringify(s)); /* R2C-3b: the shipped numbers are UNDECIDED at the base budget (hunt 98.7 +-0.7) and the extra rounds decide them (r.extraRounds) */ for (const w of ['plain', 'call', 'hunt', 'bonus1', 'bonus2']) assert.ok(s[w].pct <= 100, w + ' ' + s[w].pct);
     assert.ok(s.daily.giftCents <= L.DAILY_GIFT_MAX_CENTS, 'the daily gift is ' + s.daily.giftCents + ' cents a day'); assert.ok(r.maxStretchMs < 250);
     assert.ok(Math.abs(s.plain.pct - 98.0) < 4 * s.plain.se + 0.5, 'plain agrees with the documented 98.0 (LEVERS.md 8.12): ' + s.plain.pct);
   });
