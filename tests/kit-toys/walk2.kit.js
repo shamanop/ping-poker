@@ -2,7 +2,7 @@
 // Kit adapter for the example game (ADD-A-GAME.md "the kit"): tells tests/game-kit.js how to play it with its own socket messages. Never touches money.
 module.exports = {
   id: 'walk2',
-  module: 'walk2.js',          // path under games/
+  module: 'walk2.js', maxReturn: 1.0, paybackRounds: 2000,          // path under games/
   example: true,                           // not in MODULES: the kit registers its house account for the run
   bets: { good: [100, 500, 1000, 5000], min: 100, max: 5000 },
   open: (cur, bet) => ({ ev: 'flip', payload: { mode: cur, bet, call: 'heads' } }),

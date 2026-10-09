@@ -8,7 +8,7 @@
 // registry (games/index.js, recover() at boot as server.js does) and the game module. The kit knows nothing of any game's rules: the game ships
 // games/<id>.kit.js (the adapter, see ADD-A-GAME.md "the kit"), which plays it with the game's OWN socket messages and never touches money.
 //
-// checks: registration, escrow, restart, replay (double submit), sockets, mix, errors, input, identity, quarantine, disconnect, carry (Chips never feed Cash), refuse (a currency the adapter leaves out), ledger (replay == balances)
+// checks: registration, escrow, restart, replay (double submit), sockets, mix, errors, input, identity, quarantine, disconnect, carry (Chips never feed Cash), refuse (a currency the adapter leaves out), payback (a ceiling on what is paid back), ledger (replay == balances)
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -265,6 +265,7 @@ function checkRegistration(A) {
       t.ok(L.SOURCE_ACCOUNTS.has('house:' + A.id), `house:${A.id} is not in SOURCE_ACCOUNTS (money/ledger.js)`);
       t.ok(GAMES.includes(A.id), `"${A.id}" is not in GAMES (money/service.js)`);
     }
+    t.ok(typeof A.maxReturn === 'number' && A.maxReturn > 0 && A.maxReturn <= 1.5, `adapter.maxReturn must be a number in (0, 1.5]: the most the game may pay back per unit staked (got ${A.maxReturn})`);
     t.ok(A.bets && Array.isArray(A.bets.good) && A.bets.good.length > 0, 'adapter has no bets.good');
     t.ok(Array.isArray(A.heldPoints), 'adapter.heldPoints must be an array (empty for an instant game)');
   });
@@ -755,6 +756,35 @@ function checkRefuses(A, cur) {
   });
 }
 
+// 14. what a round pays against its stake (R2E-6): a coarse ceiling. Over a seeded run of PAYBACK_ROUNDS rounds at the smallest bet and at a large one, in each currency, what the
+// LEDGER paid back to the player divided by what it took from the player is at most the adapter's `maxReturn`. Catches a rounding that always rounds up at a small bet, a price
+// that is not charged, a pay table that pays more than it says. It is a ceiling, not an exact RTP: the seed is fixed, so the measured value is the same on every run.
+const PAYBACK_ROUNDS = Number(process.env.KIT_PAYBACK_ROUNDS) || 20000;     // an adapter whose rounds are slow (a store write per decision) may declare fewer: paybackRounds
+function checkPayback(A, cur) {
+  runCheck(A, 'payback', cur, (t) => {
+    const N = process.env.KIT_PAYBACK_ROUNDS ? PAYBACK_ROUNDS : (A.paybackRounds || PAYBACK_ROUNDS);
+    if (!(typeof A.maxReturn === 'number' && A.maxReturn > 0)) { t.fail('the adapter has no maxReturn (a number: the most the game may pay back per unit staked, e.g. 0.98 for a 96% table plus the noise of the seeded run)'); return; }
+    const good = [...A.bets.good].sort((x, y) => x - y), bets = [...new Set([good[0], good[good.length - 1]])];
+    for (const [bi, bet] of bets.entries()) {
+      const w = world(A, { seed: 16 + bi }), s = w.sock('ann'); w.rich('ann');
+      w.addKey('ann'); const acct = pacct('ann', cur), id0 = w.lastId();
+      let n = 0, played = 0;
+      for (; n < N; n++) {
+        try { A.play(w.g, s, { cur, bet, i: n }); played++; } catch (e) { if (!(e instanceof Refused)) throw e; break; }
+        s.out.length = 0; w.log.length = 0; w.hooks.calls.length = 0;          // 20,000 rounds of grids would be gigabytes
+      }
+      let staked = 0, returned = 0;
+      for (const l of w.since(id0)) { if (isKit(l)) continue; if (l.from === acct && l.cur === cur) staked += l.amount; if (l.to === acct && l.cur === cur) returned += l.amount; }
+      t.ok(played === N, `bet ${bet}: only ${played} of ${N} rounds were accepted`);
+      t.ok(staked > 0, `bet ${bet}: nothing was staked`);
+      const ret = staked > 0 ? returned / staked : 0;
+      t.ok(ret <= A.maxReturn, `bet ${bet}: the ledger paid back ${returned} of ${staked} staked = ${(100 * ret).toFixed(2)}% over ${played} rounds, above the declared maxReturn ${(100 * A.maxReturn).toFixed(2)}%`);
+      t.note(`bet ${bet}: ${(100 * ret).toFixed(2)}% of ${staked} over ${played} rounds`);
+      w.crash(); current = null;
+    }
+  });
+}
+
 // ------------------------------------------------------------------------------------------------------------------------------------ driver
 function loadAdapter(id) {
   const dir = path.join(ROOT, 'games');
@@ -788,7 +818,7 @@ function runAdapter(A, opts) {
   try {
     checkRegistration(A);
     for (const cur of CURS) if (!A.currencies || A.currencies.includes(cur)) {
-      checkEscrow(A, cur); checkRestart(A, cur); checkReplay(A, cur); checkSockets(A, cur); checkMix(A, cur); checkErrors(A, cur); checkInput(A, cur); checkIdentity(A, cur); checkDisconnect(A, cur); checkQuarantine(A, cur);
+      checkEscrow(A, cur); checkRestart(A, cur); checkReplay(A, cur); checkSockets(A, cur); checkMix(A, cur); checkErrors(A, cur); checkInput(A, cur); checkIdentity(A, cur); checkDisconnect(A, cur); checkQuarantine(A, cur); checkPayback(A, cur);
     }
     if (!A.currencies || CURS.every((c) => A.currencies.includes(c))) checkCarry(A);
     for (const cur of CURS) if (A.currencies && !A.currencies.includes(cur)) checkRefuses(A, cur);

@@ -33,6 +33,8 @@ function toPending(g, sock, kind, cur, bet) {
 module.exports = {
   id: 'coldcall',
   module: 'coldcall.js',
+  maxReturn: 1.05,                                   // measured by the kit's seeded 1,500-round run: 94.54% at 10, 100.86% at 500 (both currencies; a high-variance game, so the ceiling is loose)
+  paybackRounds: 1500,                               // a round is several store writes: 20,000 would take minutes
   files: (dir) => ({ coldcallPull: path.join(dir, 'coldcall-pull.json'), coldcallConfig: path.join(dir, 'coldcall-config.json') }),
   prepare(mod) { mod.log = () => {}; mod.potRng = () => 1; mod._history.clear(); },   // the office pot is never won unless a test says so
   crash(mod) {                                       // a kill: no decision timer fires afterwards, the store keeps only what it already wrote

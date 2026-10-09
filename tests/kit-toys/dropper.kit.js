@@ -1,6 +1,6 @@
 'use strict';
 module.exports = {
-  id: 'dropper', module: 'dropper.js', oneOpen: true,
+  id: 'dropper', module: 'dropper.js', maxReturn: 1.0, paybackRounds: 2000, oneOpen: true,
   bets: { good: [100, 500, 1000, 5000], min: 100, max: 5000 },
   open: (cur, bet) => ({ ev: 'deal', payload: { mode: cur, bet } }),
   play(g, sock, { cur, bet }) { const d = g.call(sock, 'deal', { mode: cur, bet }); const r = g.call(sock, 'reveal', { roundId: d.roundId, mode: cur }); return { roundId: d.roundId, cost: bet, win: r.win }; },

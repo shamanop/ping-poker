@@ -1,6 +1,6 @@
 'use strict';
 module.exports = {
-  id: 'freeflip', module: 'freeflip.js',
+  id: 'freeflip', module: 'freeflip.js', maxReturn: 1.0, paybackRounds: 2000,
   bets: { good: [100, 500, 1000, 5000], min: 100, max: 5000 },
   playVariants: 2,                                   // 0: a plain flip, 1: a boosted flip when a token is held (else a plain one)
   open: (cur, bet) => ({ ev: 'flip', payload: { mode: cur, bet } }),

@@ -89,7 +89,7 @@ function makeToy(variant) {
 function adapterFor(variant) {
   const mod = makeToy(variant);
   return {
-    id: 'toy', mod, modPath: 'toy.js', oneOpen: true, playVariants: 1,
+    id: 'toy', mod, modPath: 'toy.js', maxReturn: 1.0, paybackRounds: 1000, oneOpen: true, playVariants: 1,
     files: (dir) => ({ dir }),
     bets: { good: BETS, min: 100, max: 1000 },
     open: (cur, bet) => ({ ev: 'deal', payload: { mode: cur, bet } }),
@@ -128,6 +128,7 @@ const TOYS = [
   ['freeflip', 'carry', 'a boost token earned by losing a Chips flip doubles the pay of a later Cash flip'],
   ['dropper', 'disconnect', 'forgets the open round when the socket drops and does not refund it: the stake sits in an escrow nothing knows'],
   ['cashbug', 'refuse', "the adapter says currencies: ['chips'] and the game takes Cash bets (and pays them double)"],
+  ['ceilwin', 'payback', 'rounds a fractional win UP: a 90% table pays 119% at the 1 unit bet'],
   ['walk2', 'registration', 'a copy of the example: registered nowhere, and its adapter kept `example: true` (the line that switched the registration check off)'],
   ['mempot', 'carry', '10% of every stake feeds a jackpot kept in a module variable, one number for Chips and Cash'],
 ];

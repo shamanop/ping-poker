@@ -1,8 +1,7 @@
 'use strict';
-// Self-test toy adapter (tests/game-kit-selftest.js). Broken on purpose: see proxykey.js.
 module.exports = {
-  id: 'proxykey', module: 'proxykey.js', maxReturn: 1.0, paybackRounds: 2000,
-  bets: { good: [100, 500, 1000, 5000], min: 100, max: 5000 },
+  id: 'ceilwin', module: 'ceilwin.js', maxReturn: 0.95, paybackRounds: 2000,   // the table says 90%
+  bets: { good: [1, 5, 100, 500], min: 1, max: 500 },
   open: (cur, bet) => ({ ev: 'flip', payload: { mode: cur, bet } }),
   play(g, sock, { cur, bet }) { const r = g.call(sock, 'flip', { mode: cur, bet }); return { roundId: r.roundId, cost: bet, win: r.win }; },
   heldPoints: [],

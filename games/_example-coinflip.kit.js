@@ -5,6 +5,7 @@
 module.exports = {
   id: 'coinflip',
   module: '_example-coinflip.js',          // path under games/
+  maxReturn: 1.0,                          // REQUIRED: the most the game may pay back per unit staked, over the kit's seeded run (the table says 96%; the run adds noise)
   bets: { good: [100, 500, 1000, 5000], min: 100, max: 5000 },
   open: (cur, bet) => ({ ev: 'flip', payload: { mode: cur, bet, call: 'heads' } }),
   // one whole round; g.call throws when the game answers an error. Returns what the CLIENT was shown.
