@@ -8,7 +8,7 @@ Companions: `ADD-A-GAME.md` (plug a game in), `RUNBOOK.md` (operate it), `MONEY-
 **Cash is real money. Chips are free play. They never mix.**
 
 - Cash is the ledger currency `play`, counted in cents. The label was renamed "Play $" to "Cash"; the ledger key is still `play`. Chips are the currency `chips`, counted in whole chips.
-- Only an admin puts Cash into a wallet (the one exception is the one-time migration of an OLD `wallet.json`, `tools/migrate-v2.js:105-113`: it copies the old Cash rows once per data dir) (`admin/index.js:43` `setPlay`, `admin/index.js:23` `adjust`). The only other way Cash reaches a player is a win paid by a game house (`house:bender`, `house:coldcall`, `house:campaign`) or by a game pool fed by Cash stakes (Cold Call office pot), against a Cash stake of the same player. A new account has 0 Cash (`server.js:28` passes `signupPlay: 0`; `money/service.js:145`). There is no top up (`money/service.js:437` `topUp` always throws `disabled`; `games/index.js:48` answers `topup_off`).
+- Only an admin puts Cash into a wallet (the one exception is the one-time migration of an OLD `wallet.json`, `tools/migrate-v2.js:105-113`: it copies the old Cash rows once per data dir) (`admin/index.js:43` `setPlay`, `admin/index.js:23` `adjust`). The only other way Cash reaches a player is a win paid by a game house (`house:bender`, `house:coldcall`, `house:campaign`) or by a game pool fed by Cash stakes (Cold Call office pot), against a Cash stake of the same player. A new account has 0 Cash (`server.js:47-56` passes 0 unless `SIGNUP_PLAY_CENTS` is set outside production; `money/service.js:146`). There is no top up (`money/service.js:437` `topUp` always throws `disabled`; `games/index.js:48` answers `topup_off`).
 - Chips come from signup (10,000), the daily bonus and the games. Achievements pay nothing (`social.js:14` `TIER_REWARD` is 0 for every tier; a 0 credit writes no line, `transport/wallet-adapter.js:72`).
 - A table, a seat and a game round use one currency from start to end. A seat is bought in its table's own currency only (`tables/money-port.js:41`, `sameFundOnly: true` at `server.js:58`, answer `wrong_fund`). Nothing converts Cash to Chips or back.
 
@@ -61,7 +61,7 @@ Names are `kind:part:part`. A part has no `:` and is not empty (`money/ledger.js
 | `admin:adjust` | the other side of an admin edit | yes | `adminAdjust` |
 | `fx:chips`, `fx:play` | the middle of a cross-currency buy-in (`ONLY_CUR`: each is one currency) | yes | `moveIn` / `moveOut` with a fund other than the table's currency; unreachable live because of `sameFundOnly` |
 
-`mint:topup` is still in `SOURCE_ACCOUNTS`, and `mint:signup` can still mint Cash in an old test fixture: `createService` defaults `signupPlay` to 10,000.00 (`money/service.js:38`) unless the caller passes 0. `server.js:28` passes 0 unless the env var `SIGNUP_PLAY_CENTS` is set, which is honoured also in production (finding SVC-1, open: see `MONEY-FINDINGS-1008.md`).
+`mint:topup` is still in `SOURCE_ACCOUNTS`, and `mint:signup` mints no Cash on the server: `createService` mints 0 Cash unless its caller passes `signupPlay` (`money/service.js:39`), and `server.js:47-56` passes 0 unless `SIGNUP_PLAY_CENTS` is set OUTSIDE production as digits only. In production the variable is ignored with one line `[v2] SIGNUP_PLAY_CENTS IGNORED: ...` (SVC-1a, fixed and merged `7ccc1b2` / `b64ad26`; see `MONEY-FINDINGS-1008.md`).
 
 Per currency, all accounts sum to 0 at all times (`ledger.check()`, `money/ledger.js:720`).
 
@@ -103,7 +103,7 @@ Each flow lists its ledger lines in order. "Restart" says what the next boot doe
 
 ### 5.1 Signup
 1. `ensureAccount(key)` runs on every successful sign-in, signup included (`transport/handlers/auth.js:11`) and for every account at boot (`server.js:29`).
-2. Line `signup:bank:<key>`: `mint:signup` to `bank:<key>`, 10,000 Chips. No Cash line (`signupPlay` is 0, `service.js:144`).
+2. Line `signup:bank:<key>`: `mint:signup` to `bank:<key>`, 10,000 Chips. No Cash line (`signupPlay` is 0, `money/service.js:146-147`).
 3. Safe to repeat: only a currency with no `bank:` / `play:` account yet is minted.
 Restart: nothing to recover.
 
@@ -230,7 +230,7 @@ Each has the check that enforces it. "Soak" ids are in `tests/soak/README.md` (I
 | 19 | An unclaimed admin account cannot be claimed without `ADMIN_CLAIM_PASSWORD` | `tests/money-1008-adminclaim.js` |
 | 20 | The QA force hooks never touch a Cash round | `tests/money-1008-cc-hook.js`; Campaign: `tests/money-1008-campaign.js` |
 | 21 | A live slot config is accepted only when every way to play is measured at or under 100.0% payback with 3 standard errors of margin (section 5.12); Ballot Bender buys are measured at the lowest price any bet is charged | `tests/money-1008-cfg-coldcall.js`, `money-1008-cfg-bender.js`, `money-1008-r2c-bound.js`, `money-1008-r2c-buy.js`, `money-1008-r2c-reset.js` |
-| 22 | A game module reaches money only through `ctx.money`, and passes the kit | `node tests/game-kit.js <gameId>`: pending the kit merge, see `ADD-A-GAME.md` |
+| 22 | A game module reaches money only through `ctx.money`, and passes the kit | `node tests/game-kit.js <gameId>`; `npm test` runs the kit on every game (`npm run test:kit`); see `ADD-A-GAME.md` section 9 |
 | 23 | A re-made account that holds any Cash is locked | `tests/money-1008-r2b-boot.js` |
 | 24 | No amount above 1e12 cents, no balance past the safe-integer range; a paid round id is closed to every write path; an unlisted house replays as written | `tests/money-1008-r2e-contract.js` |
 | 25 | A Cold Call spin killed at any point keeps stake and leads, or neither; a store that cannot be written refuses every draw with no stake taken | `tests/money-1008-r2c-flush-kill.js`, `money-1008-r2c-flush-rw.js` |

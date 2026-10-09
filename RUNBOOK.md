@@ -58,14 +58,18 @@ Written for `money-hardening` (2026-10-08): read at `69a44f6`, line cites rechec
 1. Copy `money.jsonl` (and `accounts.json`, `campaign.json`, `coldcall-pull.json`) off the volume. `money.jsonl` only grows, so a copy is an exact backup up to that moment.
 2. Compare the money accounts: the old build must know every non-player account the file already uses (section 2, step 1). Compare against the build that is live now, not against this file.
 3. **Look at the live Ballot Bender config file before the deploy** (RVC-4): `$DATA_DIR/bender-config.json` (or the file named by `BENDER_CFG_FILE`). The new build checks number ranges at boot (`RANGES` in `games/bender-engine.js:224`). A saved config with a number outside them (e.g. `maxSpins` over 200, a `pay` value over 1e6, a list over 64 entries) is NOT loaded: the game starts on the shipped numbers with one console line `[bender] live config not loaded, using defaults: <why>`, and players see the shipped game. A saved config without a passing measurement made for exactly those numbers is refused the same way ("the saved config has no passing payback measurement; POST it again so the server can measure it"). So after the deploy check the console for that line, and POST the config again if it is wanted (section 3b). No money is involved either way. I did not read the live file (I cannot reach it).
-4. Run the suites named in the lead's hand-off (`MONEY-FINDINGS-1008.md` lists a regression test per fix). I do not list commands here that I did not run.
+4. Run the tests on the build you deploy. `npm test` runs the old suites, the quick money files (`node tests/run-money-1008.js --fast`), the kit self-test and the kit on every game (`node tests/game-kit.js --all --examples`). `npm run test:all` is `npm test` plus `node tests/run-money-1008.js --rest` (the money files that boot a server, the minutes-long ones, the long Cold Call suites). `npm run test:money` runs every `tests/money-1008-*.js` that ends in under about a minute; `npm run test:kit` only the kit. `MONEY_PORT_BASE=N` moves the files that boot a server to ports N..N+9 (header of `tests/run-money-1008.js`). A file past its timeout counts as a failure. The reviewer's runs of the test branch, NOT mine: `npm test` exit 0 and `npm run test:money` exit 0 (56 files); `MONEY-FINDINGS-1008.md` lists a regression test per fix.
+5. Read-only, on the live `money.jsonl` (or a copy): `jq -c '(.batch // [.])[] | select(.amount > 1e12)' money.jsonl | wc -l` must print 0 (RV-2 of the r2e-contract review: the new build quarantines a line over 1e12 cents, `MAX_AMOUNT` in `money/ledger.js:36`). This checks amounts only, not a balance past 2^53; NOT RUN ON RAILWAY.
+6. **Cold Call list gate (RL2-1, OPEN, see `MONEY-FINDINGS-1008.md`).** Find out which Cold Call `pull.list` is live (an accepted POST to `/api/admin/coldcall-config`, saved in `coldcall-config.json`, section 3b; the presets `cold-call/presets/rtp94.json` = 550 and `rtp96.json` = 495 are longer than the shipped 450). **If production's live Cold Call `pull.list` is over 450 at the deploy, accept no shorter list until every player with leads has spun once or the store was moved aside (fresh start step 3b).** Why: a stored record written before this build has no list-size stamp; until its player spins once it is counted against the longer list, and a shorter list accepted in that window scales it up: in the lead's re-run a player holding 0.89 of a Callback under list 550 had a Callback armed on the first spin in 12 seeds of 12, 3,417,750 cents won on those 12 Callbacks at a $25 bet. No player action causes it, only an admin accepting the shorter list; the code that is live today pays the same or more for the same admin action. NOT checked: which list production runs.
+
+**After a deploy: reload the admin tab.** The lobby loads the admin script as `admin.js?v=8-money1008` (`public/index.html:193`); the build that is live now (`cfa2ff8`) has `admin.js?v=7-v2`. The string was bumped (RVP-2, `ef9cdb4`), so a reload of the lobby page fetches the new script. An admin tab that was already open BEFORE the deploy keeps running the old script, which shows and sends the wallet instead of the TOTAL Cash (R2B-6): reload it before using Set Cash.
 
 ## 2. Rollback
 
 Rolling back means starting an OLDER build on the SAME `money.jsonl`. The older build reads every line with its own rules (`SOURCE_ACCOUNTS` and `PLAYER_KINDS` in `money/ledger.js:27-31`). A line it does not understand is not applied.
 
 **What the old build does with a line it does not know** (RUN on a temp copy): at open it writes `QUARANTINED n line(s) ... They were NOT applied` to the log and copies the line to `money.jsonl.quarantine`. Then every later line that depended on it fails too: a player whose win came from an unknown `house:<newgame>` has a balance that is too low by the win, and the line where he spent it is quarantined as `insufficient` (the sample: 100 Chips balance instead of 150, the 140 spend quarantined). The file itself is not rewritten.
-**Since R2E-14 (merged `0d776d1`) the build at this head behaves differently from the older ones.** A build WITH the R2E-14 ledger that meets `house:<game>` lines it does not list (a game taken out, or a rollback to a build from before the game) applies them as written, so no balance is rewritten, and logs `UNREGISTERED HOUSE in <file>: house:x (N line(s) replayed as written) ...` (`money/ledger.js:505`); but that build still cannot open or pay rounds for that game. The quarantine behaviour below is what an OLDER build (for example live `master` `886e61a`, before R2E-14) does. Check which ledger the target build has before relying on either.
+**Since R2E-14 (merged `0d776d1`) the build at this head behaves differently from the older ones.** A build WITH the R2E-14 ledger that meets `house:<game>` lines it does not list (a game taken out, or a rollback to a build from before the game) applies them as written, so no balance is rewritten, and logs `UNREGISTERED HOUSE in <file>: house:x (N line(s) replayed as written) ...` (`money/ledger.js:505`); but that build still cannot open or pay rounds for that game. The quarantine behaviour below is what an OLDER build (for example live `master` `cfa2ff8`, before R2E-14) does. Check which ledger the target build has before relying on either.
 
 It gets worse in two ways. (a) The old build keeps appending, and its ids continue after its last APPLIED line, so its new lines reuse the ids of the quarantined ones. (b) If you then roll FORWARD again, the new build reads the reused id as "not after" the last one and quarantines the old build's line: in the sample, 10 Chips the old build paid out vanished after rolling forward (`id 2 is not after 3`). So a rollback that skips step 1 loses data both ways.
 
@@ -76,7 +80,7 @@ It gets worse in two ways. (a) The old build keeps appending, and its ids contin
    git show <old-commit>:money/ledger.js | sed -n '/^const SOURCE_ACCOUNTS/,/\]);/p' | grep -o "'[a-z]*:[a-z]*'" | tr -d "'" | sort -u > old.txt
    comm -23 <(sort -u used.txt) old.txt        # empty = the old build knows all of them
    ```
-   Also compare the line `const PLAYER_KINDS = {...}` of both builds. Both ran empty/equal in my sample for `origin/master` (`cfa2ff8`) against this head: this head adds no source account and no account kind to the live build's lists (`git log origin/master..HEAD -- money/ledger.js` is empty). `house:campaign` is NOT known to `bb298d2` or older: rolling back that far needs it added first.
+   Also compare the line `const PLAYER_KINDS = {...}` of both builds. Both ran empty/equal in my sample for `origin/master` (`cfa2ff8`) against this head: this head adds no source account and no account kind to the live build's lists (`money/ledger.js` itself changed: `bd75d8e` R2E-2, `cc23948` R2E-14, so the first boot after the deploy is one full replay, section 1; the two lists did not change). `house:campaign` is NOT known to `bb298d2` or older: rolling back that far needs it added first.
 2. If the list is not empty: do not roll back. Either deploy a forward fix, or deploy the old build plus a one-line change adding the missing names to its `SOURCE_ACCOUNTS` (and `GAMES` in `money/service.js`) first.
 3. Copy `money.jsonl` before the switch (section 1).
 4. Deploy the old build. Check the boot log for `QUARANTINED`. If it appears, stop and read section 4 before players play.
@@ -88,12 +92,13 @@ It gets worse in two ways. (a) The old build keeps appending, and its ids contin
 Only an admin account (`chris`, claimed with `ADMIN_CLAIM_PASSWORD` once) can. In the admin console in the lobby: a player's row, Cash, enter the amount, confirm. The page sends `admin_set_play { key, cents, opId }` (`public/admin.js:198`); every click has its own op id, so a double click or a reconnect writes nothing twice.
 - **Set Cash is a TOTAL.** The player's Cash becomes X. It counts the wallet, Cash at poker seats and Cash in open game rounds (`admin/index.js:34-41`). The wallet is moved by `X - atTable - inRound - wallet` in one ledger line, `admin:adjust` to or from `play:<key>`, ref `adj:c.<opId>` (older lines: `adj:<key>:c.<opId>`).
 - **Below what is in play, it refuses.** X lower than the Cash at seats plus in rounds answers `cash_in_play`, with the amount, and writes nothing (`admin/index.js:52-58`). End the night or wait for the round, then set it.
+- **A name with no PIN is refused.** Set Cash, and a Cash adjust that would RAISE Cash, on an account that has no PIN, is not locked and is not an admin answers `account_unclaimed` ("This name has no PIN yet. The player must sign in and set a PIN before Cash can be given. Nothing was changed.") and writes nothing (R3AB-2, `admin/index.js:34` `openToStranger`, used at `:45` and `:80`): anyone with the room word could otherwise claim the name and own the Cash. The admin page marks such a row `Unclaimed`. Lowering, setting 0, a locked account and an admin account are not refused.
 - X is a RAW JSON number that is a whole number of cents (a safe integer, not `-0`), at most 100,000,000,000 (`admin/index.js:4`). A string, `null`, `""`, `[]`, `false` or `"0x10"` is refused `bad_amount` ("The amount must be a whole number of cents. Nothing was changed.") before anything is converted (R2B-2, `transport/handlers/admin.js:7-22`). A number out of range is `range`. An `admin_adjust` that would take the player's TOTAL Cash over the maximum is `range` too (RV-4).
 - The admin page shows, prefills and asks you to confirm the TOTAL Cash (wallet + seats + rounds) that Set Cash sets (R2B-6, `public/admin.js:135,144,211`), with the part in play shown beside it.
 - A Set Cash that changes nothing (X already equals the total) still writes a net-zero mark under its op id (`service.adminMark`, R2B-3, `admin/index.js:73-77`), so a resend of the same click after the balance moved is `dup`, not a new edit.
 - The admin console's Chips "bank" edit is a signed delta against the bank (`admin_adjust`, `cur: 'chips'`); Chips at tables are not touched. The server also accepts `admin_adjust` for Cash as a signed delta from a crafted client; the console does not offer it.
 - No op id = refused (`op_required`). A repeat of the same click = `dup`, nothing written. The same op id with another amount = `ref_conflict`. An op id is unique per ACCOUNT: reusing one for another account is refused, not a `dup` (RV-1 of the page review, `admin/index.js`; ref `adj:c.<opId>`). `admin_adjust` cannot take the player's total Cash past the maximum (`range`).
-- Check it afterwards: new edits are written under `adj:c.<opId>` (the account is not in the ref; it is in the legs), edits made before the R2B RV-1 rule under `adj:<key>:c.<opId>`. Both for one player: `jq -c 'select((.ref|startswith("adj:")) and ([.from,.to,(.batch[]?|.from,.to)] | index("play:ann")))' money.jsonl | tail -3` (RUN on a 3-line sample with both ref forms: printed `adj:c.op9 adj:ann:c.old1`, exit 0; for Chips use `bank:ann`). The reason carries the target: `admin:admin set play to 100000`.
+- Check it afterwards: new edits are written under `adj:c.<opId>` (the account is not in the ref; it is in the legs), edits made before the R2B RV-1 rule under `adj:<key>:c.<opId>`. Both for one player: `jq -c 'select((.ref|startswith("adj:")) and ([.from,.to,(.batch[]?|.from,.to)] | index("play:ann")))' money.jsonl | tail -3 | jq -r .ref` (RUN on a 3-line sample with both ref forms: printed `adj:ann:c.old1` then `adj:c.op9` (file order), exit 0; for Chips use `bank:ann`). The reason carries the target: `admin:admin set play to 100000`.
 
 ## 3b. Changing a slot's numbers (the live config payback check)
 
@@ -205,7 +210,7 @@ List them (section 5, second command) and look at the age of the `:open` line (`
 ```
 jq -c 'select(.ref|test(":open$")) | {ref,age_min:((now*1000 - .ts)/60000|floor)}' money.jsonl | tail -20
 ```
-Cross-check with the open ref's `:close`: `jq -c 'select(.ref=="campaign:bob:run9:close")' money.jsonl` returns nothing for a round still open.
+This lists every `:open` line ever written, closed rounds too; the open ones are those of section 5, second command. Cross-check with the open ref's `:close`: `jq -c 'select(.ref=="campaign:bob:run9:close")' money.jsonl` returns nothing for a round still open.
 
 An escrow is STUCK when it is old (a Cold Call round past its decision timeout, a Campaign run past 60 s) and the player is not in it. The game closes its own rounds by timer; a stuck one means the timer's close call was refused (the log says `money call failed, the round stays open`) or the process restarted without the game claiming it.
 1. **Restart the service.** Boot does the closing: each game settles or voids the rounds it knows; `sweepEscrows` voids every other non-zero escrow back to its player with reason `<game>:void:boot` (`money/service.js:387`). This is the normal and safe close.
@@ -272,7 +277,7 @@ Output (rehearsal, 4 accounts):
     cy,Cy,account,0,10000
     TOTAL,,total,350000,25019
 
-`cash_total` (cents) is wallet + Cash at poker seats + Cash in open game rounds: the number the admin page's Set Cash takes (K1-3). The same file has `cash_wallet`, `cash_escrow` (and `escrow_cash_<game>`), `cash_seats` and `seats_detail` per table, and the Chips equivalents. If the tool prints "WARNING ... quarantined", stop and get an admin look first.
+(Columns shortened in the sample above: the real header is `key,name,kind,cash_wallet,cash_escrow,cash_seats,cash_other,cash_total,chips_wallet,...`, so `cash_total` is column 8, which is what `cut -d, -f1,3,8` in step 5 uses.) `cash_total` (cents) is wallet + Cash at poker seats + Cash in open game rounds: the number the admin page's Set Cash takes (K1-3). The same file has `cash_wallet`, `cash_escrow` (and `escrow_cash_<game>`), `cash_seats` and `seats_detail` per table, and the Chips equivalents. If the tool prints "WARNING ... quarantined", stop and get an admin look first.
 
 Also keep a full copy of the data dir (safety net, not read by anything):
 
@@ -297,7 +302,29 @@ Output (rehearsal): nine `renamed '$D/money.jsonl' -> '$D/zeroed-20261008/money.
 
     accounts.json  accounts.json.bak  bank.json  bank.json.bak-1791515627602  ledger.json  tables.json  zeroed-20261008
 
-KEEP, do not touch: `accounts.json` (names + PINs; sha256 identical before and after the boot, rehearsal `222ea00274a8572b` both), `accounts.json.bak`, `ledger.json` (player history), `tables.json`, `bigwins.json`, `coldcall-pull.json`, `coldcall-config.json`, the Bender config. Do NOT set `FRESH_START_ID` (that is the wipe-all variant).
+KEEP, do not touch: `accounts.json` (names + PINs; sha256 identical before and after the boot, rehearsal `222ea00274a8572b` both), `accounts.json.bak`, `ledger.json` (player history), `tables.json`, `bigwins.json`, `coldcall-config.json`, the Bender config (`coldcall-pull.json` and `campaign.json` are NOT kept: step 3b rewrites them). Do NOT set `FRESH_START_ID` (that is the wipe-all variant).
+
+### 3b. Zero the games' own state files (Cold Call, Campaign). Do not skip.
+
+Cold Call keeps, per player and per mode, leads, an armed Callback and open round records in `coldcall-pull.json` (+ `.bak`, `.journal`, `.journal.prev`); Campaign keeps open runs in `campaign.json` (+ `.bak`). Neither file is money, so step 3 does not touch them, but Cash state earned with pretend money in them pays REAL Cash after go-live: an armed Cash Callback is played free at its stored bet (the house pays the win), Cash leads arm one within a few paid spins. The books still sum to 0, so no check sees it (the tool's author's proof: a $10 stored Callback paid 865.00 and 1,210.00 in two runs; 0.89 of a list of Cash leads paid 6,209.28 after 47 paid spins of 0.10). The server must still be stopped and step 3 done: the tool refuses while `money.jsonl.lock` is in the data dir (`tools/zero-game-state.js`, ZS-4).
+
+Dry run first (changes nothing):
+
+    node tools/zero-game-state.js --data-dir "$D" --zeroed-dir "$Z"
+
+Output (rehearsal): `zero-game-state: DRY RUN; data dir ...`, then per game `Cash state found: N player state(s) (N armed Callback(s), N leads), N open round record(s), Cash pot record yes`, `Chips state kept: ...`, `open runs: N Cash (dropped), N Chips (kept)`, the `would move` / `would write` lines, `dry run: nothing was changed. Run again with --apply.`
+
+Then:
+
+    node tools/zero-game-state.js --data-dir "$D" --zeroed-dir "$Z" --apply        # exit 0
+
+Output: `done: 5 file(s) moved to $Z, 2 Chips-only file(s) written. coldcall-config.json, the Bender config and accounts.json were not touched.` The original `coldcall-pull.json*` and `campaign.json*` are now in `$Z`; the data dir holds a new `coldcall-pull.json` (Chips players only) and `campaign.json` (open Chips runs only). Run it a second time: `no Cash game state in the data dir: nothing to do`, exit 0 (that is the check). After step 3b `ls "$D"` shows: `accounts.json  accounts.json.bak  bank.json  campaign.json  coldcall-pull.json  ledger.json  tables.json  zeroed-YYYYMMDD` (rehearsal).
+
+Exit 3 = refused and nothing changed: `money.jsonl.lock` still there (server running or step 3 not done), a damaged game file (a person looks first), or a file of that name already in `$Z`. A store that was restored from its backup is not touched either.
+
+This also removes every Cash record that has no list-size stamp, so the RL2-1 gate (section 1, "Before a deploy", step 6) has nothing left to act on in the Cash half. Chips records are kept and may still be unstamped; they hold no money.
+
+Rehearsal only: run by the tool's author on a throwaway data dir (`tests/money-1008-zs-games.js`, 16 checks); NOT run on Railway, NOT run with `RAILWAY_VOLUME_MOUNT_PATH` instead of `--data-dir`; the restore path that reads `.journal.prev` was read in the code, NOT run.
 
 ### 4. Start, what the boot log must show, the one command that proves Cash is 0
 
@@ -305,9 +332,10 @@ Start the server as usual. The boot log must show (rehearsal):
 
     migration: 4 accounts, 4 writes (4 written, 0 dup), orphans 0, rejected 0
     boot recovery: 0 seats, 0 pots returned
+    game recovery: bender 0 open/0 by game/0 kept, coldcall 0 open/0 by game/0 kept, campaign 0 open/0 by game/0 kept, 0 escrows voided
     Ping Poker server running on port 5525
 
-and must NOT show `QUARANTINED`, `CONFLICTS`, `fresh start`, or a `migration:` line with accounts you do not know. (The 4 writes are the Chips defaults, FOUND-1; the account count must equal the number of kept accounts.)
+(the `game recovery:` line is new in this text: it appeared in every rehearsal boot with step 3b.) It must NOT show `QUARANTINED`, `CONFLICTS`, `fresh start`, a `coldcall: store: ***` or `campaign: store: ***` line, or a `migration:` line with accounts you do not know. The boot log has no line about the kept game files, so their absence from the log proves nothing: the tool's `done:` line and its second run are the proof. (The 4 writes are the Chips defaults, FOUND-1; the account count must equal the number of kept accounts.)
 
 The one command:
 
@@ -371,6 +399,7 @@ Marks: **REHEARSAL** = run by the zero-start builder on a throwaway data dir on 
 | 2 | Export balances (read-only, server may be up) | `node tools/export-balances.js --ledger "$D/money.jsonl" --accounts "$D/accounts.json" --csv ~/ping-export/balances-before-zero.csv --json ~/ping-export/balances-before-zero.json` | REHEARSAL; NOT RUN ON RAILWAY |
 | 3 | Stop the server (SIGTERM; section 1 "Stop") | `kill -TERM <pid>` (on Railway: stop the service the normal way) | REHEARSAL (`kill -TERM`); NOT RUN ON RAILWAY |
 | 4 | Move the money files aside, bank.json = {} | the `Z=...; for f in ...; do mv -v ...; done` block and `echo '{}' > "$D/bank.json"` of section 10 step 3 | REHEARSAL; NOT RUN ON RAILWAY |
+| 4b | Zero the games' state files (Cold Call, Campaign) | `node tools/zero-game-state.js --data-dir "$D" --zeroed-dir "$Z" --apply` (dry run first without `--apply`; section 10 step 3b) | REHEARSAL (the tool's own test); NOT RUN ON RAILWAY |
 | 5 | Start the server as usual | `node server.js` (Railway: `railway.toml` start command) | REHEARSAL; NOT RUN ON RAILWAY |
 | 6 | Boot lines that must show | `migration: N accounts, N writes (N written, 0 dup), orphans 0, rejected 0` (N = the number of kept accounts), `boot recovery: 0 seats, 0 pots returned`, `Ping Poker server running on port ...`; must NOT show `QUARANTINED`, `CONFLICTS`, `fresh start` | REHEARSAL; NOT RUN ON RAILWAY |
 | 7 | The one command that proves Cash is 0 | `node tools/export-balances.js --ledger "$D/money.jsonl" --accounts "$D/accounts.json" --csv /dev/null --expect-zero cash` (exit 0 and `expect-zero (cash): OK`; exit 4 = some account is not 0) | REHEARSAL; NOT RUN ON RAILWAY |
@@ -380,7 +409,13 @@ Marks: **REHEARSAL** = run by the zero-start builder on a throwaway data dir on 
 | 11 | Roll back if needed | section 2 steps 1-4 (`jq` list of used accounts against the old build's `SOURCE_ACCOUNTS`) | RUN on a temp sample ledger in pass 1; NOT RUN ON RAILWAY |
 | 12 | Read the ledger afterwards | section 4 one-liners (`jq`, `node -e`) | RUN on a temp data dir; NOT RUN ON RAILWAY |
 
+**GO-LIVE line (ZS-4).** After the money files are moved aside and BEFORE the first boot, run `node tools/zero-game-state.js --data-dir "$D" --zeroed-dir "$Z" --apply` (section 10 step 3b): without it, Cash leads and armed Callbacks earned with pretend Cash play for free after go-live.
+
 Not in the list on purpose: `FRESH_START_ID` (the wipe-all variant, section 10 "Not chosen"), and the Chips question (ZS-1).
+
+**First boot of this build: accounts without a PIN that hold Cash are LOCKED.** At boot, `accounts.migrateLegacy` (`accounts.js:444`, called from `server.js:43` with the Cash the ledger holds per name) locks every existing account that was never claimed with a PIN (no `claimed` flag), is not the admin, and holds Cash (wallet, a Cash seat, a Cash round escrow or a stray pot) (`accounts.js:464-465`, R3AB-2). The room word does not open a locked account. The boot log prints one line `[SECURITY] accounts: N existing UNCLAIMED account(s) hold Cash and are now LOCKED ... the admin must reset each PIN (Admin > Players > reset PIN)` (`accounts.js:474`). What the admin does: for each name in that count, confirm it is the real owner (not through the game), then Admin page > Players > the row > **Reset PIN** and give the owner the new PIN (`accounts.js:378` `resetPin` clears the lock; section 3c). The Cash is not touched. Keys that start with `bot`, `demo` or `test` (Tester, Demon, Bottle) are locked the same way when they hold Cash (R3AB-1, `accounts.js:446`; test `tests/money-1008-r2b-boot.js`). NOT run by me on a copy of the live `accounts.json` and ledger, so how many accounts will be locked is not known.
+
+**Fund only names that have a PIN.** Admin Set Cash and Cash adjust refuse to RAISE Cash on an account that has no PIN, is not locked and is not an admin account (`account_unclaimed`, no ledger line; `admin/index.js:34` `openToStranger`, used at `:45` and `:80`; test `tests/money-1008-r3ab-unclaimed.js`). Lowering, setting 0, a locked account and an admin account are not refused. Before a fund, check that the player's row on the admin page does not show `Unclaimed` (`public/admin.js`, the name cell).
 
 ## 12. The Cold Call store: journal mode, a faulted store, the env vars
 
