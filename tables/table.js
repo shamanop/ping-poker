@@ -313,11 +313,10 @@ class Table {
     return r;
   }
 
-  // RV-3: the host's kick between hands, with exactly two seats taken, leaves no debt (the kicked player did not choose to miss the blind, and
-  // the host could otherwise make him the big blind every hand). Every other removal keeps the debt (K3-8, R2A-1, R2A-2).
+  // Every removal keeps the debt (K3-8, R2A-1, R2A-2), a host kick included: clearing it heads-up let a host with a second account
+  // kick that account before each hand and seat-hop debt-free (RR-1). `kind` is kept for callers.
   removeSeat(seat, kind) {
-    if (kind === 'kick' && this.seats.size === 2) delete this.owesBB[seat.key];
-    else this.owesBB[seat.key] = true;
+    this.owesBB[seat.key] = true;
     this.seats.delete(seat.seat);
     this.clearDeadline('grace:' + seat.seat);
   }

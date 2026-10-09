@@ -1,5 +1,5 @@
 'use strict';
-// Money hardening 1008, R2A-4 / RV-1 / RV-2 (the re-entry allowance is ONE return), RV-3 (heads-up host kick leaves no big-blind debt),
+// Money hardening 1008, R2A-4 / RV-1 / RV-2 (the re-entry allowance is ONE return), RR-1 (a kicked seat keeps its big-blind debt, heads-up too; RV-3 was taken out),
 // R2A-5 (the table deals again after the forced three-void pause is resumed), and the tests the mutation survivors asked for
 // (R2A-T1..T3, RV-T1, RV-T2).
 const { world, rigDeck, quiet, code, suite, eq, ok } = require('./lib-money-1008-tables');
@@ -140,38 +140,24 @@ function play(T, W) {
 for (const mode of ['play', 'chips']) {
   const tag = mode === 'play' ? 'Cash' : 'Chips';
 
-  // ---- RV-3 ----
-  t(`${tag}: RV-3 heads-up, the host kicks the other player between hands every hand: 20 / 20 big blinds in 40 hands`, () => {
-    const { W, T, cur, total0 } = blindSetup(mode, ['d', 'a'], [0, 1]);       // d is the host
-    const bb = { d: 0, a: 0 };
-    for (let i = 0; i < 40; i++) {
-      if (i > 0) { quiet(() => T.kick('d', 'a', false)); eq(T.seatOfKey('a'), null, 'kicked'); eq(code(() => T.sit('a', { amount: 50000, seat: 1, socketId: 'sa' + i })), 'none'); }
-      const r = play(T, W);
-      ok(r, 'a hand is dealt at hand ' + i);
-      eq(r.dealt.sort(), ['a', 'd']);
-      bb[r.bbKey]++;
-    }
-    eq(bb, { d: 20, a: 20 }, 'the kick leaves no debt, as on base');
-    eq(W.total(cur), total0);
-  });
-
-  t(`${tag}: RV-3 the debt stays for a leave by choice heads-up, for a kick at three seats, and for a kick of the third player`, () => {
+  // ---- RV-3 / RR-1: a kicked seat KEEPS its big-blind debt, heads-up too ----
+  t(`${tag}: RR-1 a host kick leaves the big-blind debt on the kicked player, heads-up and at three seats`, () => {
     let S = blindSetup(mode, ['d', 'a'], [0, 1]);
-    quiet(() => S.T.leave('a', 'leave'));
-    eq(S.T.owesBB.a, true, 'leave by choice heads-up: debt stays (R2A-2)');
+    quiet(() => S.T.kick('d', 'a', false));
+    eq(S.T.owesBB.a, true, 'heads-up kick keeps the debt');
+    eq(code(() => S.T.sit('a', { amount: 50000, seat: 1, socketId: 'sa2' })), 'none');
+    eq(S.T.seatOfKey('a').missedBlind, true, 'he waits for the big blind');
+    const r = play(S.T, S.W);
+    eq(r.bbKey, 'a', 'and is dealt in as the big blind');
     S = blindSetup(mode, ['d', 'a', 'c'], [0, 1, 2]);
     quiet(() => S.T.kick('d', 'c', false));
-    eq(S.T.owesBB.c, true, 'kick at three seats: debt stays (R2A-1)');
-    eq(code(() => S.T.sit('c', { amount: 50000, seat: 2, socketId: 'sc2' })), 'none');
-    eq(S.T.seatOfKey('c').missedBlind, true);
-    S = blindSetup(mode, ['d', 'a', 'c'], [0, 1, 2]);
-    quiet(() => S.T.kick('d', 'c', false));                  // now two seats left: a kick of a at two seats clears HIS debt only
-    quiet(() => S.T.kick('d', 'a', false));
-    eq(S.T.owesBB.a, undefined, 'heads-up kick: no debt');
-    eq(S.T.owesBB.c, true, 'the earlier kick at three seats keeps its debt');
+    eq(S.T.owesBB.c, true, 'kick at three seats keeps the debt');
+    S = blindSetup(mode, ['d', 'a'], [0, 1]);
+    quiet(() => S.T.leave('a', 'leave'));
+    eq(S.T.owesBB.a, true, 'leave by choice heads-up keeps the debt');
   });
 
-  t(`${tag}: RV-3 a kick held back until the hand ends (finishKick) heads-up leaves no debt either`, () => {
+  t(`${tag}: RR-1 a kick held back until the hand ends (finishKick) heads-up keeps the debt too`, () => {
     const { W, T } = blindSetup(mode, ['d', 'a'], [0, 1]);
     quiet(() => T.startHand());
     const r = quiet(() => T.kick('d', 'a', false));
@@ -179,7 +165,39 @@ for (const mode of ['play', 'chips']) {
     for (let g = 0; g < 20 && T.handLive() && T.hand.phase === 'betting'; g++) { const la = engine.legalActions(T.hand, T.hand.toAct); T.act(T.seats.get(T.hand.toAct).key, { type: la.canCheck ? 'check' : 'call' }); }
     for (let g = 0; g < 10 && T.handLive(); g++) W.clock.advance(2000);
     eq(T.seatOfKey('a'), null, 'kicked after the hand');
-    eq(T.owesBB.a, undefined, 'no debt');
+    eq(T.owesBB.a, true, 'debt kept');
+  });
+
+  // The reviewer's scenario: the host is a THIRD account that never sits (a second account of the player d) and kicks d before every hand;
+  // d sits at the button seat each time. The honest player a must never post the big blind twice running without owing it.
+  t(`${tag}: RR-1 an unseated host kicks d before every hand and d picks the button seat: honest a never posts the big blind twice running`, () => {
+    const keys = ['d', 'a', 'h'], cash = {}; for (const k of keys) cash[k] = 1000000;
+    const W = world({ keys, cash });
+    if (mode === 'chips') for (const k of keys) W.service.adminAdjust(k, 1000000, 'chips', 'seed', 'seedc:' + k);
+    const T = W.registry.create('h', { name: 'HU', mode, buyIn: { min: 500, max: 60000, default: 50000 }, blinds: { sb: 100, bb: 200 }, seats: 8, autoStart: false, actionTimerSec: 30 });
+    const total0 = W.total(mode);
+    T.sit('a', { amount: 50000, seat: 0, socketId: 'sa' });
+    T.sit('d', { amount: 50000, seat: 1, socketId: 'sd' });
+    eq(T.seatOfKey('h'), null, 'the host never sits');
+    const bb = { a: 0, d: 0 }, paid = { a: 0, d: 0 };
+    let last = null, run = 0, n = 0;
+    for (let i = 0; i < 40; i++) {
+      quiet(() => T.kick('h', 'd', false));
+      const as = T.seatOfKey('a').seat;
+      let to = [0, 1, 2, 3, 4, 5, 6, 7].find(x => x !== as && T.nextButton([{ seat: as }, { seat: x }]) === x);
+      if (to == null) to = (as + 1) % 8;
+      eq(code(() => quiet(() => T.sit('d', { amount: 50000, seat: to, socketId: 'sd' + i }))), 'none');
+      const owed = { a: !!T.seatOfKey('a').missedBlind };
+      const r = play(T, W);
+      ok(r, 'a hand is dealt at ' + i);
+      n++; bb[r.bbKey]++;
+      paid[r.bbKey] += 200; paid[r.sbKey] += 100;
+      if (r.bbKey === 'a') { run = (last === 'a' && !owed.a) ? run + 1 : 1; ok(!(last === 'a' && !owed.a), 'honest a posted the big blind twice running without owing it at hand ' + i); }
+      last = r.bbKey;
+    }
+    ok(bb.d >= 20, 'the player who is kicked every hand posts at least half of the big blinds: ' + JSON.stringify(bb));
+    ok(paid.a <= paid.d, 'honest a never pays more blinds than d: ' + JSON.stringify(paid));
+    eq(W.total(mode), total0);
   });
 
   // ---- R2A-5 ----
