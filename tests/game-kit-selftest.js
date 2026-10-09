@@ -74,6 +74,8 @@ function makeToy(variant) {
             rec.delete(key); return socket.emit('g:toy:result', { roundId: id, win: r.bet * 2 });
           }
           if (variant === 'errresult') { bad(socket, 'internal'); return socket.emit('g:toy:result', { roundId: id, win }); }   // reports the money error AND shows the win
+          if (variant === 'errresultid') { bad(socket, 'internal'); return socket.emit('g:toy:result', { id, win }); }          // the same lie, the round named `id` (the reviewer's mutant M3)
+          if (variant === 'errpaid') { bad(socket, 'internal'); return socket.emit('g:toy:paid', { win }); }             // the same lie, no round id at all: a `paid` event with the win
           if (variant === 'keepdoomed') carried += win;                         // the result the ledger refused is kept to be paid with the next round
           return bad(socket, 'internal');
         }
@@ -119,6 +121,8 @@ const VARIANTS = [
   ['bootbonus', 'restart', 'boot recovery pays twice the stake instead of refunding it'],
   ['redraw', 'restart', 'a round record outlives the restart and the round is played again under a fresh ref'],
   ['errresult', 'errors', 'on a money error sends the error event AND the result event (the client is shown a win nobody paid)'],
+  ['errresultid', 'errors', 'the same lie with the round named `id`, not `roundId` (the kit must not hang on one field name)'],
+  ['errpaid', 'errors', 'the same lie with no round in it: a `paid` event with the win'],
   ['unregistered', 'registration', 'not in MODULES, house account not registered'],
 ];
 

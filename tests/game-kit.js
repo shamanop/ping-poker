@@ -35,6 +35,18 @@ const BASE = fs.mkdtempSync(path.join(process.env.KIT_TMP || os.tmpdir(), 'game-
 let counter = 0, current = null;       // the game module is one per process: a new world first "crashes" the live one
 
 // ------------------------------------------------------------------------------------------------------------------------------------ the world
+// A game event sent beside an `error` is a shown result unless it is a bare state re-sync. The adapter may say which events are which (optional `resultEvents` / `stateEvents`: event names without the `g:<id>:` prefix);
+// otherwise the payload or the event name decides, not one field name: a round under roundId / round / rid / id, an outcome field (win, payout, paid, prize, outcome, result ...), or an event named like one.
+const ROUND_KEYS = /^(round_?id|round|round_?no|rid|id)$/i, OUTCOME_KEYS = /(^|_)(win|won|winnings|payout|paid|prize|outcome|result|settled|credited)($|_)|^(win|won|payout|paid|prize|outcome|result|settled|credited)[A-Z]/;
+const OUTCOME_EVENT = /result|win|won|payout|paid|prize|outcome|settle/i;
+function looksPlayed(A, ev, payload) {
+  if (Array.isArray(A.resultEvents)) return A.resultEvents.includes(ev);
+  if (Array.isArray(A.stateEvents) && A.stateEvents.includes(ev)) return false;
+  if (OUTCOME_EVENT.test(ev)) return true;
+  if (!payload || typeof payload !== 'object') return false;
+  return Object.keys(payload).some((k) => (ROUND_KEYS.test(k) && payload[k] !== undefined && payload[k] !== null) || OUTCOME_KEYS.test(k));
+}
+
 function world(A, opts = {}) {
   if (current) { try { current.crash(); } catch {} current = null; }
   const dir = opts.dir || fs.mkdtempSync(path.join(BASE, 'w'));
@@ -119,9 +131,10 @@ function world(A, opts = {}) {
   const collect = (sock, n0) => {
     const got = sock.out.slice(n0), pre = 'g:' + A.id + ':';
     const errs = got.filter((o) => o[0] === 'error'), res = got.filter((o) => o[0].startsWith(pre));
-    // With no error event, any game event is the answer (the games' step replies do not all name a round). Beside an error event a game event only counts as a result when it names a round
-    // (payload.roundId): a refusal answered with `error` plus a bare state re-sync is a refusal (RVK-1), `error` plus a round event is still a lie that the client was shown a result (R2E-13).
-    const named = res.filter((o) => o[1] && typeof o[1] === 'object' && o[1].roundId !== undefined && o[1].roundId !== null);
+    // With no error event, any game event is the answer (the games' step replies do not all name a round). Beside an error event a game event only counts as a result when it LOOKS like one
+    // (looksPlayed below: a round named under any usual field name, an outcome field, or an outcome event name; or what the adapter says in resultEvents / stateEvents): a refusal answered with
+    // `error` plus a bare state re-sync is a refusal (RVK-1), `error` plus a round / outcome event is still a lie that the client was shown a result (R2E-13).
+    const named = res.filter((o) => looksPlayed(A, o[0].slice(pre.length), o[1]));
     const played = errs.length ? named : res, top = errs.length && named.length ? named[named.length - 1] : res.length ? res[res.length - 1] : null;
     return { got, error: errs.length ? errs[errs.length - 1][1] : null, ev: top ? top[0].slice(pre.length) : null, payload: top ? top[1] : null, ok: played.length > 0, errored: errs.length > 0 };
   };
