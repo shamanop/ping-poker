@@ -88,5 +88,13 @@ for (const mode of ['play', 'chips']) {
     ok(sit(S.T, 'a', S.stackA) !== 'none', 'below the minimum, no allowance at an unlimited-rebuy table');
     eq(sit(S.T, 'a', MIN), 'none');
   });
+
+  t(`${tag}: a capped-rebuy table (rebuyLimit 2): below the minimum is open only up to what the server returned`, () => {
+    const S = setup(mode, { rebuys: true, rebuyLimit: 2 }); quiet(() => S.W.restart()); S.T = S.W.registry.get(S.T.id);
+    ok(sit(S.T, 'a', S.stackA + 1000) !== 'none', 'rebuys left do not open a below-minimum amount past the allowance');
+    ok(!S.T.seatOfKey('a'));
+    eq(sit(S.T, 'a', S.stackA), 'none', 'exactly what the server returned');
+    eq(S.W.total(S.cur), S.total0);
+  });
 }
 done();
