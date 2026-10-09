@@ -183,9 +183,14 @@ class Table {
     const re = this.reentry[key] || (this.reentry[key] = { remaining: 0, forgiven: 0 });
     re.remaining += amount;
   }
-  checkAmount(amount) {
+  // R2A-3: a seat-back that uses the server-return allowance may be for LESS than the table minimum (a stack that fell below it before the
+  // server cashed it out), up to exactly what the server returned. Anyone else, and any amount past the allowance, keeps min and max.
+  checkAmount(amount, key) {
     const { min, max } = this.buyIn;
-    if (!Number.isSafeInteger(amount) || amount < min || amount > max) throw new TableError('range', { min, max, have: amount });
+    if (!Number.isSafeInteger(amount) || amount > max) throw new TableError('range', { min, max, have: amount });
+    if (amount >= min) return;
+    const re = key != null ? this.reentry[key] : null;
+    if (!(amount > 0 && re && re.remaining >= amount)) throw new TableError('range', { min, max, have: amount });
   }
   checkFund(fund) {
     if (fund === undefined || fund === null || fund === '') return null;
@@ -207,7 +212,7 @@ class Table {
     if (other) throw new TableError('one_seat', { tableId: other.tableId });
     const no = this.freeSeat(opts.seat);
     if (no == null) throw new TableError(Number.isInteger(opts.seat) && this.freeSeat() != null ? 'seat_taken' : 'table_full');
-    this.checkAmount(opts.amount);
+    this.checkAmount(opts.amount, key);
     const fund = this.checkFund(opts.fund);
     if (!this.buyInAllowed(key, opts.amount)) throw new TableError('rebuy_off');
     const r = this.money.buyIn(this, key, opts.amount, fund);          // money first
@@ -245,7 +250,7 @@ class Table {
     let amount = opts.amount;
     if (amount === undefined || amount === null) amount = Math.min(this.buyIn.default, this.money.fundBalance(key, fund));
     if (!this.buyInAllowed(key, amount)) throw new TableError('rebuy_off');
-    this.checkAmount(amount);
+    this.checkAmount(amount, key);
     const r = this.money.buyIn(this, key, amount, fund, null, 'rebuy');
     this.noteBuyIn(key, amount);
     seat.stack += amount; seat.fund = fund; seat.timeouts = 0;
