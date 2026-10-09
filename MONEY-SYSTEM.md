@@ -83,7 +83,7 @@ batch : {"id":413,"ts":...,"batch":[{"from":..,"to":..,"amount":..,"cur":..,"rea
 | signup | `signup:bank:<key>`, `signup:play:<key>` (Cash only if `signupPlay` > 0) | `signup` | `service.ensureAccount` (`:138`) |
 | daily bonus | `bonus:<key>:<YYYY-MM-DD>` (the day in America/Chicago, `social.js:8-9`) | `bonus` | `social.js:268` via the wallet adapter |
 | achievement | `achv:<key>:<achievementId>` | `achv` (never written, reward is 0) | `social.js:147` |
-| admin edit | `adj:<key>:c.<opId>` | `admin:<reason>`; Set Cash writes `admin:admin set play to <cents>` | `admin/index.js:23`, `service.adminAdjust` (`:403`) |
+| admin edit | `adj:c.<opId>` (lines written before the one-op-id-per-account rule: `adj:<key>:c.<opId>`) | `admin:<reason>`; Set Cash writes `admin:admin set play to <cents>` | `admin/index.js:23`, `service.adminAdjust` (`:403`) |
 | buy-in, rebuy | `buyin:<tableId>:<key>:<boot>.<n>`, `rebuy:...` | `buyin:<fund>` | `tables/money-port.js` `buyIn` |
 | cash-out | `<kind>:<tableId>:<key>:<boot>.<n>`, kind = `leave`, `kick`, `sweep`, `grace`, `night` | `<kind>:<fund>` | `money-port.js` `cashOut` |
 | a hand | `hand:<tableId>:<handNo>` | `hand` | `service.settleHand` (`:177`) |
@@ -119,7 +119,7 @@ Without the lock the room word would hand the Cash to the first person who typed
 
 ### 5.2 Admin sets or adjusts
 1. The client message carries an op id, one per confirmed click (`transport/handlers/admin.js`, `admin_set_play`, `admin_adjust`). No op id = refused `op_required`, nothing written (`admin/index.js:15-21`).
-2. `adjust`: one line `adj:<key>:c.<opId>`, `admin:adjust` to the player (delta > 0) or the player to `admin:adjust` (delta < 0). A resend of the same op id answers `dup`; the same op id with other numbers is `ref_conflict`.
+2. `adjust`: one line `adj:c.<opId>` (older lines `adj:<key>:c.<opId>`; the account is in the legs, so the same op id for another account is `ref_conflict`), `admin:adjust` to the player (delta > 0) or the player to `admin:adjust` (delta < 0). A resend of the same op id answers `dup`; the same op id with other numbers is `ref_conflict`.
 3. Set Cash: the player's TOTAL Cash becomes X. Total = wallet + Cash at seats + Cash in open rounds (`cashOf`, `admin/index.js:34`). If X is below the part at a seat or in a round the answer is `cash_in_play` and nothing is written (`:52-53`). Otherwise one adjust line moves the wallet by `X - atTable - inRound - wallet`. X is at most 100,000,000,000 cents (`:4`).
 Restart: nothing open.
 
