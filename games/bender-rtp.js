@@ -77,7 +77,30 @@ async function measure(cfg, opts = {}) {
   const bound = Object.entries(ways).map(([way, x]) => ({ way, pct: x.pct, se: x.se, upper: x.pct + BOUND_SE * x.se })).sort((a, b) => (b.upper || 0) - (a.upper || 0))[0];
   return { ok: finite && bound.upper <= CEILING_PCT, finite, ceilingPct: CEILING_PCT, boundSe: BOUND_SE, bound, ways, worst, rounds, ms: Date.now() - t0, maxStretchMs: maxStretch, seed, scale, early, mode: paired ? 'paired' : 'direct' };
 }
-module.exports = { measure, loadRef, cfgHash, lowestPrice, CEILING_PCT, BOUND_SE };
+// R2C-4: the admin path never runs a config's smoke test or its measuring on the server's event loop. A worker thread (this file again, `benderCheck` in workerData) plays the 300-round smoke test of the config and then measure();
+// the server only waits for its message. A config whose smoke test does not end in SMOKE_LIMIT_MS, or whose check does not end in PB_DEADLINE_MS, or that the admin withdrew (opts.cancelled), is stopped (terminate) and refused.
+const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
+const SMOKE_LIMIT_MS = 10000;
+function measureInWorker(cfg, opts = {}) {
+  return new Promise((resolve, reject) => {
+    const w = new Worker(__filename, { workerData: { benderCheck: true, cfg, opts: { scale: opts.scale, seed: opts.seed } }, resourceLimits: { maxOldGenerationSizeMb: 256 } });
+    let done = false, smoked = false;
+    const end = (fn, v) => { if (done) return; done = true; clearInterval(poll); clearTimeout(smokeT); clearTimeout(deadT); w.terminate(); fn(v); };
+    const poll = setInterval(() => { if (opts.cancelled && opts.cancelled()) end(reject, new Error('payback check cancelled')); }, 50);
+    const smokeT = setTimeout(() => { if (!smoked) end(reject, new Error('cfg: the config is too slow to check: its smoke test did not finish in ' + SMOKE_LIMIT_MS / 1000 + ' s')); }, SMOKE_LIMIT_MS);
+    const deadT = setTimeout(() => end(reject, new Error('payback check did not finish in ' + PB_DEADLINE_MS / 1000 + ' s')), PB_DEADLINE_MS + 5000);
+    w.on('message', (m) => { if (m.stage === 'smoke') smoked = true; else if (m.ok) end(resolve, m.r); else end(reject, new Error(m.message)); });
+    w.on('error', (e) => end(reject, e));
+    w.on('exit', (c) => end(reject, new Error('payback check worker stopped (' + c + ')')));
+  });
+}
+if (!isMainThread && workerData && workerData.benderCheck) {
+  (async () => {
+    try { E.validateConfig(workerData.cfg); parentPort.postMessage({ stage: 'smoke' }); parentPort.postMessage({ ok: true, r: await measure(workerData.cfg, workerData.opts) }); }
+    catch (e) { parentPort.postMessage({ ok: false, message: String(e && e.message) }); }
+  })();
+}
+module.exports = { measure, measureInWorker, loadRef, cfgHash, lowestPrice, CEILING_PCT, BOUND_SE };
 
 if (require.main === module) {
 // BB_CFG='{"scatterW":1.3,"payScale":1.9}' overrides engine CFG for tuning runs (payScale multiplies pay + scatterPay). Workers inherit the env.

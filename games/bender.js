@@ -20,7 +20,7 @@ const deepEq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const hashOf = (cfg) => crypto.createHash('sha256').update(JSON.stringify(cfg)).digest('hex');
 // the full merged config for some overrides (validated by the engine first; same merge rule as the engine's own)
 function mergeOver(over) {
-  Eng.validateConfig(over || {});
+  Eng.validateConfig(over || {}, { skipSmoke: true });          // R2C-4: ranges and shape only; the 300-round smoke test runs in the checking worker (or inside Eng.setConfig for a config nobody measured)
   const next = clone(Eng.DEFAULT_CFG);
   (function m(b, o) { for (const k of Object.keys(o)) { if (b[k] && typeof b[k] === 'object' && !Array.isArray(b[k])) m(b[k], o[k]); else b[k] = o[k]; } })(next, over || {});
   return next;
@@ -41,7 +41,7 @@ function loadLiveConfig() {
 function setLiveConfig({ overrides, rtpLabel, note, measured } = {}) {
   const over = overrides || {}, next = mergeOver(over), reset = isDefaultCfg(next), proven = !!(measured && measured.ok === true && measured.hash === hashOf(next));
   if (!reset && !proven) throw new Error('cfg: refused, no passing payback measurement for these numbers (use setLiveConfigChecked)');
-  Eng.setConfig(over);                             // throws on a bad config; nothing changes in that case
+  Eng.setConfig(over, { skipSmoke: reset || proven });   // throws on a bad config; nothing changes in that case. A measured or shipped config was smoke-tested in the worker / is the shipped one
   if (checking) { checking.cancelled = true; checking = null; }   // R2C-2: an accepted change supersedes the check in flight
   const rec = { overrides: over, rtpLabel: null, note: String(note || '').slice(0, 300), updatedAt: new Date().toISOString(), measured: !reset && proven ? measured : null };
   const tmp = CFG_FILE + '.tmp';
@@ -68,7 +68,7 @@ async function setLiveConfigChecked({ overrides, rtpLabel, note, who, scale, see
   if (checking) { const e = new Error('cfg: another payback check is running, try again when it has finished'); log({ outcome: 'refused', why: e.message, new: null }); throw e; }
   const token = checking = { cancelled: false };
   let m;
-  try { m = await rtpTool.measure(next, { scale, seed, cancelled: () => token.cancelled }); } catch (e) { if (checking === token) checking = null; const why = token.cancelled ? SUPERSEDED : 'check failed: ' + String(e.message).slice(0, 200); log({ outcome: 'refused', why, new: null }); throw token.cancelled ? new Error('cfg: refused, ' + why) : e; }
+  try { m = await rtpTool.measureInWorker(next, { scale, seed, cancelled: () => token.cancelled }); } catch (e) { if (checking === token) checking = null; const why = token.cancelled ? SUPERSEDED : 'check failed: ' + String(e.message).slice(0, 200); log({ outcome: 'refused', why, new: null }); throw token.cancelled ? new Error('cfg: refused, ' + why) : e; }
   if (checking === token) checking = null;
   if (token.cancelled) { log({ outcome: 'refused', why: SUPERSEDED, new: null }); throw new Error('cfg: refused, ' + SUPERSEDED); }
   const summary = summaryOf(m), nw = { worst: { way: m.worst.way, pct: round2(m.worst.pct), se: round2(m.worst.se) }, spin: summary.spin, ways: summary, ms: m.ms, maxStretchMs: round2(m.maxStretchMs), seed: m.seed };

@@ -254,6 +254,24 @@ async function measurePayback(cfg, opts = {}) {
   const bound = Object.entries(ways).filter(([w, x]) => x.judged !== 'gift').map(([way, x]) => ({ way, pct: x.pct, se: x.se, upper: x.pct + BOUND_SE * x.se })).sort((a, b) => b.upper - a.upper)[0];
   return { ok: bound.upper <= CEILING_PCT && giftOk, giftOk, ceilingPct: CEILING_PCT, boundSe: BOUND_SE, bound, ways, worst, rounds, ms: Date.now() - t0, maxStretchMs: maxStretch, seed, scale, early };
 }
+// R2C-4: the admin path never runs a config's smoke test or its measuring on the server's event loop (the smoke test and a bonus of a degenerate config are synchronous, one of them can take seconds). A worker thread (this file
+// again, `ccCheck` in workerData) plays the smoke test, then measurePayback(); the server only waits for its message. A config whose smoke test does not end in SMOKE_LIMIT_MS, or whose check does not end in PB_DEADLINE_MS,
+// or that the admin withdrew (opts.cancelled), is stopped (terminate) and refused.
+const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
+const SMOKE_LIMIT_MS = 10000;
+function measureInWorker(cfg, opts = {}) {
+  return new Promise((resolve, reject) => {
+    const w = new Worker(__filename, { workerData: { ccCheck: true, cfg, opts: { scale: opts.scale, seed: opts.seed } }, resourceLimits: { maxOldGenerationSizeMb: 256 } });
+    let done = false, smoked = false;
+    const end = (fn, v) => { if (done) return; done = true; clearInterval(poll); clearTimeout(smokeT); clearTimeout(deadT); w.terminate(); fn(v); };
+    const poll = setInterval(() => { if (opts.cancelled && opts.cancelled()) end(reject, new Error('payback check cancelled')); }, 50);
+    const smokeT = setTimeout(() => { if (!smoked) end(reject, new Error('cfg: the config is too slow to check: its smoke test did not finish in ' + SMOKE_LIMIT_MS / 1000 + ' s')); }, SMOKE_LIMIT_MS);
+    const deadT = setTimeout(() => end(reject, new Error('payback check did not finish in ' + PB_DEADLINE_MS / 1000 + ' s')), PB_DEADLINE_MS + 5000);
+    w.on('message', (m) => { if (m.stage === 'smoke') smoked = true; else if (m.ok) end(resolve, m.r); else end(reject, new Error(m.message)); });
+    w.on('error', (e) => end(reject, e));
+    w.on('exit', (c) => end(reject, new Error('payback check worker stopped (' + c + ')')));
+  });
+}
 const round2 = (x) => Math.round(x * 100) / 100;
 const pbSummary = (r) => Object.fromEntries(Object.entries(r.ways).map(([w, x]) => [w, { pct: round2(x.pct), se: round2(x.se), ...(x.giftCents !== undefined ? { giftCents: round2(x.giftCents) } : {}) }]));
 // the label players see for a config that is not the shipped one and not a measured preset: the measured value, never a fixed claim
@@ -281,8 +299,9 @@ function writeFile(rec) {                // atomic: temp + rename. Throws when t
 // (measure, refuse above the ceiling, then this), and boot loads a saved file only if it carries the measurement made for exactly these numbers (loadLiveConfig). A caller that gets here without a passing
 // measurement for these numbers (tests of the machinery) is never silent: it writes an `unchecked` audit line, and the file it saves is not trusted at the next boot.
 function setLiveConfig({ overrides, rtpLabel, note, measured } = {}) {
-  const { next } = validate(overrides === undefined ? {} : overrides), reset = deepEq(next, DEFAULT), h = configHash(next);
+  const next = merge(overrides === undefined ? {} : overrides), reset = deepEq(next, DEFAULT), h = configHash(next);
   const proven = measured && measured.ok === true && measured.hash === h;
+  if (!reset && !proven) smoke(next);               // R2C-4: a measured config was smoke-tested in the checking worker, the shipped one is the shipped one; only a config nobody measured plays its smoke rounds on this thread
   if (!reset && !proven && !presets().some((p) => p.measuredHash === h)) audit({ who: 'in-process caller', outcome: 'unchecked', why: 'swapped in without a payback measurement of these numbers', note: String(note || '').slice(0, 120) });
   const rec = {
     overrides: JSON.parse(JSON.stringify(overrides === undefined ? {} : overrides)),
@@ -310,14 +329,14 @@ async function setLiveConfigChecked({ overrides, rtpLabel, note, who, scale, see
   const old = live.measured ? { pct: live.measured.summary.plain && live.measured.summary.plain.pct, worst: live.measured.worst, source: 'measured when set' } : { pct: 98.0, source: isCustom() ? 'unmeasured custom (pre-check file)' : 'shipped label (200M-spin sim)' };
   const log = (rec) => audit({ who: who || 'unknown', note: String(note || '').slice(0, 120), old, ...rec });
   let next;
-  try { ({ next } = validate(overrides === undefined ? {} : overrides)); } catch (e) { log({ outcome: 'refused', why: String(e.message).slice(0, 200), new: null }); throw e; }
+  try { next = merge(overrides === undefined ? {} : overrides); } catch (e) { log({ outcome: 'refused', why: String(e.message).slice(0, 200), new: null }); throw e; }
   if (deepEq(next, DEFAULT)) {                       // back to the shipped numbers: nothing to measure
     try { const info = setLiveConfig({ overrides: {}, note }); log({ outcome: 'accepted', new: { pct: 98.0, source: 'shipped' } }); return info; } catch (e) { log({ outcome: 'refused', why: String(e.message).slice(0, 200), new: null }); throw e; }
   }
   if (checking) { const e = new Error('cfg: another payback check is running, try again when it has finished'); log({ outcome: 'refused', why: e.message, new: null }); throw e; }
   const token = checking = { cancelled: false };
   let m;
-  try { m = await measurePayback(next, { scale, seed, cancelled: () => token.cancelled }); } catch (e) { if (checking === token) checking = null; const why = token.cancelled ? SUPERSEDED : 'check failed: ' + String(e.message).slice(0, 200); log({ outcome: 'refused', why, new: null }); throw token.cancelled ? new Error('cfg: refused, ' + why) : e; }
+  try { m = await measureInWorker(next, { scale, seed, cancelled: () => token.cancelled }); } catch (e) { if (checking === token) checking = null; const why = token.cancelled ? SUPERSEDED : 'check failed: ' + String(e.message).slice(0, 200); log({ outcome: 'refused', why, new: null }); throw token.cancelled ? new Error('cfg: refused, ' + why) : e; }
   if (checking === token) checking = null;
   if (token.cancelled) { log({ outcome: 'refused', why: SUPERSEDED, new: null }); throw new Error('cfg: refused, ' + SUPERSEDED); }
   const summary = pbSummary(m), nw = { worst: { way: m.worst.way, pct: round2(m.worst.pct), se: round2(m.worst.se) }, plain: summary.plain, ways: summary, ms: m.ms, maxStretchMs: round2(m.maxStretchMs), seed: m.seed };
@@ -441,4 +460,10 @@ function resolveRound(K, rng, buy, opts) {
   return { round: r, buy: r.buy, costTenths: r.costTenths, winTenths: r.winTenths, winX: r.winX, capped: r.capped, tier: r.tier, script: r.script };
 }
 
-module.exports = { setLiveConfigChecked, DAILY_GIFT_MAX_CENTS, measurePayback, pbSummary, measuredLabel, CEILING_PCT, DEFAULT, CUSTOM_LABEL, RULES, file: cfgFile, setFile, encodeCfg, decodeCfg, restoreSnapshot, configHash, presets, merge, validate, smoke, setLiveConfig, loadLiveConfig, liveInfo, clientCfg, publicCfg, buyPrices, rtp, snapshot, resolveRound };
+if (!isMainThread && workerData && workerData.ccCheck) {
+  (async () => {
+    try { smoke(workerData.cfg); parentPort.postMessage({ stage: 'smoke' }); parentPort.postMessage({ ok: true, r: await measurePayback(workerData.cfg, workerData.opts) }); }
+    catch (e) { parentPort.postMessage({ ok: false, message: String(e && e.message) }); }
+  })();
+}
+module.exports = { measureInWorker, setLiveConfigChecked, DAILY_GIFT_MAX_CENTS, measurePayback, pbSummary, measuredLabel, CEILING_PCT, DEFAULT, CUSTOM_LABEL, RULES, file: cfgFile, setFile, encodeCfg, decodeCfg, restoreSnapshot, configHash, presets, merge, validate, smoke, setLiveConfig, loadLiveConfig, liveInfo, clientCfg, publicCfg, buyPrices, rtp, snapshot, resolveRound };
