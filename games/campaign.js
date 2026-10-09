@@ -5,7 +5,7 @@
 //   start : validate -> ledger open (stake into escrow) -> record on disk (flushed) -> emit
 //   step  : validate -> E.step with the server rng -> scandal / run done: the drawn result is written into the record (`pend`, flushed) FIRST, then ledger settle -> drop the record -> emit end;
 //           survived and going on: record updated, FLUSHED, emit (no ledger line). A drawn result is final: a refused settle never un-draws it (retry, idle timer and boot close at the pended result),
-//           and a surviving step whose flush failed is remembered (`memo`) so the retry of the same message returns the same draw.
+//           and every draw of a step that could not be written is remembered (`memo`, one per step + target state) so a retry returns the same draw, whatever state is asked.
 //   cash  : steps >= 1 settle at stake x multiplier;  steps === 0 void (a refund: nothing was risked)
 //   idle  : 60 s with no accepted pick = the same as a cash-out (reason 'timeout')
 //   boot  : recover() cashes out every stored run at its stored multiplier (decision D1: a restart is an automatic cash-out) on the growth table the run was opened with, refunds a 0-step run,
@@ -127,14 +127,16 @@ function noteFence(e) {
   const c = e && ((e.cause && e.cause.code) || e.code);
   if (FENCE_CODES.includes(c) && !fenced) { fenced = c; logf('campaign: the ledger refuses writes for good, no new step is drawn until a restart', c); }
 }
-function moneyFailed(rec, e, where) {
+// What the client sees of ANY step or close that could not be written: an `error` to every socket of the account (and the stepping one), and the idle timer armed again. One function for every refused step, so a drawn scandal and a drawn survive
+// cannot be told apart before the result is on disk (Money 1008 R2D-1).
+function refused(rec, payload, extraSocket) {
+  if (runs.get(rec.nk) === rec && !rec.closed) { emitAcct(rec.nk, 'error', payload, extraSocket); armIdle(rec, rec.idleMs || idleMs()); }
+}
+const INTERNAL = () => ({ message: 'Server error', code: 'internal', game: 'campaign' });
+function moneyFailed(rec, e, where, extraSocket) {
   noteFence(e);
   logf('campaign: money call failed, the run stays open', rec.roundId, where, e && e.code, e && e.message);
-  if (runs.get(rec.nk) === rec && !rec.closed) {
-    const payload = e && e.code === 'funds' ? { message: fundsMsg(rec.cur), code: 'funds', game: 'campaign' } : { message: 'Server error', code: 'internal', game: 'campaign' };
-    emitAcct(rec.nk, 'error', payload);
-    armIdle(rec, rec.idleMs || idleMs());
-  }
+  refused(rec, e && e.code === 'funds' ? { message: fundsMsg(rec.cur), code: 'funds', game: 'campaign' } : INTERNAL(), extraSocket);
   return null;
 }
 
@@ -150,7 +152,7 @@ function closeRun(rec, run, reason, failedAt, extraSocket) {
   } catch (e) {
     if (e && e.code === 'round_closed') return alreadyPlayed(rec, extraSocket);
     if (e && e.code === 'stake_mismatch' && !refund) return unresolvable(rec, extraSocket);
-    return moneyFailed(rec, e, refund ? 'void' : 'settle');
+    return moneyFailed(rec, e, refund ? 'void' : 'settle', extraSocket);
   }
   forget(rec);
   try { store.delOpen(rec.nk); store.flush(); } catch (e) { logf('campaign: store flush failed after the ledger call (the ledger is the truth; recover() drops a record with no escrow)', rec.roundId, e && e.message); }
@@ -168,7 +170,7 @@ function alreadyPlayed(rec, extraSocket) {
 }
 // An escrow that is not the stake the record names cannot be settled by retrying: give back what the escrow holds.
 function unresolvable(rec, extraSocket) {
-  try { M().void(rec.nk, rec.cur, rec.roundId, 'unresolvable'); } catch (e) { return e && e.code === 'round_closed' ? alreadyPlayed(rec, extraSocket) : moneyFailed(rec, e, 'void'); }
+  try { M().void(rec.nk, rec.cur, rec.roundId, 'unresolvable'); } catch (e) { return e && e.code === 'round_closed' ? alreadyPlayed(rec, extraSocket) : moneyFailed(rec, e, 'void', extraSocket); }
   logf('campaign: settle refused, the escrow is not the stake the record names: voided', rec.roundId);
   forget(rec);
   try { store.delOpen(rec.nk); store.flush(); } catch {}
@@ -321,26 +323,26 @@ function step(socket, payload) {
   const n = field(payload, 'n'), to = field(payload, 'to');
   if (!isInt(n) || n !== rec.run.steps + 1) return err(socket, 'bad_step', 'That step is not next');
   if (typeof to !== 'string' || !E.options(rec.run, rec.tiers, rec.map).some((o) => o.to === to)) return err(socket, 'bad_step', 'You cannot go there');
-  let res;
-  if (rec.memo && rec.memo.n === n && rec.memo.to === to) res = rec.memo.res;             // the same step again after a failed flush: the SAME draw, not a second one
-  else {
-    rec.memo = null;
+  // One draw per (step, target state) for the life of the run in memory, until a result is durably written: a refused step, asked again for this or any other state, never draws again (Money 1008 K2-Cdisk, R2D-1).
+  const mk = `${n}|${to}`;
+  let res = rec.memo && rec.memo.get(mk);
+  if (!res) {
     const force = forceFor(rec, payload);
     const rng = force ? FORCE_RNG[force] : rngOf();
     try { res = E.step(rec.run, to, rng, rec.tiers, rec.map); } catch (e) { return err(socket, e && e.code === 'bad_step' ? 'bad_step' : 'internal', e && e.code === 'bad_step' ? 'You cannot go there' : 'Server error'); }
+    (rec.memo || (rec.memo = new Map())).set(mk, res);
   }
   const next = res.run;
   if (!res.ok || next.done) {                                                             // scandal (settle with win 0: the stake goes to the house) or landslide / dead end (an automatic cash-out at the new multiplier)
-    rec.memo = null;
     const old = toStored(rec);
     rec.pend = { run: next, reason: next.done };                                          // the drawn result is final from here: written to the record BEFORE the ledger is asked, so a refused settle,
     let durable = false;                                                                  // a restart or a flush error can never turn it into a cash-out, a better result or a new draw
-    try { store.putOpen(toStored(rec)); store.flush(); durable = true; }
+    try { store.putOpen(toStored(rec)); store.flush(); durable = true; rec.memo = null; }
     catch (e) { logf('campaign: pended result not flushed (the ledger settle is tried; if that fails too the step did not happen)', rec.roundId, e && e.message); try { store.putOpen(old); } catch {} }
     if (closeRun(rec, next, next.done, next.failedAt || null, socket) || durable || rec.closed || runs.get(rec.nk) !== rec) return;   // closed; or refused with the drawn result on disk: rec.pend stays, a retry / the idle timer / boot close it as drawn
-    // refused AND the result is on neither disk: the client was told an error, never the result, and a restart would forget it. The step did not happen: the run is back at the step before (disk = memory),
-    // and the retry of this same step gets the SAME draw (memo), so the failure is no re-roll. Record first, client last.
-    rec.pend = null; rec.memo = { n, to, res };
+    // refused AND the result is on neither disk: the client was told an error (closeRun -> moneyFailed), never the result, and a restart would forget it. The step did not happen: the run is back at the step before (disk = memory),
+    // and the retry of this step gets the SAME draw (rec.memo keeps every draw of it), so the failure is no re-roll. Record first, client last.
+    rec.pend = null;
     return;
   }
   // survived and the run goes on: the new record is flushed BEFORE the client hears of the step; a crash before the flush = the step never happened. No ledger line (nothing moved).
@@ -350,8 +352,7 @@ function step(socket, payload) {
   catch (e) {
     logf('campaign: step not flushed, the step did not happen yet (the retry of this step gets the same draw)', rec.roundId, e && e.message);
     try { store.putOpen(old); } catch {}
-    rec.memo = { n, to, res };
-    return err(socket, 'internal', 'Server error');
+    return void refused(rec, INTERNAL(), socket);                                          // the SAME answer, sockets and timer as a drawn scandal that could not be written (moneyFailed)
   }
   rec.memo = null; rec.run = next; rec.lastAt = t;
   armIdle(rec, idleMs());
