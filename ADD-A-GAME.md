@@ -5,10 +5,9 @@ Read `MONEY-SYSTEM.md` first for how the ledger, accounts and flows work. This f
 
 **Naming.** Cash is real money, Chips are free play. In code, Cash is the currency key `play` (cents) and Chips is `chips` (whole chips). Every label a player sees says Cash; every key, account name and message field still says `play`. Never rename a key.
 
-**Status at `money-hardening` (read at `69a44f6`, rechecked after merges up to `057a243`) plus the `mf-kit` branch.**
-- Cold Call and Campaign Trail play through `ctx.money` only.
-- At `69a44f6`, Ballot Bender spins through `ctx.money.round` but still reads its balances through `ctx.wallet` (`games/index.js:34` keeps `ctx.wallet` for Bender only; `games/bender.js:114,148`).
-- **Pending merge of `mf-kit` (head `5ee9799`)**: Bender reads balances through `ctx.money.balance` and no module gets `ctx.wallet`; the kit (`tests/game-kit.js`, `tests/game-kit-selftest.js`), the three adapters `games/{bender,coldcall,campaign}.kit.js`, the example game `games/_example-coinflip.js` and its adapter exist. Everything below marked **[kit]** is written against that branch and is not true of `money-hardening` until the lead merges it.
+**Status at `money-hardening` head `1bb821f` (the kit merged in `2dee7c1`, the kit gaps in `ffeb19b`).**
+- All three games play through `ctx.money` only: Cold Call, Campaign Trail and Ballot Bender (one `ctx.money.round` ledger line per round; balances through `ctx.money.balance`). No module gets `ctx.wallet` (`games/index.js:33`), and `games/index.js` has no per-game case left.
+- The kit (`tests/game-kit.js`, `tests/game-kit-selftest.js`), the three adapters `games/{bender,coldcall,campaign}.kit.js`, the example game `games/_example-coinflip.js` and its adapter `games/_example-coinflip.kit.js` are in the tree. `[kit]` marks text about them.
 
 ## 1. The one money rule
 
@@ -118,7 +117,7 @@ Game state (reels in progress, the record of an open round, free rounds, leads, 
 6. Resolve the round first with a pure function and the injected `ctx.rng` (fall back to a crypto rng), then one money call, then state, then emit.
 7. Rate-limit every event a client can spam, keyed by ACCOUNT, not by socket (a per-socket limit is bypassed by opening more tabs). Validate every payload field against a fixed list (bet levels, currencies, choices).
 8. Keep the math in `games/<id>-engine.js` with a `games/<id>-sim.js` that prints the payback, and tests in `tests/<id>.js`. Cap the largest single payout in the engine (the ledger has no cap: `MONEY-SYSTEM.md` section 8) and state it.
-9. If the game has live config (admin-changeable math): validate it, MEASURE its payback, refuse a config above 100.0%, make the label the measured value, log one line per change (Cold Call `games/coldcall-livecfg.js`, Bender `games/bender.js` `setLiveConfigChecked`, both behind the admin token routes in `server.js`).
+9. If the game has live config (admin-changeable math): check number ranges first, MEASURE its payback in a worker thread (smoke limit 10 s, deadline 300 s, one check at a time, a newer save or a reset cancels it), accept only when every way to play has measured + 3 standard errors at or under 100.0 (a buy is measured at the lowest price any bet is charged), make the label the measured value, log one line per change (Cold Call `games/coldcall-livecfg.js`, Bender `games/bender.js` `setLiveConfigChecked`, both behind the admin token routes in `server.js`; the operator side is `RUNBOOK.md` section 3b, the rule is `MONEY-SYSTEM.md` section 5.12).
 
 ## 7. Client (`public/games/<id>/...`) and the shell
 
