@@ -11,7 +11,17 @@
   let L = { games: {} };
   let signedIn = false, focusId = 'poker', zTop = 20, inResize = false;
   const wallet = { play: null, chips: null };
-  let wmode = 'play', lastWin = 0, sessNet = 0;
+  let lastWin = 0, sessNet = 0;
+  // MODE FLIP (money hardening 2026-10-08): the wallet mode is PER GAME and remembered for this tab (a reload keeps Chips: Cash is real money, a page that comes back in Cash by itself is the dangerous direction).
+  // A game tells the shell its mode on every change; the shell hands it back only on the game's FIRST init (a live game keeps its own mode: a resync never flips it).
+  const MODES = {};
+  const modeKey = (g) => 'ping.mode.' + ((user() && user().key) || '') + '.' + g;
+  function modeOf(g) {
+    if (MODES[g]) return MODES[g];
+    let m = 'play'; try { const v = sessionStorage.getItem(modeKey(g)); if (v === 'chips' || v === 'play') m = v; } catch (e) { /* private mode: Cash default */ }
+    return (MODES[g] = m);
+  }
+  function setModeOf(g, m) { m = m === 'chips' ? 'chips' : 'play'; MODES[g] = m; try { sessionStorage.setItem(modeKey(g), m); } catch (e) { /* not kept */ } }
   const $ = (id) => document.getElementById(id);
   const sock = () => window.PingSocket || null;
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -320,7 +330,7 @@
     s.on('wallet', (w) => { setWallet(w); });
     s.on('money', (m) => { if (!m) return; if (m.wallet) setWallet(m.wallet); else if (typeof m.bank === 'number') setWallet({ chips: m.bank }); });
     s.on('auth_ok', () => { setSignedIn(true); refreshTop(); s.emit('wallet_get'); bonusShown = false; s.emit('bonus:status'); });
-    s.on('auth_out', () => { wallet.chips = null; wallet.play = null; setSignedIn(false); bonusShown = false; if (window.PingJuice) { PingJuice.streakFlame($('sh-flame'), 0); } const x = $('sh-xp'); if (x) x.textContent = ''; lastXp = null; lastStats = null; bonusSt = null; renderBonusBtn(); });
+    s.on('auth_out', () => { for (const k of Object.keys(MODES)) delete MODES[k]; wallet.chips = null; wallet.play = null; setSignedIn(false); bonusShown = false; if (window.PingJuice) { PingJuice.streakFlame($('sh-flame'), 0); } const x = $('sh-xp'); if (x) x.textContent = ''; lastXp = null; lastStats = null; bonusSt = null; renderBonusBtn(); });
     s.on('social:event', onSocialEvent);
     s.on('account:stats', onStats);
     s.on('achv:unlocked', onAchv);
@@ -332,7 +342,7 @@
       PingJuice.streakCalendar(b, { targetEl: $('sh-chips') || $('sh-wallet'), format: chipAmt, onClaim: () => s.emit('bonus:claim') });
     });
     s.on('bonus:claimed', (r) => { if (r && r.ok && r.wallet) setWallet(r.wallet); if (r && r.ok && window.PingJuice) PingJuice.toast('Day **' + (r.day || r.streak) + '** bonus **' + chipAmt(r.amountCents) + '** claimed. Streak **' + r.streak + '**', { sticker: 'vp-chip' }); });
-    s.on('g:bender:state', (st) => { benderReady = true; if (st && st.balances) setWallet(st.balances); toBender({ type: 'init', wallet: Object.assign({}, wallet), mode: wmode, bets: (st && (st.bets || st.betLevels)) || undefined, cfg: st && st.cfg }); });
+    s.on('g:bender:state', (st) => { benderReady = true; if (st && st.balances) setWallet(st.balances); toBender({ type: 'init', wallet: Object.assign({}, wallet), mode: modeOf('bender'), bets: (st && (st.bets || st.betLevels)) || undefined, cfg: st && st.cfg }); });
     s.on('g:bender:cfg', (c) => { if (c && c.cfg) toBender({ type: 'cfg', cfg: c.cfg }); });
     s.on('g:bender:result', (p) => {
       const reqId = spinQ.shift(); lastWin = p && typeof p.totalWin === 'number' ? p.totalWin : lastWin;
@@ -341,7 +351,7 @@
       toBender({ type: 'result', reqId, payload: p }); refreshDock();
     });
     s.on('g:bender:error', (e) => benderErr(e));
-    s.on('g:coldcall:state', (st) => { ccReady = true; if (st && st.balances) setWallet(st.balances); toCC({ type: 'init', wallet: Object.assign({}, wallet), mode: wmode, bets: (st && (st.bets || st.betLevels)) || undefined, state: st, name: (user() && (user().display || user().key)) || undefined }); });
+    s.on('g:coldcall:state', (st) => { ccReady = true; if (st && st.balances) setWallet(st.balances); toCC({ type: 'init', wallet: Object.assign({}, wallet), mode: modeOf('coldcall'), bets: (st && (st.bets || st.betLevels)) || undefined, state: st, name: (user() && (user().display || user().key)) || undefined }); });
     s.on('g:coldcall:result', (p) => {
       const reqId = ccQ.shift(); ccBadge(p);
       if (p && p.balances) setWallet(p.balances);
@@ -359,7 +369,7 @@
     s.on('floor:feed', (p) => toCC({ type: 'floor', kind: 'feed', payload: p }));
     s.on('floor:pot', (p) => toCC({ type: 'floor', kind: 'pot', payload: p }));
     // CAMPAIGN TRAIL: the shell forwards g:campaign:* to the game's iframe untouched; the wallet follows `balances`; a dropped line is re-synced by asking state again
-    s.on('g:campaign:state', (st) => { campReady = true; if (st && st.balances) setWallet(st.balances); toCamp({ type: 'init', wallet: Object.assign({}, wallet), mode: wmode, state: st, name: (user() && (user().display || user().key)) || undefined }); });
+    s.on('g:campaign:state', (st) => { campReady = true; if (st && st.balances) setWallet(st.balances); toCamp({ type: 'init', wallet: Object.assign({}, wallet), mode: modeOf('campaign'), state: st, name: (user() && (user().display || user().key)) || undefined }); });
     for (const ev of ['run', 'step', 'end']) s.on('g:campaign:' + ev, (p) => { if (p && p.balances) setWallet(p.balances); toCamp({ type: 'ev', event: ev, payload: p }); });
     s.on('disconnect', () => { if (campReady) { campDropped = true; toCamp({ type: 'disconnect' }); } });
     s.on('auth_ok', () => { if (campDropped) { campDropped = false; s.emit('g:campaign:state', {}); } });
@@ -438,7 +448,7 @@
       spinQ.push(m.reqId);
       const p = { bet: m.bet, mode: m.mode }; if (m.buy) p.buyBonus = m.buy;
       s.emit('g:bender:spin', p);
-    } else if (m.type === 'mode') { wmode = m.mode === 'chips' ? 'chips' : 'play'; }
+    } else if (m.type === 'mode') setModeOf('bender', m.mode);
     else if (m.type === 'round') {
       if (typeof m.win === 'number') lastWin = m.win; refreshDock();
       if (window.PingJuice && (m.tier === 'mega' || m.tier === 'jackpot') && m.bet > 0) PingJuice.toast(`**You** hit **${Math.round(m.win / m.bet)}x** on Ballot Bender`, { sticker: 'ballot-cherry' });
@@ -473,7 +483,7 @@
       const d = { roundId: m.roundId, k: m.k }; if (m.k === 'pick') d.p = m.p; else d.take = m.take === true; s.emit('g:coldcall:decide', d);
     } else if (m.type === 'ready') { if (s && m.roundId) s.emit('g:coldcall:ready', { roundId: m.roundId }); }
     else if (m.type === 'history') { if (s) s.emit('g:coldcall:history', {}); }
-    else if (m.type === 'mode') { wmode = m.mode === 'chips' ? 'chips' : 'play'; }
+    else if (m.type === 'mode') setModeOf('coldcall', m.mode);
     else if (m.type === 'round') refreshDock();
     else if (m.type === 'esc') focus('poker');
   });
@@ -490,7 +500,7 @@
     else if (m.type === 'req') {
       if (!s || !CAMP_EVENTS.includes(m.event)) return;
       const p = m.payload && typeof m.payload === 'object' ? m.payload : {}; s.emit('g:campaign:' + m.event, p);
-    } else if (m.type === 'mode') { wmode = m.mode === 'chips' ? 'chips' : 'play'; }
+    } else if (m.type === 'mode') setModeOf('campaign', m.mode);
     else if (m.type === 'esc') focus('poker');
   });
 
@@ -523,7 +533,7 @@
     }
   }
 
-  const Shell = { registerGame, registerScreen, showScreen, openGame, focus, minimize, maximize, restore, close, float, dock, layout, config: cfg, setSignedIn, setWallet, isSignedIn: () => signedIn, state: () => L };
+  const Shell = { wmode: (g) => modeOf(g), registerGame, registerScreen, showScreen, openGame, focus, minimize, maximize, restore, close, float, dock, layout, config: cfg, setSignedIn, setWallet, isSignedIn: () => signedIn, state: () => L };
   window.Shell = Shell;
 
   function init() {
