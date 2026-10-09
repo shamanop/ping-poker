@@ -27,6 +27,37 @@ const proto = {
     return nos.find(n => n > this.button) ?? nos[0];
   },
 
+  // ---- missed blinds (K3-8) -----------------------------------------------------------------------------------
+  // A seat that missed a hand while it was sitting out or away (missedBlind) is dealt in again only when the big blind reaches it: it
+  // waits, it does not post out of turn, and it can never be the button. A player who stood up and sits again at this table (table.owesBB, kept per
+  // player, not per seat number or hand count) is the same case: standing up, and sitting again at once or in another seat, never clears the
+  // debt, only being dealt the big blind does (R2A-1). A player who never sat here has missed
+  // nothing and is dealt in at the next hand, in whatever position the button gives it (the rule for new seats is unchanged). With fewer than two seats that are free to play
+  // there is no game to wait behind, so the waiting seats are dealt in at once.
+  pickButton(elig) {
+    let base = elig.filter(s => !s.missedBlind);
+    if (base.length < 2) { for (const s of elig) s.missedBlind = false; base = elig; }
+    return this.nextButton(base);
+  },
+  // The seats dealt into this hand: every seat that is free to play, plus the first waiting seat (ring order after the button) that
+  // would be the big blind if it were dealt in.
+  dealtSeats(elig, button) {
+    const base = elig.filter(s => !s.missedBlind), waiting = elig.filter(s => s.missedBlind);
+    if (!waiting.length) return elig;
+    const after = n => (n - button + 1000) % 1000;
+    waiting.sort((a, b) => after(a.seat) - after(b.seat));
+    for (const w of waiting) {
+      const trial = [...base, w].sort((a, b) => a.seat - b.seat), nos = trial.map(x => x.seat);
+      const ring = nos.filter(n => n > button).concat(nos.filter(n => n <= button));    // seats after the button, wrapping (the button last)
+      if (ring[1] === w.seat) return trial;                                            // at least 3 seats here: SB = ring[0], BB = ring[1]
+    }
+    return base;
+  },
+  // A hand is dealt without a seat that has chips and is sitting out or away: that seat now owes the wait for the big blind.
+  noteMissedBlinds(dealtIn) {
+    for (const s of this.players()) if (!dealtIn.includes(s) && s.stack > 0 && !s.leaving && (s.sitOutNext || !s.connected)) s.missedBlind = true;
+  },
+
   nextHandDelay() { const env = Number(process.env.HAND_DELAY_MS); if (env > 0) return env; return this.hand && this.hand.uncontested ? 7000 : 5000; },
 
   // ---- start ------------------------------------------------------------------------------------------------
@@ -36,6 +67,8 @@ const proto = {
     if (this.endNightPending) { this.finishNight(this.endNightPending); return false; }
     const elig = this.eligible();
     if (elig.length < 2) { this.setPhase('waiting'); this.checkAutostart(); return false; }
+    this.missedSnap = new Map(this.players().map(s => [s, s.missedBlind]));          // a voided hand did not happen: void() puts the flags back
+    const button = this.pickButton(elig), dealtIn = this.dealtSeats(elig, button);
     this.clearDeadline('phase');
     const now = this.now();
     if (this.pendingBlinds) {
@@ -47,15 +80,16 @@ const proto = {
     const risen = lv.enabled && lv.level > (this.blindLevelSeen || 0);
     this.blindLevelSeen = lv.level;
     this.handNo += 1;
-    this.button = this.nextButton(elig);
+    this.button = button;
+    this.noteMissedBlinds(dealtIn);
     this.handStartStacks = {};
     for (const s of this.players()) { this.handStartStacks[s.seat] = s.stack; s.dealt = false; s.folded = false; s.lastAction = null; s.pre = null; }
     const deck = (this.deckSource && this.deckSource()) || shuffle(makeDeck(), this.rng || (this.rng = defaultRng()));
     this.committed = false; this.lastResult = null; this.log = [];
     try {
-      this.hand = engine.createHand({ handNo: this.handNo, button: this.button, sb: lv.sb, bb: lv.bb, seats: elig.map(s => ({ seat: s.seat, stack: s.stack })), deck });
+      this.hand = engine.createHand({ handNo: this.handNo, button: this.button, sb: lv.sb, bb: lv.bb, seats: dealtIn.map(s => ({ seat: s.seat, stack: s.stack })), deck });
     } catch (e) { this.hand = null; this.handNo -= 1; throw e; }
-    for (const s of elig) s.dealt = true;
+    for (const s of dealtIn) { s.dealt = true; s.missedBlind = false; }
     const h = this.hand;
     this.setPhase('betting');
     this.pushLog(`Hand ${this.handNo} dealt`);
@@ -200,19 +234,42 @@ const proto = {
     this.afterEngine(engine.dealNext(h));
   },
 
-  // ---- leave / kick while a hand is live (N1) -----------------------------------------------------------------
+  // ---- leave while a hand is live (N1, K3-1, K3-1b) ----------------------------------------------------------
   // Cash out only what is not committed to this hand now; the committed chips stay in the seat account until the batch.
+  // A KICK never gets here for a seat that still has a hand to play (Table.kick marks it kickPending instead), only for a folded one.
+  // A player who walks out of his own accord with a decision still ahead of him folds (his own choice); all-in or in the run-out he
+  // has no decision, so he stays in the hand and is paid what he wins.
   leaveInHand(seat, kind) {
     const amount = this.money.leaveAmount(this, seat.key, this.committedOf(seat));
     const r = this.money.cashOut(this, seat.key, amount, kind);
     seat.leaving = true; seat.connected = false; seat.socketId = null; seat.sitOutNext = true; seat.pre = null;
     this.out.event(this, 'left', { key: seat.key, cashedOut: amount, reason: kind === 'kick' ? 'kicked' : kind, pendingHand: true }, seat.key);
     const hs = this.hand.seats[seat.seat];
-    if (hs && !hs.folded) {
+    // A decision is still ahead of him only while betting is open and he is not all-in (the run-out has none, and an uncalled layer handed
+    // back to an all-in seat clears its allIn flag without giving it a decision).
+    const decides = !!hs && !hs.folded && !hs.allIn && this.hand.phase === 'betting';
+    if (decides) {
       seat.folded = true;
       this.afterEngine(engine.foldOut(this.hand, seat.seat));
     } else { this.out.event(this, 'room', {}); this.out.state(this); }
     return { cashedOut: amount, left: false, intent: r.intent };
+  },
+
+  // The hand is over (settled or voided): a seat whose kick was held back is paid everything it has in the seat account (exactly what it
+  // would have been paid without the kick), removed, and the kick events go out.
+  finishKick(s) {
+    if (s.leaving) {                                        // he walked out himself meanwhile: leaveInHand already paid the stack; the batch sweep pays the rest
+      this.money.sweep(this, s.key); this.removeSeat(s);
+      this.out.event(this, 'table_event', { kind: 'kicked', key: s.key, display: this.displayOf(s.key) });
+      return;
+    }
+    const amount = this.money.seatBalance(this, s.key);
+    const r = this.money.cashOut(this, s.key, amount, 'kick');
+    this.removeSeat(s);
+    this.out.event(this, 'left', { key: s.key, cashedOut: r.noop ? 0 : amount, reason: 'kicked' }, s.key);
+    this.out.event(this, 'table_event', { kind: 'kicked', key: s.key, display: this.displayOf(s.key) });
+    this.out.event(this, 'room', {});
+    this.out.event(this, 'money', { keys: [s.key] });
   },
 
   // ---- settle: the commit point -------------------------------------------------------------------------------
@@ -242,7 +299,8 @@ const proto = {
     this.lastResult = result;
     for (const s of Object.values(bySeat)) {
       s.pre = null;
-      if (s.leaving) best('sweep:' + s.key, () => { this.money.sweep(this, s.key); this.removeSeat(s); this.out.event(this, 'money', { keys: [s.key] }); });
+      if (s.kickPending) best('kick:' + s.key, () => this.finishKick(s));
+      else if (s.leaving) best('sweep:' + s.key, () => { this.money.sweep(this, s.key); this.removeSeat(s); this.out.event(this, 'money', { keys: [s.key] }); });
       else if (s.stack === 0) busted.push(s);
     }
     if (result) { this.history.unshift(result.history); if (this.history.length > 10) this.history.length = 10; }
@@ -256,6 +314,7 @@ const proto = {
       this.clearDeadline('phase');
       if (this.phase === 'between') this.setDeadline('phase', 'nexthand', this.nextHandDelay(), { hand: true });
     });
+    best('pause', () => this.applyPendingPause());           // K3-4: a pause asked for during the hand starts now that it has settled
   },
 
   buildResult(h, r, bySeat, names) {
@@ -290,9 +349,11 @@ const proto = {
     this.hand = null;
     this.clearHandDeadlines();
     for (const s of [...this.players()]) {
+      if (s.kickPending) { try { this.finishKick(s); } catch (e) { console.error('[v2] void kick failed', s.key, e && e.message); } continue; }
       if (s.leaving) { try { this.money.sweep(this, s.key); } catch (e) { console.error('[v2] void sweep failed', s.key, e && e.message); } this.removeSeat(s); continue; }
       if (s.dealt && this.handStartStacks && this.handStartStacks[s.seat] != null) s.stack = this.handStartStacks[s.seat];
       s.dealt = false; s.folded = false; s.pre = null; s.lastAction = null; live.add(s.seat);
+      if (this.missedSnap && this.missedSnap.has(s)) s.missedBlind = this.missedSnap.get(s);
     }
     this.setPhase('between'); this.committed = false;
     const now = this.now();
@@ -300,8 +361,9 @@ const proto = {
     console.error(`[v2] VOID table=${this.id} hand=${this.handNo} reason=${reason}${err ? ' ' + (err.code || err.name) + ': ' + err.message : ''}`);
     this.out.event(this, 'void', { reason });
     this.out.state(this);
-    if (this.voids.length >= 3) { this.pause(); return true; }
+    if (this.voids.length >= 3) { this.pause(true); return true; }
     this.setDeadline('phase', 'nexthand', 2000, { hand: true });
+    this.applyPendingPause();
     return true;
   },
 
@@ -323,7 +385,7 @@ const proto = {
     }
     this.endNightPending = null; this.hand = null;
     this.deadlines.clear(); this.arm();
-    this.phase = 'ended'; this.state = 'ended'; this.paused = false; this.endedAt = this.now();
+    this.phase = 'ended'; this.state = 'ended'; this.paused = false; this.pausePending = false; this.endedAt = this.now();
     this.out.event(this, 'night_end', { reason, keys });
     this.out.event(this, 'money', { keys });
     this.out.state(this);

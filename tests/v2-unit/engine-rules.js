@@ -469,8 +469,8 @@ module.exports = function register(t) {
 
   t.case('S7c heads-up SB all-in from the blind: BB (button) keeps its unmatched 25', () => {
     const h = mk({ stacks: [1000, 25], button: 0, holes: [['7c', '2d'], ['As', 'Ad']], board: DRY });
-    // button posts SB 25 and must complete to 50; seat 1 posted its whole stack as BB
-    play(h, [[0, 'call']]);
+    // button posts SB 25; seat 1 posted its whole stack (25) as BB. K3-3: the button is not asked to complete to a bb nobody posted
+    assert.strictEqual(h.phase, 'runout');
     finish(h);
     assert.deepStrictEqual(stacksOf(h), [975, 50]);
   });
@@ -488,8 +488,10 @@ module.exports = function register(t) {
       { amount: 600, eligible: [2, 3] }, { amount: 400, eligible: [3] }]);
     assert.deepStrictEqual(sidePots({ 0: 100, 1: 300, 2: 300 }, [0]), [{ amount: 700, eligible: [1, 2] }]);
     assert.deepStrictEqual(sidePots({ 0: 500, 1: 100, 2: 300 }, [0]), [
-      { amount: 300, eligible: [1, 2] }, { amount: 600, eligible: [2] }]);
-    assert.deepStrictEqual(sidePots({ 0: 1000, 1: 100, 2: 1000 }, [0, 2]), [{ amount: 2100, eligible: [1] }]);
+      { amount: 300, eligible: [1, 2] }, { amount: 400, eligible: [2] }, { amount: 200, eligible: [], refund: { 0: 200 } }]);
+    // K3-2: chips above the highest live commitment are nobody's to win: each contributor gets its own back
+    assert.deepStrictEqual(sidePots({ 0: 1000, 1: 100, 2: 1000 }, [0, 2]), [
+      { amount: 300, eligible: [1] }, { amount: 1800, eligible: [], refund: { 0: 900, 2: 900 } }]);
     assert.deepStrictEqual(sidePots({ 0: 50, 1: 50, 2: 0 }, new Set()), [{ amount: 100, eligible: [0, 1] }]);
     assert.deepStrictEqual(sidePots({}, []), []);
     assert.deepStrictEqual(sidePots({ 0: 1, 1: 2, 2: 0 }, [0, 1]), [{ amount: 3, eligible: [2] }]);
@@ -497,19 +499,21 @@ module.exports = function register(t) {
   });
 
   // ─── foldOut ──────────────────────────────────────────────────────────────
-  t.case('foldOut off turn: seat folds, turn stays, blinds stay in the pot', () => {
+  t.case('foldOut off turn: seat folds, turn stays, the left seat\'s blind stays in the pot as dead money (K3-2: nobody has to call it)', () => {
     const h = mk({ stacks: [1000, 1000, 1000], button: 0 });
     const ev = H.foldOut(h, 2); // BB leaves while seat 0 is to act
     assert.deepStrictEqual(ev, [{ type: 'fold', seat: 2, forced: true }]);
     assert.strictEqual(h.toAct, 0);
     assert.strictEqual(h.seats[2].folded, true);
-    play(h, [[0, 'call'], [1, 'call']]);
+    assert.strictEqual(H.legalActions(h, 0).toCall, 25, 'the bet to call is what a seat still in has put in (the small blind)');
+    play(h, [[0, 'call'], [1, 'check']]);
     assert.strictEqual(h.street, 'flop');
     assert.strictEqual(h.toAct, 1);
-    assert.strictEqual(H.totalPot(h), 150);
+    assert.strictEqual(H.totalPot(h), 75, 'the left BB\'s 50 is dead only up to what the others put in (the other 25 is returned to him)');
     play(h, [[1, 'check'], [0, 'check'], [1, 'check'], [0, 'check'], [1, 'check'], [0, 'check']]);
     const r = H.settle(h);
-    assert.strictEqual(r.pots.reduce((a, p) => a + p.amount, 0), 150);
+    assert.strictEqual(r.pots.reduce((a, p) => a + p.amount, 0), 75);
+    assert.strictEqual(r.returned[2], 25);
     assert.strictEqual(r.payouts[2], 0);
   });
 
@@ -572,17 +576,17 @@ module.exports = function register(t) {
     assert.deepStrictEqual(r.pots, [{ amount: 2, eligible: [4], winners: [4] }]);
   });
 
-  t.case('foldOut of the top bettor: the matched part stays in the pot, a live top bettor still gets the uncalled part', () => {
+  t.case('foldOut of the top bettor: the matched part stays in the pot, nobody is asked to call the rest, it comes back to its owner', () => {
     const h = mk({ stacks: [1000, 1000, 1000], button: 0 });
     play(h, [[0, 'raise', 300]]);
     H.foldOut(h, 0); // the raiser is kicked while seat 1 is to act
     assert.strictEqual(h.toAct, 1);
-    play(h, [[1, 'call']]);
-    play(h, [[2, 'fold']]);
+    assert.strictEqual(H.legalActions(h, 1).toCall, 25, 'the kicked raiser\'s 300 is not a bet to call');
+    play(h, [[1, 'fold']]);
     assert.strictEqual(h.phase, 'showdown');
     const r = H.settle(h);
-    assert.deepStrictEqual(r.returned, { 0: 0, 1: 0, 2: 0 });
-    assert.deepStrictEqual(r.payouts, { 0: 0, 1: 650, 2: 0 });
+    assert.deepStrictEqual(r.returned, { 0: 250, 1: 0, 2: 0 });
+    assert.deepStrictEqual(r.payouts, { 0: 0, 1: 0, 2: 125 });
     // and with a live raiser the uncalled part still comes back
     const g = mk({ stacks: [1000, 1000, 1000], button: 0 });
     play(g, [[0, 'raise', 300]]);
@@ -591,18 +595,18 @@ module.exports = function register(t) {
     assert.deepStrictEqual(H.settle(g).returned, { 0: 250, 1: 0, 2: 0 });
   });
 
-  t.case('E1 does not cover a voluntary fold: SB folds over two short all-ins -> nothing returned, whole blind is dead money (old-server showdown)', () => {
-    // seed 7 hand 8895 of the old-showdown differential: SB 5040 in, BB all-in 2520, caller all-in 2520, SB folds
+  t.case('K3-3 SB over two short all-ins: the SB is not asked to call a bet nobody made; his blind above the all-ins is returned', () => {
+    // seed 7 hand 8895 of the old-showdown differential: SB 5040 in, BB all-in 2520, caller all-in 2520. The old server made the SB call
+    // 7560 and forfeited his whole blind when he folded; the engine now returns the 2520 nobody matched.
     const h = mk({ stacks: { 0: 40320, 1: 2520, 3: 98280, 4: 2520, 7: 80640 }, button: 1, sb: 5040, bb: 7560 });
-    const ev = play(h, [[7, 'fold'], [0, 'fold'], [1, 'call'], [3, 'fold']]);
-    assert.deepStrictEqual(ev.filter(e => e.type === 'returned'), []);
+    const ev = play(h, [[7, 'fold'], [0, 'fold'], [1, 'call']]);
+    assert.deepStrictEqual(ev.filter(e => e.type === 'returned'), [{ type: 'returned', seat: 3, amount: 2520 }]);
     runOut(h);
     assert.strictEqual(h.phase, 'showdown');
     const r = H.settle(h);
-    assert.deepStrictEqual(r.returned, { 0: 0, 1: 0, 3: 0, 4: 0, 7: 0 });
-    assert.strictEqual(r.payouts[1] + r.payouts[4], 10080);
-    assert.strictEqual(r.net[3], -5040);
-    assert.strictEqual(h.seats[3].stack, 98280 - 5040);
+    assert.deepStrictEqual(r.returned, { 0: 0, 1: 0, 3: 2520, 4: 0, 7: 0 });
+    assert.strictEqual(r.payouts[1] + r.payouts[3] + r.payouts[4], 7560);
+    assert(r.net[3] >= -2520, 'the small blind loses at most what the all-in seats covered');
   });
 
   t.case('E1 heads-up: host limps, P1 raises to 500, host kicks P1 -> P1 gets his uncalled 450 back, host wins 100', () => {

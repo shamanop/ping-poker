@@ -104,7 +104,7 @@ async function session(srv, log) {
   });
   let t2;
   await step('play-table', async () => {
-    const c = await sue.req('table_create', { settings: { name: 'ShapePlay', mode: 'play', buyIn: { min: 200, max: 100000, default: 2000 }, blinds: { sb: 25, bb: 50 }, autoStart: false, actionTimerSec: 0 } }, 'table_created');
+    const c = await sue.req('table_create', { settings: { name: 'ShapePlay', mode: 'play', buyIn: { min: 200, max: 100000, default: 2000 }, blinds: { sb: 25, bb: 50 }, autoStart: false, actionTimerSec: 60 } }, 'table_created');
     t2 = c.table; if (!t2) throw new Error('create ' + c.__err);
     for (const b of [sue, tom, uri]) { const r = await b.sit(t2.id, 2000, 'play'); if (r.__err) throw new Error(b.name + ' sit ' + r.__err); }
     sue.emit('table_start', { tableId: t2.id });

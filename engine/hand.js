@@ -49,6 +49,15 @@ function needsAction(hand, n) {
   return false;
 }
 
+// K3-2: the bet to call is never above what a seat still in the hand has put in. When the owner of the top bet folds
+// (kicked, left, or a fold with nothing to call), the seats still in are not asked to call a bet nobody holds any more;
+// its unmatched part goes back to its owner in returnUncalled.
+function clampCurrentBet(hand) {
+  let top = 0;
+  for (const s of seatNums(hand)) if (!hand.seats[s].folded && hand.seats[s].bet > top) top = hand.seats[s].bet;
+  if (top < hand.currentBet) hand.currentBet = top;
+}
+
 function nextToAct(hand, from) {
   for (const s of ringAfter(hand, from)) if (needsAction(hand, s)) return s;
   return null;
@@ -95,6 +104,9 @@ function createHand(opts) {
   }
   postBlind(hand, hand.sbSeat, sb);
   postBlind(hand, hand.bbSeat, bb);
+  // K3-3: the bet to call is what was actually put in. A big blind all-in for less than the small blind (or than bb) does not
+  // make a bet of `bb` that nobody posted, and nobody is asked to call more than a seat still in has put in.
+  hand.currentBet = Math.max(hand.seats[hand.sbSeat].bet, hand.seats[hand.bbSeat].bet);
 
   const first = nextToAct(hand, hand.bbSeat);
   if (first === null) closeBetting(hand, []);
@@ -151,6 +163,7 @@ function apply(hand, seat, action) {
   switch (action.type) {
     case 'fold':
       s.folded = true;
+      clampCurrentBet(hand);
       events.push({ type: 'fold', seat: n });
       break;
 
@@ -222,9 +235,7 @@ function returnUncalled(hand, events) {
   const second = bets.length > 1 ? bets[1].bet : 0;
   if (bets[0].bet <= second) return;
   const x = hand.seats[bets[0].s];
-  // A seat that folded by its own action forfeits its whole bet (dead money, same as the old server's showdown).
-  // E1: a seat removed by foldOut (kicked, stood up) still gets the uncalled layer back.
-  if (x.folded && !x.forced) return;
+  // K3-3: the part of a bet nobody matched goes back to its owner whatever happened to the owner (folded, timed out, kicked, left).
   const back = bets[0].bet - second;
   // Only skip when handing it back would leave the pot empty (nothing for the live seat to play for).
   if (totalPot(hand) - back <= 0) return;
@@ -288,6 +299,7 @@ function foldOut(hand, seat) {
   if (s.folded) return [];
   s.folded = true;
   s.forced = true;
+  clampCurrentBet(hand);
   const events = [{ type: 'fold', seat: n, forced: true }];
   if (hand.phase === 'runout') {
     if (liveSeats(hand).length === 1) toShowdown(hand, events);
@@ -321,6 +333,10 @@ function settle(hand) {
   for (const s of all) { payouts[s] = 0; returned[s] = hand.seats[s].returned; }
 
   const outPots = pots.map(p => {
+    if (p.refund) {                       // chips no live seat matched: each contributor gets its own back
+      for (const k of Object.keys(p.refund)) payouts[k] += p.refund[k];
+      return { amount: p.amount, eligible: [], winners: [], refund: Object.assign({}, p.refund) };
+    }
     let winners = p.eligible;
     if (contested && p.eligible.length > 1) {
       let top = hands[p.eligible[0]];

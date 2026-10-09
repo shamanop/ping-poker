@@ -371,7 +371,7 @@ t('playHeld and top-up eligibility count an open Play escrow; balances() lists e
   eq(ledger.balance('play:ann', 'play'), 50);
   const el = svc.topUpEligible('ann');
   eq(el.eligible, false); eq(el.why, 'not_needed'); eq(el.total, START_PLAY); eq(el.escrow, START_PLAY - 50); eq(el.wallet, 50);
-  throwsCode(() => svc.topUp('ann', 'tu1'), 'not_needed');
+  throwsCode(() => svc.topUp('ann', 'tu1'), 'disabled');   // SVC-1b: the refill is off
   const b = svc.balances('ann');
   eq(b.chips, START_CHIPS - 123); eq(b.play, 50); eq(b.inRound, { chips: 123, play: START_PLAY - 50 });
   eq(b.escrows.map(x => [x.account, x.game, x.roundId, x.cur, x.balance]).sort(), [['escrow:coldcall:ann:big', 'coldcall', 'big', 'play', START_PLAY - 50], ['escrow:coldcall:ann:cc', 'coldcall', 'cc', 'chips', 123]].sort());

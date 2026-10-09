@@ -107,7 +107,7 @@ function realOldSeed(s) {
     else if (w < 5) both('buyIn', X => X.s.buyIn(k, t, a, cur, cur, ref));
     else if (w < 7) both('cashOut', X => X.s.cashOut(k, t, a, cur, null, ref));
     else if (w < 8) both('settle', X => X.s.settleHand(t, i, cur, { committed: { [k]: 2 }, payouts: { [k]: 2 } }));
-    else if (w < 9) both('topUp', X => X.s.topUp(k, ref));
+    else if (w < 9) both('topUpEligible', X => X.s.topUpEligible(k));    // Money 1008 SVC-1b: the refill itself (topUp) is off and throws `disabled`; see tests/money-1008-admin-topup.js
     else if (w < 10) both('two top-up legs in one line', X => X.l.batch([{ from: 'mint:topup', to: 'play:' + k, amount: a, cur: 'play' }, { from: 'mint:topup', to: 'play:' + k2, amount: a, cur: 'play' }], ref, 'topup'));
     else if (w < 11) both('seat->seat', X => X.l.batch([{ from: `seat:${t}:${k}`, to: `seat:${t}:${k2}`, amount: 1, cur }], ref, 'cashout:' + cur));
     else if (w < 12) { A.l.close(); if (rng.chance(0.5)) B.l.checkpoint(); B.l.close(); open(); }

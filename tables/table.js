@@ -19,6 +19,9 @@ class Table {
     this.cur = this.mode === 'chips' ? 'chips' : 'play';
     this.state = this.state || 'open';             // lobby state: open | paused | ended
     this.paused = this.state === 'paused';
+    this.reentry = {};                            // key -> { remaining, forgiven }: what the SERVER cashed out and the player may bring back (K3-5)
+    this.pausePending = false;                    // pause asked for during a live hand (K3-4)
+    this.owesBB = {};                             // key -> true once his seat was removed: the player (not the seat number) waits for the big blind when he sits again, however fast and in whatever seat (K3-8, R2A-1)
     this.handNo = this.handNo || 0;
     this.nightFromId = this.nightFromId || 0;
     this.nightHand0 = this.nightHand0 || 0;
@@ -89,8 +92,19 @@ class Table {
   }
 
   // ---- pause ------------------------------------------------------------------------------------------------
-  pause() {
+  // A pause never holds a live hand open (K3-4): asked for during a hand it is remembered (pausePending) and takes effect once that
+  // hand has settled or been voided; the run-out and the turn clock keep going until then. force = the safety wrapper (money
+  // fenced, three voids): those stop the table at once, as before.
+  pause(force) {
     if (this.paused || this.phase === 'ended') return false;
+    if (!force && this.handLive()) {
+      if (this.pausePending) return false;
+      this.pausePending = true;
+      this.out.event(this, 'table_event', { kind: 'pause_pending' });
+      this.out.state(this);
+      return true;
+    }
+    this.pausePending = false;
     const now = this.now();
     for (const d of this.deadlines.values()) if (d.hand && d.at != null) { d.frozen = Math.max(0, d.at - now); d.at = null; }
     this.paused = true; this.state = 'paused'; this.arm();
@@ -98,7 +112,19 @@ class Table {
     this.out.state(this);
     return true;
   }
+  // The hand is over (settled or voided): a pause asked for during it starts now.
+  applyPendingPause() {
+    if (!this.pausePending || this.handLive()) return;
+    if (this.endNightPending) { this.pausePending = false; return; }       // the night is ending: nothing to freeze
+    this.pause();
+  }
   resume() {
+    if (this.pausePending && !this.paused) {            // the host changed his mind before the hand ended
+      this.pausePending = false;
+      this.out.event(this, 'table_event', { kind: 'resumed' });
+      this.out.state(this);
+      return true;
+    }
     if (!this.paused || this.phase === 'ended') return false;
     const now = this.now();
     this.paused = false; this.state = 'open';
@@ -137,10 +163,25 @@ class Table {
   seatsMax() { return this.maxSeats || 8; }
 
   // ---- buy-in rules -----------------------------------------------------------------------------------------
-  buyInAllowed(key) {
-    const n = this.money.buyInCount(this, key, this.nightFromId);
+  // K3-5: a cash-out by the SERVER (boot recovery, the disconnect grace) is not the player's choice, so the buy-in that brings that money
+  // back is not his rebuy: it is forgiven, up to the amount the server returned (`reentry[key].remaining`), and does not count against
+  // the cap. Every other buy-in counts as before. The registry rebuilds `reentry` from the ledger at load.
+  finiteCap() { return !this.rebuys || this.rebuyLimit > 0; }
+  buyInAllowed(key, amount) {
+    const re = this.reentry[key];
+    if (re && amount > 0 && re.remaining >= amount) return true;
+    const n = this.money.buyInCount(this, key, this.nightFromId) - (re ? re.forgiven : 0);
     if (!this.rebuys) return n === 0;
     return this.rebuyLimit === 0 || n < 1 + this.rebuyLimit;
+  }
+  noteBuyIn(key, amount) {
+    const re = this.reentry[key];
+    if (re && amount > 0 && re.remaining >= amount) { re.remaining -= amount; re.forgiven += 1; }
+  }
+  noteServerReturn(key, amount) {
+    if (!(amount > 0) || !this.finiteCap()) return;
+    const re = this.reentry[key] || (this.reentry[key] = { remaining: 0, forgiven: 0 });
+    re.remaining += amount;
   }
   checkAmount(amount) {
     const { min, max } = this.buyIn;
@@ -158,6 +199,9 @@ class Table {
     opts = opts || {};
     if (this.phase === 'ended') throw new TableError('ended');
     const mine = this.seatOfKey(key);
+    // K3-6: a seat that left or was kicked in a live hand is a seat on its way out, not a reconnect: there is no stack to hand back.
+    // He sits again (with a real buy-in) once the hand has settled and the seat has been swept.
+    if (mine && mine.leaving) throw new TableError('hand_live');
     if (mine) return this.rebind(mine, opts.socketId);
     const other = this.hooks.seatOf && this.hooks.seatOf(key);
     if (other) throw new TableError('one_seat', { tableId: other.tableId });
@@ -165,11 +209,12 @@ class Table {
     if (no == null) throw new TableError(Number.isInteger(opts.seat) && this.freeSeat() != null ? 'seat_taken' : 'table_full');
     this.checkAmount(opts.amount);
     const fund = this.checkFund(opts.fund);
-    if (!this.buyInAllowed(key)) throw new TableError('rebuy_off');
+    if (!this.buyInAllowed(key, opts.amount)) throw new TableError('rebuy_off');
     const r = this.money.buyIn(this, key, opts.amount, fund);          // money first
+    this.noteBuyIn(key, opts.amount);
     const seat = {
       seat: no, key, stack: opts.amount, fund: fund || this.cur, connected: true, socketId: opts.socketId || null,
-      sitOutNext: false, leaving: false, disconnectedAt: null, graceAt: null, timeouts: 0, pre: null, dealt: false, folded: false, lastAction: null,
+      sitOutNext: false, leaving: false, kickPending: false, missedBlind: this.owesBB[key] === true, disconnectedAt: null, graceAt: null, timeouts: 0, pre: null, dealt: false, folded: false, lastAction: null,
     };
     this.seats.set(no, seat);
     this.afterSeatChange(seat, 'joined', { stack: seat.stack, reconnect: false, ref: r.intent.ref });
@@ -193,14 +238,16 @@ class Table {
     opts = opts || {};
     const seat = this.seatOfKey(key);
     if (!seat) throw new TableError('no_seat');
+    if (seat.leaving) throw new TableError('hand_live');            // K3-6: a seat on its way out takes no buy-in
     if (this.liveSeat(seat) && !seat.folded && this.hand.seats[seat.seat] && !this.hand.seats[seat.seat].folded) throw new TableError('in_hand');
     if (seat.stack > 0) throw new TableError('have_chips');
-    if (!this.buyInAllowed(key)) throw new TableError('rebuy_off');
     const fund = this.checkFund(opts.fund) || seat.fund;
     let amount = opts.amount;
     if (amount === undefined || amount === null) amount = Math.min(this.buyIn.default, this.money.fundBalance(key, fund));
+    if (!this.buyInAllowed(key, amount)) throw new TableError('rebuy_off');
     this.checkAmount(amount);
     const r = this.money.buyIn(this, key, amount, fund, null, 'rebuy');
+    this.noteBuyIn(key, amount);
     seat.stack += amount; seat.fund = fund; seat.timeouts = 0;
     this.afterSeatChange(seat, 'rebuy', { stack: seat.stack, amount, ref: r.intent.ref });
     return seat;
@@ -233,18 +280,30 @@ class Table {
   }
   lastCash(r) { return r.intent ? r.intent.amount : 0; }
 
+  // K3-1b: a kick NEVER changes a live hand. A seat dealt into the live hand that has not folded is only marked `kickPending`: it keeps
+  // its seat, socket, stack, turn and turn clock until the hand has settled or been voided (finishKick in hand-flow.js then cashes it out
+  // and removes it). A seat that is not in a live hand, or has folded, is kicked at once. A second kick of the same seat is a no-op.
   kick(byKey, targetKey, isAdmin) {
     if (byKey !== this.hostKey && !isAdmin) throw new TableError('not_host');
     const seat = this.seatOfKey(targetKey);
     if (!seat) throw new TableError('no_seat');
     if (targetKey === this.hostKey) throw new TableError('forbidden');
     const display = this.displayOf(targetKey);
+    if (seat.leaving || seat.kickPending) return { cashedOut: 0, left: false, pending: !!seat.kickPending };   // already on his way out
+    const hs = this.liveSeat(seat) ? this.hand.seats[seat.seat] : null;
+    if (hs && !hs.folded) {
+      seat.kickPending = true;
+      this.out.event(this, 'table_event', { kind: 'kick_pending', key: targetKey, display });
+      this.out.state(this);
+      return { cashedOut: 0, left: false, pending: true };
+    }
     const r = this.leave(targetKey, 'kick');
     this.out.event(this, 'table_event', { kind: 'kicked', key: targetKey, display });
     return r;
   }
 
   removeSeat(seat) {
+    this.owesBB[seat.key] = true;
     this.seats.delete(seat.seat);
     this.clearDeadline('grace:' + seat.seat);
   }
@@ -267,6 +326,7 @@ class Table {
     if (!seat || seat.connected) return;
     if (this.liveSeat(seat)) { this.setDeadline('grace:' + seatNo, 'grace', 5000, { seat: seatNo }); return; }   // retried after the hand
     const r = this.money.cashOut(this, seat.key, this.money.seatBalance(this, seat.key), 'grace');
+    this.noteServerReturn(seat.key, r.noop ? 0 : this.lastCash(r));
     this.removeSeat(seat);
     this.out.event(this, 'room', {}); this.out.event(this, 'money', { keys: [seat.key] });
     this.checkAutostart(); this.out.state(this);

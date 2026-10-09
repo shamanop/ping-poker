@@ -19,6 +19,8 @@ const has = name => argv.includes('--' + name);
 
 const ACTORS = ['poker', 'bank', 'bender', 'coldcall', 'campaign'].map(n => require('./actors/' + n));
 const slot = require('./actors/coldcall');
+const bankActor = require('./actors/bank');
+const GRANT_CASH = 1000000;            // what the old fixture gave every account at signup
 const camp = require('./actors/campaign');
 const chaos = require('./actors/chaos');
 
@@ -47,7 +49,7 @@ async function main() {
 
   const W = {
     seed, rng: mulberry32(seed), dataDir, serverDir, port, nPlayers, bug,
-    ctl: new ServerCtl({ port, dir: dataDir, serverDir, bug, injectPath: path.join(__dirname, 'bugs', 'inject.js'), env: { COLDCALL_TEST: '1', CAMPAIGN_TEST: '1', CAMPAIGN_IDLE_MS: '2500', NODE_ENV: 'test', BENDER_ADMIN_TOKEN: slot.ADMIN_TOKEN } }),
+    ctl: new ServerCtl({ port, dir: dataDir, serverDir, bug, injectPath: path.join(__dirname, 'bugs', 'inject.js'), env: { COLDCALL_TEST: '1', CAMPAIGN_TEST: '1', CAMPAIGN_IDLE_MS: '2500', NODE_ENV: 'test', ADMIN_CLAIM_PASSWORD: 'test-admin-claim-1008', BENDER_ADMIN_TOKEN: slot.ADMIN_TOKEN } }),
     model: new Model(), checker: new Checker(path.join(dataDir, 'money.jsonl')),
     bots: new Map(), tables: new Map(), admin: null, auditSock: null,
     inflightSpins: [], cfg: { betLevels: [1, 2, 10, 20, 50, 100, 200, 500, 1000, 2500], buyCostX: { election: 10.91, landslide: 77.21 } },
@@ -60,7 +62,7 @@ async function main() {
   slot.attach(W);
   camp.attach(W);
   W.warn = (k, detail) => { W.counters.warnings[k] = (W.counters.warnings[k] || 0) + 1; if (detail && W.counters.warnings[k] <= 3) console.error(`[soak] warning ${k}: ${detail}`); };
-  W.violate = (id, message, accounts, expected, got) => { W.fatal.push({ id, step: W.stepNo, message, accounts: accounts || {}, expected, got }); };
+  W.violate = (id, message, accounts, expected, got) => { if (W.checker.ablate.has(id)) return; W.fatal.push({ id, step: W.stepNo, message, accounts: accounts || {}, expected, got }); };
   W.now = () => Date.now();
   W.log = (rec) => {
     const r = { step: W.stepNo, t: Date.now() - started, ...rec };
@@ -297,7 +299,8 @@ async function main() {
     const C = W.checker, M = W.model;
     await pollSettled();
     const cls = C.classifyRestart();
-    const bad = cls.violations.map(v => ({ step: W.stepNo, ...v }));
+    // Ledger-only violations are final and must not be hidden by a restart finding: a boot-recovery line of the wrong shape is reported by I9 here AND by the invariant that owns its shape (I2 / I1 / I3).
+    const bad = [...W.checker.take().map(v => ({ step: W.stepNo, ...v })), ...cls.violations.map(v => ({ step: W.stepNo, ...v }))];
     const perTableUnacked = new Map();
     const unknownSpins = sentSpins.slice();
     for (const L of cls.racing) {
@@ -351,7 +354,7 @@ async function main() {
     await openAuditSock();
     const a0 = await W.audit();
     if (!a0.accounts.every(k => k === 'chris') || a0.accounts.length > 1) throw new HarnessError('fresh data dir expected one account (chris), got ' + a0.accounts.join(','));
-    W.model.addPlayer('chris');
+    W.model.addPlayer('chris', 0);
     const admin = W.addBot('chris'); W.admin = admin;
     await admin.connect();
     const r = await admin.claimAdmin();
@@ -363,6 +366,7 @@ async function main() {
       W.model.addPlayer(b.key);
     }
     await sleep(150);
+    for (const k of W.model.accounts()) await bankActor.grantCash(W, k, GRANT_CASH);       // signup gave 0 Cash; the admin sets it (the model books each grant)
     const st = await admin.req('g:bender:state', {}, 'g:bender:state');
     if (st.data) { W.cfg.betLevels = st.data.betLevels; W.cfg.buyCostX = st.data.buyCostX; }
     await admin.req('bonus:status', {}, 'bonus:status');
@@ -411,7 +415,7 @@ async function main() {
     seed, bug, steps: W.stepNo, minutes: Math.round((Date.now() - started) / 600) / 100, players: nPlayers, kills: W.counters.kills, sigterm: W.counters.sigterm, restarts: W.counters.restarts,
     handsSettled: M.count.hands, handsSettledUnacked: M.count.handsUnacked, handsVoidedByKill: W.counters.handsVoidedByKill,
     spins: M.count.spins, spinsUnacked: W.counters.spinsUnacked, spinsRefused: W.counters.spinsRefused, buyIns: W.counters.buyIns, cashOuts: W.counters.cashOuts,
-    mints: { signup: M.count.signups, bonus: M.count.bonus, achv: M.count.achv, topup: M.count.topup }, adminAdjusts: M.count.adminAdjust, adminRefused: M.count.adminRefused,
+    mints: { signup: M.count.signups, bonus: M.count.bonus, achv: M.count.achv, topup: M.count.topup }, adminAdjusts: M.count.adminAdjust, adminRefused: M.count.adminRefused, setCashRefused: M.count.setCashRefused || 0,
     campaign: { runs: M.count.campRuns || 0, unacked: M.count.campRunsUnacked || 0, net: M.camp.net, c: W.camp.c },
     slot: { rounds: M.count.slotRounds || 0, unacked: M.count.slotRoundsUnacked || 0, voids: M.count.slotVoids || 0, net: M.slot.net, byKind: { plain: W.slot.c.plain, buy: W.slot.c.buy, forced: W.slot.c.forced, callback: W.slot.c.callbacks, decisionsOpened: W.slot.c.pending, decisionsAnswered: W.slot.c.decided, readyLeftToTimer: W.slot.c.readyLeft, potWins: W.slot.c.potWon, refusedFunds: W.slot.c.funds, refusedRate: W.slot.c.rate, refusedBusy: W.slot.c.busy, socketDrops: W.slot.c.drops, configSwaps: W.slot.c.cfg, voidedEvents: W.slot.c.voided } },
     ledgerLines: files.ledgerLines, checks: W.counters.checks, warnings: W.counters.warnings,

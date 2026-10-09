@@ -30,6 +30,12 @@ function validAvatarPic(pic) {
 
 const cleanName = n => String(n == null ? '' : n).trim().replace(/\s+/g, ' ');
 const keyOf = n => cleanName(n).toLowerCase();
+// R2B-1: a client-chosen name must never reach an inherited key. Every Object.prototype member name (any case) plus `prototype` is refused as a name,
+// and the account map is a null-prototype map read with own keys only.
+const RESERVED_NAMES = new Set(['prototype', ...Object.getOwnPropertyNames(Object.prototype)].map(n => n.toLowerCase()));
+const isReservedName = n => RESERVED_NAMES.has(String(n == null ? '' : n).trim().toLowerCase());
+const hasOwn = (o, k) => !!o && Object.prototype.hasOwnProperty.call(o, k);
+const ownMap = (src, skip) => { const m = Object.create(null); if (src && typeof src === 'object') for (const k of Object.keys(src)) if (!(skip && isReservedName(k))) m[k] = src[k]; return m; };
 const sha = s => crypto.createHash('sha256').update(s).digest('hex');
 const emptyStats = () => ({ hands: 0, handsWon: 0, netCents: 0, netChips: 0, biggestPot: 0, nights: 0, bestNightCents: 0 });
 
@@ -41,14 +47,23 @@ function createAccounts({ file, roomPassword = 'ping' }) {
   let skew = Number(process.env.AUTH_CLOCK_SKEW) || 0;
   const now = () => Date.now() + skew;
   const signupLimit = Number(process.env.AUTH_SIGNUP_LIMIT) || 40;
-  const adminClaim = process.env.ADMIN_CLAIM_PASSWORD || null;
+  // Admin accounts are claimable ONLY with ADMIN_CLAIM_PASSWORD, never with the public room word. Unset, blank, shorter than
+  // ADMIN_CLAIM_MIN, or equal to the room word (any case, trimmed) = treated as unset = admin claim refused (fail closed).
+  const ADMIN_CLAIM_MIN = 8;
+  const rawAdminClaim = process.env.ADMIN_CLAIM_PASSWORD == null ? '' : String(process.env.ADMIN_CLAIM_PASSWORD).trim();
+  const adminClaim = rawAdminClaim.length >= ADMIN_CLAIM_MIN && rawAdminClaim.toLowerCase() !== String(roomPassword).trim().toLowerCase() ? rawAdminClaim : null;
+  const sameSecret = (a, b) => { const x = sha(a), y = sha(b); return crypto.timingSafeEqual(Buffer.from(x), Buffer.from(y)); };
   const listeners = { auth: [] };
 
-  let db = { version: 1, accounts: {} };
+  let db = { version: 1, accounts: Object.create(null) };
   try {
     const j = JSON.parse(fs.readFileSync(file, 'utf8'));
-    if (j && typeof j === 'object' && j.accounts) db = j;
+    if (j && typeof j === 'object' && j.accounts && typeof j.accounts === 'object') db = j;
   } catch { /* fresh */ }
+  // The map is rebuilt as a null-prototype map; a stored account under a reserved key is dropped (loud), never served.
+  const dropped = Object.keys(db.accounts).filter(isReservedName);
+  if (dropped.length) console.error(`[SECURITY] accounts file holds account(s) under reserved key(s) [${dropped.join(', ')}]: not loaded.`);
+  db.accounts = ownMap(db.accounts, true);
   const fileExisted = fs.existsSync(file);
   if (!db.version) db.version = 1;
 
@@ -90,14 +105,14 @@ function createAccounts({ file, roomPassword = 'ping' }) {
   const burn = pin => { try { scrypt(PIN_RE.test(String(pin)) ? pin : '0000', DUMMY_SALT); } catch { /* ignore */ } };
 
   // ── helpers ───────────────────────────────────────────────────────────────
-  const get = key => db.accounts[key] || null;
-  const isAdmin = key => !!(key && db.accounts[key] && db.accounts[key].isAdmin);
-  const displayOf = key => (db.accounts[key] ? db.accounts[key].display : key);
+  const get = key => (typeof key === 'string' && !isReservedName(key) && hasOwn(db.accounts, key) ? db.accounts[key] : null);
+  const isAdmin = key => { const a = get(key); return !!(a && hasOwn(a, 'isAdmin') && a.isAdmin); };
+  const displayOf = key => { const a = get(key); return a ? a.display : key; };
   let dispIdx = null;
   // Lowercased name (an account key or any current display) -> account key. Unknown names pass through unchanged.
   function keyForName(name) {
     const l = String(name == null ? '' : name).trim().toLowerCase();
-    if (db.accounts[l]) return l;
+    if (get(l)) return l;
     if (!dispIdx) { dispIdx = new Map(); for (const a of Object.values(db.accounts)) dispIdx.set(String(a.display).toLowerCase(), a.key); }
     return dispIdx.get(l) || l;
   }
@@ -112,8 +127,10 @@ function createAccounts({ file, roomPassword = 'ping' }) {
     a.pinHash = scrypt(pin, a.salt).toString('hex');
     a.claimed = true;
   }
+  // Own properties only: an inherited claimed / pinHash / salt never opens an account.
+  const ownClaimed = a => hasOwn(a, 'claimed') && a.claimed === true;
   function pinOk(a, pin) {
-    if (!a.claimed || !a.pinHash || !PIN_RE.test(String(pin))) { burn(pin); return false; }
+    if (!ownClaimed(a) || !hasOwn(a, 'pinHash') || typeof a.pinHash !== 'string' || !a.pinHash || !hasOwn(a, 'salt') || typeof a.salt !== 'string' || !PIN_RE.test(String(pin))) { burn(pin); return false; }
     const got = scrypt(pin, a.salt);
     const want = Buffer.from(a.pinHash, 'hex');
     return got.length === want.length && crypto.timingSafeEqual(got, want);
@@ -137,7 +154,7 @@ function createAccounts({ file, roomPassword = 'ping' }) {
   }
   function validName(name) {
     const n = cleanName(name);
-    return n.length >= 2 && n.length <= 16 && NAME_RE.test(n) ? n : null;
+    return n.length >= 2 && n.length <= 16 && NAME_RE.test(n) && !isReservedName(n) ? n : null;
   }
 
   // ── flows ─────────────────────────────────────────────────────────────────
@@ -150,9 +167,9 @@ function createAccounts({ file, roomPassword = 'ping' }) {
     const recent = (signups.get(ip) || []).filter(x => t - x < 3600000);
     if (recent.length >= signupLimit) { signups.set(ip, recent); return limited(Math.max(1000, 3600000 - (t - recent[0]))); }
     const key = n.toLowerCase();
-    const ex = db.accounts[key];
+    const ex = get(key);
     if (!ex && keyForName(key) !== key) return err('name_taken', 'That name is taken');
-    if (ex) return ex.claimed ? err('name_taken', 'That name is taken') : err('claim_required', 'This name belongs to an existing player. Claim it with the table password.');
+    if (ex) return ownClaimed(ex) ? err('name_taken', 'That name is taken') : err('claim_required', 'This name belongs to an existing player. Claim it with the table password.');
     recent.push(t); signups.set(ip, recent);
     const a = blank(key, n);
     if (AVATAR_RE.test(String(avatar))) a.avatar = avatar;
@@ -164,16 +181,22 @@ function createAccounts({ file, roomPassword = 'ping' }) {
   }
 
   function claim(name, pin, avatar, password, ctx = {}) {
+    if (isReservedName(name)) return err('bad_name', 'No such player to claim');
     const key = keyForName(keyOf(name));
     const ids = idsFor(ctx.ip, key);
     const ms = lockedMs(ids);
     if (ms) return limited(ms);
     if (!PIN_RE.test(String(pin))) return err('bad_pin', 'PIN is 4-6 digits');
-    const a = db.accounts[key];
+    const a = get(key);
     if (!a) return err('bad_name', 'No such player to claim');
-    if (a.claimed) return err('name_taken', 'That name is taken');
-    const need = (a.isAdmin && adminClaim) ? adminClaim : roomPassword;
-    if (String(password == null ? '' : password).trim().toLowerCase() !== String(need).trim().toLowerCase()) { recordFail(ids); const m = lockedMs(ids); return m ? limited(m) : err('bad_login', 'Wrong table password'); }
+    if (ownClaimed(a)) return err('name_taken', 'That name is taken');
+    const given = String(password == null ? '' : password).trim();
+    const fail = (code, message) => { recordFail(ids); const m = lockedMs(ids); return m ? limited(m) : err(code, message); };
+    if (isAdmin(key)) {
+      // never the room word; with no valid ADMIN_CLAIM_PASSWORD an admin account cannot be claimed at all. Counted by the same limiter.
+      if (!adminClaim) { burn(pin); return fail('admin_claim_disabled', 'This account cannot be claimed here. The server operator must set ADMIN_CLAIM_PASSWORD.'); }
+      if (!sameSecret(given, adminClaim)) return fail('bad_login', 'Wrong table password');
+    } else if (given.toLowerCase() !== String(roomPassword).trim().toLowerCase()) return fail('bad_login', 'Wrong table password');
     recordOk(ids);
     if (AVATAR_RE.test(String(avatar))) a.avatar = avatar;
     setPin(a, pin);
@@ -183,22 +206,23 @@ function createAccounts({ file, roomPassword = 'ping' }) {
   }
 
   function login(name, pin, ctx = {}) {
+    if (isReservedName(name)) { burn(pin); return err('bad_login', 'Wrong name or PIN'); }
     const key = keyForName(keyOf(name));
     const ids = idsFor(ctx.ip, key);
     const ms = lockedMs(ids);
     if (ms) return limited(ms);
-    const a = db.accounts[key];
+    const a = get(key);
     let good = false;
     if (a) good = pinOk(a, pin); else burn(pin);
     if (good) { recordOk(ids); const token = newSession(a, ctx.ua); save(); return { ok: true, account: a, token }; }
-    if (a && !a.claimed) return err('claim_required', 'This name belongs to an existing player. Claim it with the table password.');
+    if (a && !ownClaimed(a)) return err('claim_required', 'This name belongs to an existing player. Claim it with the table password.');
     recordFail(ids);
     const m = lockedMs(ids);
     return m ? limited(m) : err('bad_login', 'Wrong name or PIN');
   }
 
   function resume(key, token) {
-    const a = db.accounts[String(key || '').toLowerCase()];
+    const a = get(String(key || '').toLowerCase());
     if (!a || typeof token !== 'string') return err('bad_session', 'Session expired');
     const h = sha(token), t = now();
     const s = (a.sessions || []).find(x => x.h === h);
@@ -209,21 +233,21 @@ function createAccounts({ file, roomPassword = 'ping' }) {
   }
 
   function logout(key, token) {
-    const a = db.accounts[key];
+    const a = get(key);
     if (!a || typeof token !== 'string') return;
     const h = sha(token);
     a.sessions = (a.sessions || []).filter(s => s.h !== h);
     save();
   }
   function logoutHash(key, h) {
-    const a = db.accounts[key];
+    const a = get(key);
     if (!a || !h) return;
     a.sessions = (a.sessions || []).filter(s => s.h !== h);
     save();
   }
 
   function rename(key, name) {
-    const a = db.accounts[key];
+    const a = get(key);
     if (!a) return err('bad_session', 'Session expired');
     const n = validName(name);
     if (!n) return err('bad_name', 'Names are 2-16 letters, numbers, spaces, . _ - \'');
@@ -242,7 +266,7 @@ function createAccounts({ file, roomPassword = 'ping' }) {
 
   // avatarPic: undefined = leave alone, null/'' = remove, string = set (caller validates first; invalid strings are ignored)
   function setAvatarPic(key, pic) {
-    const a = db.accounts[key];
+    const a = get(key);
     if (!a) return null;
     if (pic === null || pic === '') delete a.avatarPic;
     else { const ok = validAvatarPic(pic); if (!ok) return null; a.avatarPic = ok; }
@@ -251,7 +275,7 @@ function createAccounts({ file, roomPassword = 'ping' }) {
   }
 
   function updateProfile(key, { avatar, prefs } = {}) {
-    const a = db.accounts[key];
+    const a = get(key);
     if (!a) return null;
     if (AVATAR_RE.test(String(avatar))) a.avatar = avatar;
     if (prefs && typeof prefs === 'object') {
@@ -264,7 +288,7 @@ function createAccounts({ file, roomPassword = 'ping' }) {
   }
 
   function pinChange(key, oldPin, newPin, ctx = {}) {
-    const a = db.accounts[key];
+    const a = get(key);
     const ids = idsFor(ctx.ip, key);
     const ms = lockedMs(ids);
     if (ms) return limited(ms);
@@ -272,14 +296,17 @@ function createAccounts({ file, roomPassword = 'ping' }) {
     if (!PIN_RE.test(String(newPin))) return err('bad_pin', 'PIN is 4-6 digits');
     recordOk(ids);
     setPin(a, newPin);
-    a.sessions = (a.sessions || []).filter(s => s.h === ctx.sessionH);
+    // K6b-1: every stored session goes, the changing socket gets a fresh one (the caller signs the account's OTHER sockets out)
+    a.sessions = [];
+    const token = newSession(a, ctx.ua);
     save();
-    return { ok: true };
+    return { ok: true, account: a, token };
   }
 
   function resetPin(adminKey, key, newPin) {
     if (!isAdmin(adminKey)) return err('auth', 'Admin only');
-    const a = db.accounts[String(key || '').toLowerCase()];
+    if (isReservedName(key)) return err('bad_name', 'No such account');
+    const a = get(String(key || '').toLowerCase());
     if (!a) return err('bad_name', 'No such account');
     if (!PIN_RE.test(String(newPin))) return err('bad_pin', 'PIN is 4-6 digits');
     setPin(a, newPin);
@@ -291,7 +318,7 @@ function createAccounts({ file, roomPassword = 'ping' }) {
 
   // ── stats ─────────────────────────────────────────────────────────────────
   function recordHand(key, { won, pot } = {}) {
-    const a = db.accounts[key];
+    const a = get(key);
     if (!a) return;
     a.stats.hands++;
     if (won) a.stats.handsWon++;
@@ -299,14 +326,14 @@ function createAccounts({ file, roomPassword = 'ping' }) {
     save();
   }
   function social(key, mutate) {
-    const a = db.accounts[key];
+    const a = get(key);
     if (!a) return null;
     if (!a.social || typeof a.social !== 'object') a.social = {};
     if (mutate) { mutate(a.social); save(); }
     return a.social;
   }
   function recordNight(key, { mode, net } = {}) {
-    const a = db.accounts[key];
+    const a = get(key);
     if (!a || !Number.isSafeInteger(net)) return;
     a.stats.nights++;
     if (mode === 'chips') a.stats.netChips += net;
@@ -315,7 +342,7 @@ function createAccounts({ file, roomPassword = 'ping' }) {
     emit('night', key, { mode, net });
   }
   function rebuildStats(entries) {
-    const net = {};
+    const net = Object.create(null);
     for (const e of entries) {
       if (!e.name || !['buyin', 'rebuy', 'cashout'].includes(e.type)) continue;
       const k = (e.key || String(e.name).toLowerCase().trim());
@@ -324,17 +351,27 @@ function createAccounts({ file, roomPassword = 'ping' }) {
       n[m] += e.type === 'cashout' ? e.amount : -e.amount;
     }
     for (const a of Object.values(db.accounts)) {
-      const n = net[a.key];
+      const n = net[a.key];   // net is a null-prototype map
       if (n) { a.stats.netCents = n.cents; a.stats.netChips = n.chips; }
     }
     save();
   }
 
+  // One loud line at boot when an admin account is unclaimed and nobody can claim it (so the operator sees why the admin cannot sign in).
+  function warnAdminClaim() {
+    if (adminClaim) return false;
+    const open = Object.values(db.accounts).filter(a => a.isAdmin && !a.claimed).map(a => a.key);
+    if (!open.length) return false;
+    const why = process.env.ADMIN_CLAIM_PASSWORD ? `the value set is ignored (it must be at least ${ADMIN_CLAIM_MIN} characters and not the room word)` : 'it is not set';
+    console.error(`[SECURITY] Admin account(s) [${open.join(', ')}] are UNCLAIMED and ADMIN_CLAIM_PASSWORD ${why}: admin claim is DISABLED (fail closed). Set ADMIN_CLAIM_PASSWORD (>= ${ADMIN_CLAIM_MIN} chars, not the room word) and restart to claim the admin account.`);
+    return true;
+  }
+
   // ── legacy migration (idempotent) ─────────────────────────────────────────
   function migrateLegacy({ bank = {}, ledgerEntries = [] } = {}) {
     const groups = new Map(); // key -> { display, t, raw[] }
-    const seen = (raw) => { const k = raw.trim().toLowerCase(); if (!k || BOT_NAME_RE.test(k)) return null; if (!groups.has(k)) groups.set(k, { display: null, t: Infinity, raw: new Set() }); groups.get(k).raw.add(raw); return groups.get(k); };
-    const bankRaw = {};
+    const seen = (raw) => { const k = raw.trim().toLowerCase(); if (!k || BOT_NAME_RE.test(k) || isReservedName(k)) return null; if (!groups.has(k)) groups.set(k, { display: null, t: Infinity, raw: new Set() }); groups.get(k).raw.add(raw); return groups.get(k); };
+    const bankRaw = Object.create(null);
     for (const raw of Object.keys(bank)) { const g = seen(String(raw)); if (g) bankRaw[raw.trim().toLowerCase()] = (bankRaw[raw.trim().toLowerCase()] || 0) + 1; }
     for (const e of ledgerEntries) {
       if (!e || typeof e.name !== 'string') continue;
@@ -344,14 +381,15 @@ function createAccounts({ file, roomPassword = 'ping' }) {
     let created = 0, merged = 0;
     for (const [k, g] of groups) {
       merged += Math.max(0, (bankRaw[k] || 0) - 1);
-      if (db.accounts[k]) continue;
+      if (get(k)) continue;
       let display = cleanName(g.display || (k.charAt(0).toUpperCase() + k.slice(1))).replace(/[^A-Za-z0-9 _.\-']/g, '').slice(0, 16).trim();
       if (display.length < 2) continue;
       db.accounts[k] = { ...blank(k, display), key: k };
       created++;
     }
-    if (!db.accounts.chris) { db.accounts.chris = blank('chris', 'Chris'); created++; }
+    if (!get('chris')) { db.accounts.chris = blank('chris', 'Chris'); created++; }
     if (created) { flush(); console.log(`migrated ${created} accounts, merged ${merged} duplicates`); }
+    warnAdminClaim();
     return { created, merged };
   }
 

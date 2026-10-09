@@ -118,8 +118,8 @@ t('two consecutive timeouts sit a connected seat out', () => {
   e.clock.advance(5000 + 7000); e.table.hand.toAct != null && e.clock.advance(30000);
   eq(e.table.seatOfKey('ann').timeouts >= 1, true);
 });
-t('M3: pause freezes the turn clock and a preselect; resume gives back the remainder', () => {
-  const e = three(); e.table.startHand(); e.clock.advance(10000); e.table.pause(); e.clock.advance(120000);
+t('M3: a forced pause (safety wrapper) freezes the turn clock and a preselect; resume gives back the remainder (a host pause during a hand is pending: K3-4, tests/money-1008-k3-4-pause.js)', () => {
+  const e = three(); e.table.startHand(); e.clock.advance(10000); e.table.pause(true); e.clock.advance(120000);
   eq(e.table.hand.seats[0].folded, false); e.table.resume(); e.clock.advance(19999); eq(e.table.hand.seats[0].folded, false); e.clock.advance(1); eq(e.table.hand.seats[0].folded, true);
 });
 t('preselect: only for a seat not on turn, fires PRE_MS after its turn arrives, dies when the bet changes', () => {
@@ -139,13 +139,27 @@ t('C2: the button seat vanishes between hands, next hand still deals', () => {
   const e = three(); e.table.startHand(); const T = e.table; T.act('ann', { type: 'fold' }); T.act('bob', { type: 'fold' });
   T.leave('ann'); eq(T.seatOfKey('ann'), null); e.clock.advance(7000); eq(T.handNo, 2); eq(T.phase, 'betting'); ok(T.hand.button === 1 || T.hand.button === 2);
 });
-t('N1: kick the top bettor mid-hand: cash-out = balance - committed, E1 uncalled comes back, kicked chips stay in the pot', () => {
+t('N1: kick the top bettor mid-hand: nothing changes until the hand is settled, then he is paid in full, E1 uncalled comes back', () => {
   const e = env(); e.decks.push(rigDeck([['7c', '2h'], ['As', 'Ad']], ['2c', '7d', 'Jh', '3s', '4d']));
   e.sit('ann', 2000); e.sit('bob', 2000); const T = e.table; T.startHand();
   eq(T.hand.toAct, 0); T.act('ann', { type: 'call' }); T.act('bob', { type: 'raise', to: 500 });
-  T.kick('ann', 'bob'); eq(e.events.find(x => x[0] === 'left' && x[2] === 'bob')[1].cashedOut, 1500, 'stack out, committed stays');
-  eq(T.phase, 'between'); eq(T.seatOfKey('bob'), null, 'swept after the batch');
-  eq(bank(e, 'bob'), 9950, 'uncalled 450 back, matched 50 lost'); eq(T.seatOfKey('ann').stack, 2050); eq(drift(e), []); books(e);
+  T.kick('ann', 'bob');
+  // K3-1b: a kick never changes a live hand. No cash-out, no left event, he keeps his seat; the kick is only remembered.
+  eq(e.events.find(x => x[0] === 'left' && x[2] === 'bob'), undefined, 'no left event yet');
+  eq(T.phase, 'betting'); eq(T.seatOfKey('bob').kickPending, true); eq(T.seatOfKey('bob').leaving, false); eq(T.hand.seats[1].folded, false); eq(drift(e), []);
+  T.act('ann', { type: 'fold' });
+  eq(T.phase, 'between'); eq(T.seatOfKey('bob'), null, 'paid and removed after the batch');
+  eq(e.events.find(x => x[0] === 'left' && x[2] === 'bob')[1].cashedOut, 2050, 'stack + the pot he won, paid once');
+  eq(bank(e, 'bob'), 10050, 'uncalled 450 back, matched 50 won'); eq(T.seatOfKey('ann').stack, 1950); eq(drift(e), []); books(e);
+});
+t('N1b: a walk-out of the top bettor mid-hand cashes out balance - committed at once; his own walk-out is his fold', () => {
+  const e = env(); e.decks.push(rigDeck([['7c', '2h'], ['As', 'Ad']], ['2c', '7d', 'Jh', '3s', '4d']));
+  e.sit('ann', 2000); e.sit('bob', 2000); const T = e.table; T.startHand();
+  T.act('ann', { type: 'call' }); T.act('bob', { type: 'raise', to: 500 });
+  T.leave('bob'); eq(e.events.find(x => x[0] === 'left' && x[2] === 'bob')[1].cashedOut, 1500, 'stack out, committed stays');
+  // his own walk-out with a decision still ahead of him is his fold: ann takes the 50 he put in, his uncalled 450 comes back, he is swept at once
+  eq(T.phase, 'between'); eq(T.seatOfKey('bob'), null);
+  eq(bank(e, 'bob'), 9950); eq(drift(e), []); books(e);
 });
 t('a seat that left mid-hand reports stack 0 to the audit (its stack is already cashed out): no drift, no double count (fuzz finding)', () => {
   const e = three(); const T = e.table; T.startHand(); T.act('ann', { type: 'raise', to: 200 });

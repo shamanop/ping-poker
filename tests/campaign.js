@@ -170,12 +170,12 @@ t('client-sent win / mx / force are ignored without the QA hook (and under produ
   hook(false);
 });
 
-t('QA hook (CAMPAIGN_TEST=1): force survive / scandal run the normal money path; other values ignored', () => {
+t('QA hook (CAMPAIGN_TEST=1, Chips only): force survive / scandal run the normal money path; other values ignored', () => {
   const w = setup(), s = w.sock('ann'); hook(true); w.RNG.v = 0;   // the normal rng would fail every step
-  let run = open(w, s); let r = step(w, s, run, run.options[0].to, 'survive'); eq(r.ev, 'step', 'forced survive'); run = r.payload.run;
+  let run = open(w, s, 'chips'); let r = step(w, s, run, run.options[0].to, 'survive'); eq(r.ev, 'step', 'forced survive'); run = r.payload.run;
   r = step(w, s, run, run.options[0].to, 'junk'); eq(r.ev, 'end', 'an unknown force value is ignored: the normal rng (0) fails the step'); eq(r.payload.reason, 'scandal');
-  w.RNG.v = 0.999999; run = open(w, s); r = step(w, s, run, run.options[0].to, 'scandal'); eq(r.ev, 'end'); eq(r.payload.reason, 'scandal'); eq(r.payload.win, 0);
-  run = open(w, s); r = step(w, s, run, run.options[0].to, { x: 1 }); eq(r.ev, 'step', 'a non-string force is ignored');
+  w.RNG.v = 0.999999; run = open(w, s, 'chips'); r = step(w, s, run, run.options[0].to, 'scandal'); eq(r.ev, 'end'); eq(r.payload.reason, 'scandal'); eq(r.payload.win, 0);
+  run = open(w, s, 'chips'); r = step(w, s, run, run.options[0].to, { x: 1 }); eq(r.ev, 'step', 'a non-string force is ignored');
   r = step(w, s, r.payload.run, r.payload.run.options[0].to, '__proto__'); eq(r.ev, 'step', '__proto__ as force is ignored');
   r = step(w, s, r.payload.run, r.payload.run.options[0].to, 'toString'); eq(r.ev, 'step', 'toString as force is ignored');
   hook(false);

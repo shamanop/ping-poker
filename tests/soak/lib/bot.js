@@ -98,7 +98,7 @@ class Bot {
   }
   async claimAdmin() {
     this.pin = '4321';
-    const r = await this.req('auth_claim', { name: this.name, pin: '4321', avatar: 'a01', roomPassword: 'ping' }, 'auth_ok', 6000);
+    const r = await this.req('auth_claim', { name: this.name, pin: '4321', avatar: 'a01', roomPassword: process.env.ADMIN_CLAIM_PASSWORD || 'test-admin-claim-1008' }, 'auth_ok', 6000);
     if (r.data) { this.token = r.data.token; this.key = r.data.account.key; }
     return r;
   }

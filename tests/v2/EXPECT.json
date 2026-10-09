@@ -271,11 +271,13 @@
    "M4"
   ]
  },
- "11/queued-checkfold-does-not-fire-while-the-table-is-paused": {
+ "11/queued-checkfold-still-fires-while-a-pause-is-pending": {
   "baseline": "fail",
   "bugs": [
-   "M3"
-  ]
+   "M3",
+   "K3-4"
+  ],
+  "reason": "the old pause froze every hand deadline; since K3-4 a pause during a hand is only pending and the hand plays on"
  },
  "11/action-timer-checks-a-player-who-can-check-for-free": {
   "baseline": "fail",
@@ -434,20 +436,23 @@
   ]
  },
  "20/S8a-kick-midhand-keeps-the-bet-in-the-pot": {
-  "baseline": "pass",
-  "bugs": []
+  "baseline": "fail",
+  "bugs": [],
+  "reason": "K3-1b: the kicked seat on turn is no longer folded by the kick (committed 700 each, the aces win); the old kick folded him"
  },
  "20/S8b-standup-of-biggest-contributor-gets-uncalled-layer-back": {
   "baseline": "fail",
   "bugs": [
    "N1"
-  ]
+  ],
+  "reason": "K3-1: neither the stand-up nor the kick folds him; his aces win the main and side pot"
  },
  "20/S8c-kick-of-biggest-contributor-gets-uncalled-layer-back": {
   "baseline": "fail",
   "bugs": [
    "N1"
-  ]
+  ],
+  "reason": "K3-1: neither the stand-up nor the kick folds him; his aces win the main and side pot"
  },
  "20/S4-showdown-winners-exclude-the-uncalled-return": {
   "baseline": "fail",
@@ -522,14 +527,26 @@
   ],
   "reason": "the 2 s stacks mirror has already run by 2.5 s; the loss window is under 2 s (same as the repro table)"
  },
- "24/kick-midhand-the-kicked-best-hand-does-not-take-the-pot": {
-  "baseline": "pass",
-  "bugs": []
- },
- "24/kick-midhand-uncalled-part-of-the-kicked-bet-goes-back-to-him": {
+ "24/kick-midhand-the-kicked-seat-on-turn-facing-a-bet-keeps-his-turn-and-his-aces-win": {
   "baseline": "fail",
   "bugs": [
-   "N1"
+   "N1",
+   "K3-1b"
+  ],
+  "reason": "K3-1b: a kick never changes a live hand; the old kick folded the seat on turn and the host took the pot"
+ },
+ "24/kick-midhand-the-kicked-raise-stays-live-the-host-calls-and-the-aces-win": {
+  "baseline": "fail",
+  "bugs": [
+   "N1",
+   "K3-1"
+  ]
+ },
+ "24/kick-midhand-the-kicked-raise-stays-live-the-host-folds-and-it-wins-uncontested": {
+  "baseline": "fail",
+  "bugs": [
+   "N1",
+   "K3-1"
   ]
  },
  "25/play-night-keeps-its-hand-after-sigterm-restart": {

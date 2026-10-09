@@ -9,7 +9,7 @@ body.sh-on { --sh-top: 44px; --sh-dock: 52px; }
 .sh-wallet { grid-column: 2; justify-self: end; }
 .sh-plate { min-height: 30px; padding: 0 8px; }
 .sh-plate .plate__value { font-size: 18px; }
-.sh-top .btn, .sh-top [data-money-toggle] .seg > i { min-height: 32px; }
+.sh-top { --sh-ctl: 32px; }
 .sh-top .btn { padding: 0 10px; font-size: 14px; }
 .sh-dock { width: 52px; gap: 10px; padding: 8px 0; }
 .sh-di { width: 40px; height: 40px; }

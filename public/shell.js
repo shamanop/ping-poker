@@ -290,7 +290,7 @@
   if (window.Money && window.Money.onPrefChange) window.Money.onPrefChange(() => { try { refreshTop(); } catch (e) {} try { if (ccReady) toCC({ type: 'pref' }); } catch (e) {} try { if (campReady) toCamp({ type: 'pref' }); } catch (e) {} });   // Chips shown as chips or dollars: the slot repaints its idle amounts
   function refreshTop() {
     const p = $('sh-play'); if (!p) return;
-    const c = $('sh-chips'); if (c) c.innerHTML = '<small class="plate__label">Chips</small><b class="plate__value">' + (wallet.chips == null ? '--' : chipAmt(wallet.chips)) + '</b>';
+    const c = $('sh-chips'); if (c) c.innerHTML = '<small class="plate__label">Chips</small><b class="plate__value">' + (wallet.chips == null ? '--' : (window.Money ? Money.format(wallet.chips, 'chips') : Number(wallet.chips).toLocaleString('en-US')))   /* Chips are never shown as dollars next to real Cash */ + '</b>';
     p.innerHTML = '<small class="plate__label">Cash</small><b class="plate__value">' + (wallet.play == null ? '--' : dollars(wallet.play)) + '</b>';
     const u = user(); $('sh-acct').textContent = u ? (u.display || u.key || '') : '';
   }

@@ -57,10 +57,11 @@ specs.S5b = { bug: ['H1'], title: 'S5b-allin-disconnect-covering-stack-has-best-
 // P0 raises 400, P1 and P2 call; flop: P1 bets 300, then the host removes P2 (kick) while it is P2's turn. P0 calls and checks down with AA.
 specs.S8a = { bug: [], title: 'S8a-kick-midhand-keeps-the-bet-in-the-pot', want: 0,
   names: nm('S8a', 3), stacks: [1000, 1000, 1000], deck: rigDeck([['As', 'Ad'], ['Ks', 'Kd'], ['7c', '2d']], DRY),
-  strength: [3, 2, 1], folded: S => new Set([S.names[2]]), committed: S => ({ [S.names[0]]: 700, [S.names[1]]: 700, [S.names[2]]: 400 }),
+  strength: [3, 2, 1], // K3-1b: the kick changes nothing in the live hand: P2 keeps his turn, calls the 300, loses at the showdown; the pot is the same 2,100.
+  folded: () => new Set(), committed: S => ({ [S.names[0]]: 700, [S.names[1]]: 700, [S.names[2]]: 700 }),
   script: async S => {
     const [h, p1, p2] = S.bots;
-    const pol = [P.street({ preflop: P.raiseTo(400), default: P.call }), P.street({ preflop: P.call, flop: P.raiseTo(300), default: P.call }), P.street({ preflop: P.call, default: () => null })];
+    const pol = [P.street({ preflop: P.raiseTo(400), default: P.call }), P.street({ preflop: P.call, flop: P.raiseTo(300), default: P.call }), P.street({ preflop: P.call, default: P.call })];
     await drive(S.bots, pol, () => p2.myTurn() && p2.gs.street === 'flop' && p2.gs.currentBet === 300, 15000);
     h.emit('table_kick', { tableId: S.id, key: p2.key }); await sleep(300);
     await drive(S.bots, pol, () => h.showdowns.length > S.sd0[0], 15000);
@@ -68,7 +69,9 @@ specs.S8a = { bug: [], title: 'S8a-kick-midhand-keeps-the-bet-in-the-pot', want:
 // P0 1000 (KK), P1 3000 (AA), P2 600 (QQ) all in; P1's top 2000 is never matched. Then P1 stands up (leave) or is kicked during the run-out.
 for (const how of ['leave', 'kick']) specs['S8' + (how === 'leave' ? 'b' : 'c')] = { bug: ['N1'], title: `S8${how === 'leave' ? 'b' : 'c'}-${how === 'leave' ? 'standup' : 'kick'}-of-biggest-contributor-gets-uncalled-layer-back`, want: 0,
   names: nm('S8' + (how === 'leave' ? 'b' : 'c'), 3), stacks: [1000, 3000, 600], deck: rigDeck([['Ks', 'Kd'], ['As', 'Ad'], ['Qs', 'Qd']], DRY),
-  strength: [3, 2, 1], folded: S => new Set([S.names[1]]), committed: S => ({ [S.names[0]]: 1000, [S.names[1]]: 3000, [S.names[2]]: 600 }),
+  // K3-1 (money hardening 1008): neither the stand-up nor the kick folds him any more (the kick used to hand the pot to the next best hand). His AA runs out
+  // and wins the main and side pot; the 2000 nobody called is his anyway.
+  strength: [2, 3, 1], folded: () => new Set(), committed: S => ({ [S.names[0]]: 1000, [S.names[1]]: 3000, [S.names[2]]: 600 }),
   script: async S => {
     await drive(S.bots, [P.allin, P.allin, P.call], () => S.bots[0].gs.players.filter(p => !p.folded).every(p => p.allIn || p.chips === 0) && S.bots[0].gs.street !== undefined && S.bots[0].gs.pot > 0, 15000);
     await sleep(300);

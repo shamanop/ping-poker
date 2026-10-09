@@ -5,7 +5,8 @@ const { io } = require(process.env.SIO_CLIENT || '/home/isabelle/.cache/node_mod
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ppms-'));
 const PORT = Number(process.env.TEST_PORT || 4873), ROOT = path.join(__dirname, '..');
-const env = { ...process.env, PORT: String(PORT), BANK_FILE: path.join(dir, 'bank.json'), LEDGER_FILE: path.join(dir, 'ledger.json'), ACCOUNTS_FILE: path.join(dir, 'acc.json'), TABLES_FILE: path.join(dir, 'tables.json'), WALLET_FILE: path.join(dir, 'wallet.json'), AUTO_START_MS: '600000' };
+const ADMIN_CLAIM = 'test-admin-claim-1008';   // ADMIN_CLAIM_PASSWORD for the spawned server; the admin account `chris` is claimable ONLY with this (never the room word)
+const env = { SIGNUP_PLAY_CENTS: '1000000', ...process.env, ADMIN_CLAIM_PASSWORD: ADMIN_CLAIM, PORT: String(PORT), BANK_FILE: path.join(dir, 'bank.json'), LEDGER_FILE: path.join(dir, 'ledger.json'), ACCOUNTS_FILE: path.join(dir, 'acc.json'), TABLES_FILE: path.join(dir, 'tables.json'), WALLET_FILE: path.join(dir, 'wallet.json'), AUTO_START_MS: '600000' };
 const proc = spawn('node', ['server.js'], { cwd: ROOT, env, stdio: 'ignore' });
 let fails = 0; const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails++; };
 const cl = () => { const c = { ev: [] }; c.s = io(`http://localhost:${PORT}`, { forceNew: true }); c.s.onAny((e, d) => c.ev.push([e, d])); c.last = e => { const h = c.ev.filter(x => x[0] === e); return h.length ? h[h.length - 1][1] : undefined; }; c.has = e => c.ev.some(x => x[0] === e); return c; };
@@ -29,7 +30,7 @@ const cl = () => { const c = { ev: [] }; c.s = io(`http://localhost:${PORT}`, { 
     ok(a.last('wallet').play === pIn + 2000, 'cash-out returned $20 to Cash (' + pIn + ' -> ' + a.last('wallet').play + ')');
     const b = cl(), ch = cl(); await sleep(300);
     b.s.emit('auth_signup', { name: 'Bob', pin: '1234', avatar: 'x' }); await sleep(400);
-    ch.s.emit('auth_claim', { name: 'chris', pin: '4321', avatar: 'x', roomPassword: 'ping' }); await sleep(500);
+    ch.s.emit('auth_claim', { name: 'chris', pin: '4321', avatar: 'x', roomPassword: ADMIN_CLAIM }); await sleep(500);
     ch.s.emit('admin_set_play', { key: 'bob', cents: 1000 }); await sleep(300);
     b.ev.length = 0;
     b.s.emit('table_join', { tableId: id, buyIn: 5000 }); await sleep(400);
