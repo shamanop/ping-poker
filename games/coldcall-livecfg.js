@@ -215,7 +215,7 @@ async function measurePayback(cfg, opts = {}) {
   let maxStretch = 0, mark = process.hrtime.bigint(), rounds = 0;
   const lap = () => { const t = process.hrtime.bigint(); maxStretch = Math.max(maxStretch, Number(t - mark) / 1e6); mark = t; };
   const sinceYield = () => Number(process.hrtime.bigint() - mark) / 1e6;
-  const tick = async () => { if (sinceYield() >= SLICE_MS) { lap(); await yieldLoop(); mark = process.hrtime.bigint(); if (Date.now() - t0 > PB_DEADLINE_MS) throw new Error('payback check did not finish in ' + PB_DEADLINE_MS / 1000 + ' s'); } };
+  const tick = async () => { if (sinceYield() >= SLICE_MS) { lap(); await yieldLoop(); mark = process.hrtime.bigint(); if (Date.now() - t0 > PB_DEADLINE_MS) throw new Error('payback check did not finish in ' + PB_DEADLINE_MS / 1000 + ' s'); if (opts.cancelled && opts.cancelled()) throw new Error('payback check cancelled'); } };
   const bonusB = async (key, kind, upto) => { const per = plan[key] / J; while (acc[key].length < upto) { const j = acc[key].length, r = S.rng(kind, j); let s = 0; for (let i = 0; i < per; i++) { s += S.bonus(kind, r); rounds++; if ((i & 15) === 15) await tick(); } acc[key].push(s / per); } };
   const stateless = async (key, upto) => { const per = plan[key] / J; while (acc[key].length < upto) { const j = acc[key].length, r = S.rng(10 + (key === 'call' ? 0 : 1), j), b = { n: per, base: 0, k1: 0, k2: 0, k3: 0 }; for (let i = 0; i < per; i++) { const x = S.spin(key, r); b.base += x.base; if (x.kind) b['k' + x.kind]++; rounds++; if ((i & 63) === 63) await tick(); } acc[key].push(b); } };
   const session = async (upto) => { const per = plan.sess / J; while (acc.sess.length < upto) { const j = acc.sess.length, r = S.rng(20, j), rnd = S.rng(21, j), b = { n: per, base: 0, k1: 0, k2: 0, k3: 0, leads: 0 }; let st = Eng.newState(), now = Date.UTC(2026, 9, 8, 12); for (let i = 0; i < per; i++) { now += 3000; const x = S.session(st, r, rnd, now); st = x.st; st.cb = null; st.lt = 0; st.avg = 0; b.base += x.base; if (x.kind) b['k' + x.kind]++; b.leads += x.leads; rounds++; if ((i & 31) === 31) await tick(); } acc.sess.push(b); } };
@@ -290,6 +290,7 @@ function setLiveConfig({ overrides, rtpLabel, note, measured } = {}) {
   };
   writeFile(rec.measured ? rec : (({ measured: _m, ...r }) => r)(rec));
   swapIn(next); live = rec;
+  if (checking) { checking.cancelled = true; checking = null; }   // R2C-2: an accepted change (a reset included) supersedes the payback check in flight
   return liveInfo();
 }
 const auditFile = () => cfgFile() + '.audit.log';
@@ -298,7 +299,9 @@ function audit(rec) {                    // one line per accepted or refused cha
   console.log('[cfg-audit] ' + line);
   try { fs.appendFileSync(auditFile(), line + '\n'); } catch {}
 }
-let checking = false;
+// R2C-2: the payback check that is running (null when none); setLiveConfig cancels it, so a check that ends later cannot swap in on top of a later admin action.
+let checking = null;
+const SUPERSEDED = 'another admin change (a reset or a new config) was accepted while this check ran; nothing was changed by this one';
 // The admin path: validate, MEASURE (async, never blocks the loop for long), refuse above the ceiling, then write + swap. `who` is a short text naming the caller (the route passes a token fingerprint + address).
 // Resolves liveInfo on success; rejects with an Error whose message says why (bad value, or the measured payback). Every outcome is one audit line.
 async function setLiveConfigChecked({ overrides, rtpLabel, note, who, scale, seed } = {}) {
@@ -310,10 +313,11 @@ async function setLiveConfigChecked({ overrides, rtpLabel, note, who, scale, see
     try { const info = setLiveConfig({ overrides: {}, note }); log({ outcome: 'accepted', new: { pct: 98.0, source: 'shipped' } }); return info; } catch (e) { log({ outcome: 'refused', why: String(e.message).slice(0, 200), new: null }); throw e; }
   }
   if (checking) { const e = new Error('cfg: another payback check is running, try again when it has finished'); log({ outcome: 'refused', why: e.message, new: null }); throw e; }
-  checking = true;
+  const token = checking = { cancelled: false };
   let m;
-  try { m = await measurePayback(next, { scale, seed }); } catch (e) { checking = false; log({ outcome: 'refused', why: 'check failed: ' + String(e.message).slice(0, 200), new: null }); throw e; }
-  checking = false;
+  try { m = await measurePayback(next, { scale, seed, cancelled: () => token.cancelled }); } catch (e) { if (checking === token) checking = null; const why = token.cancelled ? SUPERSEDED : 'check failed: ' + String(e.message).slice(0, 200); log({ outcome: 'refused', why, new: null }); throw token.cancelled ? new Error('cfg: refused, ' + why) : e; }
+  if (checking === token) checking = null;
+  if (token.cancelled) { log({ outcome: 'refused', why: SUPERSEDED, new: null }); throw new Error('cfg: refused, ' + SUPERSEDED); }
   const summary = pbSummary(m), nw = { worst: { way: m.worst.way, pct: round2(m.worst.pct), se: round2(m.worst.se) }, plain: summary.plain, ways: summary, ms: m.ms, maxStretchMs: round2(m.maxStretchMs), seed: m.seed };
   if (!m.ok) {
     const why = m.worst.pct <= CEILING_PCT && !m.giftOk ? 'the daily gift is worth ' + round2(m.ways.daily.giftCents) + ' cents a day (limit ' + DAILY_GIFT_MAX_CENTS + ')' : 'the ' + m.worst.way + ' way pays back ' + round2(m.worst.pct) + '% (+-' + round2(1.96 * m.worst.se) + '), above the ' + CEILING_PCT + '% ceiling';
