@@ -354,7 +354,7 @@ t('C3: a surviving step whose record flush failed: the retry of the same step re
   let boom = 1; store.flush = () => { if (boom-- > 0) throw new Error('disk full'); return real(); };
   w.RNG.v = 0.999999; let r = step(w, s, run, to); eq(r.error.code, 'internal'); eq(w.runs.get('ann').run.steps, 0, 'the step did not happen yet');
   w.RNG.v = 0;                                                                                 // a fresh draw would be a scandal
-  w.clock.advance(1000); r = step(w, s, run, to); eq(r.ev, 'step', 'the retry gets the draw that was made: a survive');   // (a refused step is answered once a second: R2D-2) eq(r.payload.run.steps, 1); eq(w.runs.get('ann').run.steps, 1);
+  w.clock.advance(1000); r = step(w, s, run, to); eq(r.ev, 'step', 'the retry gets the draw that was made: a survive'); eq(r.payload.run.steps, 1); eq(w.runs.get('ann').run.steps, 1);   // (a refused step is answered once a second: R2D-2)
   ok(w.disk().open.ann.run.steps === 1, 'durable now'); eq(w.runs.get('ann').memo, null);
   // a different step after a failed flush is a new decision: it draws
   const run2 = r.payload.run, to2 = run2.options.find((o) => !o.deadEnd).to; boom = 1; w.RNG.v = 0.999999; r = step(w, s, run2, to2); eq(r.error.code, 'internal');
