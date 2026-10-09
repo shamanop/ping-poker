@@ -18,6 +18,8 @@ for (const k of ['COLDCALL_PULL_FILE', 'DATA_DIR', 'RAILWAY_VOLUME_MOUNT_PATH', 
 const E = require('../games/coldcall-engine.js');
 let L = null; try { L = require('../games/coldcall-livecfg.js'); } catch (e) { L = null; }   // the old tree has no such file: every test then fails on its own
 const SRV = require('../games/coldcall.js');
+// K4-1: this file tests the swap machinery, so it hands setLiveConfig a proof for the numbers it sets (the gate itself, with the real measurement, is tests/money-1008-cfg-coldcall.js)
+const rawSet = SRV.setLiveConfig; SRV.setLiveConfig = (a) => rawSet(a && a.overrides && Object.keys(a.overrides).length && !a.measured ? { ...a, measured: { ok: true, hash: L.configHash(L.merge(a.overrides)), summary: {}, worst: {}, label: null } } : a);
 const H = require('./lib-coldcall-ledger.js');
 
 const SHIPPED = structuredClone(E.CFG);          // the values the code ships with
@@ -174,7 +176,7 @@ const BIG_SWAP = {
     const r = spin(s, a, { bet: 100, mode: 'play', buyBonus: 'bonus1', auto: true });
     assert.strictEqual(r.cost, 5000, 'the next paid buy is charged the new price'); assert.strictEqual(r.status, 'done');
     const j = JSON.parse(fs.readFileSync(CFG_FILE, 'utf8'));
-    assert.deepStrictEqual(Object.keys(j).sort(), ['note', 'overrides', 'rtpLabel', 'updatedAt']); assert.deepStrictEqual(j.overrides, { buyCost: { bonus1: 500 } });
+    assert.deepStrictEqual(Object.keys(j).sort(), ['measured', 'note', 'overrides', 'rtpLabel', 'updatedAt']); assert.deepStrictEqual(j.overrides, { buyCost: { bonus1: 500 } });
     assert.strictEqual(j.note, 'test'); assert.strictEqual(j.rtpLabel, null); assert.ok(!Number.isNaN(Date.parse(j.updatedAt))); assert.ok(!fs.existsSync(CFG_FILE + '.tmp'), 'atomic: no temp left');
   });
 
@@ -235,7 +237,7 @@ const BIG_SWAP = {
     assert.strictEqual(L.loadLiveConfig(() => {}), true); assert.strictEqual(SRV.liveInfo().rtpLabel, j.rtpLabel, 'same defaults, same label');
     // a deploy moves one shipped number (here the hunt bell weight's neighbour, a number no preset touches): the file is re-merged onto the new defaults
     const keep = L.DEFAULT.pull.cold.floor; L.DEFAULT.pull.cold.floor = keep + 1;
-    try { assert.strictEqual(L.loadLiveConfig(() => {}), true); assert.strictEqual(E.CFG.pull.cold.floor, keep + 1); assert.strictEqual(SRV.liveInfo().rtpLabel, 'custom settings, not measured', 'the saved file keeps its old label but the numbers moved'); assert.notStrictEqual(SRV.liveInfo().configHash, j.measuredHash); assert.ok(/rtpLabel not shown/.test(SRV.liveInfo().warning)); }
+    try { const said = []; assert.strictEqual(L.loadLiveConfig((...x) => said.push(x.join(' '))), false, 'K4-1: the numbers moved, so the measurement in the file no longer covers them: not loaded'); assert.ok(said.some((m) => /payback measurement/.test(m)), said.join('|')); assert.strictEqual(E.CFG.pull.cold.floor, keep + 1, 'booted on the (moved) shipped numbers'); assert.strictEqual(SRV.liveInfo().rtpLabel, SRV.RTP_LABEL); }
     finally { L.DEFAULT.pull.cold.floor = keep; resetLive(); }
     assert.strictEqual(SRV.liveInfo().rtpLabel, SRV.RTP_LABEL);
   });
@@ -387,7 +389,9 @@ const BIG_SWAP = {
         assert.ok(logged.filter((l) => /coldcall/.test(l)).length === 1, 'logged once: ' + body + ' -> ' + JSON.stringify(logged)); assert.strictEqual(fs.readFileSync(CFG_FILE, 'utf8'), body, 'the damaged file is kept');
         const a = s.sock('ann'); assert.strictEqual(spin(s, a, { bet: 10, mode: 'play' }).status, 'done', 'and the game plays');
       }
-      resetLive(); fs.writeFileSync(CFG_FILE, JSON.stringify({ overrides: { buyCost: { bonus1: 640 } }, rtpLabel: null, note: 'ok', updatedAt: '2026-10-06T00:00:00.000Z' })); logged.length = 0; setup({ rng: E.rngFrom(10) });
+      resetLive(); fs.writeFileSync(CFG_FILE, JSON.stringify({ overrides: { buyCost: { bonus1: 640 } }, rtpLabel: null, note: 'unmeasured', updatedAt: '2026-10-06T00:00:00.000Z' })); logged.length = 0; setup({ rng: E.rngFrom(10) });
+      assert.strictEqual(E.CFG.buyCost.bonus1, SHIPPED.buyCost.bonus1, 'K4-1: a file with no payback measurement is not loaded'); assert.strictEqual(logged.filter((l) => /payback measurement/.test(l)).length, 1);
+      resetLive(); fs.writeFileSync(CFG_FILE, JSON.stringify({ overrides: { buyCost: { bonus1: 640 } }, rtpLabel: null, note: 'ok', updatedAt: '2026-10-06T00:00:00.000Z', measured: { ok: true, hash: L.configHash(L.merge({ buyCost: { bonus1: 640 } })), summary: {}, worst: {}, label: null } })); logged.length = 0; setup({ rng: E.rngFrom(10) });
       assert.strictEqual(E.CFG.buyCost.bonus1, 640); assert.strictEqual(logged.length, 0, 'a good file logs nothing');
     } finally { console.error = errOrig; }
   });
@@ -500,7 +504,7 @@ const BIG_SWAP = {
     resetLive();
     const dir = fs.mkdtempSync(path.join(tmp, 'api')); fs.writeFileSync(path.join(dir, 'bank.json'), '{}'); fs.writeFileSync(path.join(dir, 'ledger.json'), '[]');
     delete process.env.COLDCALL_PULL_FILE;
-    Object.assign(process.env, { BANK_FILE: path.join(dir, 'bank.json'), LEDGER_FILE: path.join(dir, 'ledger.json'), PORT: '0' });
+    Object.assign(process.env, { BANK_FILE: path.join(dir, 'bank.json'), LEDGER_FILE: path.join(dir, 'ledger.json'), PORT: '0', ADMIN_WRONG_TOKEN_MAX: '1000' });   // this test sends many wrong tokens on purpose; the limiter has its own test
     const logOrig0 = console.log; console.log = () => {};
     const srv = require('../server.js').start(process.env);                                    // v2: a real boot (ledger, accounts, registry, games recover) listening on an ephemeral port
     console.log = logOrig0;
@@ -535,21 +539,21 @@ const BIG_SWAP = {
       const bad = await call('POST', P, good, { overrides: { pull: { pot: { seed: 100 } } }, note: 'bad' }); assert.strictEqual(bad.status, 400); assert.strictEqual(bad.json.ok, false); assert.ok(/seed/.test(bad.json.error), bad.text);
       assert.strictEqual((await call('POST', P, good, { overrides: { nope: 1 } })).status, 400); assert.strictEqual((await call('POST', P, good, {})).status, 400, 'no overrides and no reset: refused (an empty body must not reset)'); assert.strictEqual((await call('POST', P, good, { overrides: null })).status, 400); assert.strictEqual((await call('POST', P, good, [1])).status, 400);
       assert.strictEqual(emitted.length, n0, 'no event on a bad config'); assert.strictEqual(cfgJson(), JSON.stringify(SHIPPED)); assert.ok(!fs.existsSync(CFG_FILE));
-      const ok = await call('POST', P, good, { overrides: { buyCost: { bonus1: 640 }, pull: { list: 321 } }, rtpLabel: '95.5% (test)', note: 'api-note-1' });
-      assert.strictEqual(ok.status, 200, ok.text); assert.strictEqual(ok.json.ok, true); assert.strictEqual(ok.json.cfg.buyCost.bonus1, 640); assert.strictEqual(ok.json.rtpLabel, 'custom settings, not measured'); assert.ok(/rtpLabel not shown/.test(ok.json.warning), 'FIX D3: the reply says the label was not honoured: ' + ok.json.warning); assert.strictEqual(ok.json.note, 'api-note-1');
-      assert.strictEqual(E.CFG.buyCost.bonus1, 640); assert.strictEqual(JSON.parse(fs.readFileSync(CFG_FILE, 'utf8')).overrides.pull.list, 321);
+      const ok = await call('POST', P, good, { overrides: { buyCost: { bonus1: 1000 }, pull: { list: 500 } }, rtpLabel: '95.5% (test)', note: 'api-note-1' });
+      assert.strictEqual(ok.status, 200, ok.text); assert.strictEqual(ok.json.ok, true); assert.strictEqual(ok.json.cfg.buyCost.bonus1, 1000); assert.ok(/^\d+\.\d% \(measured by the server/.test(ok.json.rtpLabel), 'K4-1: the label is the measured value: ' + ok.json.rtpLabel); assert.ok(/rtpLabel not shown/.test(ok.json.warning), 'FIX D3: the reply says the label was not honoured: ' + ok.json.warning); assert.strictEqual(ok.json.note, 'api-note-1');
+      assert.strictEqual(E.CFG.buyCost.bonus1, 1000); assert.strictEqual(JSON.parse(fs.readFileSync(CFG_FILE, 'utf8')).overrides.pull.list, 500);
       const ev = emitted.filter((e) => e[0] === 'g:coldcall:cfg'); assert.strictEqual(ev.length, 1, 'one broadcast'); const p = ev[0][1];
-      assert.strictEqual(p.cfg.buyCost.bonus1, 640); assert.strictEqual(p.rules.list, 321); assert.strictEqual(p.rtp, 'custom settings, not measured'); assert.strictEqual(p.buyPriceCents[100].bonus1, 6400); assert.deepStrictEqual(p.bets, E.BET_LEVELS);
+      assert.strictEqual(p.cfg.buyCost.bonus1, 1000); assert.strictEqual(p.rules.list, 500); assert.ok(/measured by the server/.test(p.rtp)); assert.strictEqual(p.buyPriceCents[100].bonus1, 10000); assert.deepStrictEqual(p.bets, E.BET_LEVELS);
       assert.ok(logs.some((l) => l.includes('api-note-1') && /coldcall/.test(l)), 'a console line with the note'); assert.ok(!logs.some((l) => l.includes(TOKEN)), 'the token is never logged');
-      const g2 = await call('GET', P, good); assert.strictEqual(g2.json.overrides.pull.list, 321);
+      const g2 = await call('GET', P, good); assert.strictEqual(g2.json.overrides.pull.list, 500);
       const rs = await call('POST', P, good, { reset: true }); assert.strictEqual(rs.status, 200); assert.strictEqual(cfgJson(), JSON.stringify(SHIPPED)); assert.strictEqual(rs.json.rtpLabel, SRV.RTP_LABEL);
       assert.strictEqual(emitted.filter((e) => e[0] === 'g:coldcall:cfg').length, 2, 'the reset is broadcast too'); assert.ok(emitted.filter((e) => e[0] === 'g:coldcall:cfg')[1][1].rules.list === SHIPPED.pull.list);
       assert.strictEqual((await call('GET', '/api/admin/bender-config', good)).status, 200, 'the Bender route is untouched'); assert.strictEqual((await call('GET', '/api/admin/bender-config', {})).status, 403);
       // FIX D5c: only reset === true resets; "false" / 1 / "yes" are not a reset (they used to wipe the overrides sent with them)
-      const nr = await call('POST', P, good, { reset: 'false', overrides: { payScale: 2 }, note: 'not a reset' }); assert.strictEqual(nr.status, 200, nr.text); assert.strictEqual(E.CFG.payScale, 2, 'reset:"false" applied the overrides instead of resetting'); assert.strictEqual(nr.json.overrides.payScale, 2);
-      assert.strictEqual((await call('POST', P, good, { reset: 1 })).status, 400, 'reset: 1 with no overrides is neither a reset nor a config'); assert.strictEqual((await call('POST', P, good, { reset: 'true' })).status, 400); assert.strictEqual(E.CFG.payScale, 2, 'nothing changed');
-      const rt = await call('POST', P, good, { reset: true, overrides: { payScale: 3 } }); assert.strictEqual(rt.status, 200); assert.strictEqual(E.CFG.payScale, SHIPPED.payScale, 'reset:true resets (the overrides sent with it are dropped, as before)');
-      const lab = await call('POST', P, good, preset('rtp96')); assert.strictEqual(lab.status, 200, lab.text); assert.strictEqual(lab.json.warning, null); assert.strictEqual(lab.json.rtpLabel, preset('rtp96').rtpLabel, 'a preset file POSTed as it is keeps its label'); assert.ok(typeof lab.json.configHash === 'string');
+      const nr = await call('POST', P, good, { reset: 'false', overrides: { buyCost: { bonus1: 1000 } }, note: 'not a reset' }); assert.strictEqual(nr.status, 200, nr.text); assert.strictEqual(E.CFG.buyCost.bonus1, 1000, 'reset:"false" applied the overrides instead of resetting'); assert.strictEqual(nr.json.overrides.buyCost.bonus1, 1000);
+      assert.strictEqual((await call('POST', P, good, { reset: 1 })).status, 400, 'reset: 1 with no overrides is neither a reset nor a config'); assert.strictEqual((await call('POST', P, good, { reset: 'true' })).status, 400); assert.strictEqual(E.CFG.buyCost.bonus1, 1000, 'nothing changed');
+      const rt = await call('POST', P, good, { reset: true, overrides: { buyCost: { bonus1: 1100 } } }); assert.strictEqual(rt.status, 200); assert.strictEqual(E.CFG.buyCost.bonus1, SHIPPED.buyCost.bonus1, 'reset:true resets (the overrides sent with it are dropped, as before)');
+      // the documented presets through the real route are tested in tests/money-1008-cfg-coldcall.js (each takes a full measurement)
       await call('POST', P, good, { reset: true });
     } finally {
       console.log = logOrig; srv.io.emit = ioEmit; delete process.env.BENDER_ADMIN_TOKEN; await new Promise((r) => srv.server.close(r)); try { srv.ctx.ledger.close(); } catch {}

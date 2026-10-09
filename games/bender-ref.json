@@ -1,0 +1,56 @@
+{
+ "cfgHash": "480c4efab40a857ac8c31eda07e61e355193774d9cdcc4bf818feae9a42f7862",
+ "note": "shipped Ballot Bender numbers from a long offline run of games/bender-rtp.js workers (stratified: base spin, scatter counts, each bonus kind sampled directly); m and se in x bet, pct and se in % (1 sigma)",
+ "runs": {
+  "workers": 6,
+  "baseSpinsEach": 4000000,
+  "bonusRunsEach": 300000,
+  "baseSpins": 24000000,
+  "bonusRuns": [
+   1800000,
+   1800000,
+   225000,
+   45000
+  ]
+ },
+ "base": {
+  "m": 0.711186129160297,
+  "se": 0.0006722822718823263
+ },
+ "p": [
+  0.009028666666666667,
+  0.0009277916666666667,
+  0.00007320833333333333,
+  0.000004666666666666666
+ ],
+ "B": [
+  {
+   "m": 10.619696705226666,
+   "se": 0.08265990631699109
+  },
+  {
+   "m": 75.32011549817237,
+   "se": 0.2929184078658713
+  },
+  {
+   "m": 166.06409457822264,
+   "se": 1.3363858848206311
+  },
+  {
+   "m": 408.79670586222204,
+   "se": 4.979024514339598
+  }
+ ],
+ "spin": {
+  "pct": 97.90910498557331,
+  "se": 0.10454229401950078
+ },
+ "buyElection": {
+  "pct": 97.33910820556065,
+  "se": 0.7576526701832365
+ },
+ "buyLandslide": {
+  "pct": 97.55228014269186,
+  "se": 0.3793788471258533
+ }
+}

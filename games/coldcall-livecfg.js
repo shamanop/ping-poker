@@ -166,8 +166,99 @@ function merge(overrides) {
 }
 function validate(overrides) { const next = merge(overrides); return { next, smoke: smoke(next) }; }
 
+// ---------------------------------------------------------------------------------------------------------------- payback check (K4-1)
+// A config is accepted only after the server has MEASURED what every paid way to play pays back under it, and none is above CEILING_PCT. Exact arithmetic is not possible (cascades, bonuses, the lead
+// economy), so this is a seeded, repeatable simulation made tight by STRATIFICATION: the payback of a way is  base part + sum over bonus kinds k of P(k) x E[bonus k] (+ the Callback / daily lead part), each
+// factor sampled on its own (the same idea as games/coldcall-sim.js --strat and games/bender-rtp.js), so the 10,000x tail of the bonuses does not drown the plain spin. Every way is a batch-means estimate
+// with a stated standard error; the SE of the product is the sum of the factors' SE by the delta rule. A config is refused when any way's estimate is above the ceiling. The simulation yields to the event
+// loop every ~SLICE_MS ms (setImmediate), so no stretch blocks the server for more than that plus one engine step; the longest stretch seen is reported with every result.
+// Policy of the player (the one the shipped prices were set against): PICK = the hot square with the most hot neighbours; ONE MORE CALL = bank (its EV is rtp x W, never above banking: relation rule).
+const CEILING_PCT = 100.0;               // refuse any way whose measured payback is above this
+const PB_SEED = 20261008;                // fixed: the same config always measures the same
+const SLICE_MS = 40;                     // longest synchronous stretch the check asks for
+const PB_DEADLINE_MS = 300000;           // a check that has not finished by then refuses (fail closed)
+const PB_PLAN = { b1: 150000, b2: 50000, b3: 3000, sess: 1600000, call: 1400000, hunt: 2000000, batches: 50 };
+const DAILY_GIFT_MAX_CENTS = 5;          // the daily gift may be worth at most this many cents to one account on one day (a once-a-day spin pays back above 100% of a 10-cent stake by design: the gift is cents, see report)
+const hotNbrs = (adj) => { const out = []; for (let p = 0; p < 30; p++) { const r = (p / 6) | 0, c = p % 6, l = []; for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) { if (!dr && !dc) continue; if (adj === 4 && dr && dc) continue; const rr = r + dr, cc = c + dc; if (rr >= 0 && rr < 5 && cc >= 0 && cc < 6) l.push(rr * 6 + cc); } out.push(l); } return out; };
+const mean = (a) => a.reduce((x, y) => x + y, 0) / a.length;
+const varOf = (a) => { const m = mean(a); return a.reduce((x, y) => x + (y - m) ** 2, 0) / Math.max(1, a.length - 1); };
+const yieldLoop = () => new Promise((r) => setImmediate(r));
+
+// the sampler of one config: all its draws come from streams seeded off (seed, stream id), so a result does not depend on the order or the chunking
+function pbSampler(cfg, seed) {
+  const e = Eng.createEngine(cfg), P = cfg.pull, capT = cfg.maxWinTenths, NBR = hotNbrs(cfg.adjacency);
+  const pickOn = !!(P && P.on && P.pick && P.pick.on), minLeads = pickOn ? P.pick.minLeads : 0;
+  const hooks = () => { let done = false; return { pickHook: (hot, nHot) => {
+    if (done) return -1; done = true;
+    if (!pickOn || nHot < minLeads) return -1;
+    let best = -1, bn = -1; for (let p = 0; p < 30; p++) if (hot[p]) { let n = 0; for (const q of NBR[p]) if (hot[q]) n++; if (n > bn) { bn = n; best = p; } }
+    return best;
+  } }; };
+  const rng = (stream, k) => Eng.rngFrom((seed + Math.imul(stream + 1, 0x9E3779B1) + Math.imul(k + 1, 0x85EBCA6B)) >>> 0);
+  return {
+    // one bought / natural bonus of kind 1..3 played with the best PICK; returns tenths of the bet
+    bonus: (kind, r) => e.playBonus(r, kind, false, capT, hooks()).total,
+    // one base spin of a stateless way ('call' buys a guaranteed phone, 'hunt' a hotter bell weight); returns { base, kind }
+    spin: (way, r) => { const s = e.playSpin(r, 0, new Uint8Array(30), false, { guarantee: way === 'call', hunt: way === 'hunt', capLeft: capT }); const capped = s.capped || s.win >= capT; return { base: s.win, kind: !capped && s.bells >= 3 ? (s.bells >= 5 ? 3 : s.bells === 4 ? 2 : 1) : 0 }; },
+    // one paid spin of the stateful plain game at a flat $1 (warm squares carry over); the bonus it played is NOT counted (replaced by its mean), the Callback leads are returned
+    session: (st, r, rnd, now) => { const x = e.playRound(r, { buy: null, bet: 100, state: st, now, day: '2026-10-08', script: false, rnd, auto: true }, []); return { st: x.newState, base: x.round.clusterTenths + x.round.phoneTenths, kind: x.round.bonusKind && !x.round.capped ? x.round.bonusKind : 0, leads: x.pull.filled / 10 }; },
+    rng,
+  };
+}
+
+// run the whole measurement; opts: { seed, scale (1 = full budget), now() }. Resolves { ok, ceilingPct, ways: { plain, call, hunt, bonus1, bonus2, daily }, worst: { way, pct }, se, rounds, ms, maxStretchMs, seed, scale, early }
+async function measurePayback(cfg, opts = {}) {
+  const seed = (opts.seed === undefined ? PB_SEED : opts.seed) >>> 0, scale = opts.scale === undefined ? 1 : opts.scale, t0 = Date.now();
+  const S = pbSampler(cfg, seed), P = cfg.pull || { on: false }, pullOn = !!P.on, J = PB_PLAN.batches, plan = {};
+  for (const k of Object.keys(PB_PLAN)) plan[k] = k === 'batches' ? J : Math.max(J * 2, Math.round(PB_PLAN[k] * scale / J) * J);
+  const acc = { b1: [], b2: [], b3: [], sess: [], call: [], hunt: [] };           // per batch: bonus mean | { n, base, k1, k2, k3, leads }
+  let maxStretch = 0, mark = process.hrtime.bigint(), rounds = 0;
+  const lap = () => { const t = process.hrtime.bigint(); maxStretch = Math.max(maxStretch, Number(t - mark) / 1e6); mark = t; };
+  const sinceYield = () => Number(process.hrtime.bigint() - mark) / 1e6;
+  const tick = async () => { if (sinceYield() >= SLICE_MS) { lap(); await yieldLoop(); mark = process.hrtime.bigint(); if (Date.now() - t0 > PB_DEADLINE_MS) throw new Error('payback check did not finish in ' + PB_DEADLINE_MS / 1000 + ' s'); } };
+  const bonusB = async (key, kind, upto) => { const per = plan[key] / J; while (acc[key].length < upto) { const j = acc[key].length, r = S.rng(kind, j); let s = 0; for (let i = 0; i < per; i++) { s += S.bonus(kind, r); rounds++; if ((i & 15) === 15) await tick(); } acc[key].push(s / per); } };
+  const stateless = async (key, upto) => { const per = plan[key] / J; while (acc[key].length < upto) { const j = acc[key].length, r = S.rng(10 + (key === 'call' ? 0 : 1), j), b = { n: per, base: 0, k1: 0, k2: 0, k3: 0 }; for (let i = 0; i < per; i++) { const x = S.spin(key, r); b.base += x.base; if (x.kind) b['k' + x.kind]++; rounds++; if ((i & 63) === 63) await tick(); } acc[key].push(b); } };
+  const session = async (upto) => { const per = plan.sess / J; while (acc.sess.length < upto) { const j = acc.sess.length, r = S.rng(20, j), rnd = S.rng(21, j), b = { n: per, base: 0, k1: 0, k2: 0, k3: 0, leads: 0 }; let st = Eng.newState(), now = Date.UTC(2026, 9, 8, 12); for (let i = 0; i < per; i++) { now += 3000; const x = S.session(st, r, rnd, now); st = x.st; st.cb = null; st.lt = 0; st.avg = 0; b.base += x.base; if (x.kind) b['k' + x.kind]++; b.leads += x.leads; rounds++; if ((i & 31) === 31) await tick(); } acc.sess.push(b); } };
+
+  // the numbers of a way from the accumulators so far
+  const cbK = pullOn && P.callback ? (P.callback.kind === 'bonus2' ? 2 : 1) : 1;
+  const compute = () => {
+    const B = [null, 1, 2, 3].map((k) => (k ? { m: mean(acc['b' + k]), v: varOf(acc['b' + k]) / acc['b' + k].length } : null));
+    const potPct = pullOn ? P.pot.feedBps / 100 : 0;                                  // the office pot pays back at most what it was fed
+    const way = (batches, cost, withLeads) => {
+      const per = batches.map((b) => { let t = b.base / b.n; for (const k of [1, 2, 3]) t += (b['k' + k] / b.n) * B[k].m; if (withLeads && pullOn) t += (b.leads / b.n / P.list) * B[cbK].m; return t / cost * 100; });
+      let se2 = varOf(per) / per.length;
+      for (const k of [1, 2, 3]) { let c = mean(batches.map((b) => b['k' + k] / b.n)); if (withLeads && pullOn && k === cbK) c += mean(batches.map((b) => b.leads / b.n)) / P.list; se2 += (c / cost * 100) ** 2 * B[k].v; }
+      return { pct: mean(per) + (withLeads ? potPct : 0), se: Math.sqrt(se2) };
+    };
+    const bought = (k, cost) => ({ pct: B[k].m / cost * 100, se: Math.sqrt(B[k].v) / cost * 100 });          // a buy never feeds or rolls the pot (coldcall.js settle: `plain` only)
+    const ways = { plain: way(acc.sess, 10, true), call: way(acc.call, cfg.buyCost.call, false), hunt: way(acc.hunt, cfg.buyCost.hunt, false), bonus1: bought(1, cfg.buyCost.bonus1), bonus2: bought(2, cfg.buyCost.bonus2) };
+    // the daily spin: the player's once-a-day spin earns the daily leads on top of the plain game, at the longest streak. Its payback is plain + gift / stake, which passes 100% at a 10-cent stake even at
+    // the shipped numbers (0.4 lead x the Callback / 450 = about 0.8 cent), so the gift is judged in money: giftCents = leads x (Callback value per lead) at the bet the leads are worked at (stakeCap, 10c shipped)
+    if (pullOn) { const dl = P.daily.base + P.daily.perStreak * P.daily.streakMax, cents = dl / P.list * (B[cbK].m / 10) * P.daily.stakeCap, f = dl / P.list * 10; ways.daily = { pct: ways.plain.pct + f * B[cbK].m, se: Math.hypot(ways.plain.se, f * Math.sqrt(B[cbK].v)), giftCents: cents, judged: 'gift' }; }
+    return ways;
+  };
+  const worstOf = (ways) => Object.entries(ways).filter(([w, x]) => x.judged !== 'gift').map(([w, x]) => ({ way: w, pct: x.pct, se: x.se })).sort((a, b) => b.pct - a.pct)[0];
+  // stage 1 (a tenth of the budget): a config far above the ceiling is refused at once; stage 2: the rest
+  const steps = [Math.max(5, Math.round(J / 10)), J];
+  let early = false, ways = null;
+  for (const upto of steps) {
+    await bonusB('b1', 1, upto); await bonusB('b2', 2, upto); await bonusB('b3', 3, upto); await session(upto); await stateless('call', upto); await stateless('hunt', upto);
+    ways = compute(); const w = worstOf(ways);
+    if (upto < J && (w.pct - 6 * w.se > CEILING_PCT || (ways.daily && ways.daily.giftCents > 4 * DAILY_GIFT_MAX_CENTS))) { early = true; break; }
+  }
+  lap();
+  const worst = worstOf(ways);
+  const giftOk = !ways.daily || ways.daily.giftCents <= DAILY_GIFT_MAX_CENTS;
+  return { ok: worst.pct <= CEILING_PCT && giftOk, giftOk, ceilingPct: CEILING_PCT, ways, worst, rounds, ms: Date.now() - t0, maxStretchMs: maxStretch, seed, scale, early };
+}
+const round2 = (x) => Math.round(x * 100) / 100;
+const pbSummary = (r) => Object.fromEntries(Object.entries(r.ways).map(([w, x]) => [w, { pct: round2(x.pct), se: round2(x.se), ...(x.giftCents !== undefined ? { giftCents: round2(x.giftCents) } : {}) }]));
+// the label players see for a config that is not the shipped one and not a measured preset: the measured value, never a fixed claim
+const measuredLabel = (r) => { const p = r.ways.plain; return round2(p.pct).toFixed(1) + '% (measured by the server when this was set: plain game, +-' + round2(1.96 * p.se).toFixed(1) + '; highest way ' + r.worst.way + ' ' + round2(r.worst.pct).toFixed(1) + '%)'; };
+
 // ---------------------------------------------------------------------------------------------------------------- live state + file
-let live = { overrides: {}, rtpLabel: null, note: '', updatedAt: null };
+let live = { overrides: {}, rtpLabel: null, note: '', updatedAt: null, measured: null };
 let applied = false;                     // true once this process has put something other than its own boot values into Eng.CFG
 let fileGiven = null;                    // set by the game module's init from the server's paths (next to money.jsonl); COLDCALL_CFG_FILE still wins
 const setFile = (f) => { fileGiven = typeof f === 'string' && f ? f : null; };
@@ -184,23 +275,59 @@ function writeFile(rec) {                // atomic: temp + rename. Throws when t
 }
 
 // swap the live config. Order: validate + smoke (pure), write the file, then swap. Any failure leaves memory and file as they were.
-function setLiveConfig({ overrides, rtpLabel, note } = {}) {
-  const { next } = validate(overrides === undefined ? {} : overrides);
+// K4-1: this is the swap machinery (synchronous: write the file, swap in place). The admin route and boot never call it with a config that was not measured: the route goes through setLiveConfigChecked
+// (measure, refuse above the ceiling, then this), and boot loads a saved file only if it carries the measurement made for exactly these numbers (loadLiveConfig). A caller that gets here without a passing
+// measurement for these numbers (tests of the machinery) is never silent: it writes an `unchecked` audit line, and the file it saves is not trusted at the next boot.
+function setLiveConfig({ overrides, rtpLabel, note, measured } = {}) {
+  const { next } = validate(overrides === undefined ? {} : overrides), reset = deepEq(next, DEFAULT), h = configHash(next);
+  const proven = measured && measured.ok === true && measured.hash === h;
+  if (!reset && !proven && !presets().some((p) => p.measuredHash === h)) audit({ who: 'in-process caller', outcome: 'unchecked', why: 'swapped in without a payback measurement of these numbers', note: String(note || '').slice(0, 120) });
   const rec = {
     overrides: JSON.parse(JSON.stringify(overrides === undefined ? {} : overrides)),
     rtpLabel: typeof rtpLabel === 'string' && rtpLabel.trim() ? rtpLabel.trim().slice(0, 160) : null,
     note: String(note || '').slice(0, 300), updatedAt: new Date().toISOString(),
+    measured: !reset && proven ? measured : null,
   };
-  writeFile(rec);
+  writeFile(rec.measured ? rec : (({ measured: _m, ...r }) => r)(rec));
   swapIn(next); live = rec;
   return liveInfo();
+}
+const auditFile = () => cfgFile() + '.audit.log';
+function audit(rec) {                    // one line per accepted or refused change: when, who, old and new measured payback
+  const line = JSON.stringify({ t: new Date().toISOString(), game: 'coldcall', ...rec });
+  console.log('[cfg-audit] ' + line);
+  try { fs.appendFileSync(auditFile(), line + '\n'); } catch {}
+}
+let checking = false;
+// The admin path: validate, MEASURE (async, never blocks the loop for long), refuse above the ceiling, then write + swap. `who` is a short text naming the caller (the route passes a token fingerprint + address).
+// Resolves liveInfo on success; rejects with an Error whose message says why (bad value, or the measured payback). Every outcome is one audit line.
+async function setLiveConfigChecked({ overrides, rtpLabel, note, who, scale, seed } = {}) {
+  const old = live.measured ? { pct: live.measured.summary.plain && live.measured.summary.plain.pct, worst: live.measured.worst, source: 'measured when set' } : { pct: 98.0, source: isCustom() ? 'unmeasured custom (pre-check file)' : 'shipped label (200M-spin sim)' };
+  const log = (rec) => audit({ who: who || 'unknown', note: String(note || '').slice(0, 120), old, ...rec });
+  let next;
+  try { ({ next } = validate(overrides === undefined ? {} : overrides)); } catch (e) { log({ outcome: 'refused', why: String(e.message).slice(0, 200), new: null }); throw e; }
+  if (deepEq(next, DEFAULT)) {                       // back to the shipped numbers: nothing to measure
+    try { const info = setLiveConfig({ overrides: {}, note }); log({ outcome: 'accepted', new: { pct: 98.0, source: 'shipped' } }); return info; } catch (e) { log({ outcome: 'refused', why: String(e.message).slice(0, 200), new: null }); throw e; }
+  }
+  if (checking) { const e = new Error('cfg: another payback check is running, try again when it has finished'); log({ outcome: 'refused', why: e.message, new: null }); throw e; }
+  checking = true;
+  let m;
+  try { m = await measurePayback(next, { scale, seed }); } catch (e) { checking = false; log({ outcome: 'refused', why: 'check failed: ' + String(e.message).slice(0, 200), new: null }); throw e; }
+  checking = false;
+  const summary = pbSummary(m), nw = { worst: { way: m.worst.way, pct: round2(m.worst.pct), se: round2(m.worst.se) }, plain: summary.plain, ways: summary, ms: m.ms, maxStretchMs: round2(m.maxStretchMs), seed: m.seed };
+  if (!m.ok) {
+    const why = m.worst.pct <= CEILING_PCT && !m.giftOk ? 'the daily gift is worth ' + round2(m.ways.daily.giftCents) + ' cents a day (limit ' + DAILY_GIFT_MAX_CENTS + ')' : 'the ' + m.worst.way + ' way pays back ' + round2(m.worst.pct) + '% (+-' + round2(1.96 * m.worst.se) + '), above the ' + CEILING_PCT + '% ceiling';
+    log({ outcome: 'refused', why, new: nw }); throw new Error('cfg: refused, ' + why + (m.early ? ' (stopped early)' : ''));
+  }
+  const measured = { hash: configHash(next), ok: true, ceilingPct: CEILING_PCT, label: measuredLabel(m), summary, worst: nw.worst, seed: m.seed, at: new Date().toISOString() };
+  try { const info = setLiveConfig({ overrides, rtpLabel, note, measured }); log({ outcome: 'accepted', new: nw }); return info; } catch (e) { log({ outcome: 'refused', why: String(e.message).slice(0, 200), new: nw }); throw e; }
 }
 
 // boot: load the saved file. A missing file leaves Eng.CFG alone; a damaged one (bad JSON, wrong shape, a config that fails validation) is logged ONCE and the game boots on the
 // defaults. Never throws. The damaged file is kept for inspection until the next good save replaces it.
 function loadLiveConfig(log) {
   const say = log || ((...a) => console.error(...a));
-  const toDefaults = () => { if (applied) swapIn(DEFAULT); live = { overrides: {}, rtpLabel: null, note: '', updatedAt: null }; };
+  const toDefaults = () => { if (applied) swapIn(DEFAULT); live = { overrides: {}, rtpLabel: null, note: '', updatedAt: null, measured: null }; };
   let raw;
   try { raw = fs.readFileSync(cfgFile(), 'utf8'); } catch (e) { if (e.code !== 'ENOENT') say('[coldcall] live config not loaded, using defaults:', e.message); toDefaults(); return false; }
   try {
@@ -209,8 +336,11 @@ function loadLiveConfig(log) {
     const overrides = j.overrides === undefined ? {} : j.overrides;
     for (const [k, t] of [['rtpLabel', 'string'], ['note', 'string'], ['updatedAt', 'string']]) if (j[k] !== undefined && j[k] !== null && typeof j[k] !== t) throw new Error('the file has a ' + k + ' that is not text');
     const { next } = validate(overrides);
+    // K4-1: a saved file goes live only with the payback measurement that was made when it was set (same numbers, passed), or as a preset measured offline (hash of a known preset). Anything else is not trusted.
+    const h = configHash(next), m = j.measured, trusted = deepEq(next, DEFAULT) || presets().some((p) => p.measuredHash === h) || (isPlain(m) && m.ok === true && m.hash === h && isPlain(m.summary) && isPlain(m.worst));
+    if (!trusted) throw new Error('the saved config has no passing payback measurement; POST it again so the server can measure it');
     swapIn(next);
-    live = { overrides: JSON.parse(JSON.stringify(overrides)), rtpLabel: typeof j.rtpLabel === 'string' && j.rtpLabel ? j.rtpLabel.slice(0, 160) : null, note: typeof j.note === 'string' ? j.note.slice(0, 300) : '', updatedAt: typeof j.updatedAt === 'string' ? j.updatedAt : null };
+    live = { measured: isPlain(m) && m.hash === h ? m : null, overrides: JSON.parse(JSON.stringify(overrides)), rtpLabel: typeof j.rtpLabel === 'string' && j.rtpLabel ? j.rtpLabel.slice(0, 160) : null, note: typeof j.note === 'string' ? j.note.slice(0, 300) : '', updatedAt: typeof j.updatedAt === 'string' ? j.updatedAt : null };
     return true;
   } catch (e) { say('[coldcall] live config not loaded, using defaults:', e && e.message); toDefaults(); return false; }
 }
@@ -241,7 +371,8 @@ function presets() {                     // [{ name, rtpLabel, measuredHash }]; 
 const rtp = (shipped) => {
   if (!isCustom()) return shipped;
   const h = liveHash();
-  return live.rtpLabel && presets().some((p) => p.rtpLabel === live.rtpLabel && p.measuredHash === h) ? live.rtpLabel : CUSTOM_LABEL;
+  if (live.rtpLabel && presets().some((p) => p.rtpLabel === live.rtpLabel && p.measuredHash === h)) return live.rtpLabel;
+  return live.measured && live.measured.hash === h && typeof live.measured.label === 'string' ? live.measured.label : CUSTOM_LABEL;
 };
 // said in the POST reply: a label that was sent and is not what the room is shown
 const labelWarning = (shipped) => (live.rtpLabel && rtp(shipped) !== live.rtpLabel ? 'rtpLabel not shown: it is not the label of a known preset measured on exactly these numbers (the room reads "' + rtp(shipped) + '")' : null);
@@ -257,7 +388,7 @@ function publicCfg() {
 // the payload of `g:coldcall:cfg` (broadcast on every swap) and the fields `g:coldcall:state` carries: a COPY, editing it moves nothing
 function clientCfg(shipped) { return { cfg: publicCfg(), rules: clone(Eng.CFG.pull || null), buyPriceCents: buyPrices(), rtp: rtp(shipped), bets: Eng.BET_LEVELS.slice() }; }
 function liveInfo(shipped) {
-  return { file: cfgFile(), rtpLabel: rtp(shipped), warning: labelWarning(shipped), configHash: liveHash(), custom: isCustom(), note: live.note, updatedAt: live.updatedAt, overrides: clone(live.overrides), cfg: clone(Eng.CFG), defaults: clone(DEFAULT) };
+  return { file: cfgFile(), rtpLabel: rtp(shipped), warning: labelWarning(shipped), configHash: liveHash(), custom: isCustom(), note: live.note, updatedAt: live.updatedAt, measured: live.measured ? clone(live.measured) : null, overrides: clone(live.overrides), cfg: clone(Eng.CFG), defaults: clone(DEFAULT) };
 }
 
 // ---------------------------------------------------------------------------------------------------------------- snapshots (item 3)
@@ -304,4 +435,4 @@ function resolveRound(K, rng, buy, opts) {
   return { round: r, buy: r.buy, costTenths: r.costTenths, winTenths: r.winTenths, winX: r.winX, capped: r.capped, tier: r.tier, script: r.script };
 }
 
-module.exports = { DEFAULT, CUSTOM_LABEL, RULES, file: cfgFile, setFile, encodeCfg, decodeCfg, restoreSnapshot, configHash, presets, merge, validate, smoke, setLiveConfig, loadLiveConfig, liveInfo, clientCfg, publicCfg, buyPrices, rtp, snapshot, resolveRound };
+module.exports = { setLiveConfigChecked, DAILY_GIFT_MAX_CENTS, measurePayback, pbSummary, measuredLabel, CEILING_PCT, DEFAULT, CUSTOM_LABEL, RULES, file: cfgFile, setFile, encodeCfg, decodeCfg, restoreSnapshot, configHash, presets, merge, validate, smoke, setLiveConfig, loadLiveConfig, liveInfo, clientCfg, publicCfg, buyPrices, rtp, snapshot, resolveRound };
