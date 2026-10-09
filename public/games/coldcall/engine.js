@@ -124,6 +124,18 @@
   // a stored carry is a finite number in [0, 10) cents; anything else (missing, NaN, negative, text, 10 or more) reads as 0
   const cleanCarry = (c) => (typeof c === 'number' && c > 0 && c < 10 ? c : 0);
   const cloneState = (st) => Object.assign({}, st, { warm: st.warm.slice(), cb: st.cb ? Object.assign({}, st.cb) : null, carry: cleanCarry(st.carry) });
+  // MONEY 1008 R3C-1: the leads a player holds are an absolute count of tenths, but THE CALLBACK needs a full list of the LIVE config. A change of the live list (an accepted config, a reset, a config loaded
+  // at boot) must never change the SHARE of one Callback a player holds: a STORED state carries `ll`, the list size (list x 10, tenths of a lead) its `lt` is counted against, and a read under a different
+  // list size rescales `lt` by live / ll (0.89 of a Callback stays 0.89: shorter list, longer list, reset) and restamps it. The stamp is rewritten with the state, in the same store write / journal line, so a
+  // crash at any point leaves a record that carries the size its leads are counted against: nothing is walked or migrated in one go. A state WITHOUT a stamp is taken as counted against the list it is played
+  // under (pure engine callers: tests, the payback check, a new player). The SERVER stamps what it loads (games/coldcall.js normState): an old stored record without a stamp = SHIPPED_FULL, the list size of
+  // the engine's own defaults captured before any live config is swapped in. An armed Callback (`cb`), the average bet (`avg`) and the carry are cents, not shares: untouched.
+  const SHIPPED_FULL = Math.round(CFG.pull.list * 10);
+  const fullOf = (P) => { const f = Math.round(P.list * 10); return Number.isFinite(f) && f > 0 ? f : 0; };
+  const stamped = (st) => typeof st.ll === 'number' && Number.isFinite(st.ll) && st.ll > 0;
+  const snapT = (x) => (Math.abs(x - Math.round(x)) < 1e-6 ? Math.round(x) : x);        // a share that is a whole number of tenths stays whole (no float dust from a round trip of list sizes)
+  const ltIn = (st, P) => { const to = fullOf(P); return to && stamped(st) && to !== st.ll ? snapT(st.lt * to / st.ll) : st.lt; };
+  function alignLeads(st, P) { const to = fullOf(P); if (!to || !stamped(st)) return st; st.lt = ltIn(st, P); st.ll = to; return st; }     // st is a clone
   // the Callback is played at the lead-weighted average bet ROUNDED DOWN to a whole step, in [1, max bet level]: leads earned small cannot fire a big bet,
   // and a few cheap leads (the daily gift) cannot knock a big bettor down a whole bet level. Below an average of 10 cents the step is 1 cent (DENOMS: 1c / 2c / 5c bettors),
   // from 10 cents up it is EXACTLY the old rule (step 10); any whole number of cents in [1, 2500] is a legal Eng.cents-exact Callback bet.
@@ -155,7 +167,7 @@
   }
   // the cold clock: from coldAt, every stepMs is one cold event; the first kills the warm squares, every one takes `batch` leads down to `floor`
   function tickStateWith(P, state, now) {
-    const st = cloneState(state);
+    const st = alignLeads(cloneState(state), P);
     if (st.coldAt == null || !Number.isFinite(now) || now < st.coldAt) return st;
     const step = P.cold.stepMs > 0 ? P.cold.stepMs : Infinity, n = Math.floor((now - st.coldAt) / step) + 1, fl = Math.round(P.cold.floor * 10);
     st.warm = []; st.warmBet = 0;
@@ -484,7 +496,7 @@
         if (!input.state) throw new Error('playRound: state required for a spin');
         const before = input.state;
         s = tickStateWith(P, before, now); callback = !!s.cb; if (callback) bet = s.cb.bet;
-        leaked = before.lt - s.lt; warmDied = before.warm.length - s.warm.length;
+        leaked = ltIn(before, P) - s.lt; warmDied = before.warm.length - s.warm.length;
       }
       // DENOMS: the scale tenths -> cents of this round (a Callback at its own bet, a buy at its fair stake) and the rounding source (read twice per DONE round when an amount can be a fraction of a cent)
       const costT0 = callback ? 0 : buy ? cfg.buyCost[buy] : 10, scale = scaleOf(costT0, bet), frac = isFractional(scale), rnd = input.rnd;
@@ -651,5 +663,5 @@
   // THE PULL round: (rng, { buy, bet, state, now, day, script, auto, decide }, decisions) -> { status: 'done' | 'pending', ... }
   const playRound = (rng, input, decisions) => engine.playRound(rng, input, decisions);
 
-  return { createEngine, engine, resolveRound, rngFrom, playRound, newState, tickState, coldInfo, potSlice, potHitChance, potPrize, cbBet, cbArm, cbLevel: cbBet, winTier, cents, buyPrice, scaleOf, roundCents, settleCents, payRound, TIERS, CFG, SYM, MODES, BUYS, FORCES, TIER_NAMES, BET_LEVELS, COLS, ROWS, N, NREG, WILD, BELL, PHONE, MIN_CLUSTER, MAX_WIN_X, MAX_WIN_T };
+  return { SHIPPED_FULL, createEngine, engine, resolveRound, rngFrom, playRound, newState, tickState, coldInfo, potSlice, potHitChance, potPrize, cbBet, cbArm, cbLevel: cbBet, winTier, cents, buyPrice, scaleOf, roundCents, settleCents, payRound, TIERS, CFG, SYM, MODES, BUYS, FORCES, TIER_NAMES, BET_LEVELS, COLS, ROWS, N, NREG, WILD, BELL, PHONE, MIN_CLUSTER, MAX_WIN_X, MAX_WIN_T };
 });
