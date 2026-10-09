@@ -2,7 +2,7 @@ const { authJoin } = require('./authjoin');
 // Tables: create/validate, lobby, join/leave, host controls, nights, settle-up, rebuy, modes. Temp data files, port 4802.
 const { spawn } = require('child_process');
 const fs = require('fs'), os = require('os'), path = require('path');
-const { io } = require(process.env.SIO_CLIENT || '/home/isabelle/.cache/node_modules/socket.io-client');
+const { io } = (() => { try { return require(process.env.SIO_CLIENT || 'socket.io-client'); } catch { return require('/home/isabelle/.cache/node_modules/socket.io-client'); } })();   // SIO_CLIENT, else the repo's own node_modules, else Isabelle's cache dir
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pptb-'));
 const PORT = Number(process.env.TABLES_PORT || 4802), ROOT = path.join(__dirname, '..');

@@ -1,7 +1,7 @@
 // Profile: rename (rules, rate limit, propagation to a live seat, money keyed by account) and custom avatar photo. Temp data, port 4791.
 const { spawn } = require('child_process');
 const fs = require('fs'), os = require('os'), path = require('path'), zlib = require('zlib');
-const { io } = require(process.env.SIO_CLIENT || '/home/isabelle/.cache/node_modules/socket.io-client');
+const { io } = (() => { try { return require(process.env.SIO_CLIENT || 'socket.io-client'); } catch { return require('/home/isabelle/.cache/node_modules/socket.io-client'); } })();   // SIO_CLIENT, else the repo's own node_modules, else Isabelle's cache dir
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ppfl-'));
 const PORT = Number(process.env.PROFILE_PORT || 4791), ROOT = path.join(__dirname, '..');

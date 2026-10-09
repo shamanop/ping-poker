@@ -2,7 +2,7 @@ const { authJoin } = require('../authjoin');
 // Bank edit permission + auto-start checks. Throwaway server on PORT 4778.
 const { spawn } = require('child_process');
 const fs = require('fs'), os = require('os'), path = require('path');
-const { io } = require(process.env.SIO_CLIENT || '/home/isabelle/.cache/node_modules/socket.io-client');
+const { io } = (() => { try { return require(process.env.SIO_CLIENT || 'socket.io-client'); } catch { return require('/home/isabelle/.cache/node_modules/socket.io-client'); } })();   // SIO_CLIENT, else the repo's own node_modules, else Isabelle's cache dir
 const tot = async n => { const r = await (await fetch(`http://localhost:${PORT}/api/bank-summary?password=ping`)).json(); const p = r.players.find(x => x.name.toLowerCase() === n.toLowerCase()); return p ? p.bank + p.atTable : null; };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ppbe-'));
