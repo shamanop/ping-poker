@@ -8,7 +8,7 @@
 // registry (games/index.js, recover() at boot as server.js does) and the game module. The kit knows nothing of any game's rules: the game ships
 // games/<id>.kit.js (the adapter, see ADD-A-GAME.md "the kit"), which plays it with the game's OWN socket messages and never touches money.
 //
-// checks: registration, escrow, restart, replay (double submit), sockets, mix, errors, input, identity, quarantine, disconnect, carry (Chips never feed Cash), ledger (replay == balances)
+// checks: registration, escrow, restart, replay (double submit), sockets, mix, errors, input, identity, quarantine, disconnect, carry (Chips never feed Cash), refuse (a currency the adapter leaves out), ledger (replay == balances)
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -729,6 +729,27 @@ function checkDisconnect(A, cur) {
   });
 }
 
+// 13. a currency the adapter leaves out is a currency the game must REFUSE (R2E-8): `currencies: ['chips']` switches the Cash checks off, so the kit asks the game directly
+function checkRefuses(A, cur) {
+  runCheck(A, 'refuse', cur, (t) => {
+    const w = world(A, { seed: 15 }), s = w.sock('ann'); w.rich('ann');
+    const id0 = w.lastId(), b = CURS.map((c) => w.bal('ann', c));
+    for (let i = 0; i < 3; i++) {
+      const bet = A.bets.good[i % A.bets.good.length], o = A.open(cur, bet);
+      let r; try { r = w.g.try(s, o.ev, o.payload); } catch (e) { t.fail(`${cur} bet ${bet}: the handler threw out to the socket: ${e.message}`); continue; }
+      t.ok(!r.ok, `the adapter says this game has no ${cur} mode, and the game took a ${cur} bet of ${bet} (answer ${JSON.stringify(r.payload).slice(0, 80)})`);
+    }
+    for (let i = 0; i < 3; i++) {
+      let shown = null; try { shown = A.play(w.g, s, { cur, bet: A.bets.good[i % A.bets.good.length], i }); } catch (e) { if (!(e instanceof Refused)) throw e; }
+      t.ok(!shown, `the adapter says this game has no ${cur} mode, and a whole ${cur} round was played (win ${shown && shown.win})`);
+    }
+    const lines = w.since(id0).filter((l) => !isKit(l));
+    t.ok(!lines.some((l) => l.cur === cur), `${lines.filter((l) => l.cur === cur).length} ledger line(s) in ${cur} for a game that has no ${cur} mode`);
+    t.ok(w.since(id0).length === 0 || w.bal('ann', cur) === b[CURS.indexOf(cur)], `the ${cur} balance moved (${b[CURS.indexOf(cur)]} -> ${w.bal('ann', cur)})`);
+    finalAudit(t, w, cur, 'refuse');
+  });
+}
+
 // ------------------------------------------------------------------------------------------------------------------------------------ driver
 function loadAdapter(id) {
   const dir = path.join(ROOT, 'games');
@@ -765,6 +786,7 @@ function runAdapter(A, opts) {
       checkEscrow(A, cur); checkRestart(A, cur); checkReplay(A, cur); checkSockets(A, cur); checkMix(A, cur); checkErrors(A, cur); checkInput(A, cur); checkIdentity(A, cur); checkDisconnect(A, cur); checkQuarantine(A, cur);
     }
     if (!A.currencies || CURS.every((c) => A.currencies.includes(c))) checkCarry(A);
+    for (const cur of CURS) if (A.currencies && !A.currencies.includes(cur)) checkRefuses(A, cur);
     for (const cur of CURS) if (!A.currencies || A.currencies.includes(cur)) {
       // 8: every world above ended with an independent replay; report them together with the mixed world
       checkLedger(A);

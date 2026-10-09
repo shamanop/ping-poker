@@ -127,6 +127,7 @@ const TOYS = [
   ['proxykey', 'identity', 'plays the round on the account key the CLIENT names (payload.key)'],
   ['freeflip', 'carry', 'a boost token earned by losing a Chips flip doubles the pay of a later Cash flip'],
   ['dropper', 'disconnect', 'forgets the open round when the socket drops and does not refund it: the stake sits in an escrow nothing knows'],
+  ['cashbug', 'refuse', "the adapter says currencies: ['chips'] and the game takes Cash bets (and pays them double)"],
   ['mempot', 'carry', '10% of every stake feeds a jackpot kept in a module variable, one number for Chips and Cash'],
 ];
 function runToy(name) {
