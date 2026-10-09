@@ -50,5 +50,34 @@ const payX = (S) => ({ pay: Object.fromEntries(Object.entries(D.pay).map(([k, a]
     let err = null; try { await quiet(() => L.setLiveConfigChecked({ overrides: { payScale: 0.97 }, scale: 0.1, who: 'r2c-test' })); } catch (e) { err = e; }
     assert.ok(err && /upper bound/.test(err.message) && /ceiling/.test(err.message), err ? err.message : 'accepted');
   });
+  // R2C-3b (lead 20:50): an UNDECIDED way (at or under the ceiling, upper bound above it) gets more rounds until it is decided or a cap is reached
+  await test('Cold Call: the shipped numbers and a near-shipped config (the tests/coldcall-livecfg.js:543 POST) are UNDECIDED after the budget and ACCEPTED after extra rounds on the undecided ways; the result says how many extra rounds it took and the longest stretch stays small', async () => {
+    for (const over of [{ buyCost: { bonus1: 1000 }, pull: { list: 500 } }, {}]) {
+      const r = await quiet(() => L.measureInWorker(L.merge(over), {}));
+      assert.ok(r.ok, 'refused: ' + JSON.stringify(r.bound) + ' extra ' + r.extraRounds);
+      assert.ok(r.extraRounds > 0 && r.extended.rounds === r.extraRounds && !r.extended.capped, 'no extra rounds were needed or run: ' + JSON.stringify(r.extended));
+      assert.ok(r.bound.upper <= 100, 'accepted with bound ' + r.bound.upper); assert.ok(r.maxStretchMs < 250, 'a stretch of ' + r.maxStretchMs + ' ms');
+      console.log('     extra rounds ' + r.extraRounds + ' (' + JSON.stringify(r.extended.batches) + '), ' + Math.round(r.ms / 1000) + ' s, longest stretch ' + Math.round(r.maxStretchMs) + ' ms, bound ' + r.bound.way + ' ' + r.bound.upper.toFixed(2));
+    }
+  });
+  await test('Cold Call: a config whose payback is about 100 on the hunt way (the hunt price cut by 1-2%: true 99.5 to 100.5) is never ACCEPTED at a small budget with a short cap; one that stays undecided is REFUSED at the cap and the refusal says how many extra rounds were run', async () => {
+    let capped = 0;
+    for (const f of [0.985, 0.99, 0.995]) {
+      const over = { buyCost: { hunt: Math.round(L.merge({}).buyCost.hunt * f) } };
+      const r = await quiet(() => L.measureInWorker(L.merge(over), { scale: 0.2, extMs: 12000 }));
+      assert.ok(!r.ok && r.bound.upper > 100, f + ' ACCEPTED ' + JSON.stringify(r.bound));
+      if (r.extended.capped && r.extraRounds > 0) {
+        capped++;
+        let err = null; try { await quiet(() => L.setLiveConfigChecked({ overrides: over, scale: 0.2, who: 'r2c-test' })); } catch (e) { err = e; }
+        assert.ok(err && /upper bound/.test(err.message) && /ceiling/.test(err.message) && /extra rounds/.test(err.message), err ? err.message : 'accepted');
+      }
+    }
+    assert.ok(capped >= 1, 'no config ran to the cap (the test is not sensitive)');
+  });
+  await test('the checking worker does not run the estimator CLI of its file (it forked 12 estimator processes per Ballot Bender check)', async () => {
+    const cp = require('child_process'), count = () => +cp.execSync("ps -eo args | grep -c '[b]ender-rtp.js worker' || true", { encoding: 'utf8' }).trim();
+    const n0 = count(); await quiet(() => R.measureInWorker(bcfg(payX(0.5)), { scale: 0.05 })); await new Promise((r) => setTimeout(r, 500));
+    assert.strictEqual(count(), n0, 'estimator processes were started by the check');
+  });
   console.log(pass + ' passed, ' + fail + ' failed'); process.exit(fail ? 1 : 0);
 })();

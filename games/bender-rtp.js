@@ -13,6 +13,10 @@ const E = require('./bender-engine.js');
 // R2C-3: a way is accepted only if its UPPER bound (measured + BOUND_SE standard errors) is at or under the ceiling: the check's own uncertainty counts against the admin, a fixed seed that reads low cannot decide it.
 const BOUND_SE = 3;
 const CEILING_PCT = 100.0, PB_SEED = 20261008, SLICE_MS = 40, PB_DEADLINE_MS = 300000;
+// R2C-3b: a way UNDECIDED after the budget (measured at or under the ceiling, measured + BOUND_SE standard errors above it) gets more rounds, for THAT way only (the parts of its standard error that are largest first),
+// EXT_STEP batches at a time, until it is decided (upper bound at or under the ceiling = accept; measured above it = refuse), each part has been sampled EXT_MAX_X times its budget, or EXT_MS of wall clock have passed
+// since the check began: still undecided then = refused. A way whose uncertainty is mostly the reference's own (the paired mode) cannot be decided by more rounds and is not extended.
+const EXT_MAX_X = 8, EXT_MS = 240000;
 const PB_PLAN = { base: 700000, e3: 60000, l4: 60000, l5: 4000, l6: 1000, batches: 50 };
 const PB_PLAN_PAIRED = { base: 150000, e3: 20000, l4: 20000, l5: 1500, l6: 300, batches: 50 };
 const mean = (a) => a.reduce((x, y) => x + y, 0) / a.length;
@@ -49,18 +53,18 @@ async function measure(cfg, opts = {}) {
     if (paired) {
       const spS = E.DEFAULT_CFG.scatterPay, p = ref.p, dsp = [0, 1, 2, 3].map((i) => (cfg.scatterPay[i + 3] || 0) - (spS[i + 3] || 0));
       const per = acc.base.map((b) => b.win / b.n + p.reduce((a, pn, i) => a + pn * (dsp[i] + B[i].m), 0));       // the same bonus term in every batch: the spread is the base difference's
-      let se2 = varOf(acc.base.map((b) => b.win / b.n)) / acc.base.length;
-      for (let i = 0; i < 4; i++) se2 += p[i] ** 2 * B[i].v;
-      const sp = { pct: ref.spin.pct + mean(per) * 100, se: Math.hypot(ref.spin.se, Math.sqrt(se2) * 100) };
-      const buy = (i, cost) => ({ pct: (ref.B[i].m + B[i].m) / cost * 100, se: Math.hypot(ref.B[i].se, Math.sqrt(B[i].v)) / cost * 100 });
+      const parts = { base: varOf(acc.base.map((b) => b.win / b.n)) / acc.base.length };
+      for (let i = 0; i < 4; i++) parts[['e3', 'l4', 'l5', 'l6'][i]] = p[i] ** 2 * B[i].v;
+      const se2 = Object.values(parts).reduce((a, b) => a + b, 0), sp = { pct: ref.spin.pct + mean(per) * 100, se: Math.hypot(ref.spin.se, Math.sqrt(se2) * 100), fixed: ref.spin.se, parts: Object.fromEntries(Object.entries(parts).map(([k, v]) => [k, v * 1e4])) };
+      const buy = (i, cost) => ({ pct: (ref.B[i].m + B[i].m) / cost * 100, se: Math.hypot(ref.B[i].se, Math.sqrt(B[i].v)) / cost * 100, fixed: ref.B[i].se / cost * 100, parts: { [['e3', 'l4'][i]]: B[i].v / cost ** 2 * 1e4 } });
       return { spin: sp, buyElection: buy(0, lowestPrice(cfg.buyCost.election)), buyLandslide: buy(1, lowestPrice(cfg.buyCost.landslide)) };
     }
     const c = [0, 1, 2, 3].map((i) => (cfg.scatterPay[i + 3] || 0) + B[i].m);     // scatter pay + the bonus it starts, for 3, 4, 5, 6 scatters
     const per = acc.base.map((b) => b.win / b.n + b.sc.reduce((a, k, i) => a + (k / b.n) * c[i], 0));
-    let se2 = varOf(per) / per.length;
-    for (let i = 0; i < 4; i++) se2 += mean(acc.base.map((b) => b.sc[i] / b.n)) ** 2 * B[i].v;
+    const parts = { base: varOf(per) / per.length };
+    for (let i = 0; i < 4; i++) parts[['e3', 'l4', 'l5', 'l6'][i]] = mean(acc.base.map((b) => b.sc[i] / b.n)) ** 2 * B[i].v;
     const pE = lowestPrice(cfg.buyCost.election), pL = lowestPrice(cfg.buyCost.landslide);
-    return { spin: { pct: mean(per) * 100, se: Math.sqrt(se2) * 100 }, buyElection: { pct: B[0].m / pE * 100, se: Math.sqrt(B[0].v) / pE * 100 }, buyLandslide: { pct: B[1].m / pL * 100, se: Math.sqrt(B[1].v) / pL * 100 } };
+    return { spin: { pct: mean(per) * 100, se: Math.sqrt(Object.values(parts).reduce((a, b) => a + b, 0)) * 100, fixed: 0, parts: Object.fromEntries(Object.entries(parts).map(([k, v]) => [k, v * 1e4])) }, buyElection: { pct: B[0].m / pE * 100, se: Math.sqrt(B[0].v) / pE * 100, fixed: 0, parts: { e3: B[0].v / pE ** 2 * 1e4 } }, buyLandslide: { pct: B[1].m / pL * 100, se: Math.sqrt(B[1].v) / pL * 100, fixed: 0, parts: { l4: B[1].v / pL ** 2 * 1e4 } } };
   };
   const worstOf = (ways) => Object.entries(ways).map(([way, x]) => ({ way, pct: x.pct, se: x.se })).sort((a, b) => (b.pct || 0) - (a.pct || 0))[0];
   let ways = null, early = false;
@@ -72,10 +76,23 @@ async function measure(cfg, opts = {}) {
     ways = compute(); const w = worstOf(ways);
     if (upto < J && w.pct - 6 * w.se > CEILING_PCT) { early = true; break; }
   }
+  // R2C-3b: extend the undecided ways (see EXT_MAX_X); not after an early stop, not for a config already over the ceiling on a point estimate, not for a way the reference's own uncertainty already keeps above it.
+  const up = (x) => x.pct + BOUND_SE * x.se, undecided = (x) => x.pct <= CEILING_PCT && up(x) > CEILING_PCT && x.pct + BOUND_SE * (x.fixed || 0) < CEILING_PCT;
+  const grow = (key, upto) => (key === 'base' ? baseB(upto) : bonusB(key, upto)), ext = { rounds: 0, batches: {}, capped: false, ms: 0 }, extT0 = Date.now(), r0 = rounds;
+  while (!identical && !early && !Object.values(ways).some((x) => x.pct > CEILING_PCT)) {
+    const und = Object.entries(ways).filter(([, x]) => up(x) > CEILING_PCT).sort((a, b) => up(b[1]) - up(a[1]));
+    if (!und.length) break;
+    if (!undecided(und[0][1])) { ext.capped = true; break; }                // the worst way cannot be decided by more rounds
+    const cand = Object.entries(und[0][1].parts).filter(([k, v]) => v > 0 && acc[k].length < EXT_MAX_X * J).sort((a, b) => b[1] - a[1]);
+    if (!cand.length || Date.now() - t0 > (opts.extMs || EXT_MS)) { ext.capped = true; break; }
+    const key = cand[0][0], upto = Math.min(EXT_MAX_X * J, acc[key].length + J / 2);
+    await grow(key, upto); ext.batches[key] = upto; ways = compute();
+  }
+  ext.rounds = rounds - r0; ext.ms = Date.now() - extT0;
   lap();
   const worst = worstOf(ways), finite = Object.values(ways).every((x) => Number.isFinite(x.pct) && Number.isFinite(x.se));
   const bound = Object.entries(ways).map(([way, x]) => ({ way, pct: x.pct, se: x.se, upper: x.pct + BOUND_SE * x.se })).sort((a, b) => (b.upper || 0) - (a.upper || 0))[0];
-  return { ok: finite && bound.upper <= CEILING_PCT, finite, ceilingPct: CEILING_PCT, boundSe: BOUND_SE, bound, ways, worst, rounds, ms: Date.now() - t0, maxStretchMs: maxStretch, seed, scale, early, mode: paired ? 'paired' : 'direct' };
+  return { ok: finite && bound.upper <= CEILING_PCT, finite, ceilingPct: CEILING_PCT, boundSe: BOUND_SE, bound, ways, worst, rounds, extraRounds: ext.rounds, extended: ext, ms: Date.now() - t0, maxStretchMs: maxStretch, seed, scale, early, mode: paired ? 'paired' : 'direct' };
 }
 // R2C-4: the admin path never runs a config's smoke test or its measuring on the server's event loop. A worker thread (this file again, `benderCheck` in workerData) plays the 300-round smoke test of the config and then measure();
 // the server only waits for its message. A config whose smoke test does not end in SMOKE_LIMIT_MS, or whose check does not end in PB_DEADLINE_MS, or that the admin withdrew (opts.cancelled), is stopped (terminate) and refused.
@@ -83,7 +100,7 @@ const { Worker, isMainThread, parentPort, workerData } = require('worker_threads
 const SMOKE_LIMIT_MS = 10000;
 function measureInWorker(cfg, opts = {}) {
   return new Promise((resolve, reject) => {
-    const w = new Worker(__filename, { workerData: { benderCheck: true, cfg, opts: { scale: opts.scale, seed: opts.seed } }, resourceLimits: { maxOldGenerationSizeMb: 256 } });
+    const w = new Worker(__filename, { workerData: { benderCheck: true, cfg, opts: { scale: opts.scale, seed: opts.seed, extMs: opts.extMs } }, resourceLimits: { maxOldGenerationSizeMb: 256 } });
     let done = false, smoked = false;
     const end = (fn, v) => { if (done) return; done = true; clearInterval(poll); clearTimeout(smokeT); clearTimeout(deadT); w.terminate(); fn(v); };
     const poll = setInterval(() => { if (opts.cancelled && opts.cancelled()) end(reject, new Error('payback check cancelled')); }, 50);
@@ -102,7 +119,7 @@ if (!isMainThread && workerData && workerData.benderCheck) {
 }
 module.exports = { measure, measureInWorker, loadRef, cfgHash, lowestPrice, CEILING_PCT, BOUND_SE };
 
-if (require.main === module) {
+if (require.main === module && isMainThread) {              // R2C-4: not inside the checking worker thread, where this file is the entry script too (the CLI forked 12 estimator processes per check)
 // BB_CFG='{"scatterW":1.3,"payScale":1.9}' overrides engine CFG for tuning runs (payScale multiplies pay + scatterPay). Workers inherit the env.
 if (process.env.BB_CFG) {
   const o = JSON.parse(process.env.BB_CFG), k = o.payScale; delete o.payScale;

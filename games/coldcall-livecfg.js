@@ -178,6 +178,10 @@ const BOUND_SE = 3;                      // R2C-3: a way is accepted only if mea
 const PB_SEED = 20261008;                // fixed: the same config always measures the same
 const SLICE_MS = 40;                     // longest synchronous stretch the check asks for
 const PB_DEADLINE_MS = 300000;           // a check that has not finished by then refuses (fail closed)
+// R2C-3b: a way that is UNDECIDED after the budget (measured at or under the ceiling, measured + BOUND_SE standard errors above it) is not refused for being unlucky or accepted for being lucky: more rounds are run for THAT way
+// (the parts of its standard error that are largest first), EXT_STEP batches at a time, until it is decided (upper bound at or under the ceiling = accept; measured above the ceiling = refuse), or each part has been
+// sampled EXT_MAX_X times its budget, or EXT_MS of wall clock have passed since the check began: still undecided then = refused.
+const EXT_MAX_X = 8, EXT_MS = 240000;
 const PB_PLAN = { b1: 150000, b2: 50000, b3: 3000, sess: 1600000, call: 1400000, hunt: 2000000, batches: 50 };
 const DAILY_GIFT_MAX_CENTS = 5;          // the daily gift may be worth at most this many cents to one account on one day (a once-a-day spin pays back above 100% of a 10-cent stake by design: the gift is cents, see report)
 const hotNbrs = (adj) => { const out = []; for (let p = 0; p < 30; p++) { const r = (p / 6) | 0, c = p % 6, l = []; for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) { if (!dr && !dc) continue; if (adj === 4 && dr && dc) continue; const rr = r + dr, cc = c + dc; if (rr >= 0 && rr < 5 && cc >= 0 && cc < 6) l.push(rr * 6 + cc); } out.push(l); } return out; };
@@ -226,14 +230,14 @@ async function measurePayback(cfg, opts = {}) {
   const compute = () => {
     const B = [null, 1, 2, 3].map((k) => (k ? { m: mean(acc['b' + k]), v: varOf(acc['b' + k]) / acc['b' + k].length } : null));
     const potPct = pullOn ? P.pot.feedBps / 100 : 0;                                  // the office pot pays back at most what it was fed
-    const way = (batches, cost, withLeads) => {
+    const way = (batches, cost, withLeads, own) => {
       const per = batches.map((b) => { let t = b.base / b.n; for (const k of [1, 2, 3]) t += (b['k' + k] / b.n) * B[k].m; if (withLeads && pullOn) t += (b.leads / b.n / P.list) * B[cbK].m; return t / cost * 100; });
-      let se2 = varOf(per) / per.length;
-      for (const k of [1, 2, 3]) { let c = mean(batches.map((b) => b['k' + k] / b.n)); if (withLeads && pullOn && k === cbK) c += mean(batches.map((b) => b.leads / b.n)) / P.list; se2 += (c / cost * 100) ** 2 * B[k].v; }
-      return { pct: mean(per) + (withLeads ? potPct : 0), se: Math.sqrt(se2) };
+      const parts = { [own]: varOf(per) / per.length };
+      for (const k of [1, 2, 3]) { let c = mean(batches.map((b) => b['k' + k] / b.n)); if (withLeads && pullOn && k === cbK) c += mean(batches.map((b) => b.leads / b.n)) / P.list; parts['b' + k] = (c / cost * 100) ** 2 * B[k].v; }
+      return { pct: mean(per) + (withLeads ? potPct : 0), se: Math.sqrt(Object.values(parts).reduce((a, b) => a + b, 0)), parts };
     };
-    const bought = (k, cost) => ({ pct: B[k].m / cost * 100, se: Math.sqrt(B[k].v) / cost * 100 });          // a buy never feeds or rolls the pot (coldcall.js settle: `plain` only)
-    const ways = { plain: way(acc.sess, 10, true), call: way(acc.call, cfg.buyCost.call, false), hunt: way(acc.hunt, cfg.buyCost.hunt, false), bonus1: bought(1, cfg.buyCost.bonus1), bonus2: bought(2, cfg.buyCost.bonus2) };
+    const bought = (k, cost) => ({ pct: B[k].m / cost * 100, se: Math.sqrt(B[k].v) / cost * 100, parts: { ['b' + k]: B[k].v / cost ** 2 * 1e4 } });          // a buy never feeds or rolls the pot (coldcall.js settle: `plain` only)
+    const ways = { plain: way(acc.sess, 10, true, 'sess'), call: way(acc.call, cfg.buyCost.call, false, 'call'), hunt: way(acc.hunt, cfg.buyCost.hunt, false, 'hunt'), bonus1: bought(1, cfg.buyCost.bonus1), bonus2: bought(2, cfg.buyCost.bonus2) };
     // the daily spin: the player's once-a-day spin earns the daily leads on top of the plain game, at the longest streak. Its payback is plain + gift / stake, which passes 100% at a 10-cent stake even at
     // the shipped numbers (0.4 lead x the Callback / 450 = about 0.8 cent), so the gift is judged in money: giftCents = leads x (Callback value per lead) at the bet the leads are worked at (stakeCap, 10c shipped)
     if (pullOn) { const dl = P.daily.base + P.daily.perStreak * P.daily.streakMax, cents = dl / P.list * (B[cbK].m / 10) * P.daily.stakeCap, f = dl / P.list * 10; ways.daily = { pct: ways.plain.pct + f * B[cbK].m, se: Math.hypot(ways.plain.se, f * Math.sqrt(B[cbK].v)), giftCents: cents, judged: 'gift' }; }
@@ -248,11 +252,24 @@ async function measurePayback(cfg, opts = {}) {
     ways = compute(); const w = worstOf(ways);
     if (upto < J && (w.pct - 6 * w.se > CEILING_PCT || (ways.daily && ways.daily.giftCents > 4 * DAILY_GIFT_MAX_CENTS))) { early = true; break; }
   }
+  // R2C-3b: extend the undecided ways (see EXT_MAX_X). Never after an early stop, and never for a config that is already over the ceiling on a point estimate or whose daily gift is too big (refused as before).
+  const judged = (w) => Object.entries(w).filter(([, x]) => x.judged !== 'gift'), up = (x) => x.pct + BOUND_SE * x.se, undecided = (x) => x.pct <= CEILING_PCT && up(x) > CEILING_PCT;
+  const grow = (key, upto) => (key === 'sess' ? session(upto) : key === 'call' || key === 'hunt' ? stateless(key, upto) : bonusB(key, +key[1], upto));
+  const ext = { rounds: 0, batches: {}, capped: false, ms: 0 }, extT0 = Date.now(), r0 = rounds;
+  while (!early && !(ways.daily && ways.daily.giftCents > DAILY_GIFT_MAX_CENTS) && !judged(ways).some(([, x]) => x.pct > CEILING_PCT)) {
+    const und = judged(ways).filter(([, x]) => undecided(x)).sort((a, b) => up(b[1]) - up(a[1]));
+    if (!und.length) break;
+    const cand = Object.entries(und[0][1].parts).filter(([k, v]) => v > 0 && acc[k].length < EXT_MAX_X * J).sort((a, b) => b[1] - a[1]);
+    if (!cand.length || Date.now() - t0 > (opts.extMs || EXT_MS)) { ext.capped = true; break; }
+    const key = cand[0][0], upto = Math.min(EXT_MAX_X * J, acc[key].length + J / 2);
+    await grow(key, upto); ext.batches[key] = upto; ways = compute();
+  }
+  ext.rounds = rounds - r0; ext.ms = Date.now() - extT0;
   lap();
   const worst = worstOf(ways);
   const giftOk = !ways.daily || ways.daily.giftCents <= DAILY_GIFT_MAX_CENTS;
   const bound = Object.entries(ways).filter(([w, x]) => x.judged !== 'gift').map(([way, x]) => ({ way, pct: x.pct, se: x.se, upper: x.pct + BOUND_SE * x.se })).sort((a, b) => b.upper - a.upper)[0];
-  return { ok: bound.upper <= CEILING_PCT && giftOk, giftOk, ceilingPct: CEILING_PCT, boundSe: BOUND_SE, bound, ways, worst, rounds, ms: Date.now() - t0, maxStretchMs: maxStretch, seed, scale, early };
+  return { ok: bound.upper <= CEILING_PCT && giftOk, giftOk, ceilingPct: CEILING_PCT, boundSe: BOUND_SE, bound, ways, worst, rounds, extraRounds: ext.rounds, extended: ext, ms: Date.now() - t0, maxStretchMs: maxStretch, seed, scale, early };
 }
 // R2C-4: the admin path never runs a config's smoke test or its measuring on the server's event loop (the smoke test and a bonus of a degenerate config are synchronous, one of them can take seconds). A worker thread (this file
 // again, `ccCheck` in workerData) plays the smoke test, then measurePayback(); the server only waits for its message. A config whose smoke test does not end in SMOKE_LIMIT_MS, or whose check does not end in PB_DEADLINE_MS,
@@ -261,7 +278,7 @@ const { Worker, isMainThread, parentPort, workerData } = require('worker_threads
 const SMOKE_LIMIT_MS = 10000;
 function measureInWorker(cfg, opts = {}) {
   return new Promise((resolve, reject) => {
-    const w = new Worker(__filename, { workerData: { ccCheck: true, cfg, opts: { scale: opts.scale, seed: opts.seed } }, resourceLimits: { maxOldGenerationSizeMb: 256 } });
+    const w = new Worker(__filename, { workerData: { ccCheck: true, cfg, opts: { scale: opts.scale, seed: opts.seed, extMs: opts.extMs } }, resourceLimits: { maxOldGenerationSizeMb: 256 } });
     let done = false, smoked = false;
     const end = (fn, v) => { if (done) return; done = true; clearInterval(poll); clearTimeout(smokeT); clearTimeout(deadT); w.terminate(); fn(v); };
     const poll = setInterval(() => { if (opts.cancelled && opts.cancelled()) end(reject, new Error('payback check cancelled')); }, 50);
@@ -339,9 +356,9 @@ async function setLiveConfigChecked({ overrides, rtpLabel, note, who, scale, see
   try { m = await measureInWorker(next, { scale, seed, cancelled: () => token.cancelled }); } catch (e) { if (checking === token) checking = null; const why = token.cancelled ? SUPERSEDED : 'check failed: ' + String(e.message).slice(0, 200); log({ outcome: 'refused', why, new: null }); throw token.cancelled ? new Error('cfg: refused, ' + why) : e; }
   if (checking === token) checking = null;
   if (token.cancelled) { log({ outcome: 'refused', why: SUPERSEDED, new: null }); throw new Error('cfg: refused, ' + SUPERSEDED); }
-  const summary = pbSummary(m), nw = { worst: { way: m.worst.way, pct: round2(m.worst.pct), se: round2(m.worst.se) }, plain: summary.plain, ways: summary, ms: m.ms, maxStretchMs: round2(m.maxStretchMs), seed: m.seed };
+  const summary = pbSummary(m), nw = { worst: { way: m.worst.way, pct: round2(m.worst.pct), se: round2(m.worst.se) }, plain: summary.plain, ways: summary, ms: m.ms, maxStretchMs: round2(m.maxStretchMs), extraRounds: m.extraRounds, seed: m.seed };
   if (!m.ok) {
-    const b = m.bound, why = !m.giftOk ? 'the daily gift is worth ' + round2(m.ways.daily.giftCents) + ' cents a day (limit ' + DAILY_GIFT_MAX_CENTS + ')' : 'the ' + b.way + ' way is not shown to be at or under the ' + CEILING_PCT + '% ceiling: measured ' + round2(b.pct) + '% with a standard error of ' + round2(b.se) + ' points, so its upper bound (measured + ' + BOUND_SE + ' standard errors) is ' + round2(b.upper) + '%, above the ' + CEILING_PCT + '% ceiling';
+    const b = m.bound, why = !m.giftOk ? 'the daily gift is worth ' + round2(m.ways.daily.giftCents) + ' cents a day (limit ' + DAILY_GIFT_MAX_CENTS + ')' : 'the ' + b.way + ' way is not shown to be at or under the ' + CEILING_PCT + '% ceiling: measured ' + round2(b.pct) + '% with a standard error of ' + round2(b.se) + ' points, so its upper bound (measured + ' + BOUND_SE + ' standard errors) is ' + round2(b.upper) + '%, above the ' + CEILING_PCT + '% ceiling' + (m.extraRounds ? ' (after ' + m.extraRounds + ' extra rounds on the undecided ways' + (m.extended.capped ? ', the limit for extra rounds was reached' : '') + ')' : '');
     log({ outcome: 'refused', why, new: nw }); throw new Error('cfg: refused, ' + why + (m.early ? ' (stopped early)' : ''));
   }
   const measured = { hash: configHash(next), ok: true, ceilingPct: CEILING_PCT, label: measuredLabel(m), summary, worst: nw.worst, seed: m.seed, at: new Date().toISOString() };

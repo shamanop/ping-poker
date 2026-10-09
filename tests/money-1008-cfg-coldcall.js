@@ -83,7 +83,7 @@ const unchanged = () => { assert.strictEqual(JSON.stringify(E.CFG), SHIPPED, 'En
   await test('the shipped numbers measure under the ceiling on every way (prove-it, full budget), and the daily gift is under its limit', async () => {
     const r = await L.measurePayback(L.merge({})); const s = L.pbSummary(r);
     console.log('     shipped: ' + JSON.stringify(s) + ' in ' + Math.round(r.ms / 1000) + ' s, longest stretch ' + Math.round(r.maxStretchMs) + ' ms');
-    assert.strictEqual(r.ok, r.bound.upper <= 100 && r.giftOk, JSON.stringify(s)); /* R2C-3: ok is the UPPER bound (measured + 3 SE) at or under 100. The shipped numbers (98.6 +-0.7 here) are not provable by the check at its budget; they go live by a reset, which needs no measurement */ for (const w of ['plain', 'call', 'hunt', 'bonus1', 'bonus2']) assert.ok(s[w].pct <= 100, w + ' ' + s[w].pct);
+    assert.strictEqual(r.ok, true, JSON.stringify(s)); /* R2C-3b: the shipped numbers are UNDECIDED at the base budget (hunt 98.7 +-0.7) and the extra rounds decide them (r.extraRounds) */ for (const w of ['plain', 'call', 'hunt', 'bonus1', 'bonus2']) assert.ok(s[w].pct <= 100, w + ' ' + s[w].pct);
     assert.ok(s.daily.giftCents <= L.DAILY_GIFT_MAX_CENTS, 'the daily gift is ' + s.daily.giftCents + ' cents a day'); assert.ok(r.maxStretchMs < 250);
     assert.ok(Math.abs(s.plain.pct - 98.0) < 4 * s.plain.se + 0.5, 'plain agrees with the documented 98.0 (LEVERS.md 8.12): ' + s.plain.pct);
   });
