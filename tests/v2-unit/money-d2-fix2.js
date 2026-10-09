@@ -64,7 +64,7 @@ t('E11 SOURCE_ACCOUNTS.add() at run time, a sidecar written, a process without i
     ok(l.checkpoint().ok); l.close();
   } finally { New.SOURCE_ACCOUNTS.delete('house:newgame'); }
   const r = OPEN(f); eq(r.stats().ckpt.used, false); eq(ignored(r).length, 1); ok(/rules changed/.test(ignored(r)[0]), ignored(r)[0]);
-  eq(snap(r), fullOf(f)); r.close();
+  { const g = file(); fs.copyFileSync(f, g); const x = OPEN(g, { ckpt: false }); const s = snap(x); x.close(); eq(snap(r), s); eq(r.balance('bank:a', 'chips'), 540); eq(r.quarantined.length, 0); } r.close();
 });
 t('E11 the other way: written without the add, read with it: refused too; unchanged: believed', () => {
   const f = file(); let l = OPEN(f); l.transfer('mint:signup', 'bank:a', 100, 'chips', 'sign', 's1'); l.checkpoint(); l.close();
