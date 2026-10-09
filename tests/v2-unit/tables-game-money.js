@@ -110,7 +110,7 @@ t('onChange fires after every write call that did not throw, with the lower-case
 });
 
 // ---- the registry ----
-t('each module gets its OWN ctx.money, the same object in init and in handlers; only Bender keeps ctx.wallet; the raw service never reaches a module', () => {
+t('each module gets its OWN ctx.money, the same object in init and in handlers; no module has ctx.wallet (Bender ported, KIT); the raw service never reaches a module', () => {
   const e = env(); const seen = {};
   const mk = (id) => ({ id, name: id, kind: 'solo', init(ctx) { seen[id] = { init: ctx }; }, handlers: { ping(sock, p, ctx) { seen[id].handler = ctx; } } });
   const reg = registry(e, [mk('coldcall'), mk('bender')]);
@@ -119,7 +119,7 @@ t('each module gets its OWN ctx.money, the same object in init and in handlers; 
   reg.onConnection({ data: { acct: { key: 'ann' } }, on: (ev, fn) => { handlers[ev] = fn; }, emit() {} });
   handlers['g:coldcall:ping']({}); handlers['g:bender:ping']({});
   ok(seen.coldcall.handler === seen.coldcall.init && seen.bender.handler === seen.bender.init, 'init ctx and handler ctx differ');
-  ok(seen.bender.init.wallet === wallet && seen.bender.handler.wallet === wallet, 'Bender keeps ctx.wallet');
+  ok(!('wallet' in seen.bender.init) && !('wallet' in seen.bender.handler), 'Bender has no ctx.wallet either (it plays through ctx.money)');
   ok(!('wallet' in seen.coldcall.init) && !('wallet' in seen.coldcall.handler), 'W2-b F1: another module has no ctx.wallet');
   ok(!('service' in seen.coldcall.init), 'the service must not reach a module');
   seen.coldcall.init.money.open('ann', 'play', 'r1', 10);
@@ -128,11 +128,11 @@ t('each module gets its OWN ctx.money, the same object in init and in handlers; 
   ok(typeof reg.recover === 'function' && typeof reg.audit === 'function');
 });
 
-t('a registry built without ctx.money still works: the module has ctx.wallet and no money (Bender\'s old path)', () => {
+t('a registry built without ctx.money still works: the module has neither ctx.wallet nor money', () => {
   const e = env(); let initCtx = null, handlerCtx = null;
-  const bender = { id: 'bender', name: 'B', kind: 'solo', init(c) { initCtx = c; }, handlers: { spin(s, p, c) { handlerCtx = c; c.wallet.get('ann'); } } };
+  const bender = { id: 'bender', name: 'B', kind: 'solo', init(c) { initCtx = c; }, handlers: { spin(s, p, c) { handlerCtx = c; } } };
   const reg = games({ io: null, wallet, modules: [bender] });
-  ok(initCtx.wallet === wallet && !('money' in initCtx) && !('service' in initCtx));
+  ok(!('wallet' in initCtx) && !('money' in initCtx) && !('service' in initCtx));
   const handlers = {};
   reg.onConnection({ data: { acct: { key: 'ann' } }, on: (ev, fn) => { handlers[ev] = fn; }, emit() {} });
   handlers['g:bender:spin']({}); ok(handlerCtx === initCtx);
@@ -269,14 +269,14 @@ t('a module with no audit claims nothing: its escrows are voided; one without re
 // ---- W2-b fixes (critic report _scratch/p6/w2b/CRITIC-REPORT.md) ----
 const mod = (id, extra = {}) => ({ id, name: id, kind: 'solo', init() {}, handlers: {}, ...extra });
 
-t('F1: with ctx.money only the module bender gets ctx.wallet; without ctx.money every module keeps it (the old tests)', () => {
+t('F1: no module gets ctx.wallet, with or without ctx.money (Bender ported onto ctx.money by KIT)', () => {
   const e = env(); const seen = {};
   const mk = (id) => mod(id, { init(ctx) { seen[id] = ctx; } });
   registry(e, [mk('coldcall'), mk('bender'), mk('other')]);
-  ok(seen.bender.wallet === wallet && !('wallet' in seen.coldcall) && !('wallet' in seen.other));
+  ok(!('wallet' in seen.bender) && !('wallet' in seen.coldcall) && !('wallet' in seen.other));
   const old = {};
   games({ io: null, wallet, modules: [mod('coldcall', { init(c) { old.cc = c; } }), mod('bender', { init(c) { old.b = c; } })] });
-  ok(old.cc.wallet === wallet && old.b.wallet === wallet);
+  ok(!('wallet' in old.cc) && !('wallet' in old.b));
 });
 
 t('F2: round answers round_closed to a replay of an instant round (other numbers, or all 0 against a stored one); closed() is true for it', () => {
