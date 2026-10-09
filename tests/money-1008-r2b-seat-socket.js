@@ -22,6 +22,10 @@ async function run(mode, port) {
   // the trick
   if (mode === 'relogin') { const x = await s1.req('auth_login', { name: 'Mal', pin: '5555' }, 'auth_ok', 3000); out.push('S1 signs in as Mal on the same socket: ' + (x.account ? 'auth_ok key=' + x.account.key : JSON.stringify(x))); }
   else { const x = await s1.req('auth_logout', {}, 'auth_out', 3000); out.push('S1 signs out (auth_logout): ' + JSON.stringify(x)); }
+  // at once, before any PIN change: the seat went with the sign-in
+  await H.sleep(300);
+  const early = mal.gs && mal.gs.players.find(p => String(p.name).toLowerCase() === 'ann');
+  if (!early || early.connected !== false) faults.push(`${mode}: Ann's seat is still connected right after the socket that held it changed account`);
   // Ann, on her own device, changes her PIN
   const s2 = new H.Bot(srv, 'Ann'); await s2.connect(); await s2.login('1234');
   const mark = s1.events.length;
