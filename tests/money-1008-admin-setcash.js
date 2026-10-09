@@ -46,9 +46,10 @@ t('set Cash above the part: wallet = X - part, total = X (up and down)', () => {
   let r = e.adm.setPlay('vic', 400000, 'op3'); eq(r.ok, true); eq(e.wallet(), 350000); eq(e.total(), 400000); eq(r.total, 400000);
   r = e.adm.setPlay('vic', 100000, 'op4'); eq(r.ok, true); eq(e.wallet(), 50000); eq(e.total(), 100000);
 });
-t('set Cash to the current total is a noop (nothing written)', () => {
-  const e = env(); const id = e.ledger.lastId; const r = e.adm.setPlay('vic', 250000, 'op5');
-  eq([r.ok, r.noop], [true, true]); eq(e.ledger.lastId, id);
+t('set Cash to the current total is a noop (no balance moves; one net-zero line holds the op id, R2B-3)', () => {
+  const e = env(); const id = e.ledger.lastId, w = e.wallet(), tot = e.total(); const r = e.adm.setPlay('vic', 250000, 'op5');
+  eq([r.ok, r.noop], [true, true]); eq(e.ledger.lastId, id + 1); eq(e.wallet(), w); eq(e.total(), tot);
+  const again = e.adm.setPlay('vic', 250000, 'op5'); eq([again.ok, again.dup], [true, true]); eq(e.ledger.lastId, id + 1);
 });
 t('with no Cash in play it behaves as before: wallet set to X', () => {
   const e = env(); e.service.cashOut('vic', 'TBL', 30000, 'play', null, 'out1'); e.service.voidRound('campaign', 'vic', 'play', 'r1', 'test');

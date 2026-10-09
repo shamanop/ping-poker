@@ -2,7 +2,8 @@
 // Admin money operations and the overview payload. Money goes through the service only. "Set Cash to X" sets the player's TOTAL Cash (K1-3); Chips are adjusted by a signed delta.
 
 const MAX_PLAY = 100000000000;
-const isInt = v => Number.isSafeInteger(v);
+// R2B-2: an amount is a raw number that is a safe integer, never converted first; -0 is refused (it is not a plain 0 on the wire).
+const isInt = v => typeof v === 'number' && Number.isSafeInteger(v) && !Object.is(v, -0);
 
 function createAdmin({ service, ledger, accounts, registry, views, onlineKeys }) {
   const bankOf = k => ledger.balance('bank:' + k, 'chips');
@@ -42,7 +43,8 @@ function createAdmin({ service, ledger, accounts, registry, views, onlineKeys })
   // holds, the same request (same target) is the first answer (ok, dup) whatever the balance is now; any other edit under that op id (another kind, another target) is ref_conflict.
   function setPlay(key, target, opId) {
     if (!key || !accounts.get(key)) return { ok: false, code: 'unknown_player' };
-    if (!isInt(target) || target < 0 || target > MAX_PLAY) return { ok: false, code: 'range' };
+    if (!isInt(target)) return { ok: false, code: 'bad_amount', message: 'The amount must be a whole number of cents. Nothing was changed.' };
+    if (target < 0 || target > MAX_PLAY) return { ok: false, code: 'range' };
     const bad = checkOp(opId); if (bad) return bad;
     const reason = `admin set play to ${target}`;
     if (ledger.has(refOf(key, opId))) {
@@ -55,7 +57,8 @@ function createAdmin({ service, ledger, accounts, registry, views, onlineKeys })
       return { ok: false, code: 'cash_in_play', message: `Cannot set Cash to ${cents(target)}: ${where} (${cents(part)}) is in play and cannot be taken. End the night or wait for the round, then set it. Nothing was changed.`, ...c };
     }
     const delta = target - part - c.wallet;
-    if (delta === 0) return { ok: true, noop: true, ...c };
+    // R2B-3: a Set Cash that changes nothing still holds its op id (a net-zero line under the same ref), so its resend is a dup after the balance moved and after a restart.
+    if (delta === 0) { service.adminMark(key, 'play', reason, refOf(key, opId)); return { ok: true, noop: true, ...c }; }
     const r = adjust(key, delta, 'play', reason, opId);
     return r.ok ? { ...r, ...cashOf(key) } : r;
   }

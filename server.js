@@ -25,7 +25,16 @@ function start(env = process.env) {
   accounts.migrateLegacy({ bank: boot.readJson(paths.BANK_FILE, {}), ledgerEntries: presLedger.entries() });
   boot.migrateIfNeeded({ ledger, paths, migrate, log });
   // Cash is real money: new accounts start at 0 and the admin sets it (Chris 10/7). Test harnesses set SIGNUP_PLAY_CENTS for their old fixtures.
-  const service = createService(ledger, { signupPlay: process.env.SIGNUP_PLAY_CENTS != null ? Number(process.env.SIGNUP_PLAY_CENTS) : 0 });
+  // Money 1008 SVC-1a: the variable gives every new signup Cash (real money), so it is honoured only outside production and only as a plain count of cents (digits, a safe integer >= 0); anything else is ignored with one loud line.
+  const production = env.NODE_ENV === 'production';
+  let signupPlay = 0;
+  if (env.SIGNUP_PLAY_CENTS != null) {
+    const raw = String(env.SIGNUP_PLAY_CENTS), n = /^\d+$/.test(raw) ? Number(raw) : NaN;
+    if (production) console.error('[v2] SIGNUP_PLAY_CENTS IGNORED: NODE_ENV is production, new accounts start with 0 Cash (the admin sets Cash)');
+    else if (!Number.isSafeInteger(n)) console.error(`[v2] SIGNUP_PLAY_CENTS IGNORED: ${JSON.stringify(raw.slice(0, 40))} is not a safe integer >= 0, new accounts start with 0 Cash`);
+    else signupPlay = n;
+  }
+  const service = createService(ledger, { signupPlay });
   for (const a of Object.values(accounts.all())) service.ensureAccount(a.key);
   const bootId = Date.now().toString(36);
   const report = service.bootRecover(bootId);
@@ -56,7 +65,9 @@ function start(env = process.env) {
   const safe = ctx.safe = createSafe({ registry: { seatOf: k => registryRef.current.seatOf(k), tables: { get: id => registryRef.current.tables.get(id) }, pauseAll: () => registryRef.current.pauseAll(), voidAll: r => registryRef.current.voidAll(r) } });
   const viewlog = createViewlog({ presLedger, accounts, social: ctx.social, bankOf: k => ledger.balance('bank:' + k, 'chips'), profileOf, nightNets: t => registryRef.current.nightOf(t) });
   ctx.money = createMoneyPort({ service, ledger, bootId, sameFundOnly: true, afterWrite: k => ctx.afterWrite(k), onFence: e => { console.error('[v2] MONEY FENCED', e && e.code); registryRef.current.pauseAll(); }, onWrite: w => viewlog.onWrite(w) });
-  ctx.rig = env.RIG === '1' ? createRig(ctx) : null;
+  // Money 1008 FOUND-1: the rig needs no sign-in (decks of the next hands, every balance and seat): never created in production, like the QA force hooks of Cold Call and Campaign.
+  if (env.RIG === '1' && production) console.error('[v2] RIG IGNORED: NODE_ENV is production, no rig hooks (__rig, __audit) are registered');
+  ctx.rig = env.RIG === '1' && !production ? createRig(ctx) : null;
   const clock = { now: () => Date.now(), setTimeout: (f, ms) => setTimeout(f, ms), clearTimeout: h => clearTimeout(h) };
   const rngSource = () => crypto.randomBytes(6).readUIntBE(0, 6) / 2 ** 48;
   const transportRef = {};

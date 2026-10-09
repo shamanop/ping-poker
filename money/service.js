@@ -410,6 +410,15 @@ function createService(ledger, opts = {}) {
       : ledger.transfer(store(cur, key), 'admin:adjust', -delta, cur, why, ref);
   }
 
+  // R2B-3: a Set Cash that changes nothing still has to hold its op id. The ledger refuses a zero amount, so the event is ONE batch line under the same ref:
+  // 1 unit in from admin:adjust, 1 unit back out. The line nets to zero (no balance moves) and is read back like any other op id (ledger.has / entriesOf).
+  function adminMark(key, cur, reason, ref) {
+    needStr(key, 'bad_key', 'key'); needCur(cur); needRef(ref);
+    if (typeof reason !== 'string' || !reason.trim()) throw new MoneyError('bad_reason', { reason });
+    const why = 'admin:' + reason.trim().slice(0, 200);
+    return ledger.batch([{ from: 'admin:adjust', to: store(cur, key), amount: 1, cur, reason: why }, { from: store(cur, key), to: 'admin:adjust', amount: 1, cur, reason: why }], ref, why);
+  }
+
   // Cash held by this key: wallet, every seat at a Play table, and every open Play escrow (a stake in a round is still theirs).
   function playHeld(key) {
     const wallet = ledger.balance('play:' + key, 'play');
@@ -572,7 +581,7 @@ function createService(ledger, opts = {}) {
   }
 
   return {
-    ensureAccount, buyIn, cashOut, settleHand, mint, houseSpend, houseCredit, houseRound, adminAdjust,
+    ensureAccount, buyIn, cashOut, settleHand, mint, houseSpend, houseCredit, houseRound, adminAdjust, adminMark,
     openRound, settleRound, voidRound, openRounds, roundClosed, poolBalance, sweepEscrows,
     topUpEligible, topUp, bootRecover, mirror, nightSummary, balances, seatFund, buyInCount, lastHandNo, ledger, GAMES,
     START_CHIPS, START_PLAY, TOPUP_BELOW, TOPUP_COOLDOWN_MS,
