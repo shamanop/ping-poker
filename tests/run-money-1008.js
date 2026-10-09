@@ -15,7 +15,7 @@ const { spawn } = require('child_process');
 const SERVER = {
   'money-1008-adminclaim.js': 'boots server.js, 8 s', 'money-1008-bender-pay.js': '13 s', 'money-1008-r2c-buy.js': 'boots server.js, 25 s', 'money-1008-r2c-loop.js': 'boots server.js, 21 s', 'money-1008-r2c-reset.js': 'boots server.js, 26 s', 'money-1008-proto.js': 'boots server.js, 4 s', 'money-1008-r2b-boot.js': 'boots server.js, 22 s',
   'money-1008-r2b-seat-socket.js': 'boots server.js, 12 s', 'money-1008-r2c-flush-kill.js': 'kill loop, 17 s', 'money-1008-server-guard.js': 'boots server.js 19 times, 56 s',
-  'money-1008-session.js': 'boots server.js, 13 s', 'money-1008-zero-start.js': 'boots server.js, 10 s',
+  'money-1008-session.js': 'boots server.js, 13 s', 'money-1008-zero-start.js': 'boots server.js, 10 s', 'money-1008-zs-games.js': 'boots server.js, 24 s',
 };
 // money-1008 files that need minutes: they run the live-config payback measurement (the server measures every way to play before it accepts a config)
 const LONG = { 'money-1008-cfg-bender.js': 'payback measurement, 152 s', 'money-1008-cfg-coldcall.js': 'payback measurement, 136 s', 'money-1008-r2c-bound.js': 'payback bounds, 269 s under load' };
