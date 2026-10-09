@@ -4,10 +4,10 @@ const fs = require('fs'), os = require('os'), path = require('path'), zlib = req
 const { io } = require(process.env.SIO_CLIENT || '/home/isabelle/.cache/node_modules/socket.io-client');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ppfl-'));
-const PORT = 4791, ROOT = path.join(__dirname, '..');
+const PORT = Number(process.env.PROFILE_PORT || 4791), ROOT = path.join(__dirname, '..');
 const F = { bank: path.join(dir, 'bank.json'), ledger: path.join(dir, 'ledger.json'), acc: path.join(dir, 'accounts.json'), tables: path.join(dir, 'tables.json') };
 fs.writeFileSync(F.bank, JSON.stringify({ chris: 100000 }));
-const env = { ...process.env, PORT: String(PORT), AUTO_START_MS: '600000', AUTH_CLOCK_SKEW: '0', AUTH_SIGNUP_LIMIT: '100', BANK_FILE: F.bank, LEDGER_FILE: F.ledger, ACCOUNTS_FILE: F.acc, TABLES_FILE: F.tables };
+const env = { SIGNUP_PLAY_CENTS: '1000000', ...process.env, PORT: String(PORT), AUTO_START_MS: '600000', AUTH_CLOCK_SKEW: '0', AUTH_SIGNUP_LIMIT: '100', BANK_FILE: F.bank, LEDGER_FILE: F.ledger, ACCOUNTS_FILE: F.acc, TABLES_FILE: F.tables };
 const proc = spawn('node', ['server.js'], { cwd: ROOT, env });
 let out = ''; proc.stdout.on('data', d => { out += d; }); proc.stderr.on('data', d => { out += d; });
 let fails = 0; const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails++; };
@@ -46,7 +46,7 @@ function png(w = 16, seed = 0) {
   return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
 }
 const dataUrl = (mime, buf) => `data:${mime};base64,${buf.toString('base64')}`;
-const settings = () => ({ name: 'Profile Night', mode: 'play', buyIn: { min: 500, max: 5000, default: 1000 }, blinds: { sb: 5, bb: 10 }, seats: 8, actionTimerSec: 0, rebuys: true, isPrivate: false });
+const settings = () => ({ name: 'Profile Night', mode: 'play', buyIn: { min: 500, max: 5000, default: 1000 }, blinds: { sb: 5, bb: 10 }, seats: 8, actionTimerSec: 60, rebuys: true, isPrivate: false });
 
 (async () => {
   try {
