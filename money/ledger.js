@@ -31,7 +31,10 @@ const SOURCE_ACCOUNTS = new Set([
 ]);
 const ONLY_CUR = { bank: 'chips', play: 'play', 'fx:chips': 'chips', 'fx:play': 'play' };
 
-const isAmount = (n) => typeof n === 'number' && Number.isSafeInteger(n) && n > 0;
+// R2E-2: one amount is at most MAX_AMOUNT (1e12 cents = $10 billion), and no account may be taken past +-Number.MAX_SAFE_INTEGER by a write (validateItems):
+// past 2^53 a balance stops being an exact number and a 1 cent move no longer changes it.
+const MAX_AMOUNT = 1e12;
+const isAmount = (n) => typeof n === 'number' && Number.isSafeInteger(n) && n > 0 && n <= MAX_AMOUNT;
 
 // -> { player: bool } or throws bad_account
 function classify(account) {
@@ -114,8 +117,11 @@ function validateItems(bal, items) {
       const h = cur(it.cur, it.from);
       if (h < it.amount) throw new MoneyError('insufficient', { account: it.from, have: h, need: it.amount, cur: it.cur });
     }
-    scratch[it.cur].set(it.from, cur(it.cur, it.from) - it.amount);
-    scratch[it.cur].set(it.to, cur(it.cur, it.to) + it.amount);
+    const out = cur(it.cur, it.from) - it.amount;
+    scratch[it.cur].set(it.from, out);
+    const inn = cur(it.cur, it.to) + it.amount;
+    if (!Number.isSafeInteger(out) || !Number.isSafeInteger(inn)) throw new MoneyError('balance_overflow', { account: !Number.isSafeInteger(out) ? it.from : it.to, cur: it.cur, amount: it.amount });
+    scratch[it.cur].set(it.to, inn);
   }
   return scratch;
 }
@@ -778,4 +784,4 @@ function open(file, opts = {}) {
   return { transfer, batch, balance, list, has, entries, entriesOf, findLast, onLine, check, sync, close, checkpoint, stats: statsOut, file, quarantined, quarantineFile, get size() { return size; }, get lastId() { return S.lastId; } };
 }
 
-module.exports = { open, MoneyError, SOURCE_ACCOUNTS, CURS };
+module.exports = { open, MoneyError, SOURCE_ACCOUNTS, CURS, MAX_AMOUNT };

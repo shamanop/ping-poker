@@ -23,13 +23,13 @@ const fresh = () => path.join(dir, 'm' + (++n) + '.jsonl');
 const quiet = () => {};
 const mk = (f) => open(f || fresh(), { now: () => 1000, log: quiet });
 
-t('amount must be a positive safe integer', () => {
+t('amount must be a positive safe integer, at most MAX_AMOUNT (R2E-2)', () => {
   const l = mk();
-  for (const bad of [0, -1, 1.5, NaN, Infinity, '5', null, undefined, 2 ** 53, {}]) {
+  for (const bad of [0, -1, 1.5, NaN, Infinity, '5', null, undefined, 2 ** 53, 2 ** 53 - 1, 1e12 + 1, {}]) {
     throwsCode(() => l.transfer('mint:signup', 'bank:a', bad, 'chips', 'x', 'r-bad'), 'bad_amount');
   }
-  l.transfer('mint:signup', 'bank:a', 2 ** 53 - 1, 'chips', 'x', 'r-max');
-  eq(l.balance('bank:a', 'chips'), 2 ** 53 - 1);
+  l.transfer('mint:signup', 'bank:a', 1e12, 'chips', 'x', 'r-max');
+  eq(l.balance('bank:a', 'chips'), 1e12);
   eq(l.lastId, 1, 'bad writes leave no line');
 });
 

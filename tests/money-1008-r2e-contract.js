@@ -1,6 +1,7 @@
 'use strict';
 // Money hardening 2026-10-08, R2E-1 / R2E-2 / R2E-14: the game-money contract keeps ONE round id = ONE round, bounds an amount, and boots without rewriting balances.
 //   node tests/money-1008-r2e-contract.js     plain node: exit 0 on pass, 1 on fail.
+//   R2E-2  one amount is at most MAX_AMOUNT (1e12 cents) and no write takes a balance past Number.MAX_SAFE_INTEGER; an ordinary amount is untouched
 //   R2E-1  a round id closed by one path (round / settle) is never paid again by the other; round() on an OPEN id is refused
 const fs = require('fs');
 const os = require('os');
@@ -78,6 +79,34 @@ for (const cur of ['play', 'chips']) {
   const b = ledger.balance('play:ann', 'play');
   check('E: after a restart round() on a settled id is still round_closed', code(() => M.round('ann', 'play', 'z', { cost: 0, win: 700 })) === 'round_closed' && ledger.balance('play:ann', 'play') === b);
   check('E: after a restart settle() on an instant id is still round_closed', code(() => M.settle('ann', 'play', 'x', { win: 200 })) === 'round_closed' && ledger.balance('play:ann', 'play') === b);
+  ledger.close();
+}
+
+// ---- R2E-2 ----
+{
+  const { MAX_AMOUNT } = require('../money/ledger');
+  check('R2E-2: the ceiling is a named constant, 1e12 cents', MAX_AMOUNT === 1e12);
+  const r = rig('bender');
+  const b0 = r.cash();
+  check('R2E-2: an amount of exactly the ceiling is accepted (admin)', code(() => r.service.adminAdjust('ann', MAX_AMOUNT, 'play', 'cap', 'cap:1')) === null && r.cash() === b0 + MAX_AMOUNT);
+  check('R2E-2: ceiling + 1 is bad_amount (admin)', code(() => r.service.adminAdjust('ann', MAX_AMOUNT + 1, 'play', 'cap', 'cap:2')) === 'bad_amount');
+  check('R2E-2: a negative adjustment past the ceiling is bad_amount', code(() => r.service.adminAdjust('ann', -(MAX_AMOUNT + 1), 'play', 'cap', 'cap:3')) === 'bad_amount');
+  check('R2E-2: MAX_SAFE_INTEGER is bad_amount (admin)', code(() => r.service.adminAdjust('ann', Number.MAX_SAFE_INTEGER, 'play', 'cap', 'cap:4')) === 'bad_amount');
+  check('R2E-2: ctx.money.round win past the ceiling is refused as amount and writes nothing', (() => { try { r.M.round('ann', 'play', 'h1', { cost: 0, win: MAX_AMOUNT + 1 }); return false; } catch (e) { return e.code === 'amount' && r.cash() === b0 + MAX_AMOUNT && !r.M.closed('ann', 'h1'); } })());
+  check('R2E-2: ctx.money.round cost past the ceiling is refused', code(() => r.M.round('ann', 'play', 'h2', { cost: MAX_AMOUNT + 1, win: 0 })) === 'amount');
+  check('R2E-2: open() past the ceiling is refused', code(() => r.M.open('ann', 'play', 'h3', MAX_AMOUNT + 1)) === 'amount');
+  check('R2E-2: ctx.money.round win of exactly the ceiling is accepted', code(() => r.M.round('ann', 'play', 'h4', { cost: 0, win: MAX_AMOUNT })) === null && r.cash() === b0 + 2 * MAX_AMOUNT);
+  check('R2E-2: an ordinary round still pays to the cent', (() => { const b = r.cash(); r.M.round('ann', 'play', 'h5', { cost: 25, win: 100 }); return r.cash() === b + 75; })());
+  // a balance is never taken past 2^53: keep adding the largest legal amount until the write is refused
+  let n = 2, last = null;
+  for (; n < 9100; n++) { const e = code(() => r.service.adminAdjust('ann', MAX_AMOUNT, 'play', 'cap', 'fill:' + n)); if (e) { last = e; break; } }
+  check('R2E-2: a write that would take a balance past MAX_SAFE_INTEGER is balance_overflow', last === 'balance_overflow', String(last));
+  check('R2E-2: the refused write left the balance an exact safe integer and the books balanced', Number.isSafeInteger(r.cash()) && r.ledger.check().play.ok === true);
+  const b9 = r.cash();
+  check('R2E-2: a 1 cent stake after the refusal still moves the balance', code(() => r.M.round('ann', 'play', 'h6', { cost: 1, win: 0 })) === null && r.cash() === b9 - 1);
+  r.ledger.close();
+  const ledger = openLedger(r.file, { fsync: 'none', log: () => {} });
+  check('R2E-2: a restart replays that journal with nothing quarantined and the books ok', ledger.quarantined.length === 0 && ledger.check().play.ok === true && ledger.balance('play:ann', 'play') === b9 - 1);
   ledger.close();
 }
 
