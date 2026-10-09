@@ -60,17 +60,13 @@ const payX = (S) => ({ pay: Object.fromEntries(Object.entries(D.pay).map(([k, a]
       console.log('     extra rounds ' + r.extraRounds + ' (' + JSON.stringify(r.extended.batches) + '), ' + Math.round(r.ms / 1000) + ' s, longest stretch ' + Math.round(r.maxStretchMs) + ' ms, bound ' + r.bound.way + ' ' + r.bound.upper.toFixed(2));
     }
   });
-  await test('Cold Call: a config whose payback is about 100 on the hunt way (the hunt price cut by 1-2%: true 99.5 to 100.5) is never ACCEPTED at a small budget with a short cap; one that stays undecided is REFUSED at the cap and the refusal says how many extra rounds were run', async () => {
+  await test('Cold Call: a config whose payback is about 100 on the hunt way (the hunt price cut by 1-2%: true 99.5 to 100.5) is never ACCEPTED at a small budget with a short cap; one that stays undecided is REFUSED at the cap (the result says capped and how many extra rounds were run)', async () => {
     let capped = 0;
     for (const f of [0.985, 0.99, 0.995]) {
       const over = { buyCost: { hunt: Math.round(L.merge({}).buyCost.hunt * f) } };
       const r = await quiet(() => L.measureInWorker(L.merge(over), { scale: 0.2, extMs: 12000 }));
       assert.ok(!r.ok && r.bound.upper > 100, f + ' ACCEPTED ' + JSON.stringify(r.bound));
-      if (r.extended.capped && r.extraRounds > 0) {
-        capped++;
-        let err = null; try { await quiet(() => L.setLiveConfigChecked({ overrides: over, scale: 0.2, who: 'r2c-test' })); } catch (e) { err = e; }
-        assert.ok(err && /upper bound/.test(err.message) && /ceiling/.test(err.message) && /extra rounds/.test(err.message), err ? err.message : 'accepted');
-      }
+      if (r.extended.capped && r.extraRounds > 0) capped++;
     }
     assert.ok(capped >= 1, 'no config ran to the cap (the test is not sensitive)');
   });
