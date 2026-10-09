@@ -150,6 +150,16 @@ function bootCopy(w) {
     const w2 = H.world({ dir: w.dir, potRng: () => 1, keys: ['ann'] }); assert.deepStrictEqual(w2.store().player('ann', 'chips'), mem); same(w2, 'ann'); w2.crash();
   });
 
+  await test('line numbers go on after a checkpoint: spins after a restart with an EMPTY journal and a checkpoint at seq N survive the next restart (found by the kill loop)', async () => {
+    const w = world({ rng: E.rngFrom(31), roundRng: E.rngFrom(32) }); const s = w.sock('ann'); w.fund('ann', 'chips', 1e8);
+    for (let i = 0; i < 6; i++) await spinWait(w, s, { bet: 10, mode: 'chips' }, i);
+    w.store().compact(); assert.strictEqual(fs.statSync(JF(w)).size, 0);
+    w.reboot();                                                                           // boots on a checkpoint with jseq >= 6 and an empty journal
+    const s2 = w.sock('ann'); for (let i = 0; i < 4; i++) await spinWait(w, s2, { bet: 10, mode: 'chips' }, 6 + i);
+    const mem = clone(w.store().player('ann', 'chips')); assert.strictEqual(mem.rounds, 10);
+    w.reboot(); assert.deepStrictEqual(w.store().player('ann', 'chips'), mem, 'the 4 spins after the restart are still there after the next one'); same(w, 'ann'); w.crash();
+  });
+
   await test('a torn last line (never acknowledged) is dropped; the lines before it are applied', async () => {
     const w = world({ rng: E.rngFrom(21), roundRng: E.rngFrom(22) }); const s = w.sock('ann'); w.fund('ann', 'chips', 1e8);
     for (let i = 0; i < 5; i++) await spinWait(w, s, { bet: 10, mode: 'chips' }, i);

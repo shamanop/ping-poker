@@ -269,6 +269,7 @@ function createStore(file, opts = {}) {
       catch (e) { dirty = true; alarm('coldcall: store: the replayed journal could not be checkpointed to ' + file + ':', e && e.message); }
     }
   }
+  jlast = Math.max(jlast, jseq);                                // numbering goes on after the checkpoint even when the journal is empty (a new line must never be numbered <= jseq: boot would skip it)
   if (file && !blocked) replay();
   jmode = !!(file && opts.journal && !blocked);
   if (jmode) { try { jopen(); const st = fs.fstatSync(jfd); jbytes = st.size; } catch (e) { jmode = false; alarm('coldcall: store: the journal ' + jfile + ' cannot be opened (' + (e && e.message) + '): whole-file writes only'); } }
