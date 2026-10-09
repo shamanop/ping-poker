@@ -5,7 +5,7 @@
 //   node tests/run-money-1008.js --rest     what --fast leaves out: the money files that boot a server, the minutes-long ones, the long Cold Call suites (npm run test:all, after `npm test`)
 //   node tests/run-money-1008.js --all      everything above
 //   --only a,b      only these (a part of the file name is enough)       --keep-going   do not stop at the first failure (default: stop)
-// MONEY_PORT_BASE=N points the files that boot a server at N..N+9 (V2_PORT_BASE, SESSION_PORT_BASE, PROTO_PORT, SEAT_PORT); without it each file keeps its own default.
+// MONEY_PORT_BASE=N points the files that boot a server at N..N+9 (V2_PORT_BASE, SESSION_PORT_BASE, PROTO_PORT, SEAT_PORT, R3_PORT, K3_PORT); without it each file keeps its own default.
 // A tests/money-1008-*.js file is picked up from the directory, so a new one is in --fast / --money until it is listed below: if it takes more than a few seconds or boots a server,
 // add it to SERVER (or to LONG when it needs minutes) in the same commit that adds it. A file that is not finished within its timeout is reported TIMEOUT and counts as a failure.
 const fs = require('fs'), path = require('path');
@@ -13,12 +13,12 @@ const { spawn } = require('child_process');
 
 // money-1008 files that boot server.js or a child process on a port, or take 8 s or more (timed 2026-10-08 on the shared 12 GB box, whole run one file at a time)
 const SERVER = {
-  'money-1008-adminclaim.js': 'boots server.js, 8 s', 'money-1008-bender-pay.js': '13 s', 'money-1008-proto.js': 'boots server.js, 4 s', 'money-1008-r2b-boot.js': 'boots server.js, 22 s',
+  'money-1008-adminclaim.js': 'boots server.js, 8 s', 'money-1008-bender-pay.js': '13 s', 'money-1008-r2c-buy.js': 'boots server.js, 25 s', 'money-1008-r2c-loop.js': 'boots server.js, 21 s', 'money-1008-r2c-reset.js': 'boots server.js, 26 s', 'money-1008-proto.js': 'boots server.js, 4 s', 'money-1008-r2b-boot.js': 'boots server.js, 22 s',
   'money-1008-r2b-seat-socket.js': 'boots server.js, 12 s', 'money-1008-r2c-flush-kill.js': 'kill loop, 17 s', 'money-1008-server-guard.js': 'boots server.js 19 times, 56 s',
   'money-1008-session.js': 'boots server.js, 13 s', 'money-1008-zero-start.js': 'boots server.js, 10 s',
 };
 // money-1008 files that need minutes: they run the live-config payback measurement (the server measures every way to play before it accepts a config)
-const LONG = { 'money-1008-cfg-bender.js': 'payback measurement, 152 s', 'money-1008-cfg-coldcall.js': 'payback measurement, 136 s' };
+const LONG = { 'money-1008-cfg-bender.js': 'payback measurement, 152 s', 'money-1008-cfg-coldcall.js': 'payback measurement, 136 s', 'money-1008-r2c-bound.js': 'payback bounds, 269 s under load' };
 // the older Cold Call / Campaign suites that pin the money rules and that `npm test` did not run
 const SUITES = [
   ['coldcall-money.js', 'fast'], ['coldcall-presets.js', 'fast'], ['campaign.js', 'fast'], ['campaign-engine.js', 'fast'],
@@ -41,7 +41,7 @@ const only = val('--only'); if (only) { const parts = only.split(','); list = [.
 if (!list.length) { console.error('run-money-1008: nothing to run'); process.exit(2); }
 
 const env = { ...process.env };
-if (env.MONEY_PORT_BASE) for (const k of ['V2_PORT_BASE', 'SESSION_PORT_BASE', 'PROTO_PORT', 'SEAT_PORT']) env[k] = env.MONEY_PORT_BASE;
+if (env.MONEY_PORT_BASE) for (const k of ['V2_PORT_BASE', 'SESSION_PORT_BASE', 'PROTO_PORT', 'SEAT_PORT', 'R3_PORT', 'K3_PORT']) env[k] = env.MONEY_PORT_BASE;
 
 function runOne([file, tier]) {
   return new Promise((resolve) => {
