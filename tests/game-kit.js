@@ -1,8 +1,7 @@
 'use strict';
 // THE GAME CONFORMANCE KIT (MONEY HARDENING, ADD-A-GAME.md "the kit"). A new game is pluggable = it passes this + the 4-line registration.
 //   node tests/game-kit.js <gameId>        one registered game (or the example, coinflip)
-//   node tests/game-kit.js --all           every game in games/index.js MODULES
-//   node tests/game-kit.js --all --examples  ... plus the example games
+//   node tests/game-kit.js --all           every game in games/index.js MODULES plus the example game (coinflip); --examples is accepted and changes nothing
 // Output: one line per check per currency, `PASS|FAIL <game> <check>[/<cur>] <detail>`, a summary, exit 0 / 1.
 // Everything is real except the socket layer: money/ledger.js on a temp file, money/service.js, transport/game-money.js (ctx.money), the games
 // registry (games/index.js, recover() at boot as server.js does) and the game module. The kit knows nothing of any game's rules: the game ships
@@ -854,9 +853,9 @@ if (require.main === module) {
   let ids = args.filter((a) => !a.startsWith('--'));
   if (args.includes('--all')) {
     ids = (registry.MODULES || []).map((m) => path.basename(m, '.js'));
-    if (args.includes('--examples')) ids.push(...fs.readdirSync(path.join(ROOT, 'games')).filter((f) => /^_example-.*\.kit\.js$/.test(f)).map((f) => require(path.join(ROOT, 'games', f)).id));
+    ids.push(...fs.readdirSync(path.join(ROOT, 'games')).filter((f) => /^_example-.*\.kit\.js$/.test(f)).map((f) => require(path.join(ROOT, 'games', f)).id));
   }
-  if (!ids.length) { console.error('usage: node tests/game-kit.js <gameId> | --all [--examples]'); process.exit(2); }
+  if (!ids.length) { console.error('usage: node tests/game-kit.js <gameId> | --all'); process.exit(2); }
   for (const id of ids) runGame(id);
   const code = report();
   try { fs.rmSync(BASE, { recursive: true, force: true }); } catch {}
