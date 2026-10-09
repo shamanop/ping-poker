@@ -7,7 +7,7 @@
 // Callback within a few paid spins. The books still sum to 0 (the house account goes negative), so no audit sees it. Proof: _scratch/money/fix-zs-games/FOUND-1.md, p-zs4.js.
 //
 // What it does to a data dir (the files games/coldcall.js and games/campaign.js read, found the way server.js finds them: transport/boot.js resolvePaths):
-//   Cold Call  coldcall-pull.json + .bak + .journal (+ .tmp, .damaged-*): loaded with the game's OWN store code (journal replayed, .bak fallback) on a private copy; every Cash ('play') player state,
+//   Cold Call  coldcall-pull.json + .bak + .journal + .journal.prev (+ .tmp, .damaged-*): loaded with the game's OWN store code (journal replayed, .bak fallback) on a private copy; every Cash ('play') player state,
 //              the Cash pot record and every Cash open round are dropped; Chips ('chips') player states, the Chips pot and the Chips open rounds are KEPT. The original files go to the zeroed folder
 //              under their own names; a new coldcall-pull.json with the Chips half is written (temp + fsync + rename). No Cash state at all: the files are left alone.
 //   Campaign   campaign.json + .bak (+ .tmp, .damaged-*): every open Cash run is dropped, open Chips runs are KEPT, same move-aside + rewrite.
@@ -76,7 +76,7 @@ function planColdCall(file, tmpRoot, io) {
   const res = { name: 'Cold Call', file, family: fam, cash: false, alarms: [], keep: null, summary: [] };
   if (!fam.length) { res.summary.push('no coldcall-pull.json in the data dir: nothing to do'); return res; }
   const tmp = fs.mkdtempSync(path.join(tmpRoot, 'cc-'));
-  copyTo(fam.filter((f) => /\.(bak|journal)$/.test(f) || f === file), tmp);          // main, .bak, .journal only: the rest is never read by the store
+  copyTo(fam.filter((f) => /\.(bak|journal|journal\.prev)$/.test(f) || f === file), tmp);     // main, .bak, .journal, .journal.prev (R3C-2: read after a restore from the .bak): the rest is never read by the store
   const alarms = [];
   const st = cold.createStore(path.join(tmp, path.basename(file)), { log: () => {}, alarm: (...a) => alarms.push(a.join(' ')), confirm: () => true });   // confirm: every intent line of the journal counts (the ledger is gone)
   res.alarms = alarms;
