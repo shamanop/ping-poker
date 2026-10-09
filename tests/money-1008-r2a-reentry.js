@@ -181,5 +181,30 @@ for (const mode of ['play', 'chips']) {
     eq(T.seatOfKey('a'), null, 'kicked after the hand');
     eq(T.owesBB.a, undefined, 'no debt');
   });
+
+  // ---- R2A-5 ----
+  t(`${tag}: R2A-5 after the forced three-void pause is resumed, dealing starts again`, () => {
+    const isCash = mode === 'play', keys = ['a', 'b', 'c'], cash = {}; for (const k of keys) cash[k] = 1000000;
+    const W = world({ keys, cash });
+    if (!isCash) for (const k of keys) W.service.adminAdjust(k, 1000000, 'chips', 'seed', 'seedc:' + k);
+    const T = W.registry.create('a', { name: 'Voids', mode, buyIn: { min: 500, max: 50000, default: 20000 }, blinds: { sb: 100, bb: 200 }, seats: 6, autoStart: true, actionTimerSec: 30 });
+    for (const k of keys) T.sit(k, { amount: 20000, socketId: 's' + k });
+    const total0 = W.total(mode);
+    let voids = 0;
+    quiet(() => { for (let i = 0; i < 40 && voids < 3; i++) { W.clock.advance(2100); if (T.handLive()) { T.void('bug'); voids++; } } });
+    eq(voids, 3); ok(T.paused, 'paused by force after the third void');
+    ok(T.deadlines.has('phase') && T.deadlines.get('phase').kind === 'nexthand', 'the next-hand deadline is there, frozen');
+    ok(T.deadlines.get('phase').frozen > 0 && T.deadlines.get('phase').at == null, 'frozen while paused');
+    quiet(() => W.clock.advance(60000)); eq(T.handLive(), false, 'nothing is dealt while paused');
+    const n0 = T.handNo;
+    quiet(() => T.resume());
+    eq(T.paused, false);
+    ok(T.deadlines.get('phase') && T.deadlines.get('phase').at != null, 'the deadline is armed again after the resume');
+    quiet(() => W.clock.advance(3000));
+    ok(T.handLive() || T.handNo > n0, 'a hand is dealt after the resume');
+    quiet(() => { for (let i = 0; i < 20; i++) W.clock.advance(30000); });
+    ok(T.handNo > n0, 'and the table keeps dealing');
+    eq(W.total(mode), total0, 'ledger conserved');
+  });
 }
 done();
