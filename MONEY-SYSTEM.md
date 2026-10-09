@@ -129,7 +129,7 @@ Restart: see 5.9.
 
 ### 5.6 Poker: a hand
 1. The engine tracks blinds, bets, side pots and the odd chip in memory (`engine/hand.js`, `engine/pots.js`). The ledger sees nothing until the hand ends.
-2. At showdown or when all but one fold, `settle()` (`tables/hand-flow.js:275`) calls `money.settleHand` with three maps per seat key: `committed`, `payouts`, `returned` (an uncalled bet).
+2. At showdown or when all but one fold, `settle()` (`tables/hand-flow.js:276`) calls `money.settleHand` with three maps per seat key: `committed`, `payouts`, `returned` (an uncalled bet).
 3. ONE batch `hand:<tableId>:<handNo>` (`service.settleHand`, `:177`): each seat's committed chips go `seat -> pot`, then each seat's payouts plus returned chips go `pot -> seat`. `committed` must equal `payouts + returned`, or `not_conserved` is thrown before anything is written. The pot is 0 afterwards. The hand number never repeats after a restart (highest `hand:<id>:<n>` ref, `lastHandNo`).
 4. If the batch is refused the hand is voided: the table returns to the stacks it had at the start of the hand (`hand-flow.js` `void`, three voids in 60 s pause the table). The batch is the commit point.
 Restart (`tests/v2/07_restart_midhand.js`, `17_restart_settle.js`): a hand that never wrote its batch never happened. Boot recovery returns every seat's money to its owner at the stacks the ledger holds. Chips that were committed but not yet settled are still in the seat account (see below), so they go back too.
