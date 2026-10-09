@@ -49,7 +49,7 @@ function world(opts = {}) {
     SRV.potRng = opts.potRng || (() => 1);          // never hits unless a test says so
     SRV.roundRng = opts.roundRng;                   // the whole-cent rounding source (undefined = crypto); a separate stream from the round's own rng
     const ledger = w.ledger = open(files.money, { fsync: 'none', log: () => {} });
-    const service = w.service = createService(ledger);
+    const service = w.service = createService(ledger, { signupPlay: 1000000 });
     for (const k of w.keys) service.ensureAccount(k);
     let reg = null;
     const onChange = (k) => { if (reg) reg.pushWallet(k); };

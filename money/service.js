@@ -34,8 +34,10 @@ function needFund(fund, tableCur) {
 
 function createService(ledger, opts = {}) {
   const now = opts.now || Date.now;
-  // Cash minted at signup. server.js passes 0: Cash is real money and the admin sets it (Chris 10/7).
-  const signupPlay = opts.signupPlay != null ? opts.signupPlay : START_PLAY;
+  // Cash minted at signup. Cash is real money and the admin sets it (Chris 10/7), so there is no default grant: a caller that does not pass
+  // signupPlay mints 0 (Money 1008 SVC-1a). A value passed on purpose must be a safe integer >= 0, or this throws before anything is written.
+  const signupPlay = opts.signupPlay != null ? opts.signupPlay : 0;
+  if (!Number.isSafeInteger(signupPlay) || signupPlay < 0) throw new MoneyError('bad_amount', { signupPlay });
 
   // ---- derived indexes, rebuilt incrementally from the ledger (never a second source of truth) ----
   const known = { chips: new Set(), play: new Set() };     // keys that have ever had a bank:/play: account

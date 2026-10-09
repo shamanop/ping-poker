@@ -112,7 +112,7 @@ t('R2B-3 a no-op Set Cash, the balance moves, the same message again: dup, nothi
 });
 t('R2B-3 the no-op leaves no balance change and the op id is one ledger line (Cash only moves net zero)', () => {
   const w = world(); w.set(50000); const id = w.ledger.lastId;
-  w.set(50000, 'noop2'); eq(w.ledger.lastId, id + 1, 'one line for the no-op'); eq(w.play(), 50000); eq(w.ledger.has('adj:vic:c.noop2'), true);
+  w.set(50000, 'noop2'); eq(w.ledger.lastId, id + 1, 'one line for the no-op'); eq(w.play(), 50000); eq(w.ledger.has('adj:c.noop2'), true);
   w.close();
 });
 t('R2B-3 a no-op Set Cash resent after a RESTART is dup (read from the ledger file), nothing written', () => {

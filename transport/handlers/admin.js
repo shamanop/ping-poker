@@ -6,6 +6,7 @@ function register(ctx, socket, on) {
   const touched = k => { ctx.afterWrite([k]); };
   // R2B-2: an amount is a raw JSON number that is a safe integer, checked BEFORE any conversion (Number() turns null, '', [], false into 0 and '1e3' into 1000). -0 is refused too.
   const rawAmount = v => typeof v === 'number' && Number.isSafeInteger(v) && !Object.is(v, -0);
+  const RANGE = 'Enter a Play amount in range';   // set Cash and adjust refuse the same way (RV-4)
   const BAD_AMOUNT = 'The amount must be a whole number of cents. Nothing was changed.';
   // K1-3: the admin object may say where the Cash sits (wallet / atTable / inRound / total) and why it refused (message); pass on what is there, nothing else.
   const where = r => { const o = {}; for (const f of ['wallet', 'atTable', 'inRound', 'total']) if (Number.isFinite(r[f])) o[f] = r[f]; return o; };
@@ -20,7 +21,7 @@ function register(ctx, socket, on) {
     const echo = opId == null ? {} : { opId };
     if (!rawAmount(cents)) { socket.emit('admin_result', { op: 'set_play', key: k, ok: false, code: 'bad_amount', message: BAD_AMOUNT, ...echo }); return; }
     const r = adm.setPlay(k, cents, opId);
-    if (!r.ok) { socket.emit('admin_result', { op: 'set_play', key: k, ok: false, code: r.code, message: r.message || (r.code === 'range' ? 'Enter a Play amount in range' : 'Could not set Play'), ...where(r), ...echo }); return; }
+    if (!r.ok) { socket.emit('admin_result', { op: 'set_play', key: k, ok: false, code: r.code, message: r.message || (r.code === 'range' ? RANGE : 'Could not set Play'), ...where(r), ...echo }); return; }
     touched(k);
     if (!r.dup) console.log(`admin ${accounts.displayOf(me)} set Play for ${k}`);
     socket.emit('admin_result', { op: 'set_play', key: k, ok: true, message: 'Play set', ...where(r), ...echo });
@@ -37,7 +38,7 @@ function register(ctx, socket, on) {
       if (cur === 'chips' && !r.dup) { try { presLedger.log('adjust', accounts.displayOf(k), Math.abs(delta), views.bankOf(k), null, null, 'POKERPING', { delta }); } catch {} }
       if (!r.dup) console.log(`admin ${accounts.displayOf(me)} adjusted ${k} ${cur}`);
     }
-    socket.emit('admin_result', { op: 'adjust', key: k, ok: !!r.ok, ...(r.ok ? { message: 'Adjusted' } : { code: r.code, message: r.message || (r.code === 'insufficient' ? 'Not enough to remove' : r.code === 'bad_amount' ? BAD_AMOUNT : 'Could not adjust') }), ...echo });
+    socket.emit('admin_result', { op: 'adjust', key: k, ok: !!r.ok, ...(r.ok ? { message: 'Adjusted' } : { code: r.code, message: r.message || (r.code === 'insufficient' ? 'Not enough to remove' : r.code === 'range' ? RANGE : r.code === 'bad_amount' ? BAD_AMOUNT : 'Could not adjust') }), ...echo });
   });
 
   on('admin_reset_pin', ({ key, newPin } = {}) => {

@@ -27,7 +27,7 @@ process.on('exit', () => { try { fs.rmSync(dir, { recursive: true, force: true }
 function world(rng) {
   bender._history.clear();                 // the module keeps its per-account history in memory, shared by every world of this process
   const ledger = open(path.join(dir, 'm' + Math.random().toString(36).slice(2) + '.jsonl'), { fsync: 'none', log: () => {} });
-  const service = createService(ledger);
+  const service = createService(ledger, { signupPlay: 1000000 });
   for (const k of ['ann', 'poor']) service.ensureAccount(k);
   service.adminAdjust('poor', -(service.START_PLAY - 5), 'play', 'test: leave 5 cents', 'test:poor');
   let reg = null;

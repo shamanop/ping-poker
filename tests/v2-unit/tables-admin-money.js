@@ -22,7 +22,7 @@ let n = 0;
 
 function env() {
   const ledger = open(path.join(dir, 'm' + (++n) + '.jsonl'), { fsync: 'none', log: () => {} });
-  const service = createService(ledger);
+  const service = createService(ledger, { signupPlay: 1000000 });
   service.ensureAccount('ann'); service.ensureAccount('bob');
   const accounts = { get: (k) => (k === 'ann' || k === 'bob' ? { key: k } : null), keyOf: (s) => String(s).toLowerCase().trim(), displayOf: (k) => k, all: () => ({}) };
   const adm = createAdmin({ service, ledger, accounts, registry: { tables: new Map() }, views: {}, onlineKeys: () => new Set() });
@@ -128,14 +128,15 @@ t('D7: the same op id with the SAME request is still an ok dup (even when the ba
   eq(e.play(), 750, 'not set again'); eq(e.adjLines().length, 2);
 });
 
-t('D5: the op id names the edit of ONE player: the same op id on two players writes both (refs carry the key)', () => {
-  const e = env(); const b0 = e.ledger.balance('bank:bob', 'chips');
+t('D5 (RV-1): the op id names ONE edit for ONE account: the same op id for another account is ref_conflict and writes nothing', () => {
+  const e = env(); const b0 = e.ledger.balance('bank:bob', 'chips'), p0 = e.play();
   const a = e.send('admin_adjust', { key: 'ann', delta: 500, cur: 'chips', reason: 'admin console', opId: 'X4' });
+  const id = e.ledger.lastId;
   const b = e.send('admin_adjust', { key: 'bob', delta: 500, cur: 'chips', reason: 'admin console', opId: 'X4' });
-  eq([a.ok, a.dup, b.ok, b.dup], [true, undefined, true, undefined]); eq(e.ledger.balance('bank:bob', 'chips'), b0 + 500, 'bob moved');
-  eq(e.adjLines().map((x) => x.ref), ['adj:ann:c.X4', 'adj:bob:c.X4']);
+  eq([a.ok, b.ok, b.code], [true, false, 'ref_conflict']); eq(e.ledger.balance('bank:bob', 'chips'), b0, 'bob did not move'); eq(e.ledger.lastId, id, 'nothing written');
+  eq(e.adjLines().map((x) => x.ref), ['adj:c.X4']);
   const c = e.send('admin_set_play', { key: 'bob', cents: 123, opId: 'X5' }), d = e.send('admin_set_play', { key: 'ann', cents: 123, opId: 'X5' });
-  eq([c.ok, d.ok], [true, true]); eq([e.ledger.balance('play:bob', 'play'), e.play()], [123, 123]);
+  eq([c.ok, d.ok, d.code], [true, false, 'ref_conflict']); eq([e.ledger.balance('play:bob', 'play'), e.play()], [123, p0], 'ann kept her Cash');
 });
 
 console.log(`${pass} passed, ${fail} failed`);

@@ -34,7 +34,7 @@ function world() {
     const io = { sockets: { sockets: socks }, on(e, f) { handlers.push(f); } };
     w.accounts = createAccounts({ file: files.accounts });
     w.ledger = open(files.money, { fsync: 'none', log: () => {} });
-    w.service = createService(w.ledger);
+    w.service = createService(w.ledger, { signupPlay: 1000000 });
     w.wallet = createWalletAdapter({ service: w.service, ledger: w.ledger, onChange: () => {}, log: () => {} });
     w.social = createSocial({ io, accounts: w.accounts, now });
     w.social.setWallet(w.wallet); w.social.setLedger(w.ledger);

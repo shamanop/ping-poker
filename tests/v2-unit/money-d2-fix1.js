@@ -80,7 +80,7 @@ t('E4: a scan that throws half-way, then works: buyInCount, nightSummary, seatFu
     if (p === 'entries' && failAfter != null) { const k = failAfter; return function* (fn, a) { let i = 0; for (const e of tg.entries(fn, a)) { if (i++ >= k) throw new Error('boom'); yield e; } }; }
     const v = tg[p]; return typeof v === 'function' ? v.bind(tg) : v;
   } });
-  const svc = createService(flaky, { now });
+  const svc = createService(flaky, { signupPlay: 1000000, now });
   const port = createMoneyPort({ service: svc, ledger: flaky, bootId: 'bt', afterWrite: () => {}, onFence: () => {} });
   const both = (fn) => { fn(ref); fn(led); };
   both(l => l.transfer('mint:signup', 'bank:ann', 1e6, 'chips', 'sign', 'sg'));
@@ -103,11 +103,11 @@ t('E4: a scan that throws half-way, then works: buyInCount, nightSummary, seatFu
 // ---- E2: a scripted hour of normal play at a permanent table does no cold scan after boot ----
 t('E2: scripted hour (journal of 6 windows, permanent table nightFromId 0, new players, cash-outs of old seats, lobby summaries, a seat with no buy-in): coldScans stays 0', () => {
   const f = file(), W = 40;
-  let led = OPEN(f, { window: W }), svc = createService(led, { now });
+  let led = OPEN(f, { window: W }), svc = createService(led, { signupPlay: 1000000, now });
   for (let k = 0; k < 6; k++) led.transfer('mint:signup', 'bank:p' + k, 1e6, 'chips', 'sign', 'sg' + k);
   for (let i = 0; i < 6 * W; i++) { if (i % 9 === 0) led.transfer('bank:p' + (i % 6), 'seat:PERM:p' + (i % 6), 10, 'chips', 'buyin:chips', 'bi' + i); else led.transfer('mint:bonus', 'bank:p' + (i % 6), 1, 'chips', 'slot', 'sl' + i); }
   led.close();
-  led = OPEN(f, { window: W }); svc = createService(led, { now });                          // boot: the one pass
+  led = OPEN(f, { window: W }); svc = createService(led, { signupPlay: 1000000, now });                          // boot: the one pass
   const port = createMoneyPort({ service: svc, ledger: led, bootId: 'bt', afterWrite: () => {}, onFence: () => {} });
   ok(led.stats().lines > 5 * W && led.stats().inMemory < led.stats().lines, 'journal bigger than the window');
   const c0 = led.stats().coldScans, l0 = led.stats().coldLookups;

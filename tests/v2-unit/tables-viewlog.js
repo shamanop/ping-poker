@@ -28,7 +28,7 @@ function fakeClock() {
 function env() {
   n++;
   const ledger = open(path.join(dir, 'm' + n + '.jsonl'), { fsync: 'none', log: () => {} });
-  const service = createService(ledger);
+  const service = createService(ledger, { signupPlay: 1000000 });
   const pres = createLedger({ file: path.join(dir, 'p' + n + '.json') });
   const calls = { hand: [], nights: [], rooms: [] }, decks = [];
   const bankOf = k => ledger.balance('bank:' + k, 'chips');
