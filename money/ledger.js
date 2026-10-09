@@ -31,12 +31,19 @@ const SOURCE_ACCOUNTS = new Set([
 ]);
 const ONLY_CUR = { bank: 'chips', play: 'play', 'fx:chips': 'chips', 'fx:play': 'play' };
 
-const isAmount = (n) => typeof n === 'number' && Number.isSafeInteger(n) && n > 0;
+// R2E-2: one amount is at most MAX_AMOUNT (1e12 cents = $10 billion), and no account may be taken past +-Number.MAX_SAFE_INTEGER by a write (validateItems):
+// past 2^53 a balance stops being an exact number and a 1 cent move no longer changes it.
+const MAX_AMOUNT = 1e12;
+const isAmount = (n) => typeof n === 'number' && Number.isSafeInteger(n) && n > 0 && n <= MAX_AMOUNT;
 
+// R2E-14: SOURCE_ACCOUNTS is the permission for NEW writes. A journal line that is already on disk is history: at replay (`unlisted` given) a `house:<id>` that the
+// list lacks (a game taken out, a rollback to a build from before the game) is still a source account, and is collected into `unlisted` so the boot can say so.
+const HOUSE_ID = /^house:[a-z0-9_-]+$/;
 // -> { player: bool } or throws bad_account
-function classify(account) {
+function classify(account, unlisted) {
   if (typeof account !== 'string') throw new MoneyError('bad_account', { account });
   if (SOURCE_ACCOUNTS.has(account)) return { player: false };
+  if (unlisted && HOUSE_ID.test(account)) { unlisted.add(account); return { player: false }; }
   const parts = account.split(':');
   const need = PLAYER_KINDS[parts[0]];
   // orphan names are free text (they came from old name-keyed bank rows), so everything after the prefix is the name.
@@ -45,19 +52,21 @@ function classify(account) {
   throw new MoneyError('bad_account', { account });
 }
 
-function normItem(it, defReason) {
+function normItem(it, defReason, unlisted) {
   if (!it || typeof it !== 'object') throw new MoneyError('bad_item', { item: it });
   const { from, to, amount, cur } = it;
   const reason = it.reason != null ? it.reason : defReason;
   if (!CURS.includes(cur)) throw new MoneyError('bad_cur', { cur });
   if (!isAmount(amount)) throw new MoneyError('bad_amount', { amount });
-  classify(from); classify(to);
+  classify(from, unlisted); classify(to, unlisted);
   if (from === to) throw new MoneyError('bad_account', { account: from, why: 'from equals to' });
   for (const a of [from, to]) {
     const only = ONLY_CUR[a.split(':')[0]] || ONLY_CUR[a];
     if (only && only !== cur) throw new MoneyError('bad_account', { account: a, cur, why: 'wrong currency' });
   }
   if (typeof reason !== 'string' || !reason) throw new MoneyError('bad_reason', { reason });
+  // R2E-14: an unlisted house is let through at replay only on a line namespaced to that same game (every house line the service writes is `<game>:...`): a typo'd or forged house stays quarantined.
+  if (unlisted) for (const a of [from, to]) if (HOUSE_ID.test(a) && !SOURCE_ACCOUNTS.has(a) && !reason.startsWith(a.slice(6) + ':')) throw new MoneyError('bad_account', { account: a, why: 'house line not namespaced to its game' });
   return { from, to, amount, cur, reason };
 }
 
@@ -99,6 +108,7 @@ function newState(window) {
     lastId: 0,
     raw: 0,                     // complete lines of the journal covered (blank and not applied ones included)
     quarantined: [],            // [{ line, lineNo, reason }]
+    unlisted: new Map(),        // house:<id> not in SOURCE_ACCOUNTS -> applied lines that used it (R2E-14: replayed as written, never quarantined for that)
     hash: crypto.createHash('sha256'),   // running sha256 of every complete journal line replayed or appended
     ixId: [], ixOff: [],        // sparse index, entry k is the applied line with sequence k * IXK
   };
@@ -106,16 +116,19 @@ function newState(window) {
 
 // Validates items in order against projected balances (a scratch copy of the touched accounts).
 // Player accounts are checked at every step, so order inside a batch matters (seat -> pot before pot -> seat).
-function validateItems(bal, items) {
+function validateItems(bal, items, unlisted) {
   const scratch = { chips: new Map(), play: new Map() };
   const cur = (c, a) => (scratch[c].has(a) ? scratch[c].get(a) : (bal[c].get(a) || 0));
   for (const it of items) {
-    if (classify(it.from).player) {
+    if (classify(it.from, unlisted).player) {
       const h = cur(it.cur, it.from);
       if (h < it.amount) throw new MoneyError('insufficient', { account: it.from, have: h, need: it.amount, cur: it.cur });
     }
-    scratch[it.cur].set(it.from, cur(it.cur, it.from) - it.amount);
-    scratch[it.cur].set(it.to, cur(it.cur, it.to) + it.amount);
+    const out = cur(it.cur, it.from) - it.amount;
+    scratch[it.cur].set(it.from, out);
+    const inn = cur(it.cur, it.to) + it.amount;
+    if (!Number.isSafeInteger(out) || !Number.isSafeInteger(inn)) throw new MoneyError('balance_overflow', { account: !Number.isSafeInteger(out) ? it.from : it.to, cur: it.cur, amount: it.amount });
+    scratch[it.cur].set(it.to, inn);
   }
   return scratch;
 }
@@ -145,23 +158,25 @@ function replayLine(S, rec, off, len) {
   if (!rec || typeof rec !== 'object' || Array.isArray(rec)) throw no('not a record');
   if (!Number.isSafeInteger(rec.id) || rec.id <= S.lastId) throw no(`id ${JSON.stringify(rec.id)} is not after ${S.lastId}`);
   let items, sig, scratch;
+  const unl = new Set();
   try {
     if (Array.isArray(rec.batch)) {
-      items = rec.batch.map(it => normItem(it, rec.reason));
+      items = rec.batch.map(it => normItem(it, rec.reason, unl));
       sig = JSON.stringify(['batch', rec.reason || null, items.map(sigOf)]);
     } else {
-      items = [normItem(rec)];
+      items = [normItem(rec, undefined, unl)];
       sig = sigOf(items[0]);
     }
     if (typeof rec.ref !== 'string' || !rec.ref) throw new MoneyError('bad_ref', { ref: rec.ref });
     if (S.refs.has(rec.ref)) throw no('duplicate ref ' + rec.ref);
-    scratch = validateItems(S.bal, items);
+    scratch = validateItems(S.bal, items, unl);
   } catch (e) {
     if (e instanceof MoneyError && e.code === 'quarantine') throw e;
     const d = e.details || {};
     throw no(e.code === 'insufficient' ? `insufficient: ${d.account} has ${d.have}, needs ${d.need}` : (e.code || e.message));
   }
   commitBal(S.bal, scratch);
+  for (const h of unl) S.unlisted.set(h, (S.unlisted.get(h) || 0) + 1);
   recordLine(S, rec, sigHash(sig), off, len);
 }
 
@@ -484,6 +499,11 @@ function open(file, opts = {}) {
     log(`QUARANTINED ${quarantined.length} line(s) of ${file} (${fresh.length} new, see ${quarantineFile}). They were NOT applied: balances may be short by those lines and need an admin look. ` +
       quarantined.slice(0, 3).map(q => `line ${q.lineNo}: ${q.reason}`).join('; '));
   }
+  {   // R2E-14: houses the journal uses that this build does not list. Their lines were applied as written (the balances are the journal's); only new writes naming them are refused.
+    const names = new Map(S.unlisted);
+    for (const c of CURS) for (const a of S.bal[c].keys()) if (HOUSE_ID.test(a) && !SOURCE_ACCOUNTS.has(a) && !names.has(a)) names.set(a, 0);
+    if (names.size) log(`UNREGISTERED HOUSE in ${file}: ${[...names].map(([h, n]) => `${h} (${n} line(s) replayed as written)`).join(', ')}. This build does not list it in SOURCE_ACCOUNTS: balances are NOT rewritten, but no new write may use it. Register it, or deploy a build that does, before you take the game out.`);
+  }
   let size = good;
   const fd = fs.openSync(file, 'a');
   if (rfd == null) { try { rfd = fs.openSync(file, 'r'); } catch {} }
@@ -721,7 +741,7 @@ function open(file, opts = {}) {
     const out = {};
     for (const c of CURS) {
       let players = 0, sources = 0;
-      for (const [a, v] of S.bal[c]) { if (classify(a).player) players += v; else sources += v; }
+      for (const [a, v] of S.bal[c]) { if (classify(a, new Set()).player) players += v; else sources += v; }
       out[c] = { players, sources, ok: players + sources === 0 };
     }
     out.quarantined = quarantined.length;   // lines left out at open; separate from ok (the books balance without them)
@@ -778,4 +798,4 @@ function open(file, opts = {}) {
   return { transfer, batch, balance, list, has, entries, entriesOf, findLast, onLine, check, sync, close, checkpoint, stats: statsOut, file, quarantined, quarantineFile, get size() { return size; }, get lastId() { return S.lastId; } };
 }
 
-module.exports = { open, MoneyError, SOURCE_ACCOUNTS, CURS };
+module.exports = { open, MoneyError, SOURCE_ACCOUNTS, CURS, MAX_AMOUNT };

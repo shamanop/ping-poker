@@ -230,6 +230,7 @@ function createService(ledger, opts = {}) {
   // ---- pools and escrows (ADD-A-GAME.md section 3) ----
   const escrowOf = (game, key, roundId) => `escrow:${game}:${key}:${roundId}`;
   const poolOf = (game, name) => `pool:${game}:${name}`;
+  const instantRef = (game, key, roundId) => `${game}:${key}:${roundId}`;      // the ref of an instant round (houseRound through ctx.money.round)
   const refsOf = (game, key, roundId) => ({ open: `${game}:${key}:${roundId}:open`, close: `${game}:${key}:${roundId}:close` });
   const needGame = (game) => { if (!GAMES.includes(game)) throw new MoneyError('bad_game', { game }); return game; };
   const needAmt = (v, label) => { if (!isInt(v) || v < 0) throw new MoneyError('bad_amount', { amount: v, field: label }); return v; };
@@ -276,6 +277,8 @@ function createService(ledger, opts = {}) {
     for (const [label, v] of [['cost', cost], ['win', win]]) if (!isInt(v) || v < 0) throw new MoneyError('bad_amount', { amount: v, field: label });
     const p = needPool(game, pool);
     needFeed(p, cost);
+    // R2E-1: one round id = one round. An id that the escrow path opened or closed (its :open / :close ref) is never paid again as an instant round.
+    for (const other of [ref + ':open', ref + ':close']) if (ledger.has(other)) throw new MoneyError('round_closed', { ref: other });
     if (cost + win + p.feed + p.prize === 0) return { id: null, dup: false, noop: true };
     const player = store(cur, key);
     const items = [];
@@ -291,6 +294,7 @@ function createService(ledger, opts = {}) {
     if (cost === 0) return { id: null, dup: false, noop: true };
     const refs = refsOf(game, key, roundId);
     if (ledger.has(refs.close)) throw new MoneyError('round_closed', { ref: refs.close });
+    if (ledger.has(instantRef(game, key, roundId))) throw new MoneyError('round_closed', { ref: instantRef(game, key, roundId) });   // R2E-1: an instant round of this id was played
     return ledger.transfer(store(cur, key), escrowOf(game, key, roundId), cost, cur, game + ':open', refs.open);
   }
 
@@ -327,6 +331,8 @@ function createService(ledger, opts = {}) {
     if (o === null || typeof o !== 'object' || Array.isArray(o)) throw new MoneyError('bad_amount', { outcome: o });
     const win = needAmt(o.win == null ? 0 : o.win, 'win'), p = needPool(game, o.pool), want = o.stake == null ? null : needAmt(o.stake, 'stake');
     const { close } = refsOf(game, key, roundId), escrow = escrowOf(game, key, roundId), player = store(cur, key);
+    // R2E-1: an id that was played as an instant round is closed for settle() too (a stakeless settle would pay it a second time).
+    if (ledger.has(instantRef(game, key, roundId))) throw new MoneyError('round_closed', { ref: instantRef(game, key, roundId) });
     if (ledger.has(close)) {
       const st = closeOf(game, close);
       const pooled = p.feed + p.prize > 0;
