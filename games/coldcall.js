@@ -509,6 +509,9 @@ function pullSpin(socket, p, buy, now) {
   const key = keyOf(socket), nk = nkey(key), mode = p.mode;
   const ok = nk + '|' + mode;
   if (store.blocked && store.blocked()) { logf('coldcall: store is blocked (see the boot log), no bet is taken'); return err(socket, 'bad_request', 'Could not place that bet'); }   // nothing could be saved: no stake is taken (K4-2 / K2-5)
+  // MONEY 1008 R2C RW-1: the probe is in front of the draw. A store that cannot take a journal line refuses EVERY draw the same way (nothing drawn, nothing opened, the ledger not asked); a probe after the draw
+  // would refuse only the draws that settle at once and take the ones that stop at a decision (a filter on the draw).
+  if (store.journaled && store.journaled()) { try { store.probe(); } catch (e) { logf('coldcall: the store cannot be written, the spin does not happen', e && e.message); return err(socket, 'internal', 'Server error'); } }
   const o = openByKey.get(ok);
   if (o) return err(socket, 'decision_open', 'Finish your open decision first', { open: o.pending ? pendingView(o) : null });
   const day = chicagoDay(now);
@@ -580,7 +583,8 @@ module.exports = {
     const file = process.env.COLDCALL_PULL_FILE || files.coldcallPull || null;
     // MONEY 1008 R2C-5: journal mode (append-only lines + off-loop fsync) is on under server.js; COLDCALL_JOURNAL=0|1 or `coldcall.journal = true|false` decides otherwise (tests run the whole-file path by default)
     const jEnv = process.env.COLDCALL_JOURNAL, jOn = jEnv === '1' ? true : jEnv === '0' ? false : typeof module.exports.journal === 'boolean' ? module.exports.journal : !!(require.main && path.basename(require.main.filename || '') === 'server.js');
-    store = createStore(file, { log: logf, alarm, journal: jOn, confirm: (k, id) => C.money.closed(k, id) });
+    const jMax = Number(process.env.COLDCALL_JOURNAL_MAX);     // bytes; tests set it small, production leaves the store's 8 MB
+    store = createStore(file, { log: logf, alarm, journal: jOn, maxJournal: jMax > 0 ? jMax : undefined, confirm: (k, id) => C.money.closed(k, id) });
     cashForceSeen = 0;
     if (testHookOn()) alarm('coldcall: *** QA FORCE HOOK IS ON (COLDCALL_TEST=1, NODE_ENV=' + (process.env.NODE_ENV || '(unset)') + '): any signed-in player can force Cold Call rounds in CHIPS ONLY; Cash rounds ignore it. Never set COLDCALL_TEST on a real server. ***');
     for (const mode of ['play', 'chips']) { try { syncPot(mode); } catch {} }

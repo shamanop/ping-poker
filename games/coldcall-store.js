@@ -169,7 +169,7 @@ function createStore(file, opts = {}) {
     dirtyP.clear(); dirtyO.clear(); dirtyT.clear();
     return { p, o, t };
   }
-  function appendDelta() { if (!dirtyP.size && !dirtyO.size && !dirtyT.size) return false; const d = takeDelta(); try { jwrite(d); } catch (e) { for (const x of d.p) dirtyP.add(x[0] + '\0' + x[1]); for (const x of d.o) dirtyO.add(x[0]); for (const x of d.t) dirtyT.add(x[0]); throw e; } return true; }
+  function appendDelta() { if (!dirtyP.size && !dirtyO.size && !dirtyT.size) return false; gate(); const d = takeDelta(); try { jwrite(d); } catch (e) { for (const x of d.p) dirtyP.add(x[0] + '\0' + x[1]); for (const x of d.o) dirtyO.add(x[0]); for (const x of d.t) dirtyT.add(x[0]); throw e; } return true; }
   function syncNow() { const fd = jopen(); fs.fdatasyncSync(fd); step('journal-synced'); }
   // cb runs once every line written so far is fsynced; the fsync runs on the thread pool (the event loop is free), and lines written while one is in flight share the next (group commit)
   function durable(cb) {
@@ -199,15 +199,21 @@ function createStore(file, opts = {}) {
   }
   function journaled() { return jmode && !blocked; }
   // the line of a paid spin, BEFORE its ledger call. line = { ref: { key, id }, player: [key, mode, state], open: [openKey]|undefined (to delete), pot: [mode, record]|undefined }
-  function intent(line) {
-    if (!jmode || blocked) throw new Error('coldcall store: no journal');
-    // The line is the ONE probe of a spin (R2C RV-7, like the record write of a Campaign step): when the store cannot take it the ledger is not asked, so no stake is taken. A journal that could not be fsynced, or that
-    // is over `maxJournal` because checkpoints keep failing, first tries a checkpoint (at most once a second); if that fails too the spin is refused.
+  // The gate of a journal that cannot take lines: a fsync that failed, or a journal over `maxJournal` because checkpoints keep failing. It first tries a checkpoint (at most once a second); if the fault stays it throws.
+  function gate() {
     if (syncFault || jbytes >= maxJournal) {
       const t = Date.now();
       if (t - lastTry >= 1000) { lastTry = t; try { compact(); } catch (e) { say('coldcall: store: checkpoint on demand failed:', e && e.message); } }
       if (syncFault || jbytes >= maxJournal) throw new Error('coldcall store cannot be written: ' + (syncFault ? 'the journal fsync failed (' + (syncFault && syncFault.message) + ')' : 'the journal is over ' + maxJournal + ' bytes and the checkpoint fails'));
     }
+  }
+  // R2C RW-1: the probe of a spin BEFORE anything is drawn or taken (the game calls it first in pullSpin): the gate, then a real small write (a line that carries nothing), so a disk that refuses writes (ENOSPC) is
+  // found here too. A spin that reaches a decision takes its stake and writes its record later; with the probe in front of the draw, a faulted store refuses every draw the same way, not just those that settle at once.
+  function probe() { if (!jmode || blocked) return; gate(); jwrite({ n: 1 }); }
+  function intent(line) {
+    if (!jmode || blocked) throw new Error('coldcall store: no journal');
+    // The line is the ONE probe of a settle (R2C RV-7): when the store cannot take it the ledger is not asked, so no stake is taken.
+    gate();
     const o = { c: { k: line.ref.key, i: line.ref.id }, p: [], o: [], t: [] }; if (line.free) o.z = 1;
     if (line.player) o.p.push(line.player);
     if (line.del) o.o.push([line.del, null]);
@@ -271,7 +277,7 @@ function createStore(file, opts = {}) {
     let applied = 0, skipped = 0, dropped = 0, cancels = 0, maxSeq = jseq;
     for (const j of good) {
       if (j.s > maxSeq) maxSeq = j.s;
-      if (j.x !== undefined) continue;
+      if (j.x !== undefined || j.n !== undefined) continue;
       if (j.s <= jseq) { skipped++; continue; }
       if (cancelled.has(j.s)) { cancels++; say('coldcall: store: journal line ' + j.s + ' was cancelled (the ledger refused its call), not applied'); continue; }
       if (j.c && !j.z) {                                                          // a paid spin: applied only when the ledger holds the round (a kill between the line and the ledger call leaves nothing)
@@ -312,7 +318,7 @@ function createStore(file, opts = {}) {
   const openKey = (key, mode) => key + '|' + mode;
 
   return {
-    file, save, flush, close, blocked: () => blocked, journaled, intent, cancel, durable, covered, compact, openKey,
+    file, save, flush, close, blocked: () => blocked, journaled, probe, intent, cancel, durable, covered, compact, openKey,
     // player state (a stored object or null; callers clone before handing it to the engine)
     player(key, mode) { checkMode(mode); const p = data.players[key]; return (p && p[mode]) || null; },
     setPlayer(key, mode, state) { checkMode(mode); (data.players[key] = data.players[key] || dict())[mode] = state; dirtyP.add(key + '\0' + mode); save(); },

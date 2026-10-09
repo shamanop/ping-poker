@@ -73,7 +73,8 @@ function bootCopy(w) {
     finally { fs.renameSync = ren; fs.writeFileSync = wf; }
     assert.ok(done.every((r) => r && r.status === 'done'), 'every spin ended in a result: ' + JSON.stringify(done.find((r) => !r || r.status !== 'done')));
     assert.strictEqual(renames, 0, 'main file renamed during the spins'); assert.strictEqual(big, 0, 'a whole-file sized write happened during the spins');
-    const lines = jlines(w); assert.ok(lines.length >= 300 && lines.length < 400, 'one line per spin: ' + lines.length); assert.ok(Math.max(...lines.map((l) => l.length)) < size / 10, 'a line is small, whatever the store holds: ' + Math.max(...lines.map((l) => l.length)) + ' bytes vs a store of ' + size); assert.ok(lines.filter((l) => l.length < 1500).length >= 0.9 * lines.length, 'the lines of instant spins are about 300-600 bytes');
+    const lines = jlines(w).filter((l) => !/"n":1\}$/.test(l));      // minus the probe lines (a tiny line that carries nothing, written in front of every spin, RW-1)
+    assert.ok(jlines(w).length - lines.length >= 300, 'a probe line in front of every spin'); assert.ok(lines.length >= 300 && lines.length < 400, 'one line per spin: ' + lines.length); assert.ok(Math.max(...lines.map((l) => l.length)) < size / 10, 'a line is small, whatever the store holds: ' + Math.max(...lines.map((l) => l.length)) + ' bytes vs a store of ' + size); assert.ok(lines.filter((l) => l.length < 1500).length >= 0.9 * lines.length, 'the lines of instant spins are about 300-600 bytes');
     w.crash();
   });
 
