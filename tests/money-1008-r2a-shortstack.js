@@ -49,12 +49,11 @@ for (const mode of ['play', 'chips']) {
       eq(sit(S.T, 'a', S.stackA), 'none', 'what he had is still open to him');
     });
 
-    t(`${tag}: ${how}: less than the server returned is fine; the allowance is a total, spent as it is used, never more than the server returned`, () => {
+    t(`${tag}: ${how}: less than the server returned is fine; the allowance is ONE return, spent whole by the first sit (R2A-4)`, () => {
       const S = setup(mode); server(how, S);
       eq(sit(S.T, 'a', 3000), 'none');
       quiet(() => S.T.leave('a', 'leave'));                        // his own cash-out: 3000 back in his wallet
-      eq(sit(S.T, 'a', 2000), 'none', 'the 2000 left of the allowance');
-      quiet(() => S.T.leave('a', 'leave'));
+      ok(sit(S.T, 'a', 2000) !== 'none', 'the other 2000 are not a second entry: the allowance was spent whole');
       ok(sit(S.T, 'a', 100) !== 'none', 'allowance spent: no more below-minimum seats');
       eq(S.W.total(S.cur), S.total0);
     });

@@ -145,7 +145,7 @@ function createRegistry(deps) {
   }
 
   // K3-5: what the SERVER cashed out of each seat (boot recovery, the disconnect grace) since the night began, replayed from the ledger,
-  // so a player it sent home can sit down again at a table with a buy-in cap. The re-entry is forgiven up to the amount returned and no
+  // so a player it sent home can sit down again at a table with a buy-in cap. The re-entry is ONE return (R2A-4), spent whole by the first sit, and no
   // further: the cap keeps counting every buy-in the player makes himself. Only tables with a finite cap need it.
   function seedReentry() {
     if (typeof ledger.entries !== 'function') return;
@@ -165,6 +165,9 @@ function createRegistry(deps) {
       } else if (isSeat(e.from) && (rs.startsWith('boot:') || ref.startsWith('grace:'))) {
         const [, tid, key] = e.from.split(':'), t = want.get(tid);
         if (t && e.id > (t.nightFromId || 0)) t.noteServerReturn(key, e.amount);
+      } else if (isSeat(e.from) && (rs.startsWith('leave:') || rs.startsWith('kick:'))) {
+        const [, tid, key] = e.from.split(':'), t = want.get(tid);
+        if (t && e.id > (t.nightFromId || 0)) t.noteLeave(key);
       }
     }
   }
