@@ -173,5 +173,23 @@ function world(seed) {
   check('pay-5 a round that reaches the cap pays exactly cap x bet on the ledger', notExact === 0, `${notExact} wrong`);
 }
 
+// pay-6 (R2E-15, the critic's mutant M2: `const key = p.key ? String(p.key) : keyOf(socket)`): a spin is played on the SIGNED-IN socket's account, whatever account
+// the message names. A message from `mal` that carries `vic`'s key in every likely field moves only mal's money; vic sends nothing and loses nothing.
+{
+  const w = world(13), mal = w.sock('mal'), vic = w.sock('vic'); w.fund('mal', 1e6); w.fund('vic', 1e6);
+  const named = {}; for (const f of ['key', 'acct', 'account', 'name', 'user', 'username', 'userId', 'player', 'owner', 'email', 'roundId']) named[f] = f === 'roundId' ? 'vicround' : 'vic';
+  const vic0 = { play: w.bal('vic', 'play'), chips: w.bal('vic', 'chips') }, id0 = w.ledger.lastId;
+  let answered = 0;
+  for (const mode of CUR) for (let i = 0; i < 12; i++) {
+    const o0 = mal.out.length; w.clock.advance(200); mal.send('g:bender:spin', { ...named, bet: 100, mode });
+    if (mal.out.slice(o0).some((o) => o[0] === 'g:bender:result')) answered++;
+  }
+  const lines = [...w.ledger.entries(null, id0)];
+  check('pay-6 the spins were played (the pin is sensitive)', answered === 24 && lines.length >= 24, `answered ${answered}, lines ${lines.length}`);
+  check('pay-6 no ledger line names the other account', !lines.some((l) => /vic/.test(`${l.from} ${l.to} ${l.ref}`)), JSON.stringify(lines.filter((l) => /vic/.test(`${l.from} ${l.to} ${l.ref}`)).slice(0, 1)));
+  check('pay-6 the other account lost nothing in either currency', w.bal('vic', 'play') === vic0.play && w.bal('vic', 'chips') === vic0.chips, `${vic0.play}/${vic0.chips} -> ${w.bal('vic', 'play')}/${w.bal('vic', 'chips')}`);
+  check('pay-6 every line is on the sender', lines.every((l) => /^bender:mal:/.test(String(l.ref))), String((lines.find((l) => !/^bender:mal:/.test(String(l.ref))) || {}).ref));
+}
+
 console.log(`money-1008-bender-pay.js: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -8,6 +8,7 @@ const buyMax = Math.max(...Object.values(Eng.CFG.buyCost));
 module.exports = {
   id: 'bender',
   module: 'bender.js',
+  maxReturn: 0.99,                                     // measured by the kit's seeded 20,000-round run: 94.14% at the smallest bet, 96.08% at the largest (both currencies); the table says 98%
   prepare(mod) { mod._history.clear(); },
   bets: { good: [Eng.BET_LEVELS[0], Eng.BET_LEVELS[Math.floor(Eng.BET_LEVELS.length / 2)], Eng.BET_LEVELS[Eng.BET_LEVELS.length - 1]], min: Eng.BET_LEVELS[0], max: Eng.BET_LEVELS[Eng.BET_LEVELS.length - 1] },
   maxCost: (bet) => Math.ceil(bet * buyMax) + 1,       // a bought bonus costs a multiple of the bet

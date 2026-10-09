@@ -1,14 +1,13 @@
 'use strict';
 // THE GAME CONFORMANCE KIT (MONEY HARDENING, ADD-A-GAME.md "the kit"). A new game is pluggable = it passes this + the 4-line registration.
-//   node tests/game-kit.js <gameId>        one registered game (or an example, e.g. coinflip)
-//   node tests/game-kit.js --all           every game in games/index.js MODULES
-//   node tests/game-kit.js --all --examples  ... plus the example games
+//   node tests/game-kit.js <gameId>        one registered game (or the example, coinflip)
+//   node tests/game-kit.js --all           every game in games/index.js MODULES plus the example game (coinflip); --examples is accepted and changes nothing
 // Output: one line per check per currency, `PASS|FAIL <game> <check>[/<cur>] <detail>`, a summary, exit 0 / 1.
 // Everything is real except the socket layer: money/ledger.js on a temp file, money/service.js, transport/game-money.js (ctx.money), the games
 // registry (games/index.js, recover() at boot as server.js does) and the game module. The kit knows nothing of any game's rules: the game ships
 // games/<id>.kit.js (the adapter, see ADD-A-GAME.md "the kit"), which plays it with the game's OWN socket messages and never touches money.
 //
-// checks: registration, escrow, restart, replay (double submit), sockets, mix, errors, input, quarantine, ledger (replay == balances)
+// checks: registration, escrow, restart, replay (double submit), sockets, mix, errors, input, identity, quarantine, disconnect, carry (Chips never feed Cash), refuse (a currency the adapter leaves out), payback (a ceiling on what is paid back), ledger (replay == balances)
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -44,8 +43,9 @@ function world(A, opts = {}) {
   let t = 1000000;
   const clock = { now: () => t, advance: (ms) => { t += ms; } };
   const hooks = { seq: 0, crashAt: null, calls: [] };                // crashAt = { k, phase: 'before'|'after' } counted over every ctx.money write call
-  const rng = mulberry(opts.seed || 12345);
-  const w = { A, mod, dir, io, clock, hooks, rng, boots: 0, keys: new Set(), log: [], accepted: 0, g: null, report: null, files: { money: path.join(dir, 'money.jsonl') } };
+  let rngIn = mulberry(opts.seed || 12345);
+  const rng = () => rngIn();                                         // one function for the life of the world: w.reseed() swaps the stream under it
+  const w = { A, mod, dir, io, clock, hooks, rng, reseed: (sd) => { rngIn = mulberry(sd); }, boots: 0, keys: new Set(), log: [], accepted: 0, g: null, report: null, files: { money: path.join(dir, 'money.jsonl') } };
   const openEv = A.open(CURS[0], A.bets.good[0]).ev;
   w.openEv = openEv;
 
@@ -115,16 +115,17 @@ function world(A, opts = {}) {
   w.reboot = () => { w.crash(); return boot(); };
 
   // ---- the driver an adapter plays through
-  const g = w.g = { rng, now: clock.now, dup: null, tamper: null, same: false, world: w };
+  const g = w.g = { rng, now: clock.now, dup: null, tamper: null, extra: null, same: false, world: w };
   const collect = (sock, n0) => {
     const got = sock.out.slice(n0);
     const errs = got.filter((o) => o[0] === 'error'), res = got.filter((o) => o[0].startsWith('g:' + A.id + ':'));
-    return { got, error: errs.length ? errs[errs.length - 1][1] : null, ev: res.length ? res[res.length - 1][0].slice(('g:' + A.id + ':').length) : null, payload: res.length ? res[res.length - 1][1] : null, ok: !errs.length && res.length > 0 };
+    return { got, error: errs.length ? errs[errs.length - 1][1] : null, ev: res.length ? res[res.length - 1][0].slice(('g:' + A.id + ':').length) : null, payload: res.length ? res[res.length - 1][1] : null, ok: res.length > 0, errored: errs.length > 0 };   // a result event = the round was played, whatever else came with it (an error event beside it is a lie, not a refusal)
   };
   const send1 = (sock, ev, payload, advance) => {
     if (advance) clock.advance(200);
     let p = payload;
     if (g.tamper && ev !== openEv && p && typeof p === 'object') p = { ...p, ...g.tamper };
+    if (g.extra && p && typeof p === 'object' && !Array.isArray(p)) p = { ...g.extra, ...p };     // every message (the opening one too); the game's own fields win
     const n0 = sock.out.length;
     w.log.push({ key: sock.key, ev, payload: jclone(p) });
     sock.send('g:' + A.id + ':' + ev, p);
@@ -243,21 +244,27 @@ function roundFacts(t, w, who, cur, key, o) {
   t.ok(!o.lines.some((l) => !isKit(l) && l.cur === other_), `${who}: a line in ${other_} was written`);
 }
 
+const EXAMPLE_ADAPTER = path.join(ROOT, 'games', '_example-coinflip.kit.js');
+const registrationByKit = (A) => !!(A.isExample || RUN_OPTS.register);      // register: the self-test's way to run a toy whose registration is not the point
+
 // ------------------------------------------------------------------------------------------------------------------------------------ the checks
 function checkRegistration(A) {
   runCheck(A, 'registration', null, (t) => {
     const mods = registry.MODULES || [];
-    if (A.example) t.note('example game: house account registered by the kit for the run');
+    const skip = registrationByKit(A);                                    // only the example adapter file, or the self-test's own toys, get their registration from the kit
+    t.ok(!A.example || A.isExample, '`example: true` is set on an adapter that is not games/_example-coinflip.kit.js: a copy of the example must not copy that line (the registration check would be off)');
+    if (skip) t.note('example game: house account registered by the kit for the run');
     else t.ok(mods.some((m) => path.basename(m, '.js') === path.basename(A.modPath, '.js')), `games/index.js MODULES does not list ./${path.basename(A.modPath)}`);
     const m = A.mod;
     t.ok(m && m.id === A.id, `module id ${m && m.id} != adapter id ${A.id}`);
     t.ok(m && m.handlers && typeof m.handlers === 'object', 'module has no handlers');
     t.ok(typeof m.audit === 'function', 'module has no audit()');
     t.ok(typeof m.init === 'function', 'module has no init(ctx)');
-    if (!A.example) {
+    if (!skip) {
       t.ok(L.SOURCE_ACCOUNTS.has('house:' + A.id), `house:${A.id} is not in SOURCE_ACCOUNTS (money/ledger.js)`);
       t.ok(GAMES.includes(A.id), `"${A.id}" is not in GAMES (money/service.js)`);
     }
+    t.ok(typeof A.maxReturn === 'number' && A.maxReturn > 0 && A.maxReturn <= 1.5, `adapter.maxReturn must be a number in (0, 1.5]: the most the game may pay back per unit staked (got ${A.maxReturn})`);
     t.ok(A.bets && Array.isArray(A.bets.good) && A.bets.good.length > 0, 'adapter has no bets.good');
     t.ok(Array.isArray(A.heldPoints), 'adapter.heldPoints must be an array (empty for an instant game)');
   });
@@ -387,7 +394,10 @@ function checkReplay(A, cur) {
         const res = A.play(w.g, s, { cur, bet: A.bets.good[i % A.bets.good.length], i });
         const lines = w.since(id0), round = roundsOf(A, lines).get(res.roundId);
         done.push({ res, msgs: w.log.slice(mark).filter((m) => m.ev !== w.openEv) });
-        if (!round) { t.fail(`${dup} play#${i}: no ledger line for round ${res.roundId}`); continue; }
+        if (!round) {
+          if (res.cost === 0 && !res.win) continue;      // a free round that won nothing writes no line (ADD-A-GAME.md section 4): the same rule roundFacts applies
+          t.fail(`${dup} play#${i}: no ledger line for round ${res.roundId}`); continue;
+        }
         t.ok(round.staked === res.cost, `${dup} play#${i}: staked ${round.staked}, round cost ${res.cost}`);
         if (res.win != null) t.ok(round.returned === res.win, `${dup} play#${i}: shown win ${res.win}, ledger paid ${round.returned}`);
         // every other round the doubled messages may have made must be a whole round of its own: a stake, one escrow or settled
@@ -637,6 +647,146 @@ function checkInput(A, cur) {
   });
 }
 
+
+// 10. the account a round is played on is the SIGNED-IN socket's, never one the message names (R2E-5)
+const ID_FIELDS = ['key', 'acct', 'account', 'name', 'user', 'username', 'userId', 'player', 'owner', 'email'];
+function checkIdentity(A, cur) {
+  runCheck(A, 'identity', cur, (t) => {
+    const w = world(A, { seed: 13 }), s = w.sock('mallory'); w.sock('victim'); w.rich('mallory'); w.rich('victim');
+    const extra = {}; for (const f of ID_FIELDS) extra[f] = 'victim';
+    const vb = CURS.map((c) => w.bal('victim', c)), id0 = w.lastId();
+    w.g.extra = extra;                                                      // every message carries the victim's key in every likely field
+    let played = 0;
+    const tryRound = (fn) => { try { fn(); played++; } catch (e) { if (!(e instanceof Refused)) throw e; } };
+    for (let i = 0; i < Math.min(playN(A), 6); i++) tryRound(() => playOne(w, s, cur, i));
+    for (const pt of A.heldPoints) tryRound(() => { const held = holdOne(w, s, pt, cur); pt.finish(w.g, s, held); });
+    w.g.extra = null;
+    const lines = w.since(id0).filter((l) => !isKit(l));
+    const bad = lines.filter((l) => /victim/.test(`${l.from} ${l.to} ${l.ref}`));
+    for (const l of bad.slice(0, 3)) t.fail(`a message from mallory naming "victim" wrote line ${l.id} ${l.ref} (${l.from} -> ${l.to}, ${l.amount})`);
+    t.ok(CURS.every((c, i) => w.bal('victim', c) === vb[i]), `the victim's balance moved (${vb} -> ${CURS.map((c) => w.bal('victim', c))}) though the victim sent nothing`);
+    t.ok(lines.every((l) => !l.ref || new RegExp('^' + A.id + ':mallory:').test(l.ref)), 'a ledger line of the run is not on the sender\'s own key');
+    t.note(`${played} round(s) played with ${ID_FIELDS.length} identity fields set`);
+    finalAudit(t, w, cur, 'identity');
+  });
+}
+
+// 11. nothing is carried from Chips into Cash (R2E-3, R2E-4): a token, a pot, a streak kept in memory or in the game's own file pays Cash it did not earn in Cash
+// The same seeded Cash rounds are played on (A) a fresh world, (B) a world that first played Chips rounds on both accounts, (C) a fresh world restarted after every round.
+// What the Cash rounds paid, read off the LEDGER round by round, must be the same in all three.
+function carryRun(A, seed, mode) {
+  const w = world(A, { seed }); let a = w.sock('ann'), b = w.sock('bob'); w.rich('ann'); w.rich('bob');
+  const rounds = (id0) => [...roundsOf(A, w.since(id0)).values()].filter((r) => r.curs.has('play')).map((r) => [r.staked, r.returned]);
+  const n = 3 * playN(A);
+  if (mode === 'chips-first') for (let i = 0; i < n; i++) { try { A.play(w.g, i % 2 ? a : b, { cur: 'chips', bet: A.bets.good[i % A.bets.good.length], i }); } catch (e) { if (!(e instanceof Refused)) throw e; } }
+  w.reseed(seed + 1);
+  const out = { ann: [], bob: [] };
+  for (let i = 0; i < playN(A); i++) {
+    for (const [who, s] of [['ann', a], ['bob', b]]) {
+      const id0 = w.lastId();
+      try { A.play(w.g, s, { cur: 'play', bet: A.bets.good[i % A.bets.good.length], i }); } catch (e) { if (!(e instanceof Refused)) throw e; }
+      out[who].push(rounds(id0));
+    }
+    if (mode === 'restart') { w.reboot(); a = w.sock('ann'); b = w.sock('bob'); }
+  }
+  return out;
+}
+function checkCarry(A) {
+  runCheck(A, 'carry', null, (t) => {
+    const fresh = carryRun(A, 77, 'fresh'), again = carryRun(A, 77, 'fresh');
+    const same = (x, y) => JSON.stringify(x) === JSON.stringify(y);
+    if (!t.ok(same(fresh, again), 'two fresh worlds with the same seed paid different Cash (the game does not draw only from ctx.rng, ADD-A-GAME.md 6.6): the comparison below would mean nothing')) return;
+    const diff = (x, y) => { for (const who of ['ann', 'bob']) for (let i = 0; i < x[who].length; i++) if (!same(x[who][i], y[who][i])) return `${who} Cash round #${i}: fresh world [staked, paid] ${JSON.stringify(x[who][i])}, here ${JSON.stringify(y[who][i])}`; return null; };
+    const chips = carryRun(A, 77, 'chips-first'), d1 = diff(fresh, chips);
+    t.ok(!d1, `Cash pays differ after Chips rounds were played (something earned in Chips was spent in Cash): ${d1}`);
+    const rest = carryRun(A, 77, 'restart'), d2 = diff(fresh, rest);
+    t.ok(!d2, `Cash pays differ after a restart between rounds (something kept in memory changed a later pay): ${d2}`);
+    t.note(`${fresh.ann.length * 2} Cash rounds compared, 3 worlds`);
+  });
+}
+
+// 12. a dropped socket strands no stake (R2E-12): open a held round, drop the socket (the page reloaded, the phone lost its signal). Then either the stake is back / settled
+// (escrow 0, lines consistent) or the round is still open, audit() lists it, and signing in again lets the player finish it. An escrow nothing knows about is a failure.
+function checkDisconnect(A, cur) {
+  if (!A.heldPoints.length) { if (cur === CURS[0]) RESULTS.push({ game: A.id, check: 'disconnect', cur: null, ok: true, skip: true, detail: 'no held round: an instant game has nothing open when a socket drops' }); return; }
+  runCheck(A, 'disconnect', cur, (t) => {
+    for (const pt of A.heldPoints) {
+      const w = world(A, { seed: 14 }), s = w.sock('ann'); w.rich('ann');
+      const who = `drop at ${pt.name}`, held = holdOne(w, s, pt, cur);
+      s.send('disconnect');                                                  // what socket.io emits on the server side when the client goes away
+      const esc = w.escrowOf('ann', held.roundId, cur), knows = (w.audit().openRounds || []).some((r) => r.roundId === held.roundId);
+      if (esc !== 0) {
+        t.ok(knows, `${who}: escrow ${held.roundId} still holds ${esc} after the socket dropped and audit() does not list the round: nothing knows about this money`);
+        let fin = null; try { fin = pt.finish(w.g, w.sock('ann'), held); } catch (e) { if (!(e instanceof Refused)) throw e; t.fail(`${who}: the round is open in the ledger (${esc}) but the player, signed in again, cannot finish it: ${JSON.stringify(e.reply && e.reply.error)}`); }
+        if (fin) {
+          const r = roundsOf(A, w.since(held.id0)).get(held.roundId);
+          t.ok(w.escrowOf('ann', held.roundId, cur) === 0, `${who}: finishing the round after signing in again left its escrow open`);
+          if (r && fin.win != null) t.ok(r.returned === fin.win, `${who}: shown win ${fin.win}, ledger paid ${r.returned}`);
+        }
+      } else {
+        const r = roundsOf(A, w.since(held.id0)).get(held.roundId);
+        t.ok(!!r && r.staked === held.cost, `${who}: escrow is 0 but the round has no ledger lines of ${held.cost} (the stake went nowhere)`);
+        t.ok(!knows, `${who}: the round is closed in the ledger and audit() still lists it`);
+        if (r) t.ok(w.bal('ann', cur) === held.b0 - r.staked + r.returned, `${who}: balance ${held.b0} -> ${w.bal('ann', cur)} does not match stake ${r.staked} / pay ${r.returned}`);
+      }
+      auditMatchesLedger(t, w, who);
+      t.ok(!w.since(held.id0).some((l) => !isKit(l) && l.cur === other(cur)), `${who}: a ${other(cur)} line was written for a ${cur} round`);
+      for (const m of lineProblems(A, w.since(held.id0)).slice(0, 2)) t.fail(`${who}: ${m}`);
+      finalAudit(t, w, cur, who);
+    }
+  });
+}
+
+// 13. a currency the adapter leaves out is a currency the game must REFUSE (R2E-8): `currencies: ['chips']` switches the Cash checks off, so the kit asks the game directly
+function checkRefuses(A, cur) {
+  runCheck(A, 'refuse', cur, (t) => {
+    const w = world(A, { seed: 15 }), s = w.sock('ann'); w.rich('ann');
+    const id0 = w.lastId(), b = CURS.map((c) => w.bal('ann', c));
+    for (let i = 0; i < 3; i++) {
+      const bet = A.bets.good[i % A.bets.good.length], o = A.open(cur, bet);
+      let r; try { r = w.g.try(s, o.ev, o.payload); } catch (e) { t.fail(`${cur} bet ${bet}: the handler threw out to the socket: ${e.message}`); continue; }
+      t.ok(!r.ok, `the adapter says this game has no ${cur} mode, and the game took a ${cur} bet of ${bet} (answer ${JSON.stringify(r.payload).slice(0, 80)})`);
+    }
+    for (let i = 0; i < 3; i++) {
+      let shown = null; try { shown = A.play(w.g, s, { cur, bet: A.bets.good[i % A.bets.good.length], i }); } catch (e) { if (!(e instanceof Refused)) throw e; }
+      t.ok(!shown, `the adapter says this game has no ${cur} mode, and a whole ${cur} round was played (win ${shown && shown.win})`);
+    }
+    const lines = w.since(id0).filter((l) => !isKit(l));
+    t.ok(!lines.some((l) => l.cur === cur), `${lines.filter((l) => l.cur === cur).length} ledger line(s) in ${cur} for a game that has no ${cur} mode`);
+    t.ok(w.since(id0).length === 0 || w.bal('ann', cur) === b[CURS.indexOf(cur)], `the ${cur} balance moved (${b[CURS.indexOf(cur)]} -> ${w.bal('ann', cur)})`);
+    finalAudit(t, w, cur, 'refuse');
+  });
+}
+
+// 14. what a round pays against its stake (R2E-6): a coarse ceiling. Over a seeded run of PAYBACK_ROUNDS rounds at the smallest bet and at a large one, in each currency, what the
+// LEDGER paid back to the player divided by what it took from the player is at most the adapter's `maxReturn`. Catches a rounding that always rounds up at a small bet, a price
+// that is not charged, a pay table that pays more than it says. It is a ceiling, not an exact RTP: the seed is fixed, so the measured value is the same on every run.
+const PAYBACK_ROUNDS = Number(process.env.KIT_PAYBACK_ROUNDS) || 20000;     // an adapter whose rounds are slow (a store write per decision) may declare fewer: paybackRounds
+function checkPayback(A, cur) {
+  runCheck(A, 'payback', cur, (t) => {
+    const N = process.env.KIT_PAYBACK_ROUNDS ? PAYBACK_ROUNDS : (A.paybackRounds || PAYBACK_ROUNDS);
+    if (!(typeof A.maxReturn === 'number' && A.maxReturn > 0)) { t.fail('the adapter has no maxReturn (a number: the most the game may pay back per unit staked, e.g. 0.98 for a 96% table plus the noise of the seeded run)'); return; }
+    const good = [...A.bets.good].sort((x, y) => x - y), bets = [...new Set([good[0], good[good.length - 1]])];
+    for (const [bi, bet] of bets.entries()) {
+      const w = world(A, { seed: 16 + bi }), s = w.sock('ann'); w.rich('ann');
+      w.addKey('ann'); const acct = pacct('ann', cur), id0 = w.lastId();
+      let n = 0, played = 0;
+      for (; n < N; n++) {
+        try { A.play(w.g, s, { cur, bet, i: n }); played++; } catch (e) { if (!(e instanceof Refused)) throw e; break; }
+        s.out.length = 0; w.log.length = 0; w.hooks.calls.length = 0;          // 20,000 rounds of grids would be gigabytes
+      }
+      let staked = 0, returned = 0;
+      for (const l of w.since(id0)) { if (isKit(l)) continue; if (l.from === acct && l.cur === cur) staked += l.amount; if (l.to === acct && l.cur === cur) returned += l.amount; }
+      t.ok(played === N, `bet ${bet}: only ${played} of ${N} rounds were accepted`);
+      t.ok(staked > 0, `bet ${bet}: nothing was staked`);
+      const ret = staked > 0 ? returned / staked : 0;
+      t.ok(ret <= A.maxReturn, `bet ${bet}: the ledger paid back ${returned} of ${staked} staked = ${(100 * ret).toFixed(2)}% over ${played} rounds, above the declared maxReturn ${(100 * A.maxReturn).toFixed(2)}%`);
+      t.note(`bet ${bet}: ${(100 * ret).toFixed(2)}% of ${staked} over ${played} rounds`);
+      w.crash(); current = null;
+    }
+  });
+}
+
 // ------------------------------------------------------------------------------------------------------------------------------------ driver
 function loadAdapter(id) {
   const dir = path.join(ROOT, 'games');
@@ -648,7 +798,7 @@ function loadAdapter(id) {
 }
 function finishAdapter(a, file) {
   const modFile = a.mod ? (a.modPath || a.id + '.js') : path.join(path.dirname(file), a.module || (a.id + '.js'));   // a.mod given = the self-test's toy
-  a = Object.assign({}, a, { modPath: modFile, mod: a.mod || require(modFile), oneOpen: !!a.oneOpen });
+  a = Object.assign({}, a, { modPath: modFile, mod: a.mod || require(modFile), oneOpen: !!a.oneOpen, file, isExample: path.resolve(file) === EXAMPLE_ADAPTER });
   if (!a.heldPoints) a.heldPoints = [];
   return a;
 }
@@ -663,15 +813,17 @@ function runAdapter(A, opts) {
   const savedEnv = {}, env = Object.assign({ NODE_ENV: undefined }, A.env || {});
   for (const k of Object.keys(env)) { savedEnv[k] = process.env[k]; if (env[k] === undefined) delete process.env[k]; else process.env[k] = env[k]; }
   // an example / toy game is not in the money rules: the kit registers it for the run (a real game must already be: the registration check)
-  const addedHouse = A.example && !L.SOURCE_ACCOUNTS.has('house:' + A.id), addedGame = A.example && !GAMES.includes(A.id);
+  const byKit = registrationByKit(A), addedHouse = byKit && !L.SOURCE_ACCOUNTS.has('house:' + A.id), addedGame = byKit && !GAMES.includes(A.id);
   if (addedHouse) L.SOURCE_ACCOUNTS.add('house:' + A.id);
   if (addedGame) GAMES.push(A.id);
   FINAL.n = 0; FINAL.fails = [];
   try {
     checkRegistration(A);
     for (const cur of CURS) if (!A.currencies || A.currencies.includes(cur)) {
-      checkEscrow(A, cur); checkRestart(A, cur); checkReplay(A, cur); checkSockets(A, cur); checkMix(A, cur); checkErrors(A, cur); checkInput(A, cur); checkQuarantine(A, cur);
+      checkEscrow(A, cur); checkRestart(A, cur); checkReplay(A, cur); checkSockets(A, cur); checkMix(A, cur); checkErrors(A, cur); checkInput(A, cur); checkIdentity(A, cur); checkDisconnect(A, cur); checkQuarantine(A, cur); checkPayback(A, cur);
     }
+    if (!A.currencies || CURS.every((c) => A.currencies.includes(c))) checkCarry(A);
+    for (const cur of CURS) if (A.currencies && !A.currencies.includes(cur)) checkRefuses(A, cur);
     for (const cur of CURS) if (!A.currencies || A.currencies.includes(cur)) {
       // 8: every world above ended with an independent replay; report them together with the mixed world
       checkLedger(A);
@@ -688,9 +840,9 @@ function runAdapter(A, opts) {
 }
 
 function report() {
-  let pass = 0, fail = 0;
-  for (const r of RESULTS) { console.log(`${r.ok ? 'PASS' : 'FAIL'} ${r.game} ${r.check}${r.cur ? '/' + r.cur : ''} ${r.detail}`); if (r.ok) pass++; else fail++; }
-  console.log(`kit: ${pass} PASS, ${fail} FAIL (${[...new Set(RESULTS.map((r) => r.game))].join(', ')})`);
+  let pass = 0, fail = 0, skip = 0;
+  for (const r of RESULTS) { console.log(`${r.skip ? 'SKIP' : r.ok ? 'PASS' : 'FAIL'} ${r.game} ${r.check}${r.cur ? '/' + r.cur : ''} ${r.detail}`); if (r.skip) skip++; else if (r.ok) pass++; else fail++; }
+  console.log(`kit: ${pass} PASS, ${fail} FAIL${skip ? ', ' + skip + ' SKIP' : ''} (${[...new Set(RESULTS.map((r) => r.game))].join(', ')})`);
   return fail ? 1 : 0;
 }
 
@@ -701,9 +853,9 @@ if (require.main === module) {
   let ids = args.filter((a) => !a.startsWith('--'));
   if (args.includes('--all')) {
     ids = (registry.MODULES || []).map((m) => path.basename(m, '.js'));
-    if (args.includes('--examples')) ids.push(...fs.readdirSync(path.join(ROOT, 'games')).filter((f) => /^_example-.*\.kit\.js$/.test(f)).map((f) => require(path.join(ROOT, 'games', f)).id));
+    ids.push(...fs.readdirSync(path.join(ROOT, 'games')).filter((f) => /^_example-.*\.kit\.js$/.test(f)).map((f) => require(path.join(ROOT, 'games', f)).id));
   }
-  if (!ids.length) { console.error('usage: node tests/game-kit.js <gameId> | --all [--examples]'); process.exit(2); }
+  if (!ids.length) { console.error('usage: node tests/game-kit.js <gameId> | --all'); process.exit(2); }
   for (const id of ids) runGame(id);
   const code = report();
   try { fs.rmSync(BASE, { recursive: true, force: true }); } catch {}

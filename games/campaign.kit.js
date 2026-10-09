@@ -16,6 +16,8 @@ const SURVIVE = 0.999999, SCANDAL = 0;
 module.exports = {
   id: 'campaign',
   module: 'campaign.js',
+  maxReturn: 0.70,                                   // measured by the kit's seeded run: 68.00% at both bets (the adapter's three round shapes are fixed draws)
+  paybackRounds: 3000,
   files: (dir) => ({ campaign: path.join(dir, 'campaign.json') }),
   crash(mod) {                                       // a kill: no timer fires afterwards, the store keeps only what it already wrote
     for (const rec of mod._test.runs.values()) if (rec.timer) { clearTimeout(rec.timer); rec.timer = null; }

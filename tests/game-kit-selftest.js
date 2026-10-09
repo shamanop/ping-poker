@@ -1,6 +1,6 @@
 'use strict';
 // SELF-TEST OF THE KIT: a kit that has never failed proves nothing. A minimal two-step game (deal: stake into escrow, reveal: settle) is played through
-// tests/game-kit.js once as written (it must PASS every check) and then in 11 deliberately broken variants; each variant must FAIL the check named for it.
+// tests/game-kit.js once as written (it must PASS every check) and then in deliberately broken variants (VARIANTS) and broken whole games (TOYS); each variant must FAIL the check named for it.
 //   node tests/game-kit-selftest.js        exit 0 when the good toy passes and every broken one is caught on its check
 const crypto = require('crypto');
 const fs = require('fs');
@@ -73,6 +73,7 @@ function makeToy(variant) {
             try { C.money.round(key, r.cur, id + 'r' + crypto.randomBytes(3).toString('hex'), { cost: 0, win: r.bet * 2 }); } catch {}
             rec.delete(key); return socket.emit('g:toy:result', { roundId: id, win: r.bet * 2 });
           }
+          if (variant === 'errresult') { bad(socket, 'internal'); return socket.emit('g:toy:result', { roundId: id, win }); }   // reports the money error AND shows the win
           if (variant === 'keepdoomed') carried += win;                         // the result the ledger refused is kept to be paid with the next round
           return bad(socket, 'internal');
         }
@@ -88,7 +89,7 @@ function makeToy(variant) {
 function adapterFor(variant) {
   const mod = makeToy(variant);
   return {
-    id: 'toy', mod, modPath: 'toy.js', example: variant !== 'unregistered' || undefined, oneOpen: true, playVariants: 1,
+    id: 'toy', mod, modPath: 'toy.js', maxReturn: 1.0, paybackRounds: 1000, oneOpen: true, playVariants: 1,
     files: (dir) => ({ dir }),
     bets: { good: BETS, min: 100, max: 1000 },
     open: (cur, bet) => ({ ev: 'deal', payload: { mode: cur, bet } }),
@@ -117,15 +118,34 @@ const VARIANTS = [
   ['twoopen', 'sockets', 'two sockets of one account both get a round'],
   ['bootbonus', 'restart', 'boot recovery pays twice the stake instead of refunding it'],
   ['redraw', 'restart', 'a round record outlives the restart and the round is played again under a fresh ref'],
+  ['errresult', 'errors', 'on a money error sends the error event AND the result event (the client is shown a win nobody paid)'],
   ['unregistered', 'registration', 'not in MODULES, house account not registered'],
 ];
+
+// broken toy GAMES (tests/kit-toys/<name>.js + <name>.kit.js, written by the Opus critic R2-E, each a whole game with its own adapter) -> the check that must fail
+const TOYS = [
+  ['proxykey', 'identity', 'plays the round on the account key the CLIENT names (payload.key)'],
+  ['freeflip', 'carry', 'a boost token earned by losing a Chips flip doubles the pay of a later Cash flip'],
+  ['dropper', 'disconnect', 'forgets the open round when the socket drops and does not refund it: the stake sits in an escrow nothing knows'],
+  ['cashbug', 'refuse', "the adapter says currencies: ['chips'] and the game takes Cash bets (and pays them double)"],
+  ['ceilwin', 'payback', 'rounds a fractional win UP: a 90% table pays 119% at the 1 unit bet'],
+  ['walk2', 'registration', 'a copy of the example: registered nowhere, and its adapter kept `example: true` (the line that switched the registration check off)'],
+  ['mempot', 'carry', '10% of every stake feeds a jackpot kept in a module variable, one number for Chips and Cash'],
+];
+const NOT_REGISTERED = new Set(['walk2']);               // toys whose registration is what the kit must check; every other toy is registered by the kit for the run
+function runToy(name) {
+  K.RESULTS.length = 0;
+  const file = path.join(__dirname, 'kit-toys', name + '.kit.js');
+  K.runAdapter(K.finishAdapter(require(file), file), { register: !NOT_REGISTERED.has(name) });
+  return K.RESULTS.filter((r) => !r.ok).map((r) => r.check + (r.cur ? '/' + r.cur : ''));
+}
 
 let failed = 0;
 const rows = [];
 function runVariant(variant) {
   K.RESULTS.length = 0;
   const A = K.finishAdapter(adapterFor(variant), __filename);
-  K.runAdapter(A, { onBoot: (w) => { backdoor = w.service; } });
+  K.runAdapter(A, { onBoot: (w) => { backdoor = w.service; }, register: variant !== 'unregistered' });
   carried = 0;
   return K.RESULTS.filter((r) => !r.ok).map((r) => r.check + (r.cur ? '/' + r.cur : ''));
 }
@@ -134,6 +154,11 @@ const good = runVariant('ok');
 rows.push(['ok', '(none)', good.length ? 'FAIL: ' + good.join(',') : 'PASS: every check passes', !good.length]);
 for (const [v, check, what] of VARIANTS) {
   const f = runVariant(v);
+  const hit = f.some((x) => x === check || x.startsWith(check + '/'));
+  rows.push([v, check, hit ? `caught on ${check} (all failing: ${[...new Set(f)].join(',')})` : `NOT CAUGHT on ${check}; failing: ${f.join(',') || 'nothing'}`, hit, what]);
+}
+for (const [v, check, what] of TOYS) {
+  const f = runToy(v);
   const hit = f.some((x) => x === check || x.startsWith(check + '/'));
   rows.push([v, check, hit ? `caught on ${check} (all failing: ${[...new Set(f)].join(',')})` : `NOT CAUGHT on ${check}; failing: ${f.join(',') || 'nothing'}`, hit, what]);
 }
