@@ -1,5 +1,5 @@
 'use strict';
-// RIG=1 test hooks (contract section 10). Registered only when process.env.RIG === '1'; never in production. No sign-in needed.
+// RIG=1 test hooks (contract section 10). Registered only when env RIG === '1' and NODE_ENV is not 'production' (server.js, Money 1008 FOUND-1). No sign-in needed.
 // __rig queues decks (dealt in order by deckSource), __audit returns a money + seat snapshot. Read-only: no rule change.
 
 const CURS = ['chips', 'play'];
