@@ -1,6 +1,6 @@
 'use strict';
 // The money suites in one go: one line per file (name, exit, seconds, last output line), a timeout per file, exit 1 when any file failed or timed out. Plain node, no framework.
-//   node tests/run-money-1008.js --fast     the files that end in a few seconds and boot no server (what `npm test` runs)
+//   node tests/run-money-1008.js --fast     the files that end in a few seconds (samefund boots one server, cfg-admin-token and cfg-notoken one in-process); what `npm test` runs
 //   node tests/run-money-1008.js --money    every tests/money-1008-*.js that ends in under about a minute (npm run test:money)
 //   node tests/run-money-1008.js --rest     what --fast leaves out: the money files that boot a server, the minutes-long ones, the long Cold Call suites (npm run test:all, after `npm test`)
 //   node tests/run-money-1008.js --all      everything above
