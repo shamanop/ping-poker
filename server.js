@@ -22,7 +22,7 @@ function start(env = process.env) {
   const { createAccounts } = require('./accounts'), { createLedger } = require('./ledger');
   const accounts = createAccounts({ file: paths.ACCOUNTS_FILE, roomPassword: ROOM_PASSWORD });
   const presLedger = createLedger({ file: paths.LEDGER_FILE, keyOf: k => accounts.keyForName(k), displayOf: k => (accounts.get(k) ? accounts.get(k).display : null), onWrite: () => { if (ctx.pushBank) ctx.pushBank(); } });
-  accounts.migrateLegacy({ bank: boot.readJson(paths.BANK_FILE, {}), ledgerEntries: presLedger.entries() });
+  accounts.migrateLegacy({ bank: boot.readJson(paths.BANK_FILE, {}), ledgerEntries: presLedger.entries(), cash: Object.fromEntries(ledger.list('play:', 'play').map(x => [x.account.slice(5), x.balance])) });   // R2B-4: a re-made account that holds Cash comes back LOCKED
   boot.migrateIfNeeded({ ledger, paths, migrate, log });
   // Cash is real money: new accounts start at 0 and the admin sets it (Chris 10/7). Test harnesses set SIGNUP_PLAY_CENTS for their old fixtures.
   // Money 1008 SVC-1a: the variable gives every new signup Cash (real money), so it is honoured only outside production and only as a plain count of cents (digits, a safe integer >= 0); anything else is ignored with one loud line.
