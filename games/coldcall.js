@@ -326,17 +326,20 @@ function settle(rec, r, autoWhy, extraSocket) {
 
   // ---- MONEY 1008 R2C-5 (journal mode): the line of this spin (the state it leaves, the record it drops, the pot numbers) is WRITTEN (one write(2), no fsync: it survives kill -9) BEFORE the ledger call,
   // and the fsync runs off the event loop after it: the result is held until that fsync returned. Boot applies the line only when the ledger holds the round, so a kill at any point keeps stake AND leads, or neither.
-  let jok = false;
+  let jok = false, jseqNo = null;
   if (store.journaled()) {
     try {
       const p0 = plain ? store.pot(mode) : null;
-      store.intent({
+      jseqNo = store.intent({
         ref: { key: rec.nk, id: rec.id }, player: [rec.nk, mode, r.newState], del: rec.stored ? store.openKey(rec.nk, mode) : null,
         pot: plain ? [mode, { ...p0, bal: bal0 + slice.slice - (prize || 0), fed: p0.fed + slice.slice, paid: p0.paid + (prize || 0), rem: slice.rem, last: prize != null ? { who: rec.who, amount: prize, at: wonAt } : p0.last }] : null,
         free: cost === 0 && winCents === 0 && !pool,        // writes nothing to the ledger: nothing to wait for at boot
       });
       jok = true;
-    } catch (e) { logf('coldcall: journal line not written, whole-file flush instead', rec.id, e && e.message); }
+    } catch (e) {                                  // MONEY 1008 R2C RV-7: the line is the probe of the spin. A store that cannot take it: the ledger is NOT asked, no stake is taken (an escrowed round stays open and is tried again as a timeout),
+      logf('coldcall: the store cannot be written, the spin does not happen', rec.id, e && e.message);   // and the player hears the same error whatever was drawn
+      return moneyFailed(rec, { code: 'store', message: e && e.message }, 'store');
+    }
   }
 
   // ---- the ledger, ONE call
@@ -344,8 +347,8 @@ function settle(rec, r, autoWhy, extraSocket) {
   try { const res = payOut(rec, winCents, pool); dup = !!(res && res.dup); }
   catch (e) {
     if (e && e.code === 'round_closed') closed = true;
-    else if (e && e.code === 'stake_mismatch') { logf('coldcall: settle refused, the escrow is not the stake the round recorded: voiding', rec.id); return voidRound(rec, 'unresolvable'); }   // retrying cannot change what the escrow holds; boot (recoverOne) does the same
-    else return moneyFailed(rec, e, rec.stored ? 'settle' : 'round');
+    else if (e && e.code === 'stake_mismatch') { if (jseqNo != null) store.cancel(jseqNo); logf('coldcall: settle refused, the escrow is not the stake the round recorded: voiding', rec.id); return voidRound(rec, 'unresolvable'); }   // retrying cannot change what the escrow holds; boot (recoverOne) does the same
+    else { if (jseqNo != null) store.cancel(jseqNo); return moneyFailed(rec, e, rec.stored ? 'settle' : 'round'); }     // RV-1: a refused call leaves nothing that boot replays
   }
 
   // ---- state second: the record is dropped in the same store write as the state
@@ -506,6 +509,9 @@ function pullSpin(socket, p, buy, now) {
   const key = keyOf(socket), nk = nkey(key), mode = p.mode;
   const ok = nk + '|' + mode;
   if (store.blocked && store.blocked()) { logf('coldcall: store is blocked (see the boot log), no bet is taken'); return err(socket, 'bad_request', 'Could not place that bet'); }   // nothing could be saved: no stake is taken (K4-2 / K2-5)
+  // MONEY 1008 R2C RW-1: the probe is in front of the draw. A store that cannot take a journal line refuses EVERY draw the same way (nothing drawn, nothing opened, the ledger not asked); a probe after the draw
+  // would refuse only the draws that settle at once and take the ones that stop at a decision (a filter on the draw).
+  if (store.journaled && store.journaled()) { try { store.probe(); } catch (e) { logf('coldcall: the store cannot be written, the spin does not happen', e && e.message); return err(socket, 'internal', 'Server error'); } }
   const o = openByKey.get(ok);
   if (o) return err(socket, 'decision_open', 'Finish your open decision first', { open: o.pending ? pendingView(o) : null });
   const day = chicagoDay(now);
@@ -577,7 +583,8 @@ module.exports = {
     const file = process.env.COLDCALL_PULL_FILE || files.coldcallPull || null;
     // MONEY 1008 R2C-5: journal mode (append-only lines + off-loop fsync) is on under server.js; COLDCALL_JOURNAL=0|1 or `coldcall.journal = true|false` decides otherwise (tests run the whole-file path by default)
     const jEnv = process.env.COLDCALL_JOURNAL, jOn = jEnv === '1' ? true : jEnv === '0' ? false : typeof module.exports.journal === 'boolean' ? module.exports.journal : !!(require.main && path.basename(require.main.filename || '') === 'server.js');
-    store = createStore(file, { log: logf, alarm, journal: jOn, confirm: (k, id) => C.money.closed(k, id) });
+    const jMax = Number(process.env.COLDCALL_JOURNAL_MAX);     // bytes; tests set it small, production leaves the store's 8 MB
+    store = createStore(file, { log: logf, alarm, journal: jOn, maxJournal: jMax > 0 ? jMax : undefined, confirm: (k, id) => C.money.closed(k, id) });
     cashForceSeen = 0;
     if (testHookOn()) alarm('coldcall: *** QA FORCE HOOK IS ON (COLDCALL_TEST=1, NODE_ENV=' + (process.env.NODE_ENV || '(unset)') + '): any signed-in player can force Cold Call rounds in CHIPS ONLY; Cash rounds ignore it. Never set COLDCALL_TEST on a real server. ***');
     for (const mode of ['play', 'chips']) { try { syncPot(mode); } catch {} }

@@ -14,6 +14,7 @@ const H = require('./lib-coldcall-ledger.js');
 const E = require('../games/coldcall-engine.js');
 const { createStore } = require('../games/coldcall-store.js');
 
+setTimeout(() => { console.error('FAIL watchdog: the test did not finish in 240 s'); process.exit(1); }, 240000).unref();
 let n = 0, passed = 0;
 const test = async (name, fn) => { try { await fn(); console.log('ok   ' + name); passed++; } catch (e) { console.error('FAIL ' + name + '\n' + (e.stack || e)); process.exitCode = 1; } };
 const world = (o = {}) => H.world({ dir: fs.mkdtempSync(path.join(tmp, 'w' + ++n + '-')), potRng: () => 1, ...o });
@@ -26,7 +27,7 @@ const clone = (o) => JSON.parse(JSON.stringify(o));
 // send one spin and wait for its end: the result (decisions answered by the policy) or an error
 function spinWait(w, s, payload, i = 0) {
   return new Promise((resolve) => {
-    const push = s.out.push.bind(s.out); let k = 0;
+    const push = s.out.push.bind(s.out); let k = 0; setTimeout(() => { s.out.push = push; resolve({ error: { code: 'test_timeout' } }); }, 10000).unref();
     s.out.push = (e) => {
       const r = push(e);
       if (e[0] === 'error') { s.out.push = push; resolve({ error: e[1] }); }
@@ -72,7 +73,8 @@ function bootCopy(w) {
     finally { fs.renameSync = ren; fs.writeFileSync = wf; }
     assert.ok(done.every((r) => r && r.status === 'done'), 'every spin ended in a result: ' + JSON.stringify(done.find((r) => !r || r.status !== 'done')));
     assert.strictEqual(renames, 0, 'main file renamed during the spins'); assert.strictEqual(big, 0, 'a whole-file sized write happened during the spins');
-    const lines = jlines(w); assert.ok(lines.length >= 300 && lines.length < 400, 'one line per spin: ' + lines.length); assert.ok(Math.max(...lines.map((l) => l.length)) < size / 10, 'a line is small, whatever the store holds: ' + Math.max(...lines.map((l) => l.length)) + ' bytes vs a store of ' + size); assert.ok(lines.filter((l) => l.length < 1500).length >= 0.9 * lines.length, 'the lines of instant spins are about 300-600 bytes');
+    const lines = jlines(w).filter((l) => !/"n":1\}$/.test(l));      // minus the probe lines (a tiny line that carries nothing, written in front of every spin, RW-1)
+    assert.ok(jlines(w).length - lines.length >= 300, 'a probe line in front of every spin'); assert.ok(lines.length >= 300 && lines.length < 400, 'one line per spin: ' + lines.length); assert.ok(Math.max(...lines.map((l) => l.length)) < size / 10, 'a line is small, whatever the store holds: ' + Math.max(...lines.map((l) => l.length)) + ' bytes vs a store of ' + size); assert.ok(lines.filter((l) => l.length < 1500).length >= 0.9 * lines.length, 'the lines of instant spins are about 300-600 bytes');
     w.crash();
   });
 
@@ -83,14 +85,24 @@ function bootCopy(w) {
     try {
       for (const mode of ['chips', 'play']) for (let i = 0; i < 6; i++) {
         let seen = null; const push = s.out.push.bind(s.out);
-        s.out.push = (e) => { if (e[0] === 'g:coldcall:result' && e[1].status === 'done') seen = { finished, mem: clone(w.store().player('ann', mode)), booted: bootCopy(w).player('ann', mode) }; return push(e); };
+        s.out.push = (e) => { if (e[0] === 'g:coldcall:result' && e[1].status === 'done') { const bc = bootCopy(w); seen = { finished, mem: clone(w.store().player('ann', mode)), booted: bc.player('ann', mode), potMem: clone(w.store().peekPot(mode)), potBooted: bc.peekPot(mode) && clone(bc.peekPot(mode)) }; } return push(e); };
         const p = spinWait(w, s, { bet: 100, mode }, i); await sleep(5);
         assert.strictEqual(seen, null, 'no result while the fsync is still running');
         const r = await p; s.out.push = push; assert.strictEqual(r.status, 'done'); assert.ok(seen, 'the result went out');
         assert.ok(seen.finished >= 1, 'an fsync returned before the result'); assert.deepStrictEqual(seen.booted, seen.mem, 'at the moment of the result a boot from the files holds the state of the spin');
+        assert.deepStrictEqual(seen.potBooted, seen.potMem, 'and the pot numbers (bal, fed, paid, rem, last) of the spin (RV-5)');
       }
     } finally { fs.fdatasync = fd; }
     assert.ok(calls >= 12); same(w, 'ann'); w.crash();
+  });
+
+  await test('RV-5 a pot PRIZE is in the line: a boot from the files holds the pot record (paid, last, bal) the spin left, and the winner state', async () => {
+    const w = world({ rng: E.rngFrom(41), roundRng: E.rngFrom(42), potRng: () => 0 }); const s = w.sock('ann'); w.fund('ann', 'play', 1e9); w.seedPool('play', 20000);
+    let won = null;
+    for (let i = 0; i < 12 && !won; i++) { const r = await spinWait(w, s, { bet: 1000, mode: 'play' }, i); assert.ok(!r.error, JSON.stringify(r.error)); if (r.pot && r.pot.won) won = r; }
+    assert.ok(won, 'a pot prize was paid'); const mem = clone(w.store().peekPot('play')); assert.ok(mem.paid > 0 && mem.last && mem.last.amount === won.pot.amount, JSON.stringify(mem));
+    const bc = bootCopy(w); assert.deepStrictEqual(clone(bc.peekPot('play')), mem); assert.deepStrictEqual(bc.player('ann', 'play'), w.store().player('ann', 'play'));
+    w.reboot(); assert.deepStrictEqual(clone(w.store().peekPot('play')), mem); w.crash();
   });
 
   await test('group commit: 20 spins started in the same tick share fsyncs (fewer fdatasync calls than spins), every result still waits for an fsync', async () => {
@@ -178,10 +190,10 @@ function bootCopy(w) {
     ls[1] = ls[1].slice(0, 20) + 'X' + ls[1].slice(21);                                  // bit rot in line 2 with two good lines after it
     fs.writeFileSync(file + '.journal', ls.join('\n') + '\n');
     const b = createStore(file, { journal: true, log: () => {}, alarm: (...x) => alarms.push(x.join(' ')) });
-    assert.strictEqual(alarms.length, 1); assert.ok(/bad line \(line 2 of 4/.test(alarms[0]) && /were NOT/.test(alarms[0]), alarms[0]);
-    assert.strictEqual(b.player('p1', 'chips').lt, 1); assert.strictEqual(b.player('p3', 'chips'), null);
+    assert.strictEqual(alarms.length, 2, alarms.join(' | ')); assert.ok(/journal line 2 .*checksum/.test(alarms[0]) && /3 good line\(s\) were applied/.test(alarms[1]), alarms.join(' | '));      // RV-4: the lines after the bad one are applied too (each line is absolute)
+    assert.strictEqual(b.player('p1', 'chips').lt, 1); assert.strictEqual(b.player('p2', 'chips'), null); assert.strictEqual(b.player('p3', 'chips').lt, 3); assert.strictEqual(b.player('p4', 'chips').lt, 4);
     assert.strictEqual(fs.readdirSync(dir).filter((f) => f.includes('.journal.damaged-')).length, 1, 'the damaged bytes are kept');
-    b.close(); const c = createStore(file, { journal: true, log: () => {}, alarm: (...x) => alarms.push(x.join(' ')) }); assert.strictEqual(alarms.length, 1, 'the next boot is quiet'); assert.strictEqual(c.player('p1', 'chips').lt, 1); c.close();
+    b.close(); const c = createStore(file, { journal: true, log: () => {}, alarm: (...x) => alarms.push(x.join(' ')) }); assert.strictEqual(alarms.length, 2, 'the next boot is quiet'); assert.strictEqual(c.player('p1', 'chips').lt, 1); c.close();
   });
 
   await test('a journal that cannot be read blocks the store (fail closed): every write throws and the main file is not touched', async () => {
