@@ -127,5 +127,36 @@ t('RV-1 a new edit is written under the op-id-only ref', () => {
   w.close();
 });
 
+// ---- RV-2: a refused ledger write on a no-op Set Cash is an answer, not a throw ----
+t('RV-2 a no-op Set Cash while the ledger refuses the write answers { ok:false, code } (no throw), and the socket answer carries the op id', () => {
+  const w = world(); w.set(0, 'E0');            // vic at 0
+  w.close();                                      // the ledger now refuses every write
+  let r; try { r = w.adm.setPlay('vic', 0, 'E1'); } catch (e) { throw new Error('setPlay threw: ' + (e && e.message)); }
+  eq(r.ok, false); if (!r.code) throw new Error('no code: ' + JSON.stringify(r));
+  const s = w.call('admin_set_play', { key: 'vic', cents: 0, opId: 'E2' });
+  eq([s.op, s.ok, s.opId], ['set_play', false, 'E2']); if (!s.code) throw new Error('no code on the socket answer');
+  const d = w.adj(100, 'play', 'E3'); eq([d.op, d.ok, d.opId], ['adjust', false, 'E3']);   // the real-delta paths already answered like this
+});
+
+// ---- RV-4: admin_adjust cannot take a player's total Cash past the Set Cash maximum ----
+const MAX = 100000000000;
+t('RV-4 an adjust whose resulting total Cash would pass the maximum is refused like Set Cash (same code and message), nothing written', () => {
+  const w = world(); seated(w);                 // total 60000: 30000 wallet + 30000 in play
+  const id = w.lines();
+  const a = w.adj(MAX - 60000 + 1, 'play'), s = w.set(MAX + 1);
+  eq([a.ok, a.code], [false, 'range']); eq([s.ok, s.code], [false, 'range']); eq(a.message, s.message, 'same message');
+  if (!/range/i.test(a.message)) throw new Error('message: ' + a.message);
+  eq(w.lines(), id, 'ledger line written'); eq(w.play(), 30000);
+  w.close();
+});
+t('RV-4 an adjust that lands exactly on the maximum is allowed; Chips have no such limit', () => {
+  const w = world(); seated(w);
+  const a = w.adj(MAX - 60000, 'play', 'AT-MAX'); eq(a.ok, true); eq(w.adm.adjust('vic', MAX - 60000, 'play', 'x', 'AT-MAX').dup, true, 'the resend of the adjust that reached the maximum is a dup, not range'); eq(w.row('vic').playTotal, MAX);
+  eq(w.adj(MAX - 60000, 'play').code, 'range', 'a fresh op id for the same amount: over');
+  eq(w.adj(1, 'play').code, 'range', 'one cent over'); eq(w.adj(-1, 'play').ok, true, 'a removal is always fine');
+  eq(w.adj(MAX + 5, 'chips').ok, true, 'Chips');
+  w.close();
+});
+
 console.log(`${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

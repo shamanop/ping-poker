@@ -36,6 +36,8 @@ function createAdmin({ service, ledger, accounts, registry, views, onlineKeys })
     if (typeof reason !== 'string' || !reason.trim()) return { ok: false, code: 'bad_reason' };
     const bad = checkOp(opId); if (bad) return bad;
     const f = refOf(key, opId); if (f.conflict) return CONFLICT;
+    // RV-4: an adjust cannot take the TOTAL Cash (wallet + seats + open rounds) past the Set Cash maximum; a removal never does. A resend (the ref is held) is the ledger's to answer: dup, or ref_conflict.
+    if (cur === 'play' && delta > 0 && !ledger.has(f.ref) && cashOf(key).total + delta > MAX_PLAY) return { ok: false, code: 'range' };
     try { const r = service.adminAdjust(key, delta, cur, reason, f.ref); return r && r.dup ? { ok: true, dup: true } : { ok: true }; }
     catch (e) { if (e && e.name === 'MoneyError') return { ok: false, code: e.code === 'insufficient' ? 'insufficient' : e.code }; throw e; }
   }
@@ -69,7 +71,11 @@ function createAdmin({ service, ledger, accounts, registry, views, onlineKeys })
     }
     const delta = target - part - c.wallet;
     // R2B-3: a Set Cash that changes nothing still holds its op id (a net-zero line under the same ref), so its resend is a dup after the balance moved and after a restart.
-    if (delta === 0) { service.adminMark(key, 'play', reason, f.ref); return { ok: true, noop: true, ...c }; }
+    if (delta === 0) {
+      // RV-2: a refused write (closed / write_failed / lost_lock) is an answer here, as in adjust(), not a throw
+      try { service.adminMark(key, 'play', reason, f.ref); } catch (e) { if (e && e.name === 'MoneyError') return { ok: false, code: e.code }; throw e; }
+      return { ok: true, noop: true, ...c };
+    }
     const r = adjust(key, delta, 'play', reason, opId);
     return r.ok ? { ...r, ...cashOf(key) } : r;
   }
