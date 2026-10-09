@@ -1,6 +1,6 @@
 # RUNBOOK.md: operating the money system at 2 a.m.
 
-Written for the head `69a44f6` of `money-hardening` (2026-10-08). `MONEY-SYSTEM.md` explains what the parts are; this file is what to do. The shell one-liners below were RUN by me against a 14-line sample ledger made with the real service (`_scratch/money/fix-docs/runbook-sample-ledger.js`) in a temp dir. They were not run against the live site, whose data I cannot reach.
+Written for `money-hardening` (2026-10-08): read at `69a44f6`, line cites rechecked after the merges up to `057a243`. `MONEY-SYSTEM.md` explains what the parts are; this file is what to do. The shell one-liners below were RUN by me against a 14-line sample ledger made with the real service (`_scratch/money/fix-docs/runbook-sample-ledger.js`) in a temp dir. They were not run against the live site, whose data I cannot reach.
 
 **Two rules before anything else**
 1. **Never open `money.jsonl` with the ledger code (`node -e "require('./money/ledger')..."`) while the server is running.** Opening it takes the writer lock; the running server then refuses every write (`lost_lock`) and players see "Money service is unavailable". Read with `jq`/`tail` (read-only), or work on a COPY.
@@ -129,7 +129,7 @@ node -e "const L=require('./money/ledger');const l=L.open(process.argv[1],{fsync
 
 ## 6. `money_down` or a fenced ledger
 
-**What players see.** Any action that needs money answers `Money service is unavailable` (`code: money_down`, `transport/safe.js:29`); all tables are paused (`registry.pauseAll`); Campaign refuses new runs and steps with `money_down` (`games/campaign.js:283,320`); Cold Call and Campaign keep an open round open and retry the close as a timeout (they never show a result for a write that failed).
+**What players see.** Any action that needs money answers `Money service is unavailable` (`code: money_down`, `transport/safe.js:29`); all tables are paused (`registry.pauseAll`); Campaign refuses new runs and steps with `money_down` (`games/campaign.js:285,322`); Cold Call and Campaign keep an open round open and retry the close as a timeout (they never show a result for a write that failed).
 
 **What triggers it** (`money/ledger.js:497-516`, `tables/errors.js:27`):
 | Code | Meaning | Sticky |

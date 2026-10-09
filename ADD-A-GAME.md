@@ -5,7 +5,7 @@ Read `MONEY-SYSTEM.md` first for how the ledger, accounts and flows work. This f
 
 **Naming.** Cash is real money, Chips are free play. In code, Cash is the currency key `play` (cents) and Chips is `chips` (whole chips). Every label a player sees says Cash; every key, account name and message field still says `play`. Never rename a key.
 
-**Status at head `69a44f6` (money-hardening) plus the `mf-kit` branch.**
+**Status at `money-hardening` (read at `69a44f6`, rechecked after merges up to `057a243`) plus the `mf-kit` branch.**
 - Cold Call and Campaign Trail play through `ctx.money` only.
 - At `69a44f6`, Ballot Bender spins through `ctx.money.round` but still reads its balances through `ctx.wallet` (`games/index.js:34` keeps `ctx.wallet` for Bender only; `games/bender.js:114,148`).
 - **Pending merge of `mf-kit` (head `5ee9799`)**: Bender reads balances through `ctx.money.balance` and no module gets `ctx.wallet`; the kit (`tests/game-kit.js`, `tests/game-kit-selftest.js`), the three adapters `games/{bender,coldcall,campaign}.kit.js`, the example game `games/_example-coinflip.js` and its adapter exist. Everything below marked **[kit]** is written against that branch and is not true of `money-hardening` until the lead merges it.
@@ -222,7 +222,7 @@ A kit FAIL is a bug in the game or a hole in the contract, never a reason to loo
 | 38 | Only after the call returned: emit the result with `C.money.balance(key, mode)`. The balance is read from the ledger, not computed. |
 
 To make it a real game: copy to `games/<id>.js`, rename the ids, replace lines 7-10 and 29-34 with your engine, do the registration (section 8), copy `_example-coinflip.kit.js` to `games/<id>.kit.js`, run `node tests/game-kit.js <id>`.
-A game with a decision or feature in the middle of a round replaces line 36 by `C.money.open(...)` when the round starts and `C.money.settle(..., { win, stake })` or `C.money.void(...)` when it ends, keeps the round's record on disk before replying, and adds `recover(rounds, ctx)` and a real `audit()`. Cold Call (`games/coldcall.js`, `payOut` `:290`, `recover` `:456`, `audit` `:469`) and Campaign (`games/campaign.js`, `closeRun` `:143`, `recover` `:240`) are the two worked examples of that shape.
+A game with a decision or feature in the middle of a round replaces line 36 by `C.money.open(...)` when the round starts and `C.money.settle(..., { win, stake })` or `C.money.void(...)` when it ends, keeps the round's record on disk before replying, and adds `recover(rounds, ctx)` and a real `audit()`. Cold Call (`games/coldcall.js`, `payOut` `:290`, `recover` `:456`, `audit` `:469`) and Campaign (`games/campaign.js`, `closeRun` `:145`, `recover` `:242`) are the two worked examples of that shape.
 
 ## 11. Before a game ships
 

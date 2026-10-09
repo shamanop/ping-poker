@@ -1,6 +1,6 @@
 # MONEY-SYSTEM.md: how money works in The Ping
 
-Written for the head `69a44f6` of `money-hardening` (2026-10-08). Every sentence was checked in the code at that head; `file:line` points at it. If the code moved, the code wins, and this file is wrong: fix the file.
+Written for `money-hardening` (2026-10-08): read at `69a44f6`, line cites rechecked after the merges up to `057a243` (the later merges touch `tables/table.js`, `tables/hand-flow.js` and `games/campaign.js` only). Every sentence was checked in the code at that head; `file:line` points at it. If the code moved, the code wins, and this file is wrong: fix the file.
 Companions: `ADD-A-GAME.md` (plug a game in), `RUNBOOK.md` (operate it), `MONEY-FINDINGS-1008.md` (what the 2026-10-08 hardening found).
 
 ## 1. The one rule
@@ -161,8 +161,8 @@ Restart (D1): `games.recover()` (`games/index.js:69`) first lets each game repla
 1. Start: `ctx.money.open(key, cur, roundId, bet)`: `campaign:<key>:<roundId>:open`, player to `escrow:campaign:<key>:<roundId>`. The run record is flushed to `campaign.json`. Bets are $1, $2, $5, $10, $25 (`campaign-engine.js:8`).
 2. Each surviving step moves no money. The run record is updated and flushed.
 3. A drawn end (scandal, or the last step) is written into the record (`pend`) BEFORE the ledger call, so a refused write never un-draws it.
-4. Cash-out, scandal, LANDSLIDE, idle timeout (60 s with no pick) all close with `closeRun` (`games/campaign.js:143`): 0 steps = `void` (stake back, reason `campaign:void:withdrawn` / `timeout` / `boot`); any other close = `settle` with `win = payout` (0 on a scandal, `stake` = the bet). The stake leg goes to `house:campaign`, then the win to the player, one batch.
-Restart: every stored run is cashed out at its stored multiplier on the growth table and map it was opened with; a 0-step run is refunded; a pended result is closed as drawn (a scandal stays a loss); an escrow with no record is voided by the sweep (`games/campaign.js:203-260`).
+4. Cash-out, scandal, LANDSLIDE, idle timeout (60 s with no pick) all close with `closeRun` (`games/campaign.js:145`): 0 steps = `void` (stake back, reason `campaign:void:withdrawn` / `timeout` / `boot`); any other close = `settle` with `win = payout` (0 on a scandal, `stake` = the bet). The stake leg goes to `house:campaign`, then the win to the player, one batch.
+Restart: every stored run is cashed out at its stored multiplier on the growth table and map it was opened with; a 0-step run is refunded; a pended result is closed as drawn (a scandal stays a loss); an escrow with no record is voided by the sweep (`games/campaign.js:205-260`).
 
 ### 5.11 A refused ledger write
 | Part | What it does |
@@ -172,7 +172,7 @@ Restart: every stored run is cashed out at its stored multiplier on the growth t
 | safe wrapper | A fence from any handler is answered `{ code: 'money_down', message: 'Money service is unavailable' }` and also pauses all tables (`transport/safe.js:69-83`). Any other throw out of the hand engine voids the one table named in the message (or the sender's seat), never all of them. |
 | hand | The settle batch refused: the hand is voided, stacks restored (5.6). |
 | Cold Call | A refused money call leaves the round and its record open, tells the client an error (never a result), arms the timer to try again as a timeout (`coldcall.js:274` `moneyFailed`). |
-| Campaign | Same for a run (`campaign.js:130` `moneyFailed`); a fence code sets `fenced` and every new start or step answers `money_down` until restart (`FENCE_CODES` `:62`, `noteFence` `:126`, checks at `:283` and `:320`). |
+| Campaign | Same for a run (`campaign.js:136` `moneyFailed`); a fence code sets `fenced` and every new start or step answers `money_down` until restart (`FENCE_CODES` `:62`, `noteFence` `:126`, checks at `:285` and `:322`). |
 | game money / wallet adapter | `insufficient` on a player account = `funds`; `bad_amount` = `amount`; `round_closed`, `pool_short`, `ref_conflict`, `stake_mismatch` pass through; anything else = `internal` ("Server error") with the cause attached (`transport/game-money.js:14`, `wallet-adapter.js:17`). |
 
 ## 6. Invariants
