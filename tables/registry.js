@@ -165,9 +165,6 @@ function createRegistry(deps) {
       } else if (isSeat(e.from) && (rs.startsWith('boot:') || ref.startsWith('grace:'))) {
         const [, tid, key] = e.from.split(':'), t = want.get(tid);
         if (t && e.id > (t.nightFromId || 0)) t.noteServerReturn(key, e.amount);
-      } else if (isSeat(e.from) && (rs.startsWith('leave:') || rs.startsWith('kick:'))) {
-        const [, tid, key] = e.from.split(':'), t = want.get(tid);
-        if (t && e.id > (t.nightFromId || 0)) t.noteLeave(key);
       }
     }
   }

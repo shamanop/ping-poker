@@ -2,7 +2,7 @@
 // Money hardening 1008, R2A-4 / RV-1 / RV-2 (the re-entry allowance is ONE return), RV-3 (heads-up host kick leaves no big-blind debt),
 // R2A-5 (the table deals again after the forced three-void pause is resumed), and the tests the mutation survivors asked for
 // (R2A-T1..T3, RV-T1, RV-T2).
-const { world, quiet, code, suite, eq, ok } = require('./lib-money-1008-tables');
+const { world, rigDeck, quiet, code, suite, eq, ok } = require('./lib-money-1008-tables');
 const engine = require('../engine/hand');
 const { t, done } = suite(__filename);
 
@@ -205,6 +205,98 @@ for (const mode of ['play', 'chips']) {
     quiet(() => { for (let i = 0; i < 20; i++) W.clock.advance(30000); });
     ok(T.handNo > n0, 'and the table keeps dealing');
     eq(W.total(mode), total0, 'ledger conserved');
+  });
+
+  // ---- R2A-T1 + RV-T1: which waiting seat is dealt, and the all-waiting clear ----
+  t(`${tag}: RV-T1 every seat waiting (both owe the big blind, heads-up): dealt at once, no throw, flags cleared (M5 / M35)`, () => {
+    const { W, T, cur, total0 } = blindSetup(mode, ['a', 'd'], [0, 1]);
+    quiet(() => { T.leave('a', 'leave'); T.leave('d', 'leave'); });
+    eq(code(() => T.sit('a', { amount: 50000, seat: 0, socketId: 'sa2' })), 'none');
+    eq(code(() => T.sit('d', { amount: 50000, seat: 1, socketId: 'sd2' })), 'none');
+    eq([T.seatOfKey('a').missedBlind, T.seatOfKey('d').missedBlind], [true, true], 'both owe');
+    const r = play(T, W);
+    ok(r, 'a hand is dealt');
+    eq(r.dealt.sort(), ['a', 'd']);
+    eq([T.seatOfKey('a').missedBlind, T.seatOfKey('d').missedBlind], [false, false], 'nobody was free to play: no game to wait behind, flags cleared');
+    eq(play(T, W) !== null, true, 'and the next hand deals too');
+    eq(W.total(cur), total0);
+  });
+
+  t(`${tag}: RV-T1 one free seat and two returners: the FIRST waiting seat in ring order after the button is the big blind (M3)`, () => {
+    for (const [seats, firstBB] of [[[0, 1, 2], 'x'], [[0, 5, 2], 'y']]) {
+      const { W, T } = blindSetup(mode, ['f', 'x', 'y'], seats);              // f is the free seat; x and y owe the big blind
+      for (const k of ['x', 'y']) { const sn = T.seatOfKey(k).seat; quiet(() => T.leave(k, 'leave')); T.sit(k, { amount: 50000, seat: sn, socketId: k + '2' }); }
+      eq([T.seatOfKey('x').missedBlind, T.seatOfKey('y').missedBlind], [true, true]);
+      T.button = null;
+      const r = play(T, W);
+      ok(r, 'a hand is dealt');
+      eq(r.dealt.length, 2, 'heads-up: the free seat and ONE waiting seat');
+      eq(r.sbKey, 'f', 'the free seat is the button / small blind');
+      // ring order after the button f (seat 0): the lower seat number comes first
+      const first = seats[1] < seats[2] ? 'x' : 'y';
+      eq(r.bbKey, first, 'the first waiting seat in ring order is the big blind');
+      eq(T.seatOfKey(first === 'x' ? 'y' : 'x').missedBlind, true, 'the other keeps waiting');
+    }
+  });
+
+  // ---- R2A-T2: the audit row of a leaver ----
+  t(`${tag}: R2A-T2 auditSeats: a seat that left mid-hand counts no stack, only what the seat account still holds`, () => {
+    const { W, T } = blindSetup(mode, ['a', 'b', 'c'], [0, 1, 2]);
+    quiet(() => T.startHand());
+    ok(T.handLive());
+    const who = T.seats.get(T.hand.toAct).key;
+    quiet(() => T.leave(who, 'leave'));
+    const row = T.auditSeats().find(x => x.key === who);
+    eq(row.stack, 0, 'the stack was paid out at the leave');
+    for (const r of T.auditSeats()) {
+      const acct = W.ledger.balance('seat:' + T.id + ':' + r.key, mode);
+      eq(acct, r.stack + r.handBet, 'seat account = stack + handBet for ' + r.key);
+    }
+  });
+
+  // ---- R2A-T3: kick held back, then the kicked player walks out himself before the hand ends ----
+  t(`${tag}: R2A-T3 kick held back, the kicked player leaves himself mid-hand: finishKick sweeps his seat account`, () => {
+    const keys = ['a', 's', 'd'], cash = {}; for (const k of keys) cash[k] = 1000000;
+    const W = world({ keys, cash });
+    if (mode === 'chips') for (const k of keys) W.service.adminAdjust(k, 1000000, 'chips', 'seed', 'seedc:' + k);
+    const T = W.registry.create('d', { name: 'KL', mode, buyIn: { min: 100, max: 50000, default: 20000 }, blinds: { sb: 5, bb: 10 }, seats: 3, autoStart: false, actionTimerSec: 60 });
+    T.actionTimerSec = 0;
+    T.sit('a', { amount: 5000, seat: 0 }); T.sit('s', { amount: 200, seat: 1 }); T.sit('d', { amount: 5000, seat: 2 });
+    const total0 = W.total(mode), before = Object.fromEntries(keys.map(k => [k, W.held(k, mode)]));
+    W.decks.push(rigDeck([['Ks', 'Kd'], ['7c', '2d'], ['Qs', 'Qd']], ['3c', '8d', '9h', '4s', 'Jh']));
+    quiet(() => T.startHand());
+    T.act('a', { type: 'raise', to: 1000 }); T.act('s', { type: 'call' }); T.act('d', { type: 'call' });
+    T.act('d', { type: 'check' }); T.act('a', { type: 'raise', to: 2000 });
+    eq(quiet(() => T.kick('d', 'a', false)).pending, true, 'the kick of a is held back');
+    quiet(() => T.leave('a', 'leave'));                                // he walks out himself
+    ok(T.seatOfKey('a') && T.seatOfKey('a').leaving, 'on his way out');
+    if (T.handLive() && T.hand.toAct != null && T.seats.get(T.hand.toAct).key === 'd') T.act('d', { type: 'fold' });
+    let g = 0; while (T.handLive() && g++ < 20) { if (T.hand.phase === 'betting') { const s = T.seats.get(T.hand.toAct); T.act(s.key, { type: 'check' }); } else quiet(() => W.clock.advance(2000)); }
+    quiet(() => W.clock.advance(60000));
+    eq(T.seatOfKey('a'), null, 'a is gone after the hand');
+    eq(W.ledger.list('seat:' + T.id + ':', mode).filter(x => x.account.endsWith(':a') && x.balance !== 0).length, 0, 'no chips left in a\'s seat account');
+    eq(W.ledger.list('pot:', mode).filter(x => x.balance !== 0).length, 0, 'no chips left in a pot');
+    const stacks = T.players().reduce((x, s2) => x + s2.stack, 0), seatsLedger = W.ledger.list('seat:', mode).reduce((x, s2) => x + s2.balance, 0);
+    eq(seatsLedger, stacks, 'the seat accounts are exactly the stacks of the seats still at the table');
+    eq(W.total(mode), total0, 'conserved');
+    eq(keys.reduce((x, k) => x + W.held(k, mode) - before[k], 0), 0);
+  });
+
+  t(`${tag}: R2A-4 the forgiven entry does not count against a rebuy limit: server return, then ONE rebuy of his own, then rebuy_off`, () => {
+    const S = setup(mode, { rebuys: true, rebuyLimit: 1 }, { start: 30000, noHand: true }); server('restart', S);
+    eq(sit(S.T, 'a', 25000), 'none', 'the return: forgiven');
+    leave(S.T, 'a');
+    eq(sit(S.T, 'a', 25000), 'none', 'his one rebuy of the limit');
+    leave(S.T, 'a');
+    eq(sit(S.T, 'a', 25000), 'rebuy_off', 'the limit holds');
+    quiet(() => S.W.restart()); S.T = S.W.registry.get(S.T.id);
+    eq(sit(S.T, 'a', 25000), 'rebuy_off', 'also after a restart (replay)');
+  });
+
+  t(`${tag}: R2A-4 a newer server return replaces the older one (it is ONE return, not a sum)`, () => {
+    const S = setup(mode, null, { noHand: true });
+    S.T.noteServerReturn('x', 3000); S.T.noteServerReturn('x', 1000);
+    eq(S.T.reentry.x.amount, 1000);
   });
 }
 done();
