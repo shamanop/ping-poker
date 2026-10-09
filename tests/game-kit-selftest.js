@@ -1,6 +1,6 @@
 'use strict';
 // SELF-TEST OF THE KIT: a kit that has never failed proves nothing. A minimal two-step game (deal: stake into escrow, reveal: settle) is played through
-// tests/game-kit.js once as written (it must PASS every check) and then in 11 deliberately broken variants; each variant must FAIL the check named for it.
+// tests/game-kit.js once as written (it must PASS every check) and then in deliberately broken variants (VARIANTS) and broken whole games (TOYS); each variant must FAIL the check named for it.
 //   node tests/game-kit-selftest.js        exit 0 when the good toy passes and every broken one is caught on its check
 const crypto = require('crypto');
 const fs = require('fs');
@@ -73,6 +73,7 @@ function makeToy(variant) {
             try { C.money.round(key, r.cur, id + 'r' + crypto.randomBytes(3).toString('hex'), { cost: 0, win: r.bet * 2 }); } catch {}
             rec.delete(key); return socket.emit('g:toy:result', { roundId: id, win: r.bet * 2 });
           }
+          if (variant === 'errresult') { bad(socket, 'internal'); return socket.emit('g:toy:result', { roundId: id, win }); }   // reports the money error AND shows the win
           if (variant === 'keepdoomed') carried += win;                         // the result the ledger refused is kept to be paid with the next round
           return bad(socket, 'internal');
         }
@@ -117,6 +118,7 @@ const VARIANTS = [
   ['twoopen', 'sockets', 'two sockets of one account both get a round'],
   ['bootbonus', 'restart', 'boot recovery pays twice the stake instead of refunding it'],
   ['redraw', 'restart', 'a round record outlives the restart and the round is played again under a fresh ref'],
+  ['errresult', 'errors', 'on a money error sends the error event AND the result event (the client is shown a win nobody paid)'],
   ['unregistered', 'registration', 'not in MODULES, house account not registered'],
 ];
 

@@ -120,7 +120,7 @@ function world(A, opts = {}) {
   const collect = (sock, n0) => {
     const got = sock.out.slice(n0);
     const errs = got.filter((o) => o[0] === 'error'), res = got.filter((o) => o[0].startsWith('g:' + A.id + ':'));
-    return { got, error: errs.length ? errs[errs.length - 1][1] : null, ev: res.length ? res[res.length - 1][0].slice(('g:' + A.id + ':').length) : null, payload: res.length ? res[res.length - 1][1] : null, ok: !errs.length && res.length > 0 };
+    return { got, error: errs.length ? errs[errs.length - 1][1] : null, ev: res.length ? res[res.length - 1][0].slice(('g:' + A.id + ':').length) : null, payload: res.length ? res[res.length - 1][1] : null, ok: res.length > 0, errored: errs.length > 0 };   // a result event = the round was played, whatever else came with it (an error event beside it is a lie, not a refusal)
   };
   const send1 = (sock, ev, payload, advance) => {
     if (advance) clock.advance(200);
