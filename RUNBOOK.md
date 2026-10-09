@@ -21,7 +21,7 @@ Written for `money-hardening` (2026-10-08): read at `69a44f6`, line cites rechec
 **How.** `.github/workflows/deploy.yml` runs on a push to `master` and executes `railway up --service ping-poker --detach`; `railway.toml` starts `node server.js` and restarts it on exit (`restartPolicyType = "always"`). A push to `master` is a deploy to real players. Isabelle merges to `master` and pushes; builders and critics never push (`builders/MONEY-COMMON.md`). I did not verify who holds the Railway token.
 
 **What a boot does** (`server.js:14-80`; log lines to look for):
-1. `[money] checkpoint id N at B bytes, T tail lines replayed` or a full replay. After a deploy that changed `money/ledger.js`, expect one full replay (the checkpoint is refused by design when the ledger source changed; `money/ledger.js:74-83`). That is slow on a big file, not an error.
+1. `[v2] money: checkpoint id N at B bytes, T tail lines replayed, M ms` or a full replay (every ledger message in the log carries the prefix `[v2] money:`, `server.js:21`). After a deploy that changed `money/ledger.js`, expect one full replay (the checkpoint is refused by design when the ledger source changed; `money/ledger.js:74-83`). That is slow on a big file, not an error.
 2. `QUARANTINED n line(s)` means lines were NOT applied: go to section 4 before anything else.
 3. `migration: ...` only on a first boot or a boot with changed old stores.
 4. `boot recovery: S seats, P pots returned` (every seat that was open at the last stop goes back to its owner).
