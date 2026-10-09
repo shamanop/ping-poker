@@ -204,7 +204,7 @@ All in the data directory (`RAILWAY_VOLUME_MOUNT_PATH` or `DATA_DIR`). I found n
 |---|---|---|
 | `money.jsonl` | THE ledger. The only source of truth for money. Never rewritten, rotated or compacted. | **No.** Without it every balance is lost. |
 | `money.jsonl.ckpt` | boot shortcut (balances and refs, with a hash of the journal bytes it covers). Believed only if the hash matches and the code that wrote it is the same code. | Yes: the next boot does a full replay. A checkpoint that fails a check (or, with `LEDGER_CKPT_VERIFY=1`, disagrees with a full replay: `CHECKPOINT MISMATCH`) is logged `checkpoint ignored: ...` and renamed `.ckpt.bad`; the full replay is used. Send that log to a developer. |
-| `money.jsonl.lock` | the writer token of the running process (`ledger.js:280`). | Only with the server stopped; a stale lock never blocks a boot. |
+| `money.jsonl.lock` | the writer token of the running process (`money/ledger.js:280-283`). | Only with the server stopped; a stale lock never blocks a boot. |
 | `money.jsonl.quarantine` | lines the ledger refused (section 4). | Keep it: it lists what needs an admin look. |
 | `bank.json`, `wallet.json` | write-only mirror for rollback to the old file-based server, rewritten when the ledger moves. | They are derived; nothing reads them at run time. |
 | `bank.json.pre-v2`, `wallet.json.pre-v2`, `stacks.json.pre-v2`, `accounts.json.pre-v2` | copies of the old stores made once, at the first v2 boot (`transport/boot.js:61`); also the marker that "v2 has booted here". | Keep. If missing, the migration treats the store as empty. |
