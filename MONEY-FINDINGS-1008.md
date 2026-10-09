@@ -213,7 +213,7 @@ Base = live `master` `cfa2ff8` (the job started on `886e61a`).
 | RV-4 (r2a-headsup) | a player cashed out below the minimum still cannot sit back from the browser | client builder (`public/lobby.js`) |
 | LEGS-B1 / RV-C4 | wrong promise text, no money | copy fix |
 | RV-C1, RV-C2, RV-C5 | a Chips tab can be left in Cash by a Cash round played elsewhere; test gap; low | the lead |
-| REV-SG-3/4/5, RV-SG-3/4 | latent env hardening and a stale `RUNBOOK.md` | deployer note: `NODE_ENV=production` exactly |
+| REV-SG-3/4, RV-SG-3/4 | latent env hardening (REV-SG-5, the stale `RUNBOOK.md` rows, is fixed in docs pass 2) | deployer note: production is `NODE_ENV=production` or any Railway variable (`server.js:14-20`) |
 | RV-ACCT-2/3, RR-T1, RR-N1, RW-5, RW-7, RVC-2/5/6, RVP-1/3/4/5, R2C-6, RV-5 (r2b-admin), m05 | low, test gaps or notes | stage 2 |
 | K3-C1, K4-6, K6b-2 | cosmetic / hardening | stage 2 |
 
