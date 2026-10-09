@@ -20,7 +20,7 @@ Companions: `ADD-A-GAME.md` (plug a game in), `RUNBOOK.md` (operate it), `MONEY-
  socket handlers (transport/handlers/*, admin/index.js, games/*)
         |                     |                         |
  tables/money-port.js   transport/game-money.js    transport/wallet-adapter.js
- (poker tables)         (ctx.money, per game)      (ctx.wallet: Bender legacy path, daily bonus, achievements)
+ (poker tables)         (ctx.money, per game)      (ctx.wallet: daily bonus, achievements; no game module)
         \                     |                         /
                     money/service.js     (named operations, every one = ONE ledger write)
                               |
@@ -37,7 +37,7 @@ Companions: `ADD-A-GAME.md` (plug a game in), `RUNBOOK.md` (operate it), `MONEY-
 | Service | `money/service.js` | Named operations on top of the ledger (`createService`). Table half: `buyIn`, `cashOut`, `settleHand`, `bootRecover`, `seatFund`, `nightSummary`. Game half: `houseRound`, `openRound`, `settleRound`, `voidRound`, `openRounds`, `roundClosed`, `poolBalance`, `sweepEscrows`. Shared: `ensureAccount`, `mint`, `adminAdjust`, `balances`, `mirror`. The game ids it knows are in `GAMES` (`:13`). |
 | Table port | `tables/money-port.js` | The ONLY place a table money `ref` is built and the only caller of the service for tables. Turns a fence into `TableError('money_down')` plus `onFence` (`server.js` pauses all tables). |
 | Game money | `transport/game-money.js` | `ctx.money` for game modules. `forGame(gameId)` binds the calls to one game id; no call takes a game id, so a module cannot name another game's accounts. Calls: `balance`, `round`, `open`, `settle`, `void`, `openRounds`, `closed`, `pool`. |
-| Wallet adapter | `transport/wallet-adapter.js` | `ctx.wallet`: `get`, `spend` + `credit` (spend only parks the cost in memory, credit writes ONE `houseRound` batch; a parked cost with no credit is flushed as a loss at the end of the tick, `:44`), and the mints for the daily bonus (`game 'bonus'`) and achievements (`'achv'`). At this head Ballot Bender still reads its balances through it; Cold Call and Campaign do not use it. |
+| Wallet adapter | `transport/wallet-adapter.js` | `ctx.wallet`: `get`, `spend` + `credit` (spend only parks the cost in memory, credit writes ONE `houseRound` batch; a parked cost with no credit is flushed as a loss at the end of the tick, `:44`), and the mints for the daily bonus (`game 'bonus'`) and achievements (`'achv'`). No game module gets it: `games/index.js:33-34` deletes it from every module's context, and all three games read balances through `ctx.money.balance` (Ballot Bender: `games/bender.js:99`). |
 | Views | `transport/views.js` | What a client is told: the `wallet` event (`walletView`, `:20`) and the `money` event (`moneyView`, `:23`). Pure reads. |
 | Mirror | `transport/boot.js:93` `startMirror` | Write-only `bank.json` and `wallet.json`, rewritten (temp + rename) when the ledger moved, so an old build can be rolled back to. Nothing reads them at run time. |
 
@@ -246,7 +246,7 @@ Each has the check that enforces it. "Soak" ids are in `tests/soak/README.md` (I
 
 ## 8. Exposure in Cash
 
-No code caps a payout or a house balance: the house accounts have no floor (`money/ledger.js:28`). The only ceilings are constants in the engines. The numbers below are from the critics' reports `_scratch/money/k2/K2-R1.md` (lines 22-32) and `k4/FINDINGS.md` (lines 44-50), because the lead's hand-off file `PROGRESS-MONEY-1008.md` does not exist at this head. I re-read the constants in the code (`bender-engine.js:8` `MAX_WIN_X = 10000`, `coldcall-engine.js:13` `MAX_WIN_X = 10000`, `campaign-engine.js:7-8`); the hit rates are the critics' measurements and are NOT re-run by me.
+No code caps a payout or a house balance: the house accounts have no floor (`money/ledger.js:28`). The only ceilings are constants in the engines. The numbers below are from the critics' reports `_scratch/money/k2/K2-R1.md` (lines 22-32) and `k4/FINDINGS.md` (lines 44-50), because the lead's hand-off file `PROGRESS-MONEY-1008.md` does not carry them. I re-read the constants in the code (`bender-engine.js:8` `MAX_WIN_X = 10000`, `coldcall-engine.js:13` `MAX_WIN_X = 10000`, `campaign-engine.js:7-8`); the hit rates are the critics' measurements and are NOT re-run by me.
 
 | Game | Largest payout on one round | Top bet | How often |
 |---|---|---|---|
@@ -265,7 +265,7 @@ The live slot configs are measured before they go live: a Cold Call or Ballot Be
 - A new source account, named like the others, e.g. `chain:deposit`, added to `SOURCE_ACCOUNTS` (`money/ledger.js:28`) and allowed for `play` only (add it to `ONLY_CUR`'s logic or check it in `normItem`, as `bank:`/`fx:` are). Editing that file changes `SRC_SHA`, so the first boot after the deploy replays the whole journal once (`money/ledger.js:74-83`); that is expected.
 - The credit is ONE ledger write: `chain:deposit -> play:<key>`, reason `deposit:<chain>`, ref = chain + transaction hash + log index (for example `dep:<chain>:<txHash>:<logIndex>`). A ref names the EVENT, so the same transaction can never credit twice, also after a restart or a re-scan of the chain.
 - Credit only after the chain's own finality rule, from a service function in `money/service.js` (`depositCash(key, amount, ref)`) that is called by the connector, never by a socket handler.
-- The checks that must learn the new source: soak `CASH_SOURCES` and `SOURCES` in `tests/soak/invariants.js:8-9` (I11 would flag the new source otherwise, on purpose; I13 treats it as a legal origin of a wallet's Cash), the account-shape list there, `tests/soak/actors/*` (the model books it as Cash created), and the game kit's source list once the kit is merged.
+- The checks that must learn the new source: soak `CASH_SOURCES` and `SOURCES` in `tests/soak/invariants.js:8-9` (I11 would flag the new source otherwise, on purpose; I13 treats it as a legal origin of a wallet's Cash), the account-shape list there, `tests/soak/actors/*` (the model books it as Cash created), and the game kit's source list (the kit is merged: `2dee7c1`).
 - The admin Set Cash total (`admin/index.js:43`) must keep counting deposited Cash like any other wallet Cash.
 
 **Withdraw**
