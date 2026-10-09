@@ -27,6 +27,7 @@ const LONG = { pull: { list: 4500, fill: { dead: 12, win: 6, bonus: 6 }, daily: 
 const accept = (o) => L.setLiveConfig({ overrides: o, note: 'r3c test', measured: { ok: true, hash: L.configHash(L.merge(o)), summary: { plain: { pct: 97 } }, worst: { way: 'plain', pct: 97, se: 0.5 } } });
 const reset = () => L.setLiveConfig({ overrides: {}, note: 'r3c test reset' });
 const BET = 2500;
+const OPEN_SEED = Number(process.env.R3C_OPEN_SEED || 7301);     // a seed checked to reach a decision round early (the case below)
 
 function spinWait(w, s, payload, i = 0) {
   return new Promise((resolve) => {
@@ -120,7 +121,7 @@ const near = (x, y, tag) => assert.ok(Math.abs(x - y) < 1e-6, tag + ': share ' +
     const c = await spin(w, s2, 'play', 3); near(c.share, lt2 / 450, 'after the reset and a boot (list 450 again)');
   });
   await test('a round OPEN across the swap settles on its own numbers and the next spin still sees the same share', async () => {
-    const w = world(), { s } = await holder(w, 'play', 4005, false);
+    const w = world({ rng: E.rngFrom(OPEN_SEED), roundRng: E.rngFrom(OPEN_SEED + 1) }), { s } = await holder(w, 'play', 4005, false);       // seeded: an unseeded world needs a round that stops at a decision (about one spin in 300), and 2 runs in 12 never drew one in 800 spins (RL-1)
     let swapped = false, view = null;
     for (let i = 0; i < 800 && !swapped; i++) {                    // spin until a round stops at a decision, swap the config then, answer it
       view = await new Promise((resolve) => {
