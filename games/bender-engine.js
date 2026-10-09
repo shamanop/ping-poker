@@ -219,17 +219,24 @@ if (typeof module === 'object' && module.exports) {
   // so every holder of the object (bender.js buy costs, tests) sees the live values.
   const DEFAULT_CFG = JSON.parse(JSON.stringify(Eng.CFG));
   const clone = (o) => JSON.parse(JSON.stringify(o));
+  // R2C-4: every number has a range, checked before anything is built or measured (an out-of-range config is refused at once, nothing runs). The loop bounds keep a bonus finite, the money knobs keep a typo (one extra
+  // zero) out: the shipped value of every key is inside its range. [min, max]; a key not listed here is [0, 1e6].
+  const RANGES = { guaranteeP: [0, 1], maxSticky: [0, 30], growCap: [0, 100], maxSpins: [0, 200], maxTumbles: [0, 100], 'spinsFor.*': [0, 100], 'retrigger.*': [0, 40], 'buyCost.*': [0, 1e5], 'pay.*': [0, 1e6], 'scatterPay.*': [0, 1e6], 'weights.*': [0, 1e6], landslideStart: [0, 29] };
+  const rangeFor = (at, pairCol) => { const p = at.replace(/^cfg\./, ''); if (RANGES[p]) return RANGES[p]; if (pairCol === 0) return [0, 1000]; const q = p.replace(/\.[^.]+$/, '.*'); return RANGES[q] || [0, 1e6]; };
+  const inRange = (x, at, col) => { const [lo, hi] = rangeFor(at, col); if (typeof x !== 'number' || !Number.isFinite(x) || x < lo || x > hi) throw new Error(at + ': must be between ' + lo + ' and ' + hi + ' (got ' + (typeof x === 'number' ? x : typeof x) + ')'); return x; };
   function mergeChecked(base, over, at) {
     if (over === null || typeof over !== 'object' || Array.isArray(over)) throw new Error(at + ': expected an object');
     for (const k of Object.keys(over)) {
       if (!(k in base)) throw new Error(at + '.' + k + ': unknown setting');
       const b = base[k], v = over[k], here = at + '.' + k;
       if (typeof b === 'number') {
-        if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) throw new Error(here + ': must be a number >= 0');
+        inRange(v, here);
         base[k] = v;
       } else if (Array.isArray(b)) {
         if (!Array.isArray(v) || !v.length) throw new Error(here + ': must be a non-empty list');
+        if (v.length > 64) throw new Error(here + ': must have at most 64 entries');
         if (!v.every((x) => (Array.isArray(b[0]) ? Array.isArray(x) && x.length === b[0].length && x.every((y) => typeof y === 'number' && Number.isFinite(y) && y >= 0) : typeof x === 'number' && Number.isFinite(x) && x >= 0))) throw new Error(here + ': list entries must be numbers >= 0 shaped like the default');
+        v.forEach((x) => { if (Array.isArray(x)) x.forEach((y, c) => inRange(y, here, c)); else inRange(x, here); });
         if (!Array.isArray(b[0]) && b.length !== v.length) throw new Error(here + ': must have ' + b.length + ' entries');
         base[k] = v;
       } else if (b && typeof b === 'object') mergeChecked(b, v, here);
@@ -237,25 +244,26 @@ if (typeof module === 'object' && module.exports) {
     }
     return base;
   }
-  function buildConfig(over) {
+  // opts.skipSmoke: the config already passed the smoke test somewhere else (the checking worker, or it is the shipped numbers): ranges and shape only, no 300 rounds on this thread
+  function buildConfig(over, opts) {
     const next = mergeChecked(clone(DEFAULT_CFG), over || {}, 'cfg');
     if (!(next.buyCost.election > 0 && next.buyCost.landslide > 0)) throw new Error('cfg.buyCost: prices must be > 0');
     const e = Eng.createEngine(next), rng = Eng.rngFrom(20261005);
-    for (let i = 0; i < 300; i++) {
+    for (let i = 0; i < (opts && opts.skipSmoke ? 0 : 300); i++) {
       const r = e.round(rng, i % 30 === 0 ? 'buy-election' : i % 30 === 15 ? 'buy-landslide' : 'spin');
       if (!(Number.isFinite(r.win) && r.win >= 0 && Number.isFinite(r.cost) && r.cost > 0)) throw new Error('cfg: smoke test produced a bad round');
     }
     return { next, e };
   }
-  function setConfig(over) {
-    const { next, e } = buildConfig(over);
+  function setConfig(over, opts) {
+    const { next, e } = buildConfig(over, opts);
     for (const k of Object.keys(Eng.CFG)) delete Eng.CFG[k];
     Object.assign(Eng.CFG, next);
     engine = e; Eng.engine = e;
     return clone(Eng.CFG);
   }
   Eng.DEFAULT_CFG = DEFAULT_CFG;
-  Eng.validateConfig = (over) => { buildConfig(over); return true; };
+  Eng.validateConfig = (over, opts) => { buildConfig(over, opts); return true; };      // opts.skipSmoke: ranges and shape only (R2C-4: the admin path checks these first, the smoke test runs in the worker)
   Eng.setConfig = setConfig;
   Eng.resetConfig = () => setConfig({});
   Eng.currentConfig = () => clone(Eng.CFG);
