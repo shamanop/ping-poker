@@ -12,10 +12,12 @@
     // cell weights for regular symbols; W and S added on top
     weights: { pen: 18, stk: 16, bal: 14, yrd: 12, meg: 8.5, cap: 6.5, phn: 4.5, seal: 3.0 },
     wildW: 1.1, scatterW: 1.19, bonusScatterW: 1.4,
-    bonusWildW: 0.025,               // wild weight during free spins
+    bonusWildW: 0.04,                // wild weight during free spins (with maxSticky 1 these wilds do not stick: they add their multiplier to the win they land in)
     wildTable: [[2, 40], [3, 26], [4, 14], [5, 9], [8, 5], [10, 2], [15, 0.6]],
     bonusWildTable: [[2, 60], [3, 24], [4, 10], [6, 4], [8, 1.6], [12, 0.4]],
-    guaranteeP: 0, maxSticky: 2, growCap: 256,   // no guaranteed wild (both bonuses start with a planted one); at most 2 sticky wilds on the board, the planted one included; a sticky wild doubles once per spin it wins, up to 256x (maxSticky 3 with real doubling made 10,000x too common)
+    guaranteeP: 0, maxSticky: 1, growCap: 128,   // no guaranteed wild (both bonuses start with a planted one); the planted wild is the only sticky one; doubling up to 128x
+    // (10/11 multi-grow: per-step doubling with config B (maxSticky 2, cap 256, Landslide 4x) read about 123% RTP; this set is back at 98%)
+    growPerStep: true,   // a sticky wild doubles EVERY tumble step it is part of a win (2>4>8 inside one spin, Chris 10/11); false = once per spin
     // payout x bet by cluster size bucket: 5,6,7,8,9,10-11,12-14,15-19,20+
     pay: {
       pen : [0.4075, 0.6224, 1.054, 1.657, 2.51, 4.177, 8.322, 28.81, 112.4],
@@ -30,9 +32,9 @@
     scatterPay: { 3: 6.455, 4: 21.48, 5: 107.4, 6: 429.7 },
     spinsFor: { 3: 6, 4: 8, 5: 12, 6: 20 },
     retrigger: { 3: 3, 4: 5, 5: 8 }, maxSpins: 40,
-    landslideStart: [[4]],   // pre-placed sticky wilds in LANDSLIDE (UI copy: starts with a 4x wild planted)
+    landslideStart: [[1]],   // pre-placed sticky wilds in LANDSLIDE (UI copy: starts with a wild planted)
     electionStart: [[1]],    // pre-placed sticky wilds in RECOUNT (UI copy: starts with a wild planted)
-    buyCost: { election: 11.5, landslide: 68.6 },   // 'election' = RECOUNT in the UI; 11.5 not 11.15: the 1-cent bet rounds any price under 11.5 to 11c, over the 100% gate (R2C-1)
+    buyCost: { election: 16.1, landslide: 32.7 },   // 'election' = RECOUNT in the UI; EV/0.98 (98.2%, 98.1%); the 1c/2c bets round them to 16 / 32.5 (98.4%, 98.7%), under the 100% gate (R2C-1: the gate checks the lowest price)
     maxTumbles: 14,   // hard tumble cap per spin: sticky wilds wall the board and would otherwise chain 40 tumbles (tail variance)
   };
   const TIERS = [[100, 'worldisyours'], [50, 'megalandslide'], [25, 'ballotbender'], [10, 'closeenough'], [5, 'tasty'], [2, 'nice']];
@@ -118,9 +120,10 @@
         for (const k of clusters) for (const [c, r] of k.cells) {
           if (g[c][r].stick) grow.add(c + ',' + r); else kill.add(c + ',' + r);
         }
-        // sticky wilds in a paying cluster double after it pays
+        // sticky wilds in a paying cluster double after the step pays (the step is paid at the old multiplier, the new one counts from the next tumble);
+        // growPerStep: every tumble step the wild is part of a win (2>4>8 inside one spin), else once per spin
         const grown = [];
-        for (const key of grow) { const [c, r] = key.split(',').map(Number); const w = g[c][r]; if (w.grew) continue; w.grew = true; const to = Math.max(w.m, Math.min(w.m * 2, cfg.growCap ?? 512)); if (to !== w.m) { grown.push({ c, r, from: w.m, to }); w.m = to; } }
+        for (const key of grow) { const [c, r] = key.split(',').map(Number); const w = g[c][r]; if (!cfg.growPerStep) { if (w.grew) continue; w.grew = true; } const to = Math.max(w.m, Math.min(w.m * 2, cfg.growCap ?? 512)); if (to !== w.m) { grown.push({ c, r, from: w.m, to }); w.m = to; } }
         // gravity per column, treating sticky wilds as walls
         const fall = [], spawn = [];
         for (let c = 0; c < COLS; c++) {

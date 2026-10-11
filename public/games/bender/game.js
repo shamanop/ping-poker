@@ -538,7 +538,12 @@
     if (w.length > 1) return w.length + ' wilds planted';
     return (w[0][0] > 1 ? 'a ' + w[0][0] + 'x' : 'a') + ' wild planted';
   }
-  const growRule = () => 'A sticky wild doubles once per spin when it is part of a win, up to ' + E.CFG.growCap + 'x.';
+  const growRule = () => E.CFG.growPerStep === false ? 'A sticky wild doubles once per spin when it is part of a win, up to ' + E.CFG.growCap + 'x.'
+    : 'A sticky wild doubles every time it is part of a win, up to ' + E.CFG.growCap + 'x: one spin can double it again and again.';
+  // only the planted wild sticks when maxSticky leaves no room for more (wilds that land later still pay, they just do not stay)
+  const plantedOnly = (kind) => { const w = (kind === 'landslide' ? E.CFG.landslideStart : E.CFG.electionStart) || []; return w.length > 0 && w.length >= (E.CFG.maxSticky ?? 99); };
+  const stickRule = (kind) => (plantedOnly(kind) ? 'The planted wild sticks.' : 'Wilds stick.');
+  const growShort = (kind) => (plantedOnly(kind) ? 'It sticks and doubles' : 'Sticky wilds double') + (E.CFG.growPerStep === false ? '' : ' every win') + ', up to ' + E.CFG.growCap + 'x.';
   const startsWith = (kind) => { const p = planted(kind); return p ? 'Starts with ' + p + '.' : ''; };
 
   async function bonusIntro(kind, spins) {
@@ -546,7 +551,7 @@
     SFX.bonusStart(); FX.ballots(90); FX.ring(540, 760, { n: 3, r1: 520, w: 22 }); pose('shock', 3000); say('bonusStart');
     const p = modal(`<div class="scene"><img class="ttl" src="assets/img/title_stack.webp" alt="">
       <h2 ${Ls ? 'class="sm"' : ''}>${Ls ? 'Landslide' : 'Recount'}</h2><h3><b class="n">${spins}</b> free spins</h3>
-      <p>${startsWith(kind)} Wilds stick. ${growRule()}${Ls ? '' : ' Dump & Count boxes add spins.'}</p>
+      <p>${startsWith(kind)} ${stickRule(kind)} ${growRule()}${Ls ? '' : ' Dump & Count boxes add spins.'}</p>
       <img class="mas" src="assets/img/mascot_shock.webp" alt="">
       <div class="tap">TAP TO START</div></div>`, { anywhere: true, auto: st.auto ? 2600 : 0 });
     setTimeout(() => { FX.shake(14, 400); SFX.drop(); FX.flash(100, '#fff', 0.5); }, 450);
@@ -814,8 +819,8 @@
     const C = E.CFG, b = bet(), cE = b * C.buyCost.election, cL = b * C.buyCost.landslide;
     const v = await modal(`<div class="card"><h2 style="font-size:70px">Buy a bonus</h2>
       <div class="buygrid">
-        <button class="buyopt" data-v="buy-election" ${avail() < cE ? 'disabled' : ''}><b>Recount</b><span>${C.spinsFor[3]} free spins. ${startsWith('election')} Sticky wilds double, up to ${C.growCap}x.</span><em>${fmt(cE)}</em><u>${money.live ? '' : 'VOTES'}</u></button>
-        <button class="buyopt" data-v="buy-landslide" ${avail() < cL ? 'disabled' : ''}><b>Landslide</b><span>${C.spinsFor[4]} free spins. ${startsWith('landslide')} Sticky wilds double, up to ${C.growCap}x.</span><em>${fmt(cL)}</em><u>${money.live ? '' : 'VOTES'}</u></button>
+        <button class="buyopt" data-v="buy-election" ${avail() < cE ? 'disabled' : ''}><b>Recount</b><span>${C.spinsFor[3]} free spins. ${startsWith('election')} ${growShort('election')}</span><em>${fmt(cE)}</em><u>${money.live ? '' : 'VOTES'}</u></button>
+        <button class="buyopt" data-v="buy-landslide" ${avail() < cL ? 'disabled' : ''}><b>Landslide</b><span>${C.spinsFor[4]} free spins. ${startsWith('landslide')} ${growShort('landslide')}</span><em>${fmt(cL)}</em><u>${money.live ? '' : 'VOTES'}</u></button>
       </div><button class="btn alt" data-v="x">Not now</button></div>`, { backdrop: true });
     if (v === 'buy-election' || v === 'buy-landslide') play(v);
   });
@@ -829,7 +834,7 @@
       <p style="margin-top:10px;font-size:26px">Match 5 or more of the same symbol touching up, down, left or right. Winners vanish and new symbols tumble in until nothing pays.</p>
       <div class="pay">${rows}</div>
       <p style="font-size:24px"><b>Dump &amp; Count box</b> is wild: it stands in for any symbol and carries a multiplier. Multipliers in one cluster add together.</p>
-      <p style="font-size:24px"><b>VP coin</b>: 3 trigger the Recount (${C.spinsFor[3]} free spins${planted('election') ? ', ' + planted('election') : ''}). 4+ trigger the Landslide (${C.spinsFor[4]}+ spins${planted('landslide') ? ', ' + planted('landslide') : ''}). In free spins wilds stick. ${growRule()}</p>
+      <p style="font-size:24px"><b>VP coin</b>: 3 trigger the Recount (${C.spinsFor[3]} free spins${planted('election') ? ', ' + planted('election') : ''}). 4+ trigger the Landslide (${C.spinsFor[4]}+ spins${planted('landslide') ? ', ' + planted('landslide') : ''}). In free spins ${plantedOnly('election') && plantedOnly('landslide') ? 'the planted wild sticks' : 'wilds stick'}. ${growRule()}</p>
       <p style="font-size:24px">Big wins: ${tiers}. Max win ${fx(E.MAX_WIN_X)}x. ${window.BENDER_FOOTER || ''}</p>
       <button class="btn" data-v="x" style="margin-top:20px">Close</button></div>`, { backdrop: true });
   });
