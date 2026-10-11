@@ -1,0 +1,133 @@
+/* DINO "Hatch Party" theme layer. Loaded after style.css. Placeholders (inline SVG/CSS) show until DinoArt (art.js) finds a PNG for a slot:
+   art.js sets --art-<key> and html.art-<key>; every rule below falls back to the placeholder when the class is absent. Contract: _dino/ASSET-SLOTS.md */
+
+/* ---------- palette ---------- */
+:root {
+  --bg0: #0d3a3c; --bg1: #17635f; --ink: #fff8e6; --mute: #b4d9cb; --acc: #f5a83b; --acc2: #37d1bd;
+  --panel: rgba(255, 248, 230, .09); --line: rgba(190, 255, 235, .22); --danger: #ff6b5e;
+  --hp-cream: #fff3d6; --hp-coral: #ff7a5c; --hp-teal: #2a9d8f; --hp-wood: #8a5a2b; --hp-gold: #ffc857;
+  --logo-h: clamp(0px, calc(100dvh - 745px), 96px);
+}
+#stage, #stage.free { background: var(--bg0); }
+
+/* ---------- layer stack: bg(0) < ui(1) < frame/mascot(8-9) < fx canvases(10+) < overlay(20+) ---------- */
+#theme { position: absolute; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+#top, #play { position: relative; z-index: 1; }
+.th-bg { position: absolute; inset: 0; }
+.th-bg .ph, .th-bg .ph svg, .th-bg .art { position: absolute; inset: 0; width: 100%; height: 100%; }
+.th-bg .ph-l { display: none; }
+.th-bg .art { display: none; background: center bottom / cover no-repeat; }
+.th-bg .a-p { background-image: var(--art-bg_portrait, var(--art-bg_landscape)); }
+.th-bg .a-l { background-image: var(--art-bg_landscape, var(--art-bg_portrait)); }
+.th-bg .free.a-p { background-image: var(--art-bg_free_portrait, var(--art-bg_free_landscape)); }
+.th-bg .free.a-l { background-image: var(--art-bg_free_landscape, var(--art-bg_free_portrait)); }
+html.art-bg .th-bg .ph { display: none; }
+html.art-bg .th-bg .art.a-p:not(.free) { display: block; }
+html.art-bg-free .th-bg .art.free.a-p { display: block; opacity: 0; transition: opacity .6s; }
+html.art-bg-free #stage.free .th-bg .art.free { opacity: 1; }
+.th-tint { position: absolute; inset: 0; opacity: 0; transition: opacity .6s; background: radial-gradient(120% 80% at 50% 20%, rgba(255, 120, 190, .28), rgba(70, 20, 120, .55)); }
+#stage.free .th-tint { opacity: 1; }
+html.art-bg-free .th-tint { display: none; }
+@media (min-aspect-ratio: 1/1) {
+  .th-bg .ph-p { display: none; } .th-bg .ph-l { display: block; }
+  html.art-bg .th-bg .art.a-p:not(.free), html.art-bg-free .th-bg .art.free.a-p { display: none; }
+  html.art-bg .th-bg .art.a-l:not(.free) { display: block; }
+  html.art-bg-free .th-bg .art.free.a-l { display: block; opacity: 0; transition: opacity .6s; }
+  html.art-bg-free #stage.free .th-bg .art.free.a-l { opacity: 1; }
+}
+
+/* ---------- layout: board + frame margin + logo row. Frame is a fixed-aspect overlay: 6% of board width on every side ---------- */
+#boardCol { --bw: min((100vw - 16px) / 1.12, (100dvh - 330px - var(--logo-h)) * 1.2 / 1.144); width: calc(var(--bw) * 1.12 + 16px); }
+#boardFrame { position: relative; width: var(--bw); max-width: 100%; margin: calc(var(--bw) * .06) auto; }
+#board { margin: 0; border: 0; border-radius: 4px; background: rgba(6, 42, 42, .7); box-shadow: inset 0 0 28px rgba(0, 0, 0, .45); }
+.gridbg { background-color: #145a54; background-image: linear-gradient(to right, rgba(0, 0, 0, .3) 2px, transparent 2px), linear-gradient(to bottom, rgba(0, 0, 0, .3) 2px, transparent 2px); background-size: calc(100% / 6) 20%; }
+html.art-grid_bg .gridbg { background: var(--art-grid_bg) center / 100% 100% no-repeat; }
+@media (max-height: 640px) and (max-aspect-ratio: 6/5) { #boardCol { --bw: min((100vw - 16px) / 1.12, (100dvh - 290px - var(--logo-h)) * 1.2 / 1.144); } }
+@media (min-aspect-ratio: 6/5) and (min-width: 760px) {
+  :root { --logo-h: clamp(0px, calc(100dvh - 760px), 80px); }
+  #boardCol { --bw: min((100vw - 440px) / 1.12, (100dvh - 150px - var(--logo-h)) * 1.2 / 1.144); }
+}
+
+/* ---------- frame (fixed 1720x1464 overlay, hole = grid window) ---------- */
+.th-frame { position: absolute; left: -6%; right: -6%; top: calc(var(--bw) * -.06); bottom: calc(var(--bw) * -.06); z-index: 8; pointer-events: none; }
+.th-frame .ph, .th-frame .art { position: absolute; inset: 0; width: 100%; height: 100%; }
+.th-frame .art { display: none; background: var(--art-frame) center / 100% 100% no-repeat; }
+html.art-frame .th-frame .ph { display: none; }
+html.art-frame .th-frame .art { display: block; }
+
+/* ---------- logo (in-flow row above the strip; height collapses to 0 on short screens) ---------- */
+.th-logo { position: relative; height: var(--logo-h); aspect-ratio: 2 / 1; margin: 0 auto; pointer-events: none; }
+.th-logo .ph, .th-logo .art { position: absolute; inset: 0; width: 100%; height: 100%; filter: drop-shadow(0 3px 0 rgba(0, 60, 50, .35)); }
+.th-logo .art { display: none; background: var(--art-logo) center / contain no-repeat; }
+html.art-logo .th-logo .ph { display: none; }
+html.art-logo .th-logo .art { display: block; }
+
+/* ---------- mascot (3:4, bottom-right of the frame; never takes clicks) ---------- */
+.th-mascot { position: absolute; z-index: 9; pointer-events: none; right: -2%; bottom: calc(var(--bw) * -.085); width: calc(var(--bw) * .19); aspect-ratio: 3 / 4; transform-origin: 50% 100%; }
+.th-mascot .ph, .th-mascot .art { position: absolute; inset: 0; width: 100%; height: 100%; }
+.th-mascot .art { background: center bottom / contain no-repeat; }
+.th-mascot .art, .th-mascot .ph { opacity: 0; transition: opacity .12s linear; }
+.th-mascot .p-idle { background-image: var(--art-mascot_idle); }
+.th-mascot .p-celebrate { background-image: var(--art-mascot_celebrate); }
+.th-mascot .p-shock { background-image: var(--art-mascot_shock); }
+.th-mascot .p-dance { background-image: var(--art-mascot_dance); }
+.th-mascot .art.on, .th-mascot[data-art="0"] .ph { opacity: 1; }
+/* CSS motion when the exact pose has no PNG (placeholder or fallback art); transform only, no layout shift */
+.th-mascot[data-fb="1"][data-pose="celebrate"] { animation: th-hop .5s ease-in-out infinite alternate; }
+.th-mascot[data-fb="1"][data-pose="shock"] { animation: th-shock .45s cubic-bezier(.2, 1.6, .4, 1) 1; }
+.th-mascot[data-fb="1"][data-pose="dance"] { animation: th-dance .6s ease-in-out infinite alternate; }
+@keyframes th-hop { to { transform: translateY(-6%) rotate(-3deg); } }
+@keyframes th-shock { 0% { transform: scale(1); } 18% { transform: translate(-3%, -4%) scale(1.16, .9) rotate(-4deg); } 36% { transform: translate(3%, -2%) scale(.94, 1.1) rotate(4deg); } 60% { transform: translateX(-1.5%) scale(1.06) rotate(-2deg); } 100% { transform: scale(1); } }
+@keyframes th-dance { 0% { transform: translateY(0) rotate(-7deg); } 50% { transform: translateY(-7%) rotate(0) scale(1.03, .98); } 100% { transform: translateY(0) rotate(7deg); } }
+@media (min-aspect-ratio: 6/5) and (min-width: 760px) { .th-mascot { right: -11%; bottom: calc(var(--bw) * -.07); width: calc(var(--bw) * .21); } }
+
+/* ---------- top bar / dock (Hatch Party chrome) ---------- */
+.brand { color: var(--hp-cream); text-shadow: 0 2px 0 rgba(0, 60, 50, .5); }
+html.art-logo .brand { display: none; }
+#dock { background: linear-gradient(180deg, rgba(26, 138, 128, .94), rgba(13, 86, 84, .97)); border: 2px solid rgba(150, 255, 230, .32); border-bottom: 0; border-radius: 22px 22px 0 0; padding-top: 8px; box-shadow: 0 -8px 26px rgba(0, 40, 40, .3); }
+#betM, .sq { background: rgba(5, 50, 50, .45); border-color: rgba(150, 255, 230, .25); }
+#spin { background: radial-gradient(circle at 35% 30%, #ffa591, #f2604a 55%, #c93e2e); color: #fff1dc; box-shadow: 0 6px 22px rgba(242, 96, 74, .45), inset 0 -4px 0 rgba(0, 0, 0, .2), 0 0 0 5px rgba(255, 248, 230, .22); }
+.opts #buy { background: linear-gradient(#ffd27a, #f59b1e); border-color: #ffe9b0; color: #4a2a00; box-shadow: inset 0 -3px 0 rgba(120, 60, 0, .3); }
+.opts #buy .t, .opts #buy .s { color: #4a2a00; }
+.opts button[aria-checked="true"] { background: rgba(55, 209, 189, .28); }
+.mini button.on { background: rgba(245, 168, 59, .22); }
+#win { text-shadow: 0 0 18px rgba(245, 168, 59, .5); }
+.card { background: #12403f; }
+.card .row button.go, .autoopts button:active { color: #3a2200; }
+@media (min-aspect-ratio: 6/5) and (min-width: 760px) { #dock { border-radius: 22px; border-bottom: 2px solid rgba(150, 255, 230, .32); padding: 14px 16px; } }
+
+/* art: spin (1:1) — icon baked into the art */
+html.art-btn_spin #spin { background: var(--art-btn_spin) center / contain no-repeat; box-shadow: none; }
+html.art-btn_spin #spin svg { visibility: hidden; }
+html.art-btn_spin #spin:active:not(:disabled) { filter: brightness(.92); }
+/* art: buy-feature button (9-slice, art drawn at 4x: slice 48 64, border 12px 16px). Label + price stay live text. */
+html.art-btn_buy .opts #buy { border: solid transparent; border-width: 12px 16px; border-image: var(--art-btn_buy) 48 64 fill / 12px 16px stretch; background: none; box-shadow: none; padding: 0; min-height: 48px; }
+html.art-btn_buy .opts #buy:disabled { filter: grayscale(.8) brightness(.8); }
+html.art-btn_buy .opts #buy:active:not(:disabled) { filter: brightness(.92); }
+
+/* ---------- symbols (art mode) ---------- */
+.dsym { display: block; position: relative; width: 100%; height: 100%; container-type: size; pointer-events: none; }
+.dsym img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; -webkit-user-drag: none; user-select: none; }
+.dsym .w { display: none; }
+.cell.hl .dsym.hasw .w, .cell.sc .dsym.hasw .w { display: block; }
+.cell.hl .dsym.hasw .b, .cell.sc .dsym.hasw .b { display: none; }
+.pt .dsym { width: 34px; height: 34px; }
+.bnum { position: absolute; left: 50%; top: 60%; transform: translate(-50%, -50%); font: 900 28cqw/1 "Arial Black", Impact, system-ui, sans-serif; color: #fff; white-space: nowrap; font-variant-numeric: tabular-nums;
+  -webkit-text-stroke: .09em var(--bs, #0b3e5a); paint-order: stroke fill; letter-spacing: -.02em; }
+.bnum[data-l="3"] { font-size: 22cqw; } .bnum[data-l="4"] { font-size: 17cqw; } .bnum[data-l="5"] { font-size: 14cqw; }
+.bnum[data-t="low"] { --bs: #0b3e5a; } .bnum[data-t="mid"] { --bs: #6a3300; } .bnum[data-t="high"] { --bs: #5a0f35; } .bnum[data-t="max"] { --bs: #5a0f05; }
+
+/* ---------- fx.js overlays (specificity bumped; fx.js injects its CSS later) ---------- */
+#stage .dfx-panel { background: radial-gradient(ellipse at 50% 45%, rgba(16, 96, 90, .88) 0%, rgba(5, 32, 34, .94) 70%); }
+#stage .dfx-btn { background: linear-gradient(#ffd27a, #f59b1e); border-color: #7a4200; color: #3a2200; box-shadow: 0 calc(var(--u) * .9) 0 #8a4f00, 0 0 calc(var(--u) * 4) rgba(255, 200, 87, .5); }
+#stage .dfx-big { color: #ffd27a; }
+#stage .dfx-panel.th-art { isolation: isolate; background: rgba(4, 24, 26, .6); }
+#stage .dfx-panel.th-art::before { content: ""; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(96%, 720px); aspect-ratio: 6 / 7; max-height: 96%; z-index: -1; background: center / contain no-repeat; }
+#stage .dfx-panel[data-kind="fsintro"]::before { background-image: var(--art-panel_fs_intro); }
+#stage .dfx-panel[data-kind="fsoutro"]::before { background-image: var(--art-panel_fs_outro); }
+#stage .dfx-tier.th-art { font-size: 0 !important; color: transparent !important; text-shadow: none !important; width: min(94%, 760px); aspect-ratio: 12 / 5; height: auto; background: center / contain no-repeat; }
+#stage .dfx-tier[data-tier="nice"] { background-image: var(--art-bw_nice); } #stage .dfx-tier[data-tier="great"] { background-image: var(--art-bw_great); }
+#stage .dfx-tier[data-tier="big"] { background-image: var(--art-bw_big); } #stage .dfx-tier[data-tier="huge"] { background-image: var(--art-bw_huge); }
+#stage .dfx-tier[data-tier="mega"] { background-image: var(--art-bw_mega); } #stage .dfx-tier[data-tier="epic"] { background-image: var(--art-bw_epic); }
+
+@media (prefers-reduced-motion: reduce) { .th-mascot { animation: none !important; } .th-mascot .art, .th-mascot .ph { transition: none; } .th-bg .art.free, .th-tint { transition: none; } }

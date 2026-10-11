@@ -7,7 +7,7 @@
   const games = new Map();   // id -> {def, el, di, mounted}
   const screens = new Map(); // id -> {mountFn, el, mounted}
   const ui = {};
-  const cfg = { benderUrl: '/games/bender/index.html?bridge=1', coldcallUrl: '/games/coldcall/index.html?bridge=1', campaignUrl: '/games/campaign/index.html?bridge=1' };
+  const cfg = { benderUrl: '/games/bender/index.html?bridge=1', coldcallUrl: '/games/coldcall/index.html?bridge=1', campaignUrl: '/games/campaign/index.html?bridge=1', dinoUrl: '/games/dino/index.html?bridge=1' };
   let L = { games: {} };
   let signedIn = false, focusId = 'poker', zTop = 20, inResize = false;
   const wallet = { play: null, chips: null };
@@ -373,7 +373,15 @@
     for (const ev of ['run', 'step', 'end']) s.on('g:campaign:' + ev, (p) => { if (p && p.balances) setWallet(p.balances); toCamp({ type: 'ev', event: ev, payload: p }); });
     s.on('disconnect', () => { if (campReady) { campDropped = true; toCamp({ type: 'disconnect' }); } });
     s.on('auth_ok', () => { if (campDropped) { campDropped = false; s.emit('g:campaign:state', {}); } });
-    s.on('error', (e) => { if (e && e.game === 'campaign') return toCamp({ type: 'ev', event: 'error', payload: e }); if (e && e.game === 'coldcall') return ccErr(e); if (spinQ.length) benderErr(e); });
+    // DINO: server state -> iframe init; one result per accepted spin, matched to the oldest spin in flight (dinoQ)
+    s.on('g:dino:state', (st) => { dinoReady = true; if (st && st.balances) setWallet(st.balances); toDino({ type: 'init', wallet: Object.assign({}, wallet), mode: modeOf('dino'), state: st }); });
+    s.on('g:dino:result', (p) => {
+      const reqId = dinoQ.shift();
+      if (p && typeof p.totalWin === 'number' && typeof p.cost === 'number') dinoNet += p.totalWin - p.cost;
+      if (p && p.balances) setWallet(p.balances);
+      toDino({ type: 'result', reqId, payload: p }); refreshDock();
+    });
+    s.on('error', (e) => { if (e && e.game === 'dino') return dinoErr(e); if (e && e.game === 'campaign') return toCamp({ type: 'ev', event: 'error', payload: e }); if (e && e.game === 'coldcall') return ccErr(e); if (spinQ.length) benderErr(e); });
     if (user()) { setSignedIn(true); s.emit('wallet_get'); s.emit('account:stats'); bonusShown = false; s.emit('bonus:status'); }
     return true;
   }
@@ -433,7 +441,7 @@
     if (!w) return;
     if (typeof w.play === 'number') wallet.play = w.play;
     if (typeof w.chips === 'number') wallet.chips = w.chips;
-    refreshTop(); if (benderReady) toBender({ type: 'wallet', wallet: Object.assign({}, wallet) }); if (ccReady) toCC({ type: 'wallet', wallet: Object.assign({}, wallet) }); if (campReady) toCamp({ type: 'wallet', wallet: Object.assign({}, wallet) });
+    refreshTop(); if (benderReady) toBender({ type: 'wallet', wallet: Object.assign({}, wallet) }); if (ccReady) toCC({ type: 'wallet', wallet: Object.assign({}, wallet) }); if (campReady) toCamp({ type: 'wallet', wallet: Object.assign({}, wallet) }); if (dinoReady) toDino({ type: 'wallet', wallet: Object.assign({}, wallet) });
   }
   const benderFrame = () => { const g = games.get('bender'); return g && g.el ? g.el.querySelector('iframe') : null; };
   function toBender(m) { const f = benderFrame(); if (f && f.contentWindow) f.contentWindow.postMessage(m, '*'); }
@@ -453,6 +461,27 @@
       if (typeof m.win === 'number') lastWin = m.win; refreshDock();
       if (window.PingJuice && (m.tier === 'mega' || m.tier === 'jackpot') && m.bet > 0) PingJuice.toast(`**You** hit **${Math.round(m.win / m.bet)}x** on Ballot Bender`, { sticker: 'ballot-cherry' });
     }
+    else if (m.type === 'esc') focus('poker');
+  });
+
+  // ---------- DINO bridge (same protocol as Bender, own ready flag + own queue) ----------
+  // Hidden game: it is only registered when the URL has ?dino=1 or localStorage 'ping.dino' is '1'. With the flag off nothing about dino exists in the shell.
+  // game -> shell: {hello | spin{reqId,bet,mode,ante,buy} | mode | round{win,tier,bet} | esc}; shell -> game: {init{wallet,mode,state} | wallet | result{reqId,payload} | error{reqId,message,code}}
+  let dinoReady = false, dinoNet = 0; const dinoQ = [];
+  const dinoFrame = () => { const g = games.get('dino'); return g && g.el ? g.el.querySelector('iframe') : null; };
+  function toDino(m) { const f = dinoFrame(); if (f && f.contentWindow) f.contentWindow.postMessage(m, '*'); }
+  function dinoErr(e) { toDino({ type: 'error', reqId: dinoQ.shift(), message: (e && e.message) || 'Spin refused.', code: e && e.code }); }
+  window.addEventListener('message', (ev) => {
+    const f = dinoFrame(); if (!f || ev.source !== f.contentWindow) return;
+    const m = ev.data || {}, s = sock();
+    if (m.type === 'hello') { if (!s || !signedIn) return; dinoReady = false; s.emit('g:dino:state', {}); }
+    else if (m.type === 'spin') {
+      if (!s) return toDino({ type: 'error', reqId: m.reqId, message: 'Not connected.' });
+      dinoQ.push(m.reqId);
+      const p = { bet: m.bet, mode: m.mode }; if (m.ante) p.ante = true; if (m.buy) p.buy = true;
+      s.emit('g:dino:spin', p);
+    } else if (m.type === 'mode') setModeOf('dino', m.mode);
+    else if (m.type === 'round') { if (typeof m.win === 'number') lastWin = m.win; refreshDock(); }
     else if (m.type === 'esc') focus('poker');
   });
 
@@ -511,6 +540,12 @@
       id: 'bender', name: 'Ballot Bender', icon: IC.box,
       mount(el) { const f = document.createElement('iframe'); f.src = cfg.benderUrl; f.title = 'Ballot Bender'; f.setAttribute('allow', 'autoplay'); el.appendChild(f); benderReady = false; },
       badge() { return sessNet > 0 ? '+' + dollars2(sessNet) : sessNet < 0 ? '-' + dollars2(-sessNet) : ''; }
+    });
+    let dinoOn = false; try { dinoOn = new URLSearchParams(location.search).get('dino') === '1' || localStorage.getItem('ping.dino') === '1'; } catch (e) { /* storage blocked: stays hidden */ }
+    if (dinoOn) registerGame({
+      id: 'dino', name: 'Dino', icon: IC.box,
+      mount(el) { const f = document.createElement('iframe'); f.src = cfg.dinoUrl; f.title = 'Dino'; f.setAttribute('allow', 'autoplay'); el.appendChild(f); dinoReady = false; },
+      badge() { return dinoNet > 0 ? '+' + dollars2(dinoNet) : dinoNet < 0 ? '-' + dollars2(-dinoNet) : ''; }
     });
     registerGame({
       id: 'coldcall', name: 'Cold Call', icon: IC.phone,
