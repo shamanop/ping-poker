@@ -23,7 +23,7 @@ class Bot {
     const sock = this.ctl.connect(); this.sock = sock; this.authed = false; const gen = ++this.gen;
     this.tableId = null; this.seatFund = null;
     const evs = ['auth_ok', 'auth_error', 'game_state', 'your_cards', 'showdown_result', 'bust_out', 'wallet', 'money', 'table_joined', 'table_left', 'table_created',
-      'g:bender:result', 'g:bender:state', 'bonus:claimed', 'bonus:status', 'achv:unlocked', 'achv:state', 'admin_result', 'admin_overview', 'table_event', '__audit', 'error',
+      'g:bender:result', 'g:bender:state', 'g:dino:result', 'g:dino:state', 'bonus:claimed', 'bonus:status', 'achv:unlocked', 'achv:state', 'admin_result', 'admin_overview', 'table_event', '__audit', 'error',
       'room_update', 'balance_update', 'settle_up', 'table_info', 'lobby_tables', 'ok',
       'g:coldcall:result', 'g:coldcall:state', 'g:coldcall:voided', 'g:coldcall:timer', 'g:coldcall:cfg', 'g:coldcall:history', 'g:coldcall:floor',
       'g:campaign:run', 'g:campaign:step', 'g:campaign:end', 'g:campaign:state'];

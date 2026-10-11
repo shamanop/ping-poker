@@ -17,7 +17,7 @@ const argv = process.argv.slice(2);
 const arg = (name, dflt) => { const i = argv.indexOf('--' + name); return i >= 0 && i + 1 < argv.length ? argv[i + 1] : dflt; };
 const has = name => argv.includes('--' + name);
 
-const ACTORS = ['poker', 'bank', 'bender', 'coldcall', 'campaign'].map(n => require('./actors/' + n));
+const ACTORS = ['poker', 'bank', 'bender', 'dino', 'coldcall', 'campaign'].map(n => require('./actors/' + n));
 const slot = require('./actors/coldcall');
 const bankActor = require('./actors/bank');
 const GRANT_CASH = 1000000;            // what the old fixture gave every account at signup
@@ -53,11 +53,11 @@ async function main() {
     ctl: new ServerCtl({ port, dir: dataDir, serverDir, bug, injectPath: path.join(__dirname, 'bugs', 'inject.js'), env: { COLDCALL_TEST: '1', CAMPAIGN_TEST: '1', CAMPAIGN_IDLE_MS: '2500', NODE_ENV: 'test', ADMIN_CLAIM_PASSWORD: 'test-admin-claim-1008', BENDER_ADMIN_TOKEN: slot.ADMIN_TOKEN } }),
     model: new Model(), checker: new Checker(path.join(dataDir, 'money.jsonl')),
     bots: new Map(), tables: new Map(), admin: null, auditSock: null,
-    inflightSpins: [], cfg: { betLevels: [1, 2, 10, 20, 50, 100, 200, 500, 1000, 2500], buyCostX: { election: 10.91, landslide: 77.21 } },
+    inflightSpins: [], cfg: { betLevels: [1, 2, 10, 20, 50, 100, 200, 500, 1000, 2500], buyCostX: { election: 10.91, landslide: 77.21 }, dino: { anteCost: 1.25, buyCostX: 100, anteLevels: [20, 100, 200, 500, 1000, 2500] } },
     achvReward: new Map(), bonusSchedule: [],
     stepNo: 0, recent: [], fatal: [], lastSignupAt: 0,
     counters: { checks: 0, kills: 0, restarts: 0, sigterm: 0, buyIns: 0, cashOuts: 0, spinsRefused: 0, spinsUnacked: 0, handsVoidedByKill: 0, warnings: {} },
-    killLive: new Map(), mute: { showdown: false, bender: false, achv: false, slot: false, camp: false },
+    killLive: new Map(), mute: { showdown: false, bender: false, dino: false, achv: false, slot: false, camp: false },
     sleep, chicagoDay,
   };
   slot.attach(W);
@@ -83,7 +83,7 @@ async function main() {
   function wire(bot) {
     bot.on('g:bender:result', d => {
       if (W.mute.bender) return;                       // chaos 'spinlost': the answer is dropped on the client side, as if the connection died first
-      const i = W.inflightSpins.findIndex(s => s.key === bot.key && s.mode === d.mode && s.bet === d.bet && (s.buy || null) === (d.buyBonus || null));
+      const i = W.inflightSpins.findIndex(s => !s.game && s.key === bot.key && s.mode === d.mode && s.bet === d.bet && (s.buy || null) === (d.buyBonus || null));
       if (i >= 0) W.inflightSpins.splice(i, 1);
       if (!W.model.hasPlayer(bot.key)) return;
       const want = Math.round((d.buyBonus ? W.cfg.buyCostX[d.buyBonus] : 1) * d.bet);
@@ -92,6 +92,19 @@ async function main() {
         return;
       }
       W.model.applySpin({ key: bot.key, cur: d.mode, cost: d.cost, win: d.totalWin, roundId: d.roundId });
+    });
+    bot.on('g:dino:result', d => {
+      if (W.mute.dino) return;
+      const opt = d.buy ? 'buy' : d.ante ? 'ante' : null;
+      const i = W.inflightSpins.findIndex(s => s.game === 'dino' && s.key === bot.key && s.mode === d.mode && s.bet === d.bet && (s.buy || null) === opt);
+      if (i >= 0) W.inflightSpins.splice(i, 1);
+      if (!W.model.hasPlayer(bot.key)) return;
+      const want = Math.round((d.buy ? W.cfg.dino.buyCostX : d.ante ? W.cfg.dino.anteCost : 1) * d.bet);
+      if (d.cost !== want || !Number.isSafeInteger(d.totalWin) || d.totalWin < 0 || !d.roundId || (d.mode !== 'chips' && d.mode !== 'play')) {
+        W.violate('I7', `dino result is not priced as asked: cost ${d.cost} (want ${want}), totalWin ${d.totalWin}, mode ${d.mode}`, { key: bot.key, roundId: d.roundId }, `cost ${want}`, `cost ${d.cost} win ${d.totalWin}`);
+        return;
+      }
+      W.model.applySpin({ game: 'dino', key: bot.key, cur: d.mode, cost: d.cost, win: d.totalWin, roundId: d.roundId });
     });
     bot.on('showdown_result', d => { if (!W.mute.showdown) W.onShowdown(bot, d); });
     slot.listen(W, bot);
@@ -257,7 +270,7 @@ async function main() {
       for (; i < C.lines.length; i++) {
         const L = C.lines[i], ref = L.ref || '';
         if (L.hand) { if (L.listeners !== 0 && !M.hasHand(L.hand.tableId, L.hand.handNo)) { open = ref; break; } }
-        else if (ref.startsWith('bender:')) { if (!M.spins.has(ref)) { open = ref; break; } }
+        else if (ref.startsWith('bender:') || ref.startsWith('dino:')) { if (!M.spins.has(ref)) { open = ref; break; } }
         else if (L.slot && L.slot.suffix !== 'open') { const id = `${L.slot.key}:${L.slot.rid}`; if (!M.slot.rounds.has(id) && !M.slot.open.has(id)) { open = ref; break; } }
         else if (L.camp && L.camp.suffix !== 'open') { const id = `${L.camp.key}:${L.camp.rid}`; if (!M.camp.rounds.has(id) && !M.camp.open.has(id)) { open = ref; break; } }
       }
@@ -315,17 +328,18 @@ async function main() {
         if (unknown.length) { bad.push({ step: W.stepNo, id: 'I7', message: `hand ${ref} pays an account the harness never created: ${unknown}`, accounts: { ref }, expected: 'known players', got: unknown.join(',') }); continue; }
         const r = M.applyHand(tableId, handNo, nets, fund, 'unacked');
         if (r.notZeroSum) bad.push({ step: W.stepNo, id: 'I7', message: `settled-unacked hand ${ref} is not zero-sum (sum ${r.sum})`, accounts: { ref }, expected: 0, got: r.sum });
-      } else if (ref.startsWith('bender:')) {
-        const [, key, roundId] = ref.split(':');
+      } else if (ref.startsWith('bender:') || ref.startsWith('dino:')) {
+        const [game, key, roundId] = ref.split(':'), house = 'house:' + game;
         if (M.spins.has(ref)) continue;
         const it = L.items, cur = it[0].cur, store = (cur === 'chips' ? 'bank:' : 'play:') + key;
         let cost = 0, win = 0;
-        for (const x of it) { if (x.from === store && x.to === 'house:bender') cost += x.amount; else if (x.from === 'house:bender' && x.to === store) win += x.amount; }
-        const i = unknownSpins.findIndex(s => s.key === key && s.mode === cur && Math.round((s.buy ? W.cfg.buyCostX[s.buy] : 1) * s.bet) === cost);
-        if (i < 0) { bad.push({ step: W.stepNo, id: 'I7', message: `ledger has a Bender round ${ref} (cost ${cost}, win ${win}) that no spin in flight at the kill explains`, accounts: { ref, key }, expected: 'a spin sent and not answered', got: `cost ${cost} win ${win}` }); continue; }
+        for (const x of it) { if (x.from === store && x.to === house) cost += x.amount; else if (x.from === house && x.to === store) win += x.amount; }
+        const priceOf = (s) => (game === 'dino' ? Math.round((s.buy === 'buy' ? W.cfg.dino.buyCostX : s.buy === 'ante' ? W.cfg.dino.anteCost : 1) * s.bet) : Math.round((s.buy ? W.cfg.buyCostX[s.buy] : 1) * s.bet));
+        const i = unknownSpins.findIndex(s => (s.game || 'bender') === game && s.key === key && s.mode === cur && priceOf(s) === cost);
+        if (i < 0) { bad.push({ step: W.stepNo, id: 'I7', message: `ledger has a ${game === 'dino' ? 'Dino' : 'Bender'} round ${ref} (cost ${cost}, win ${win}) that no spin in flight at the kill explains`, accounts: { ref, key }, expected: 'a spin sent and not answered', got: `cost ${cost} win ${win}` }); continue; }
         unknownSpins.splice(i, 1);
         if (!M.hasPlayer(key)) continue;
-        M.applySpin({ key, cur, cost, win, roundId }); W.counters.spinsUnacked++;
+        M.applySpin({ game, key, cur, cost, win, roundId }); W.counters.spinsUnacked++;
       } else if (ref.startsWith('achv:')) {
         const [, key, id] = ref.split(':');
         const want = W.achvReward.get(id), got = L.items[0].amount;

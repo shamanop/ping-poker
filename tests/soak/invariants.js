@@ -5,8 +5,8 @@
 const fs = require('fs');
 
 const CURS = ['chips', 'play'];
-const SOURCES = new Set(['mint:signup', 'mint:bonus', 'mint:achv', 'mint:topup', 'mint:migration', 'house:bender', 'house:coldcall', 'house:campaign', 'admin:adjust', 'fx:chips', 'fx:play']);
-const CASH_SOURCES = new Set(['admin:adjust', 'house:bender', 'house:coldcall', 'house:campaign']);
+const SOURCES = new Set(['mint:signup', 'mint:bonus', 'mint:achv', 'mint:topup', 'mint:migration', 'house:bender', 'house:coldcall', 'house:campaign', 'house:dino', 'admin:adjust', 'fx:chips', 'fx:play']);
+const CASH_SOURCES = new Set(['admin:adjust', 'house:bender', 'house:coldcall', 'house:campaign', 'house:dino']);
 const SHAPE = { bank: 2, play: 2, seat: 3, pot: 3, escrow: 4, pool: 3 };      // number of ':' separated parts
 const ONLY_CUR = { bank: 'chips', play: 'play', 'fx:chips': 'chips', 'fx:play': 'play' };
 const isAmount = n => typeof n === 'number' && Number.isSafeInteger(n) && n > 0;
@@ -349,13 +349,14 @@ class Checker {
     for (const [ref, s] of model.spins) {
       if (s.checked) continue;
       const L = this.lineByRef(ref);
-      if (!L) { out.push({ id: 'I7', message: `a Bender result the client received is not in the ledger (${ref})`, accounts: { ref, key: s.key }, expected: `cost ${s.cost} win ${s.win}`, got: 'no line' }); continue; }
+      const house = 'house:' + (s.game || 'bender');
+      if (!L) { out.push({ id: 'I7', message: `a ${s.game === 'dino' ? 'Dino' : 'Bender'} result the client received is not in the ledger (${ref})`, accounts: { ref, key: s.key }, expected: `cost ${s.cost} win ${s.win}`, got: 'no line' }); continue; }
       let cost = 0, win = 0, bad = null;
       const store = (s.cur === 'chips' ? 'bank:' : 'play:') + s.key;
       for (const it of L.items) {
         if (it.cur !== s.cur) bad = 'wrong currency ' + it.cur;
-        else if (it.from === store && it.to === 'house:bender') cost += it.amount;
-        else if (it.from === 'house:bender' && it.to === store) win += it.amount;
+        else if (it.from === store && it.to === house) cost += it.amount;
+        else if (it.from === house && it.to === store) win += it.amount;
         else bad = `foreign leg ${it.from} -> ${it.to}`;
       }
       if (bad || cost !== s.cost || win !== s.win) { out.push({ id: 'I7', message: `ledger line ${ref} does not match the result the client was told${bad ? ' (' + bad + ')' : ''}`, accounts: { ref, key: s.key }, expected: `cost ${s.cost} win ${s.win}`, got: `cost ${cost} win ${win}` }); continue; }
@@ -614,7 +615,7 @@ class Checker {
     const dead = this.killMark.dead != null ? this.killMark.dead : this.lines.length;
     const fresh = this.lines.slice(this.killMark.lines);
     const isBoot = L => (L.ref || '').startsWith('boot:') || (L.reason || '').startsWith('boot');
-    const allowed = /^(hand|bender|coldcall|campaign|achv|bonus|signup|buyin|rebuy|leave|kick|sweep|grace|night):/;
+    const allowed = /^(hand|bender|dino|coldcall|campaign|achv|bonus|signup|buyin|rebuy|leave|kick|sweep|grace|night):/;
     for (const L of fresh) {
       if (L.idx < dead) {
         if (isBoot(L)) { out.violations.push({ id: 'I9', message: `line ${L.no} (${L.ref}) is a boot line written before the server died`, accounts: { ref: L.ref }, expected: 'a cut-off operation', got: L.reason || L.ref }); continue; }

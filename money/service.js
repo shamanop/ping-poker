@@ -10,7 +10,7 @@ const TOPUP_BELOW = 10000;        // wallet.js: top-up only when Cash is under 1
 const TOPUP_COOLDOWN_MS = 3600000;
 const CURS = ['chips', 'play'];
 const MINT_KINDS = ['bonus', 'achv', 'topup'];
-const GAMES = ['bender', 'coldcall', 'campaign'];
+const GAMES = ['bender', 'coldcall', 'campaign', 'dino'];
 
 const isInt = (n) => typeof n === 'number' && Number.isSafeInteger(n);
 const store = (fund, key) => (fund === 'chips' ? 'bank:' : 'play:') + key;

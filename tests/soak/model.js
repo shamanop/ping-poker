@@ -8,7 +8,7 @@ const CURS = ['chips', 'play'];
 class Model {
   constructor() {
     this.players = new Map();                       // key -> { key, held:{chips,play} }
-    this.src = { signup: { chips: 0, play: 0 }, bonus: 0, achv: 0, topup: 0, admin: { chips: 0, play: 0 }, bender: { chips: 0, play: 0 }, coldcall: { chips: 0, play: 0 }, campaign: { chips: 0, play: 0 } };   // what each source account must be -sum of (coldcall: what the players netted; house + pool = -that)
+    this.src = { signup: { chips: 0, play: 0 }, bonus: 0, achv: 0, topup: 0, admin: { chips: 0, play: 0 }, bender: { chips: 0, play: 0 }, dino: { chips: 0, play: 0 }, coldcall: { chips: 0, play: 0 }, campaign: { chips: 0, play: 0 } };   // what each source account must be -sum of (coldcall: what the players netted; house + pool = -that)
     this.slot = new SlotBook();
     this.camp = new CampBook();
     this.spins = new Map();                         // ref -> { key, cur, cost, win, checked }
@@ -27,12 +27,12 @@ class Model {
   heldTotal(key) { return this.held(key, 'chips') + this.held(key, 'play'); }
   _add(key, cur, n) { const p = this.players.get(key); if (!p) throw new Error('model: unknown player ' + key); p.held[cur] += n; }
 
-  // A Bender result the client received: cost and totalWin are the numbers in the result event. Deduped by roundId.
-  applySpin({ key, cur, cost, win, roundId }) {
-    const ref = `bender:${key}:${roundId}`;
+  // A Bender (or Dino: game 'dino') result the client received: cost and totalWin are the numbers in the result event. Deduped by roundId.
+  applySpin({ key, cur, cost, win, roundId, game = 'bender' }) {
+    const ref = `${game}:${key}:${roundId}`;
     if (this.spins.has(ref)) return false;
-    this.spins.set(ref, { key, cur, cost, win, checked: false });
-    this._add(key, cur, win - cost); this.src.bender[cur] += win - cost; this.count.spins++;
+    this.spins.set(ref, { key, cur, cost, win, game, checked: false });
+    this._add(key, cur, win - cost); this.src[game][cur] += win - cost; this.count.spins++;
     return true;
   }
   // nets: { key: net } as the engine reports them (zero-sum over the hand); cur: { key: 'chips'|'play' } = fund of that seat.
@@ -87,7 +87,7 @@ class Model {
   accounts() { return [...this.players.keys()]; }
   expectedSource(cur) {
     return {
-      'mint:signup': -this.src.signup[cur], 'admin:adjust': -this.src.admin[cur], 'house:bender': -this.src.bender[cur], 'house:campaign': -this.src.campaign[cur], 'mint:migration': 0,
+      'mint:signup': -this.src.signup[cur], 'admin:adjust': -this.src.admin[cur], 'house:bender': -this.src.bender[cur], 'house:dino': -this.src.dino[cur], 'house:campaign': -this.src.campaign[cur], 'mint:migration': 0,
       'mint:bonus': cur === 'chips' ? -this.src.bonus : 0, 'mint:achv': cur === 'play' ? -this.src.achv : 0, 'mint:topup': cur === 'play' ? -this.src.topup : 0,
     };
   }
