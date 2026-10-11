@@ -172,8 +172,64 @@ function setup(opts = {}) {
     }
   });
 
+  // bonus growth (10/11 fix, config B): a sticky wild doubles once per spin it is part of a win, up to growCap (was 6: 2>4>6, then stuck)
+  const growthOf = (cfg, kind, seeds) => {   // every growth event of `seeds` bonuses, with the chain of each wild (by board cell, sticky wilds never move)
+    const eng = E.createEngine(cfg), ev = [], chains = [];
+    for (let seed = 1; seed <= seeds; seed++) {
+      const b = eng.playBonus(E.rngFrom(seed), kind, kind === 'landslide' ? 4 : 3, E.MAX_WIN_X), at = new Map();
+      for (const w of b.startWilds) at.set(w.c + ',' + w.r, [w.cell.m]);
+      for (const sp of b.spins) for (const st of sp.steps) for (const g of st.grown) { ev.push(g); const k = g.c + ',' + g.r; if (!at.has(k)) at.set(k, [g.from]); at.get(k).push(g.to); }
+      for (const ch of at.values()) chains.push(ch);
+      if (b.startWilds.length) { assert.strictEqual(b.startWilds.length, (kind === 'landslide' ? cfg.landslideStart : cfg.electionStart).length); }
+    }
+    return { ev, chains };
+  };
+  const has = (chains, seq) => chains.some((ch) => ('>' + ch.join('>') + '>').includes('>' + seq.join('>') + '>'));
+  await test('engine: shipped bonus math is config B (Recount plants a 1x wild, Landslide a 4x, growCap 256, maxSticky 2, no guarantee)', () => {
+    const C = E.DEFAULT_CFG;
+    assert.deepStrictEqual(C.electionStart, [[1]]); assert.deepStrictEqual(C.landslideStart, [[4]]);
+    assert.strictEqual(C.growCap, 256); assert.strictEqual(C.maxSticky, 2); assert.strictEqual(C.guaranteeP, 0); assert.strictEqual(C.bonusWildW, 0.025);
+  });
+  await test('engine: sticky wilds really double, 2>4>8>16, every growth is x2 up to growCap 256, once per spin', () => {
+    const cfg = { ...E.DEFAULT_CFG, landslideStart: [[2]] }, { ev, chains } = growthOf(cfg, 'landslide', 400);
+    assert.ok(ev.length > 200, 'growth events ' + ev.length);
+    for (const g of ev) assert.strictEqual(g.to, Math.min(g.from * 2, 256), g.from + 'x -> ' + g.to + 'x');
+    assert.ok(has(chains, [2, 4, 8, 16]), 'a 2x wild went 2>4>8>16');
+    const { ev: ev2 } = growthOf({ ...E.DEFAULT_CFG }, 'landslide', 400);
+    assert.ok(ev2.some((g) => g.from === 4 && g.to === 8), 'the planted 4x grows to 8x (cap 6 used to stop it at 6x)');
+  });
+  await test('engine: a wild born at 8x grows (8x -> 16x); growCap caps the double; growCap 1 means no growth (`??`, not `||`)', () => {
+    const { ev } = growthOf({ ...E.DEFAULT_CFG, landslideStart: [[8]] }, 'landslide', 300);
+    assert.ok(ev.some((g) => g.from === 8 && g.to === 16), 'an 8x wild grew to 16x');
+    const capped = growthOf({ ...E.DEFAULT_CFG, landslideStart: [[8]], growCap: 12 }, 'landslide', 300).ev;
+    assert.ok(capped.length && capped.every((g) => g.to <= 12) && capped.some((g) => g.from === 8 && g.to === 12), 'cap 12: 8x -> 12x, never above');
+    assert.strictEqual(growthOf({ ...E.DEFAULT_CFG, growCap: 1 }, 'landslide', 200).ev.length, 0, 'growCap 1: no wild grows');
+    assert.strictEqual(growthOf({ ...E.DEFAULT_CFG, growCap: 0 }, 'landslide', 200).ev.length, 0, 'growCap 0 is no growth (it used to fall back to 512)');
+  });
+  await test('engine: the Recount plants one sticky 1x wild (electionStart), the Landslide one 4x (landslideStart), on both copies of the engine', () => {
+    const eng = E.createEngine();
+    for (let seed = 1; seed <= 50; seed++) {
+      const e = eng.playBonus(E.rngFrom(seed), 'election', 3, E.MAX_WIN_X), l = eng.playBonus(E.rngFrom(seed), 'landslide', 4, E.MAX_WIN_X);
+      assert.strictEqual(e.startWilds.length, 1); assert.strictEqual(e.startWilds[0].cell.s, 'W'); assert.strictEqual(e.startWilds[0].cell.m, 1);
+      assert.strictEqual(l.startWilds.length, 1); assert.strictEqual(l.startWilds[0].cell.m, 4);
+      const w = e.startWilds[0]; assert.ok(e.spins[0].initial[w.c][w.r].s === 'W', 'the planted wild is on the first board');
+    }
+    const r = eng.round(E.rngFrom(3), 'buy-election'); assert.strictEqual(r.bonus.startWilds.length, 1); assert.strictEqual(r.cost, 11.5);
+    const two = E.createEngine({ ...E.DEFAULT_CFG, electionStart: [[2], [3]] }).playBonus(E.rngFrom(1), 'election', 3, E.MAX_WIN_X);
+    assert.deepStrictEqual(two.startWilds.map((w) => w.cell.m), [2, 3]); assert.notStrictEqual(two.startWilds[0].c + ',' + two.startWilds[0].r, two.startWilds[1].c + ',' + two.startWilds[1].r);
+  });
+  await test('engine: RANGES accept the shipped bonus keys and their bounds, refuse 0, too big, bad shapes and more planted wilds than maxSticky', () => {
+    for (const over of [{}, { growCap: 1 }, { growCap: 256 }, { growCap: 1024 }, { maxSticky: 1, electionStart: [[1]], landslideStart: [[4]] }, { maxSticky: 30 }, { electionStart: [[64]] }, { electionStart: [[2]] }, { landslideStart: [[1]] }, { landslideStart: [[64]] }, { landslideStart: [[2], [2]] }, { electionStart: [[1], [1]] }])
+      assert.doesNotThrow(() => E.validateConfig(over, { skipSmoke: true }), JSON.stringify(over));
+    assert.ok(E.validateConfig({ electionStart: [[8]], growCap: 512 }));   // with the 300-round smoke test
+    for (const [over, re] of [[{ growCap: 0 }, /growCap: must be between 1 and 1024/], [{ growCap: 1025 }, /must be between 1 and 1024/], [{ growCap: '256' }, /growCap/], [{ maxSticky: 0 }, /maxSticky: must be between 1 and 30/], [{ maxSticky: 31 }, /must be between 1 and 30/],
+      [{ electionStart: [[0]] }, /electionStart: must be between 1 and 64/], [{ electionStart: [[65]] }, /must be between 1 and 64/], [{ electionStart: [] }, /non-empty list/], [{ electionStart: [1] }, /shaped like the default/], [{ electionStart: [[1, 2]] }, /shaped like the default/], [{ electionStart: 1 }, /electionStart/], [{ electionStart: [[-1]] }, /electionStart/], [{ electionStart: [[NaN]] }, /electionStart/],
+      [{ electionStart: [[1], [1], [1]] }, /electionStart: at most maxSticky \(2\)/], [{ landslideStart: [[0]] }, /landslideStart: must be between 1 and 64/], [{ landslideStart: [[65]] }, /landslideStart/], [{ landslideStart: Array.from({ length: 31 }, () => [2]), maxSticky: 30 }, /landslideStart: at most maxSticky/]])
+      assert.throws(() => E.validateConfig(over, { skipSmoke: true }), re, JSON.stringify(over));
+  });
+
   await test('engine: tuned to 98% RTP (buy costs equal measured bonus EV; bonus about 1 in 100)', () => {
-    const C = E.CFG; assert.ok(C.buyCost.election === 10.91 && C.buyCost.landslide === 77.21, 'buy costs');
+    const C = E.CFG; assert.ok(C.buyCost.election === 11.5 && C.buyCost.landslide === 68.6, 'buy costs');
     const eng = E.createEngine(), rng = E.rngFrom(424242); let bonus = 0; const N = 300000;
     for (let i = 0; i < N; i++) if (eng.round(rng, 'spin').bonus) bonus++;
     const one = N / bonus; assert.ok(one > 85 && one < 115, 'bonus 1 in ' + one.toFixed(0));

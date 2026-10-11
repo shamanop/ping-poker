@@ -53,7 +53,7 @@ async function main() {
     ctl: new ServerCtl({ port, dir: dataDir, serverDir, bug, injectPath: path.join(__dirname, 'bugs', 'inject.js'), env: { COLDCALL_TEST: '1', CAMPAIGN_TEST: '1', CAMPAIGN_IDLE_MS: '2500', NODE_ENV: 'test', ADMIN_CLAIM_PASSWORD: 'test-admin-claim-1008', BENDER_ADMIN_TOKEN: slot.ADMIN_TOKEN } }),
     model: new Model(), checker: new Checker(path.join(dataDir, 'money.jsonl')),
     bots: new Map(), tables: new Map(), admin: null, auditSock: null,
-    inflightSpins: [], cfg: { betLevels: [1, 2, 10, 20, 50, 100, 200, 500, 1000, 2500], buyCostX: { election: 10.91, landslide: 77.21 } },
+    inflightSpins: [], cfg: { betLevels: [1, 2, 10, 20, 50, 100, 200, 500, 1000, 2500], buyCostX: { election: 11.5, landslide: 68.6 } },
     achvReward: new Map(), bonusSchedule: [],
     stepNo: 0, recent: [], fatal: [], lastSignupAt: 0,
     counters: { checks: 0, kills: 0, restarts: 0, sigterm: 0, buyIns: 0, cashOuts: 0, spinsRefused: 0, spinsUnacked: 0, handsVoidedByKill: 0, warnings: {} },

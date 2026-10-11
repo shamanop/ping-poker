@@ -1,6 +1,6 @@
 {
- "cfgHash": "480c4efab40a857ac8c31eda07e61e355193774d9cdcc4bf818feae9a42f7862",
- "note": "shipped Ballot Bender numbers from a long offline run of games/bender-rtp.js workers (stratified: base spin, scatter counts, each bonus kind sampled directly); m and se in x bet, pct and se in % (1 sigma)",
+ "cfgHash": "e8ab8cf445867c0ed2da03c3585bc4583ced23a99f9eb784c9244dd270d56ee1",
+ "note": "shipped Ballot Bender numbers from a long offline run of games/bender-rtp.js workers (stratified: base spin, scatter counts, each bonus kind sampled directly); m and se in x bet, pct and se in % (1 sigma); buy pct at the lowest price any allowed bet pays (R2C-1). Config B, 2026-10-11 (Recount plants a 1x wild, Landslide a 4x, growCap 256).",
  "runs": {
   "workers": 6,
   "baseSpinsEach": 4000000,
@@ -14,43 +14,43 @@
   ]
  },
  "base": {
-  "m": 0.711186129160297,
-  "se": 0.0006722822718823263
+  "m": 0.7119749288644766,
+  "se": 0.0006800431670984093
  },
  "p": [
-  0.009028666666666667,
-  0.0009277916666666667,
-  0.00007320833333333333,
-  0.000004666666666666666
+  0.009036041666666666,
+  0.0009292083333333333,
+  0.00007266666666666667,
+  0.000004583333333333333
  ],
  "B": [
   {
-   "m": 10.619696705226666,
-   "se": 0.08265990631699109
+   "m": 11.11347172411554,
+   "se": 0.06852803171048379
   },
   {
-   "m": 75.32011549817237,
-   "se": 0.2929184078658713
+   "m": 67.63873143856101,
+   "se": 0.2077721155095108
   },
   {
-   "m": 166.06409457822264,
-   "se": 1.3363858848206311
+   "m": 206.22277449422128,
+   "se": 1.337167975702169
   },
   {
-   "m": 408.79670586222204,
-   "se": 4.979024514339598
+   "m": 781.765156335556,
+   "se": 6.896890846802425
   }
  ],
  "spin": {
-  "pct": 97.90910498557331,
-  "se": 0.10454229401950078
+  "pct": 98.18767095384973,
+  "se": 0.09453089953149053
  },
  "buyElection": {
-  "pct": 97.33910820556065,
-  "se": 0.7576526701832365
+  "pct": 96.63888455752642,
+  "se": 0.5958959279172503
  },
  "buyLandslide": {
-  "pct": 97.55228014269186,
-  "se": 0.3793788471258533
+  "pct": 98.74267363293579,
+  "se": 0.30331695694819094
  }
 }
