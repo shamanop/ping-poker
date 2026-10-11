@@ -16,7 +16,7 @@ const has = (live, o) => Object.keys(o).every((k) => (o[k] && typeof o[k] === 'o
 const D = BE.DEFAULT_CFG, r4 = (x) => Math.round(x * 1e4) / 1e4;
 const GAMES = [
   { name: 'Ballot Bender',
-    A: { pay: Object.fromEntries(Object.entries(D.pay).map(([k, a]) => [k, a.map((v) => r4(v * 0.9))])) }, Bc: { buyCost: { election: 12 } },
+    A: { pay: Object.fromEntries(Object.entries(D.pay).map(([k, a]) => [k, a.map((v) => r4(v * 0.9))])) }, Bc: { buyCost: { election: 18 } },   // dearer than the shipped 16.1 (Recount EV 15.75 since the 10/11 multi-grow), so it passes
     set: (o, extra) => B.setLiveConfigChecked({ overrides: o, scale: SC, who: 'r2c-test', ...extra }),
     custom: () => JSON.stringify(BE.currentConfig()) !== JSON.stringify(D), live: () => BE.currentConfig(), info: () => B.liveInfo(), file: () => process.env.BENDER_CFG_FILE },
   { name: 'Cold Call',

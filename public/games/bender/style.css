@@ -69,8 +69,11 @@ img.frame{left:0;top:0;width:1000px;height:833px;pointer-events:none;z-index:2}
 
 .cell{position:absolute;left:0;top:0;width:130px;height:130px;will-change:transform,opacity}
 .cell img{position:absolute;left:0;top:0;width:130px;height:130px;object-fit:contain;pointer-events:none}
-.cell .mult{position:absolute;left:50%;top:80%;transform:translate(-50%,-50%);font-family:var(--slab);font-size:64px;line-height:1;padding:4px 12px 0;color:var(--red);background:var(--cream);border:5px solid var(--navy);border-radius:14px;box-shadow:0 5px 0 rgba(0,0,0,.55),0 0 18px rgba(245,185,66,.8);letter-spacing:-.02em;pointer-events:none;white-space:nowrap;z-index:3}
+.cell .mult{position:absolute;left:50%;top:68%;transform:translate(-50%,-50%);font-family:var(--slab);font-size:64px;line-height:1;padding:4px 12px 0;color:var(--red);background:var(--cream);border:5px solid var(--navy);border-radius:14px;box-shadow:0 5px 0 rgba(0,0,0,.55),0 0 18px rgba(245,185,66,.8);letter-spacing:-.02em;pointer-events:none;white-space:nowrap;z-index:3}
 .cell.big .mult{font-size:56px;background:var(--gold)}
+.cell[data-d="2"] .mult{font-size:50px;padding:4px 10px 0}
+.cell[data-d="3"] .mult{font-size:40px;padding:4px 8px 0;border-width:4px;border-radius:12px}
+.cell[data-d="4"] .mult{font-size:32px;padding:3px 6px 0;border-width:4px;border-radius:10px}
 .cell.dim{opacity:.3;filter:saturate(.4) brightness(.72);transition:opacity .15s,filter .15s}
 .cell.dim img{transform:scale(.94)}
 .cell.hit{z-index:2}

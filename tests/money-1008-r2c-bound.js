@@ -17,7 +17,7 @@ const payX = (S) => ({ pay: Object.fromEntries(Object.entries(D.pay).map(([k, a]
   B.init({});
   await test('Ballot Bender: ok means every way\'s upper bound (measured + 3 SE) is at or under 100; a config whose POINT estimates are all at or under 100 but whose standard error is wide is refused, and the result names the way', async () => {
     let seen = 0;
-    for (const over of [{ ...payX(0.12), buyCost: { election: 3.0 } }, { ...payX(0.5), buyCost: { landslide: 90 } }, { spinsFor: { 6: 21 }, buyCost: { landslide: 73.8 } }, { ...payX(0.3), buyCost: { election: 6 } }]) {
+    for (const over of [{ ...payX(0.12), buyCost: { election: 3.0 } }, { ...payX(0.5), buyCost: { landslide: 90 } }, { spinsFor: { 6: 21 }, buyCost: { landslide: 31.5 } }, { ...payX(0.3), buyCost: { election: 6 } }, { buyCost: { election: 15.8 } }]) {   // 10/11 multi-grow: Landslide EV 32.07 (67.6 under config B, 75.3 before): the p8 price moves 73.8 -> 66.3 -> 31.5 (still ~102%); Recount EV 15.75: 15.8 (every bet pays 15.8) reads 99.7% +-0.3 (the reference's own SE), bound 100.6
       const r = await quiet(() => R.measure(bcfg(over), { scale: 0.1 }));
       assert.ok(r.bound && r.bound.way && Number.isFinite(r.bound.upper), 'no bound in the result');
       for (const [w, x] of Object.entries(r.ways)) assert.ok(r.bound.upper >= x.pct + 3 * x.se - 1e-9, w + ' above the reported bound');
@@ -30,9 +30,9 @@ const payX = (S) => ({ pay: Object.fromEntries(Object.entries(D.pay).map(([k, a]
     const r = await quiet(() => R.measure(bcfg({}), { scale: 0.1 }));
     assert.ok(r.ok && r.bound.upper < 100, 'shipped bound ' + JSON.stringify(r.bound));
   });
-  await test('Ballot Bender admin path: the critic\'s p8 config (spinsFor[6] 21, landslide buy 73.8x; the check read the buy 99.5% +-2.1, the reference says 102.1%) is REFUSED at the full budget, the reply names the way and the bound, nothing changes', async () => {
+  await test('Ballot Bender admin path: the critic\'s p8 config (spinsFor[6] 21, landslide buy 73.8x then, 66.3x after the 10/11 bonus fix, 31.5x since the multi-grow: about 102% against the reference) is REFUSED at the full budget, the reply names the way and the bound, nothing changes', async () => {
     const before = JSON.stringify(E.currentConfig());
-    let err = null; try { await quiet(() => B.setLiveConfigChecked({ overrides: { spinsFor: { 6: 21 }, buyCost: { landslide: 73.8 } }, note: 'r2c-3', who: 'r2c-test' })); } catch (e) { err = e; }
+    let err = null; try { await quiet(() => B.setLiveConfigChecked({ overrides: { spinsFor: { 6: 21 }, buyCost: { landslide: 31.5 } }, note: 'r2c-3', who: 'r2c-test' })); } catch (e) { err = e; }
     assert.ok(err, 'ACCEPTED'); assert.ok(/buyLandslide|buyElection|spin/.test(err.message) && /upper bound/.test(err.message) && /ceiling/.test(err.message), err.message);
     assert.strictEqual(JSON.stringify(E.currentConfig()), before); assert.ok(!fs.existsSync(process.env.BENDER_CFG_FILE));
     const a = fs.readFileSync(process.env.BENDER_CFG_FILE + '.audit.log', 'utf8').trim().split('\n').map((l) => JSON.parse(l)); assert.strictEqual(a[a.length - 1].outcome, 'refused');

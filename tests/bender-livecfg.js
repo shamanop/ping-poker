@@ -21,20 +21,20 @@ const quiet = async (fn) => { const o = console.log; console.log = () => {}; try
       assert.ok(!fs.existsSync(process.env.BENDER_CFG_FILE));
     });
     await t('swap applies to the next round and buy costs (a dearer election buy: its payback goes down, so it is accepted)', async () => {
-      const info = await quiet(() => B.setLiveConfigChecked({ overrides: { buyCost: { election: 14 } }, note: 'test', who: 'test' }));
-      assert.strictEqual(E.CFG.buyCost.election, 14);
+      const info = await quiet(() => B.setLiveConfigChecked({ overrides: { buyCost: { election: 18 } }, note: 'test', who: 'test' }));
+      assert.strictEqual(E.CFG.buyCost.election, 18);
       assert.strictEqual(E.CFG.buyCost.landslide, E.DEFAULT_CFG.buyCost.landslide);
       assert.ok(/measured by the server/.test(info.rtpLabel), info.rtpLabel);
-      const r = E.resolveRound(E.rngFrom(1), 'election'); assert.strictEqual(r.costMult, 14);
+      const r = E.resolveRound(E.rngFrom(1), 'election'); assert.strictEqual(r.costMult, 18);
     });
     await t('persisted (with its measurement) and reloaded', () => {
       const j = JSON.parse(fs.readFileSync(process.env.BENDER_CFG_FILE, 'utf8'));
-      assert.strictEqual(j.overrides.buyCost.election, 14); assert.strictEqual(j.measured.ok, true); assert.ok(j.measured.label);
+      assert.strictEqual(j.overrides.buyCost.election, 18); assert.strictEqual(j.measured.ok, true); assert.ok(j.measured.label);
       E.resetConfig(); assert.strictEqual(E.CFG.buyCost.election, E.DEFAULT_CFG.buyCost.election);
-      B.loadLiveConfig(); assert.strictEqual(E.CFG.buyCost.election, 14);
+      B.loadLiveConfig(); assert.strictEqual(E.CFG.buyCost.election, 18);
     });
     await t('clientCfg carries the live buy price; reset restores defaults', async () => {
-      assert.strictEqual(B.clientCfg().buyCost.election, 14);
+      assert.strictEqual(B.clientCfg().buyCost.election, 18);
       await quiet(() => B.setLiveConfigChecked({ overrides: {} })); assert.strictEqual(JSON.stringify(E.CFG), def);
     });
     console.log(`bender-livecfg: ${n} passed`);

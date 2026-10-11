@@ -12,10 +12,12 @@
     // cell weights for regular symbols; W and S added on top
     weights: { pen: 18, stk: 16, bal: 14, yrd: 12, meg: 8.5, cap: 6.5, phn: 4.5, seal: 3.0 },
     wildW: 1.1, scatterW: 1.19, bonusScatterW: 1.4,
-    bonusWildW: 0.085,               // wild weight during free spins
+    bonusWildW: 0.04,                // wild weight during free spins (with maxSticky 1 these wilds do not stick: they add their multiplier to the win they land in)
     wildTable: [[2, 40], [3, 26], [4, 14], [5, 9], [8, 5], [10, 2], [15, 0.6]],
     bonusWildTable: [[2, 60], [3, 24], [4, 10], [6, 4], [8, 1.6], [12, 0.4]],
-    guaranteeP: 0.083, maxSticky: 3, growCap: 6,   // a guaranteed sticky wild on ~1 in 12 bonus spins, at most 3 on the board; sticky wilds double 2>4>6 (maxSticky 4 made 10,000x too common and RTP lumpy)
+    guaranteeP: 0, maxSticky: 1, growCap: 128,   // no guaranteed wild (both bonuses start with a planted one); the planted wild is the only sticky one; doubling up to 128x
+    // (10/11 multi-grow: per-step doubling with config B (maxSticky 2, cap 256, Landslide 4x) read about 123% RTP; this set is back at 98%)
+    growPerStep: true,   // a sticky wild doubles EVERY tumble step it is part of a win (2>4>8 inside one spin, Chris 10/11); false = once per spin
     // payout x bet by cluster size bucket: 5,6,7,8,9,10-11,12-14,15-19,20+
     pay: {
       pen : [0.4075, 0.6224, 1.054, 1.657, 2.51, 4.177, 8.322, 28.81, 112.4],
@@ -30,8 +32,9 @@
     scatterPay: { 3: 6.455, 4: 21.48, 5: 107.4, 6: 429.7 },
     spinsFor: { 3: 6, 4: 8, 5: 12, 6: 20 },
     retrigger: { 3: 3, 4: 5, 5: 8 }, maxSpins: 40,
-    landslideStart: [[2]],   // pre-placed sticky wilds in LANDSLIDE (UI copy: starts with 1 wild planted)
-    buyCost: { election: 10.91, landslide: 77.21 },   // 'election' = RECOUNT in the UI
+    landslideStart: [[1]],   // pre-placed sticky wilds in LANDSLIDE (UI copy: starts with a wild planted)
+    electionStart: [[1]],    // pre-placed sticky wilds in RECOUNT (UI copy: starts with a wild planted)
+    buyCost: { election: 16.1, landslide: 32.7 },   // 'election' = RECOUNT in the UI; EV/0.98 (98.2%, 98.1%); the 1c/2c bets round them to 16 / 32.5 (98.4%, 98.7%), under the 100% gate (R2C-1: the gate checks the lowest price)
     maxTumbles: 14,   // hard tumble cap per spin: sticky wilds wall the board and would otherwise chain 40 tumbles (tail variance)
   };
   const TIERS = [[100, 'worldisyours'], [50, 'megalandslide'], [25, 'ballotbender'], [10, 'closeenough'], [5, 'tasty'], [2, 'nice']];
@@ -97,9 +100,9 @@
       const g = Array.from({ length: COLS }, () => new Array(ROWS));
       const fixedIn = opts.fixed || [];
       let stuck = fixedIn.length;
-      const draw = () => { const x = drawCell(rng, tb, false); if (sticky && x.s === 'W' && stuck < (cfg.maxSticky || 99)) { x.stick = true; stuck++; } return x; };
+      const draw = () => { const x = drawCell(rng, tb, false); if (sticky && x.s === 'W' && stuck < (cfg.maxSticky ?? 99)) { x.stick = true; stuck++; } return x; };
       for (const w of fixedIn) { w.cell.grew = false; w.cell.stick = true; g[w.c][w.r] = w.cell; }
-      if (sticky && cfg.guaranteeP && stuck < (cfg.maxSticky || 99) && rng() < cfg.guaranteeP) {
+      if (sticky && cfg.guaranteeP && stuck < (cfg.maxSticky ?? 99) && rng() < cfg.guaranteeP) {
         const free = []; for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) if (!g[c][r]) free.push([c, r]);
         const [c, r] = free[Math.floor(rng() * free.length)];
         g[c][r] = { id: nextId++, s: 'W', m: drawWildMult(rng, tb), stick: true }; stuck++;
@@ -117,9 +120,10 @@
         for (const k of clusters) for (const [c, r] of k.cells) {
           if (g[c][r].stick) grow.add(c + ',' + r); else kill.add(c + ',' + r);
         }
-        // sticky wilds in a paying cluster double after it pays
+        // sticky wilds in a paying cluster double after the step pays (the step is paid at the old multiplier, the new one counts from the next tumble);
+        // growPerStep: every tumble step the wild is part of a win (2>4>8 inside one spin), else once per spin
         const grown = [];
-        for (const key of grow) { const [c, r] = key.split(',').map(Number); const w = g[c][r]; if (w.grew) continue; w.grew = true; const to = Math.max(w.m, Math.min(w.m * 2, cfg.growCap || 512)); if (to !== w.m) { grown.push({ c, r, from: w.m, to }); w.m = to; } }
+        for (const key of grow) { const [c, r] = key.split(',').map(Number); const w = g[c][r]; if (!cfg.growPerStep) { if (w.grew) continue; w.grew = true; } const to = Math.max(w.m, Math.min(w.m * 2, cfg.growCap ?? 512)); if (to !== w.m) { grown.push({ c, r, from: w.m, to }); w.m = to; } }
         // gravity per column, treating sticky wilds as walls
         const fall = [], spawn = [];
         for (let c = 0; c < COLS; c++) {
@@ -157,10 +161,11 @@
       capLeft = Math.max(0, capLeft);
       if (capLeft <= 0) { out.capped = true; out.startWilds = []; return out; }
       let fixed = [];
-      if (kind === 'landslide') {
+      const start = kind === 'landslide' ? cfg.landslideStart : (cfg.electionStart || []);
+      if (start.length) {
         const cells = []; for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) cells.push([c, r]);
         for (let i = cells.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [cells[i], cells[j]] = [cells[j], cells[i]]; }
-        fixed = cfg.landslideStart.map(([m], i) => ({ c: cells[i][0], r: cells[i][1], cell: { id: nextId++, s: 'W', m } }));
+        fixed = start.map(([m], i) => ({ c: cells[i][0], r: cells[i][1], cell: { id: nextId++, s: 'W', m } }));
       }
       out.startWilds = fixed.map((w) => ({ c: w.c, r: w.r, cell: { ...w.cell } }));
       let left = spins, i = 0;
@@ -221,7 +226,7 @@ if (typeof module === 'object' && module.exports) {
   const clone = (o) => JSON.parse(JSON.stringify(o));
   // R2C-4: every number has a range, checked before anything is built or measured (an out-of-range config is refused at once, nothing runs). The loop bounds keep a bonus finite, the money knobs keep a typo (one extra
   // zero) out: the shipped value of every key is inside its range. [min, max]; a key not listed here is [0, 1e6].
-  const RANGES = { guaranteeP: [0, 1], maxSticky: [0, 30], growCap: [0, 100], maxSpins: [0, 200], maxTumbles: [0, 100], 'spinsFor.*': [0, 100], 'retrigger.*': [0, 40], 'buyCost.*': [0, 1e5], 'pay.*': [0, 1e6], 'scatterPay.*': [0, 1e6], 'weights.*': [0, 1e6], landslideStart: [0, 29] };
+  const RANGES = { guaranteeP: [0, 1], maxSticky: [1, 30], growCap: [1, 1024], maxSpins: [0, 200], maxTumbles: [0, 100], 'spinsFor.*': [0, 100], 'retrigger.*': [0, 40], 'buyCost.*': [0, 1e5], 'pay.*': [0, 1e6], 'scatterPay.*': [0, 1e6], 'weights.*': [0, 1e6], landslideStart: [1, 64], electionStart: [1, 64] };
   const rangeFor = (at, pairCol) => { const p = at.replace(/^cfg\./, ''); if (RANGES[p]) return RANGES[p]; if (pairCol === 0) return [0, 1000]; const q = p.replace(/\.[^.]+$/, '.*'); return RANGES[q] || [0, 1e6]; };
   const inRange = (x, at, col) => { const [lo, hi] = rangeFor(at, col); if (typeof x !== 'number' || !Number.isFinite(x) || x < lo || x > hi) throw new Error(at + ': must be between ' + lo + ' and ' + hi + ' (got ' + (typeof x === 'number' ? x : typeof x) + ')'); return x; };
   function mergeChecked(base, over, at) {
@@ -239,6 +244,9 @@ if (typeof module === 'object' && module.exports) {
         v.forEach((x) => { if (Array.isArray(x)) x.forEach((y, c) => inRange(y, here, c)); else inRange(x, here); });
         if (!Array.isArray(b[0]) && b.length !== v.length) throw new Error(here + ': must have ' + b.length + ' entries');
         base[k] = v;
+      } else if (typeof b === 'boolean') {
+        if (typeof v !== 'boolean') throw new Error(here + ': must be true or false');
+        base[k] = v;
       } else if (b && typeof b === 'object') mergeChecked(b, v, here);
       else throw new Error(here + ': not tunable');
     }
@@ -248,6 +256,7 @@ if (typeof module === 'object' && module.exports) {
   function buildConfig(over, opts) {
     const next = mergeChecked(clone(DEFAULT_CFG), over || {}, 'cfg');
     if (!(next.buyCost.election > 0 && next.buyCost.landslide > 0)) throw new Error('cfg.buyCost: prices must be > 0');
+    for (const k of ['landslideStart', 'electionStart']) if (next[k].length > next.maxSticky) throw new Error('cfg.' + k + ': at most maxSticky (' + next.maxSticky + ') planted wilds');
     const e = Eng.createEngine(next), rng = Eng.rngFrom(20261005);
     for (let i = 0; i < (opts && opts.skipSmoke ? 0 : 300); i++) {
       const r = e.round(rng, i % 30 === 0 ? 'buy-election' : i % 30 === 15 ? 'buy-landslide' : 'spin');

@@ -80,7 +80,7 @@ async function setLiveConfigChecked({ overrides, rtpLabel, note, who, scale, see
   try { const info = setLiveConfig({ overrides: over, note, measured }); log({ outcome: 'accepted', new: nw }); return info; } catch (e) { log({ outcome: 'refused', why: String(e.message).slice(0, 200), new: nw }); throw e; }
 }
 const rtpLabel = () => (isDefaultCfg(Eng.CFG) ? RTP_LABEL : live.measured && live.measured.hash === hashOf(Eng.CFG) ? live.measured.label : 'custom settings, not measured');
-function clientCfg() { const c = Eng.currentConfig(); return { weights: c.weights, pay: c.pay, scatterPay: c.scatterPay, spinsFor: c.spinsFor, retrigger: c.retrigger, buyCost: c.buyCost }; }
+function clientCfg() { const c = Eng.currentConfig(); return { weights: c.weights, pay: c.pay, scatterPay: c.scatterPay, spinsFor: c.spinsFor, retrigger: c.retrigger, buyCost: c.buyCost, growCap: c.growCap, growPerStep: c.growPerStep, maxSticky: c.maxSticky, guaranteeP: c.guaranteeP, electionStart: c.electionStart, landslideStart: c.landslideStart }; }   // the bonus keys too, so practice play and the rules copy follow a live override
 function liveInfo() { return { file: CFG_FILE, rtpLabel: rtpLabel(), note: live.note, updatedAt: live.updatedAt, measured: live.measured, overrides: live.overrides, cfg: Eng.currentConfig() }; }
 
 const BET_LEVELS = Eng.BET_LEVELS;
