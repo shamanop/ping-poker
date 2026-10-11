@@ -296,7 +296,7 @@
     const homeLine = '<div class="homeline"><label for="homeQ">HOME</label>' + (S.home ? '<b>' + esc(nameOf(S.home)) + '</b>' + tierChip(tierOf(S.home)) + '' : '<b class="ph">tap the map, or search</b>') + '</div>';
     p.innerHTML =
       '<div class="setup">' + homeLine +
-      '<div class="seg bets" role="radiogroup" aria-label="Stake"><span class="legend">STAKE</span>' + lv.map((n) => '<button type="button" class="segb' + (n === S.bet ? ' on' : '') + '" data-action="bet" data-b="' + n + '" role="radio" aria-checked="' + (n === S.bet) + '">' + fmt(n) + '</button>').join('') + '</div>' +
+      '<div class="seg bets" role="radiogroup" aria-label="Stake"><span class="legend">STAKE</span>' + lv.map((n) => '<button type="button" class="segb' + (n === S.bet ? ' on' : '') + '" data-action="bet" data-b="' + n + '" role="radio" aria-checked="' + (n === S.bet) + '">' + fmt(n).replace(/\.00$/, '') + '</button>').join('') + '</div>' +
       '<div class="homeRow"><input id="homeQ" class="find" type="search" inputmode="search" autocomplete="off" spellcheck="false" placeholder="Search 50 states" value="' + esc(S.q) + '" aria-label="Search for a home state"><div id="homeListBox"></div></div>' +
       '<div class="lgnd" aria-hidden="true"><i class="lg safeR"></i><i class="lg safeD"></i><span>SAFE</span><i class="lg leanR"></i><i class="lg leanD"></i><span>LEAN</span><i class="lg swing"></i><span>SWING</span></div>' +
       '</div>';

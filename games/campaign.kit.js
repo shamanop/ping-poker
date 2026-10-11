@@ -23,7 +23,7 @@ module.exports = {
     for (const rec of mod._test.runs.values()) if (rec.timer) { clearTimeout(rec.timer); rec.timer = null; }
     try { mod._test.store.close(true); } catch {}
   },
-  bets: { good: [100, 200, 500, 1000, 2500], min: 100, max: 2500 },
+  bets: { good: [100, 200, 500, 1000, 2500, 5000, 10000, 25000, 50000, 100000], min: 100, max: 100000 },
   oneOpen: true,                                     // one open run per account
   playVariants: 3,                                   // 0: withdraw at step 0 (refund), 1: one step then cash out, 2: a scandal on the first step (stake lost)
   open: (cur, bet) => ({ ev: 'start', payload: { mode: cur, bet, home: HOME } }),

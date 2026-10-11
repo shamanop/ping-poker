@@ -41,7 +41,7 @@ module.exports = {
     for (const rec of mod._pull.open.values()) if (rec.timer) { clearTimeout(rec.timer); rec.timer = null; }
     try { mod._pull.store.close(true); } catch {}
   },
-  bets: { good: [10, 50, 100, 500], min: 1, max: 2500 },   // cents / chips
+  bets: { good: [10, 50, 100, 500], min: 1, max: 100000 },   // cents / chips
   maxCost: (bet) => bet * 500,                       // a bought bonus costs a multiple of the bet
   oneOpen: true,                                     // one open decision per account and currency
   playVariants: 3,                                   // 0: a plain spin, 1: buy bonus1, 2: buy bonus2 (decisions answered until done)

@@ -11,7 +11,7 @@
   else root.ColdCallEngine = factory();
 })(typeof self !== 'undefined' ? self : this, function () {
   const COLS = 6, ROWS = 5, N = 30, MIN_CLUSTER = 5, MAX_WIN_X = 10000, MAX_WIN_T = MAX_WIN_X * 10;
-  const BET_LEVELS = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2500];
+  const BET_LEVELS = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2500, 5000, 10000, 25000, 50000, 100000];
   // symbol ids: regular 0..9 (low 0-4, high 5-9), then closer (wild), bell (scatter), phone ("the call connects")
   const SYM = ['mug', 'note', 'ball', 'can', 'cups', 'headset', 'rx', 'pile', 'cashwad', 'cash', 'closer', 'bell', 'phone'];
   const NREG = 10, WILD = 10, BELL = 11, PHONE = 12, NSYM = 13;

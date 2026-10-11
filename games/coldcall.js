@@ -89,7 +89,7 @@ const balances = (key) => ({ play: M().balance(key, 'play'), chips: M().balance(
 
 // A stored state of the wrong shape must never lock an account out, and it must never cost a player more than it has to (an armed Callback and the leads are Cash value that lives only in this file):
 // every field is checked on its own; a missing one gets its default, a malformed one is reset ALONE, with a log line that names the player, the field and the value that was dropped (MONEY 1008 K4-2).
-// A state that is not an object of version 1 at all reads as a new one (also logged). cb.bet is any whole number of cents in [1, 2500] (DENOMS: below an average of 10c the Callback step is 1 cent); warmBet (cents of the bet the warm squares were made at) is 0 when absent, carry (cents, [0, 10)) is 0 when absent or
+// A state that is not an object of version 1 at all reads as a new one (also logged). cb.bet is any whole number of cents in [1, the top bet level] (DENOMS: below an average of 10c the Callback step is 1 cent); warmBet (cents of the bet the warm squares were made at) is 0 when absent, carry (cents, [0, 10)) is 0 when absent or
 // cb.id (P6) is the Callback's round id, 'cb' + the id of the round that armed it; a missing or unusable id is not a damaged state, it is given a new one before the Callback may be played.
 const isInt = (n) => Number.isSafeInteger(n);
 const isFiniteNum = (n) => typeof n === 'number' && Number.isFinite(n);
@@ -108,7 +108,7 @@ function normState(st, who) {
   const get = (k, dflt, ok, fix) => { const x = st[k]; if (x === undefined || (x === null && dflt === null)) return dflt; if (ok(x)) return fix ? fix(x) : x; resetNote(who || '(unknown)', k, x); return dflt; };
   out.lt = get('lt', 0, (x) => isFiniteNum(x) && x >= 0);
   out.avg = get('avg', 0, (x) => isFiniteNum(x) && x >= 0);
-  out.cb = get('cb', null, (x) => x && typeof x === 'object' && !Array.isArray(x) && isInt(x.bet) && x.bet >= 1 && x.bet <= 2500, (x) => { const c = { ...x }; if (!validId(c.id)) delete c.id; return c; });
+  out.cb = get('cb', null, (x) => x && typeof x === 'object' && !Array.isArray(x) && isInt(x.bet) && x.bet >= 1 && x.bet <= BET_LEVELS[BET_LEVELS.length - 1], (x) => { const c = { ...x }; if (!validId(c.id)) delete c.id; return c; });
   out.warm = get('warm', [], (x) => Array.isArray(x) && x.every((q) => isInt(q) && q >= 0 && q < cells), (x) => x.slice());
   out.warmBet = get('warmBet', 0, (x) => isInt(x) && x >= 0);
   out.coldAt = get('coldAt', null, isFiniteNum);

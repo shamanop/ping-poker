@@ -34,7 +34,7 @@ t('state: shape, bet levels, map, balances, no run', () => {
   const w = setup(), s = w.sock('ann');
   const r = H.call(w, s, 'state', {});
   eq(r.ev, 'state'); const p = r.payload;
-  deq(p.betLevels, [100, 200, 500, 1000, 2500]); deq(p.modes, ['play', 'chips']); eq(p.rtp, '96.0%'); eq(p.maxWinX, 1000); eq(p.capX, 10000); eq(p.idleMs, 60000);
+  deq(p.betLevels, [100, 200, 500, 1000, 2500, 5000, 10000, 25000, 50000, 100000]); deq(p.modes, ['play', 'chips']); eq(p.rtp, '96.0%'); eq(p.maxWinX, 1000); eq(p.capX, 10000); eq(p.idleMs, 60000);
   eq(Object.keys(p.map.states).length, 50); ok(p.map.tiers && p.map.tiers.swing, 'tier table in the map'); eq(p.run, null);
   eq(p.balances.play, w.bal('ann', 'play')); eq(p.balances.chips, w.bal('ann', 'chips'));
   eq(lines(w), 0, 'state writes nothing'); eq(w.lines().filter((l) => /^campaign/.test(String(l.ref || ''))).length, 0);

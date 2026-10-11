@@ -123,7 +123,7 @@
     const cb = cbPending(), sp = $('spin') && $('spin').firstElementChild;
     if (sp) { sp.textContent = cb ? 'CALLBACK' : 'SPIN'; sp.style.fontSize = cb ? '15px' : ''; }
     $('spin').classList.toggle('cb', cb);
-    $('bet').textContent = dollars(cb ? cbBetNow() : bet()); $('betDn').disabled = st.busy || cb || st.betIdx === 0; $('betUp').disabled = st.busy || cb || st.betIdx === st.bets.length - 1;
+    $('bet').textContent = dollars(cb ? cbBetNow() : bet()); $('bet').classList.toggle('long', $('bet').textContent.length > 7); $('betDn').disabled = st.busy || cb || st.betIdx === 0; $('betUp').disabled = st.busy || cb || st.betIdx === st.bets.length - 1;
     const bp = buyList(); $('buy').disabled = st.busy || !bp.length || cb; $('buyFrom').textContent = cb ? 'Callback first' : bp.length ? 'from ' + dollars(Math.min(...bp.map((x) => x[1]))) : 'n/a';   // U15: buy prices follow the bet, a Callback shows its own and freezes it: no buying until it is played
   }
   function setBusy(b) { st.busy = b; $('spin').classList.toggle('run', b); $('spin').classList.toggle('idle', !b); drawBet(); }

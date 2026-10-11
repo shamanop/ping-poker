@@ -216,7 +216,7 @@ function replayRound(s, cfg) {
     assert.strictEqual(E.COLS, 6); assert.strictEqual(E.ROWS, 5); assert.strictEqual(E.N, 30); assert.strictEqual(E.MIN_CLUSTER, 5);
     assert.deepStrictEqual(E.SYM, ['mug', 'note', 'ball', 'can', 'cups', 'headset', 'rx', 'pile', 'cashwad', 'cash', 'closer', 'bell', 'phone']);
     assert.strictEqual(E.MAX_WIN_X, 10000); assert.strictEqual(CFG.maxWinTenths, 100000);
-    assert.deepStrictEqual(E.BET_LEVELS, [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2500]);   // DENOMS: 1c / 2c / 5c
+    assert.deepStrictEqual(E.BET_LEVELS, [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2500, 5000, 10000, 25000, 50000, 100000]);   // DENOMS: 1c / 2c / 5c
     assert.deepStrictEqual(CFG.spins, { bonus1: 8, bonus2: 12, bonus3: 12 });
     assert.deepStrictEqual(CFG.retrigger, { two: 2, three: 4, upgrade: 4 });
     assert.deepStrictEqual(CFG.bubbles.bronze.map((b) => b[0]), [2, 5, 10, 20, 30, 40]);
@@ -662,7 +662,7 @@ function replayRound(s, cfg) {
   await test('coldcall: bad bets, modes, buys and payload shapes are rejected without touching the ledger', async () => {
     const s = setup(); const a = s.sock('ann');
     const bad = [{ bet: 0, mode: 'play' }, { bet: -10, mode: 'play' }, { bet: 15, mode: 'play' }, { bet: 1.5, mode: 'play' }, { bet: NaN, mode: 'play' }, { bet: Infinity, mode: 'play' },
-      { bet: 1e21, mode: 'play' }, { bet: 2 ** 60, mode: 'play' }, { bet: Number.MAX_SAFE_INTEGER, mode: 'play' }, { bet: 5000, mode: 'play' }, { bet: [100], mode: 'play' },
+      { bet: 1e21, mode: 'play' }, { bet: 2 ** 60, mode: 'play' }, { bet: Number.MAX_SAFE_INTEGER, mode: 'play' }, { bet: 100001, mode: 'play' }, { bet: [100], mode: 'play' },
       { bet: '100', mode: 'play' }, { bet: 100, mode: 'ledger' }, { bet: 100, mode: 'PLAY' }, { bet: 100, mode: ['play'] }, { bet: 100 }, { mode: 'play' }, null, 'x', 7, [],
       { bet: 100, mode: 'play', buyBonus: 'nope' }, { bet: 100, mode: 'play', buyBonus: 'election' }, { bet: 100, mode: 'play', buyBonus: 'rotary' }, { bet: 100, mode: 'play', buyBonus: 'quote' }, { bet: 100, mode: 'play', buyBonus: 'Bonus1' }, { bet: 100, mode: 'play', buyBonus: 1 }, { bet: 100, mode: 'play', buyBonus: true },
       { bet: 100, mode: 'play', buyBonus: {} }, { bet: 100, mode: 'play', buyBonus: ['bonus1'] }, { bet: 100, mode: 'play', buyBonus: 'BONUS2' }];

@@ -1139,7 +1139,7 @@ const potOk = (p, s, mode) => { assert.strictEqual(p.fed, p.paid + p.bal, 'pot s
       assert.deepStrictEqual(v.cb, { bet: 1 }, 'carry ' + String(carry) + ' keeps the Callback'); assert.strictEqual(v.lt, 120); assert.deepStrictEqual(v.warm, [3, 4]);
       const r = play(s, a, { bet: 100, mode: 'play' }); assert.strictEqual(r.status, 'done'); assert.strictEqual(r.betCents, 1); assert.ok(!all(a, 'error').length);
     }
-    for (const cb of [{ bet: 0 }, { bet: -1 }, { bet: 2501 }, { bet: 1.5 }, { bet: '5' }, { bet: NaN }, {}, 'x', 5, []]) {    // a damaged cb: that state is reset, the account keeps working
+    for (const cb of [{ bet: 0 }, { bet: -1 }, { bet: 100001 }, { bet: 1.5 }, { bet: '5' }, { bet: NaN }, {}, 'x', 5, []]) {    // a damaged cb: that state is reset, the account keeps working
       const s = setup({ rng: E.rngFrom(322), roundRng: E.rngFrom(323) }); const a = s.sock('ann'); rich(s, 'ann');
       s.store().setPlayer('ann', 'play', mk({ cb })); a.send('g:coldcall:state'); const v = last(a, 'g:coldcall:state').pull.play; assert.strictEqual(v.cb, null, JSON.stringify(cb)); assert.ok(!all(a, 'error').length);
       const r = play(s, a, { bet: 1, mode: 'play' }); assert.strictEqual(r.status, 'done'); assert.strictEqual(r.callback, false);
@@ -1165,10 +1165,10 @@ const potOk = (p, s, mode) => { assert.strictEqual(p.fed, p.paid + p.bal, 'pot s
 
   await test('DENOMS the state event lists 1c / 2c / 5c, whole-cent buy prices for every bet, and the spin handler takes the new bets and refuses others', async () => {
     const s = setup({ rng: E.rngFrom(326), roundRng: E.rngFrom(327) }); const a = s.sock('ann'); rich(s, 'ann');
-    a.send('g:coldcall:state'); const st = last(a, 'g:coldcall:state'); assert.deepStrictEqual(st.betLevels, [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2500]); assert.deepStrictEqual(st.bets, st.betLevels);
+    a.send('g:coldcall:state'); const st = last(a, 'g:coldcall:state'); assert.deepStrictEqual(st.betLevels, [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2500, 5000, 10000, 25000, 50000, 100000]); assert.deepStrictEqual(st.bets, st.betLevels);
     for (const b of st.betLevels) for (const buy of E.BUYS) assert.strictEqual(st.buyPriceCents[b][buy], E.buyPrice(E.CFG.buyCost[buy], b), b + ' ' + buy);
     for (const bet of [1, 2, 5]) { const r = spin(s, a, { bet, mode: 'play' }); assert.strictEqual(r.status, 'done'); assert.strictEqual(r.cost, bet); }
-    for (const bad of [3, 4, 0, 7, 15, 25, 1.5, -1, 2501, '1', null]) { const r = spin(s, a, { bet: bad, mode: 'play' }); assert.strictEqual(r.error && r.error.code, 'bad_bet', String(bad)); }
+    for (const bad of [3, 4, 0, 7, 15, 25, 1.5, -1, 2501, 100001, '1', null]) { const r = spin(s, a, { bet: bad, mode: 'play' }); assert.strictEqual(r.error && r.error.code, 'bad_bet', String(bad)); }
   });
 
   await test('DENOMS legacy server (pull.on = false) at 1c: whole-cent price and rounded win, wallet balances to the cent', async () => {

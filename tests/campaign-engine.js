@@ -82,7 +82,7 @@ t('map: tier lists exactly as the contract (7 / 18 / 25) and party set', () => {
 
 // ---------------------------------------------------------------- constants and the walker used by the exact tests
 t('constants', () => {
-  eq(E.RTP_BPS, 9600); eq(E.LANDSLIDE_MX, 100000); eq(E.CAP_MX, 1000000); eq(E.MAX_STEPS, 49); eq(E.BET_LEVELS.join(), '100,200,500,1000,2500');
+  eq(E.RTP_BPS, 9600); eq(E.LANDSLIDE_MX, 100000); eq(E.CAP_MX, 1000000); eq(E.MAX_STEPS, 49); eq(E.BET_LEVELS.join(), '100,200,500,1000,2500,5000,10000,25000,50000,100000');
   ok(E.VERSION >= 1); eq(typeof E.EngineError, 'function');
 });
 

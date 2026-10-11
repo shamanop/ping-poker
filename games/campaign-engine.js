@@ -5,7 +5,7 @@
 const MAP = require('./campaign-map.js');
 
 const VERSION = 1, RTP_BPS = 9600, LANDSLIDE_MX = 100000, CAP_MX = 1000000, MAX_STEPS = 49;
-const BET_LEVELS = [100, 200, 500, 1000, 2500];
+const BET_LEVELS = [100, 200, 500, 1000, 2500, 5000, 10000, 25000, 50000, 100000];
 const TIERS = MAP.tiers;
 /* The rules a run is played on: the borders and tier of every state, the step limit, the LANDSLIDE and the cap. `CUR` is this build's (it reads MAP live); a run stores `snapshot()` of it when it is opened
    and every function below takes that as its last argument, so a deploy that edits the map never changes what an open run is worth (ADD-A-GAME.md section 4). */

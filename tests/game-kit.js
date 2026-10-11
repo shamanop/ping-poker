@@ -110,7 +110,7 @@ function world(A, opts = {}) {
   // reads, all from the LEDGER
   w.bal = (key, cur) => w.ledger.balance(pacct(key, cur), cur);
   w.setBal = (key, cur, v) => { key = w.addKey(key); const d = v - w.bal(key, cur); if (d) w.service.adminAdjust(key, d, cur, 'kit-fund', `kit:fund:${w.boots}:${++counter}`); return v; };
-  w.rich = (key) => { for (const c of CURS) w.setBal(key, c, 1e9); };
+  w.rich = (key) => { for (const c of CURS) w.setBal(key, c, 1e11); };
   w.lastId = () => w.ledger.lastId;
   w.since = (id) => [...w.ledger.entries(null, id)];
   w.house = (cur) => w.ledger.balance('house:' + A.id, cur);

@@ -204,6 +204,9 @@ button:disabled, [aria-disabled="true"] { cursor: default; }
 .hrow b { font: 400 20px/1 var(--disp); letter-spacing: .06em; color: var(--ink); }
 .seg.bets { gap: 6px; padding: 4px; } .seg.bets .legend { border-right: 0; background: none; padding: 0 6px 0 4px; }
 .seg.bets .segb { border: 1px solid var(--line); border-radius: 4px; font-size: 19px; }
+/* 10 stakes since the $1,000 top (10/10): two rows of five, the STAKE legend down the left */
+.seg.bets { display: grid; grid-template-columns: auto repeat(5, minmax(0, 1fr)); } .seg.bets .legend { grid-row: span 2; }
+.seg.bets .segb { height: 38px; font-size: 18px; white-space: nowrap; }
 .seg.bets .segb.on { border-color: #000; }
 .seg { display: flex; border: 1.5px solid var(--brass-dk); border-radius: 6px; overflow: hidden; background: #0d0805; box-shadow: inset 0 2px 4px rgba(0, 0, 0, .7); }
 .seg .legend { flex: 0 0 auto; display: grid; place-items: center; padding: 0 9px; font: 700 12px/1 var(--mono); letter-spacing: .12em; color: var(--mute); border-right: 1px solid var(--line); background: rgba(0, 0, 0, .35); }
