@@ -96,7 +96,8 @@ function checkSpin(sp, eng) {
   const bombs = [...cellsOf(g).values()].filter((x) => x.s === 'B');
   if (sp.kind !== 'bonus') assert.strictEqual(bombs.length + [sp.initial, ...sp.steps.map((s) => s.grid)].flat(2).filter((x) => x.s === 'B').length, 0, 'no bombs outside free spins');
   assert.strictEqual(sp.bombSum, bombs.reduce((a, b) => a + b.m, 0));
-  assert.strictEqual(sp.bombApplied, sp.kind === 'bonus' && sp.winBeforeBombs > 0 && sp.bombSum > 0, 'bombs apply only on a winning free spin');
+  const scRaw = sp.kind === 'bonus' && E.CFG.fsScatterPay && sp.scatters >= 4 ? E.CFG.scatterPay[Math.min(6, sp.scatters)] : 0;
+  assert.strictEqual(sp.bombApplied, sp.kind === 'bonus' && sp.winBeforeBombs + scRaw > 0 && sp.bombSum > 0, 'bombs apply only on a free spin with a prize (tumble wins or scatter pay)');
   const want = sp.bombApplied ? sp.winBeforeBombs * sp.bombSum : sp.winBeforeBombs;
   if (sp.capped) assert.ok(sp.spinWin < want); else assert.ok(Math.abs(sp.spinWin - want) < 1e-9);
   return g;
@@ -147,7 +148,7 @@ function checkSpin(sp, eng) {
       const rd = eng.round(E.rngFrom(seed * 7919), mode);
       for (const sp of allSpins(rd)) { checkSpin(sp, eng); if (sp.kind === 'bonus' && sp.bombs.length) { if (sp.bombApplied) applied++; else unapplied++; } }
       assert.strictEqual(rd.base.kind, mode === 'ante' ? 'ante' : 'base');
-      if (mode === 'buy') { const sc = rd.base.initial.flat().filter((x) => x.s === 'S').length; assert.ok(sc >= 4 && sc <= 6, 'a buy lands 4-6 scatters'); assert.ok(rd.bonus, 'a buy always gets the bonus'); assert.strictEqual(rd.cost, 100); }
+      if (mode === 'buy') { const sc = rd.base.initial.flat().filter((x) => x.s === 'S').length; assert.strictEqual(sc, 4, 'a buy places exactly 4 scatters on the first board'); assert.ok(rd.base.scatters >= 4, 'and still triggers after the tumbles'); assert.ok(rd.bonus, 'a buy always gets the bonus'); assert.strictEqual(rd.cost, 100); }
       assert.strictEqual(!!rd.bonus, rd.base.scatters >= 4, 'bonus iff 4+ scatters');
       const sp4 = rd.base.scatters >= 4 ? E.CFG.scatterPay[Math.min(6, rd.base.scatters)] : 0;
       assert.strictEqual(rd.scatterPay, sp4);
@@ -156,7 +157,8 @@ function checkSpin(sp, eng) {
         const b = rd.bonus;
         assert.strictEqual(b.spins.length, b.startSpins + b.added, 'spins played = 10 + added');
         assert.strictEqual(b.added, b.spins.reduce((a, s) => a + (s.retrigger || 0), 0));
-        for (const s of b.spins) { if (s.scatters >= 3) assert.ok(s.retrigger > 0 || b.startSpins + b.added >= E.CFG.maxSpins); else assert.ok(!s.retrigger); }
+        for (const s of b.spins) { if (s.scatters >= 3 && !(b.capped && s === b.spins[b.spins.length - 1])) assert.ok(s.retrigger > 0 || b.startSpins + b.added >= E.CFG.maxSpins); else assert.ok(!s.retrigger); }
+        for (const s of b.spins) { const m = s.bombApplied ? s.bombSum : 1; const raw = s.scatters >= 4 ? E.CFG.scatterPay[Math.min(6, s.scatters)] * m : 0; if (!b.capped) assert.ok(Math.abs(s.scatterPay - raw) < 1e-9, 'FS scatter pay x the spin\'s bombs'); }
         assert.ok(Math.abs(b.total - b.spins.reduce((a, s) => a + s.total, 0)) < 1e-6);
       }
       const sum = rd.base.spinWin + rd.scatterPay + (rd.bonus ? rd.bonus.total : 0);
@@ -166,11 +168,12 @@ function checkSpin(sp, eng) {
     assert.ok(bonuses > 600 && applied > 100 && unapplied > 100, `coverage: ${bonuses} bonuses, ${applied} spins with bombs applied, ${unapplied} with bombs that did nothing`);
   });
 
-  await test('engine: retrigger adds 5 spins on 3+ scatters, capped at maxSpins 100 in total', () => {
-    const cfg = JSON.parse(JSON.stringify(E.CFG)); cfg.bonusScatterW = 40;   // scatters everywhere: retrigger every spin
+  await test('engine: retrigger adds 5 spins on 3+ scatters, capped at maxSpins 1000 in total (safety stop only)', () => {
+    const cfg = JSON.parse(JSON.stringify(E.CFG)); cfg.bonusScatterW = 40; cfg.fsScatterPay = false; cfg.bombW = 0;   // scatters everywhere: retrigger every spin (no scatter pay / bombs, so 1000 spins never reach the 10,000x cap)
     const eng = E.createEngine(cfg);
     const b = eng.playBonus(E.rngFrom(3), MAX_WIN_X);
-    assert.strictEqual(b.startSpins + b.added, 100); assert.strictEqual(b.spins.length, 100);
+    assert.strictEqual(E.CFG.maxSpins, 1000);
+    assert.strictEqual(b.startSpins + b.added, 1000); assert.strictEqual(b.spins.length, 1000);
     assert.ok(b.spins[0].retrigger === 5 && b.retriggers >= 18);
     const e2 = E.createEngine();
     let seen = 0;
@@ -187,11 +190,37 @@ function checkSpin(sp, eng) {
       const rd = eng.round(E.rngFrom(seed), seed % 2 ? 'buy' : 'spin');
       assert.ok(rd.win <= MAX_WIN_X);
       const sum = rd.base.winBeforeBombs + rd.scatterPay + (rd.bonus ? rd.bonus.total : 0);
-      assert.strictEqual(rd.maxed, sum >= MAX_WIN_X); assert.strictEqual(rd.win, Math.min(rd.base.spinWin + rd.scatterPay + (rd.bonus ? rd.bonus.total : 0), MAX_WIN_X));
+      assert.strictEqual(rd.maxed, sum >= MAX_WIN_X - 1e-9 || !!rd.base.capped || !!(rd.bonus && rd.bonus.capped)); assert.ok(Math.abs(rd.win - Math.min(rd.base.spinWin + rd.scatterPay + (rd.bonus ? rd.bonus.total : 0), MAX_WIN_X)) < 1e-6);
+      if (rd.maxed) assert.strictEqual(rd.win, MAX_WIN_X, 'a capped round pays exactly 10,000x (no float drift)');
       if (rd.base.winBeforeBombs >= MAX_WIN_X) { assert.strictEqual(rd.base.spinWin, MAX_WIN_X); assert.ok(rd.maxed && rd.base.capped && !rd.bonus); maxedBase++; }
       if (rd.bonus && rd.bonus.capped) { assert.strictEqual(rd.win, MAX_WIN_X); assert.ok(rd.maxed && rd.bonus.spins.length < rd.bonus.startSpins + rd.bonus.added + 1); assert.ok(rd.bonus.spins[rd.bonus.spins.length - 1].capped || rd.bonus.spins[rd.bonus.spins.length - 1].scatterPay > 0); maxedBonus++; }
     }
     assert.ok(maxedBase > 0 && maxedBonus > 0);
+  });
+
+  await test('engine: the free spin that reaches the cap gets no retrigger, spinsLeft 0; capped rounds are maxed at exactly 10,000x', () => {
+    const cfg = JSON.parse(JSON.stringify(E.CFG));
+    for (const s of Object.keys(cfg.pay)) cfg.pay[s] = cfg.pay[s].map((x) => x * 6);
+    cfg.bombW = 6; cfg.bombTable = [[20, 1], [50, 1], [100, 1]]; cfg.bonusScatterW = 3;
+    const eng = E.createEngine(cfg);
+    let capped = 0, cappedWith3 = 0;
+    for (let seed = 1; seed <= 1500; seed++) {
+      const rd = eng.round(E.rngFrom(seed * 31), 'buy');
+      if (!rd.bonus || !rd.bonus.capped) { assert.ok(!rd.maxed || rd.win === MAX_WIN_X); continue; }
+      capped++;
+      const last = rd.bonus.spins[rd.bonus.spins.length - 1];
+      assert.ok(!last.retrigger && last.spinsLeft === 0, 'no +5 on the capping spin');
+      if (last.scatters >= 3) cappedWith3++;
+      assert.strictEqual(rd.bonus.added, rd.bonus.spins.reduce((a, x) => a + (x.retrigger || 0), 0));
+      assert.ok(rd.maxed && rd.win === MAX_WIN_X, 'capped bonus -> maxed, win exactly 10000 (got ' + rd.win + ')');
+    }
+    assert.ok(capped > 20 && cappedWith3 > 0, `coverage: ${capped} capped, ${cappedWith3} capping spins with 3+ scatters`);
+  });
+
+  await test('engine: bombs use the Sweet Bonanza value set 2-100x (100x ~1% of bombs, mean ~11)', () => {
+    assert.deepStrictEqual(E.CFG.bombTable.map((x) => x[0]), [2, 3, 4, 5, 6, 8, 10, 12, 15, 20, 25, 50, 100]);
+    const W = E.CFG.bombTable.reduce((a, b) => a + b[1], 0), mean = E.CFG.bombTable.reduce((a, b) => a + b[0] * b[1], 0) / W, p100 = E.CFG.bombTable[12][1] / W;
+    assert.ok(mean > 10 && mean < 12.5 && p100 > 0.007 && p100 < 0.014, 'mean ' + mean + ', 100x ' + p100);
   });
 
   await test('engine: ante levels are the bets where 1.25 x bet is whole; ante + buy refused; config ranges checked', () => {
@@ -206,13 +235,26 @@ function checkSpin(sp, eng) {
     assert.deepStrictEqual(E.currentConfig(), E.DEFAULT_CFG);
   });
 
-  await test('engine: trigger rates in range (200k seeded spins each: plain 1 in 300-450, ante 1 in 150-230)', () => {
-    const eng = E.createEngine();
-    for (const [kind, lo, hi] of [['base', 300, 450], ['ante', 150, 230]]) {
-      const rng = E.rngFrom(424242); let n = 0; const N = 200000;
+  await test('engine: trigger rates in range (400k seeded spins each: plain 1 in 350-450, ante 1 in 170-230, ante about 2x plain)', () => {
+    const eng = E.createEngine(), got = {};
+    for (const [kind, lo, hi] of [['base', 350, 450], ['ante', 170, 230]]) {
+      const rng = E.rngFrom(424242); let n = 0; const N = 400000;
       for (let i = 0; i < N; i++) if (eng.playSpin(rng, { kind }).scatters >= 4) n++;
+      got[kind] = N / n;
       assert.ok(N / n > lo && N / n < hi, kind + ' trigger 1 in ' + (N / n).toFixed(0));
     }
+    const ratio = got.base / got.ante;
+    assert.ok(ratio > 1.8 && ratio < 2.3, 'ante about doubles the trigger: x' + ratio.toFixed(2));
+  });
+
+  await test('engine: pay table is flat (12+ pays about 5x the 8-9 tier, top 12+ at most 100x), base hit rate 40-45%, buy lands exactly 4 scatters', () => {
+    const P = E.CFG.pay;
+    for (const s of E.REG) { assert.ok(P[s][0] < P[s][1] && P[s][1] < P[s][2], s + ' tiers rise'); const r = P[s][2] / P[s][0]; assert.ok(r >= 4.5 && r <= 5.5, s + ' 12+/8-9 ratio ' + r); assert.ok(P[s][2] <= 100, s + ' top pay'); }
+    assert.ok(Math.max(...E.REG.map((s) => P[s][2])) >= 50, 'top symbol 12+ pays 50-100x');
+    assert.deepStrictEqual(E.CFG.buyScatters, [[4, 1]]);
+    const eng = E.createEngine(), rng = E.rngFrom(777); let hit = 0; const N = 100000;
+    for (let i = 0; i < N; i++) if (eng.playSpin(rng, { kind: 'base' }).winBeforeBombs > 0) hit++;
+    assert.ok(hit / N > 0.40 && hit / N < 0.45, 'hit rate ' + (hit / N * 100).toFixed(1) + '%');
   });
 
   await test('dino: unsigned socket gets auth error, ledger untouched', async () => {

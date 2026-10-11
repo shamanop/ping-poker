@@ -63,7 +63,12 @@ html.art-logo .th-logo .ph { display: none; }
 html.art-logo .th-logo .art { display: block; }
 
 /* ---------- mascot (3:4, bottom-right of the frame; never takes clicks) ---------- */
-.th-mascot { position: absolute; z-index: 9; pointer-events: none; right: -2%; bottom: calc(var(--bw) * -.085); width: calc(var(--bw) * .19); aspect-ratio: 3 / 4; transform-origin: 50% 100%; }
+.th-mascot { position: absolute; z-index: 9; pointer-events: none; right: -3%; bottom: calc(var(--bw) * -.455); width: calc(var(--bw) * .32); aspect-ratio: 3 / 4; transform-origin: 50% 100%; }
+/* phone: the nanny stands in a reserved strip under the board (top edge below the last row, so she never covers a cell) */
+#boardCol { padding-bottom: calc(var(--bw) * .16); }
+/* art fills only 60-87% of its 256 square: scale the picture so the symbol reads ~85% of the cell (cells overlap on transparent margin only) */
+.dsym img { transform: scale(1.16); }
+.dsym[data-dsym="B"] img { transform: scale(1.04); }
 .th-mascot .ph, .th-mascot .art { position: absolute; inset: 0; width: 100%; height: 100%; }
 .th-mascot .art { background: center bottom / contain no-repeat; }
 .th-mascot .art, .th-mascot .ph { opacity: 0; transition: opacity .12s linear; }
@@ -79,7 +84,7 @@ html.art-logo .th-logo .art { display: block; }
 @keyframes th-hop { to { transform: translateY(-6%) rotate(-3deg); } }
 @keyframes th-shock { 0% { transform: scale(1); } 18% { transform: translate(-3%, -4%) scale(1.16, .9) rotate(-4deg); } 36% { transform: translate(3%, -2%) scale(.94, 1.1) rotate(4deg); } 60% { transform: translateX(-1.5%) scale(1.06) rotate(-2deg); } 100% { transform: scale(1); } }
 @keyframes th-dance { 0% { transform: translateY(0) rotate(-7deg); } 50% { transform: translateY(-7%) rotate(0) scale(1.03, .98); } 100% { transform: translateY(0) rotate(7deg); } }
-@media (min-aspect-ratio: 6/5) and (min-width: 760px) { .th-mascot { right: -11%; bottom: calc(var(--bw) * -.07); width: calc(var(--bw) * .21); } }
+@media (min-aspect-ratio: 6/5) and (min-width: 760px) { .th-mascot { right: -28%; bottom: calc(var(--bw) * -.07); width: calc(var(--bw) * .27); } #boardCol { padding-bottom: 0; } }
 
 /* ---------- top bar / dock (Hatch Party chrome) ---------- */
 .brand { color: var(--hp-cream); text-shadow: 0 2px 0 rgba(0, 60, 50, .5); }
@@ -131,3 +136,38 @@ html.art-btn_buy .opts #buy:active:not(:disabled) { filter: brightness(.92); }
 #stage .dfx-tier[data-tier="mega"] { background-image: var(--art-bw_mega); } #stage .dfx-tier[data-tier="epic"] { background-image: var(--art-bw_epic); }
 
 @media (prefers-reduced-motion: reduce) { .th-mascot { animation: none !important; } .th-mascot .art, .th-mascot .ph { transition: none; } .th-bg .art.free, .th-tint { transition: none; } }
+
+/* marquee plaque: navy board with a gold rim so the line reads over sky and jungle */
+#hint { display: inline-block; padding: 4px 12px 3px; border-radius: 999px; background: linear-gradient(#10243f, #0a1628); color: #ffd46b; border: 1.5px solid #f5b942; box-shadow: 0 2px 0 rgba(0, 0, 0, .35), inset 0 1px 0 rgba(255, 255, 255, .12); text-shadow: 0 1px 0 rgba(0, 0, 0, .6); letter-spacing: .1em; font-size: 12px; }
+@media (min-aspect-ratio: 6/5) and (min-width: 760px) { #hint { font-size: 14px; padding: 6px 16px 5px; } }
+
+/* free-spins HUD on the same navy plaque as the marquee (the bare text was low contrast over the sky) */
+#fsCount, #bonusTot, #multbox { padding: 3px 11px 2px; border-radius: 12px; background: linear-gradient(#10243f, #0a1628); border: 1.5px solid #f5b942; box-shadow: 0 2px 0 rgba(0, 0, 0, .35), inset 0 1px 0 rgba(255, 255, 255, .12); text-shadow: 0 1px 0 rgba(0, 0, 0, .6); }
+#fsCount { display: inline-block; color: #ffd46b; font-size: 13px; padding: 5px 12px 4px; border-radius: 999px; }
+#fsCount[hidden], #bonusTot[hidden], #multbox[hidden] { display: none; }
+#bonusTot i, #multbox i { color: #cfe6ff; font-size: 9px; letter-spacing: .1em; }
+#bonusTot b { color: #fff; }
+#multbox b { color: #ffd46b; }
+@media (min-aspect-ratio: 6/5) and (min-width: 760px) { #fsCount { font-size: 15px; } }
+
+/* big-win banner: fx.js puts a copy of the nanny in front of the dim; she sways while she dances */
+#stage .dfx-cameo { pointer-events: none; transform-origin: 50% 100%; }
+#stage .dfx-cameo[data-pose="dance"] { animation: th-dance .52s ease-in-out infinite alternate; }
+@media (prefers-reduced-motion: reduce) { #stage .dfx-cameo { animation: none !important; } }
+
+/* win glow reads on the real art: a soft cream rim plus the symbol color (same 0.32 s ramp as style.css) */
+@keyframes hlglow { from { filter: drop-shadow(0 0 0 #fff6d8) drop-shadow(0 0 0 var(--c, #fff)); } to { filter: drop-shadow(0 0 3px #fff6d8) drop-shadow(0 0 11px var(--c, #fff)) brightness(1.15); } }
+/* portrait: keep the free-spins strip the same height as the base strip so the board and buttons don't shift (FS layout on 390x844) */
+@media (max-aspect-ratio: 6/5) {
+  #bonusTot, #multbox { flex-direction: row; align-items: baseline; gap: 5px; padding: 2px 9px 1px; }
+  #bonusTot b, #multbox b { font-size: 15px; }
+  #fsCount { padding: 3px 10px 2px; }
+}
+/* narrow portrait: the FS strip never wraps (a long bonus total pushed the board and buttons ~20 px down) */
+@media (max-aspect-ratio: 6/5) and (max-width: 480px) {
+  #stripL, #stripR, #fsCount, #bonusTot, #multbox { white-space: nowrap; }
+  #multbox i { display: none; }
+  #bonusTot b, #multbox b { font-size: 14px; }
+  #fsCount { font-size: 12px; padding: 3px 8px 2px; }
+  #bonusTot, #multbox { padding: 2px 7px 1px; gap: 4px; }
+}

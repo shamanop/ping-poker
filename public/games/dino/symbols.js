@@ -3,7 +3,7 @@
 (function () {
   'use strict';
   var uid = 0;
-  var NAMES = { h1: 'Hatchling', h2: 'Longneck', h3: 'Triceratops', h4: 'Stegosaurus', l1: 'Amber', l2: 'Ammonite', l3: 'Footprint', l4: 'Berries', l5: 'Fern leaf', S: 'Rainbow Egg', B: 'Multiplier Egg' };
+  var NAMES = { h1: 'Hatchling', h2: 'Longneck', h3: 'Triceratops', h4: 'Stegosaurus', l1: 'Pebble', l2: 'Seashell', l3: 'Footprint', l4: 'Berries', l5: 'Fern leaf', S: 'Rainbow Egg', B: 'Multiplier Egg' };
   // [main, light, dark outline]
   var PAL = {
     h1: ['#F7B955', '#FFE7A8', '#6A3B0E'],
@@ -32,7 +32,7 @@
   var TEXT_Y = { h1: 61, h2: 64, h3: 65, h4: 65, l1: 79, l2: 66, l3: 69, l4: 64, l5: 74 };
   var TEXT_SZ = { h1: 30, h2: 34, h3: 36, h4: 38, l1: 32, l2: 40, l3: 38, l4: 36, l5: 36 };
 
-  function bombTier(m) { m = +m || 0; return m >= 100 ? 'max' : m >= 20 ? 'high' : m >= 6 ? 'mid' : 'low'; }
+  function bombTier(m) { m = +m || 0; return m >= 100 ? 'max' : m >= 20 ? 'high' : m >= 8 ? 'mid' : 'low'; }
   var BOMB_PAL = { low: ['#3FC8E8', '#B8F1FF', '#0B3E5A'], mid: ['#F59A2E', '#FFD79A', '#6A3300'], high: ['#E1478F', '#FFB3D6', '#5A0F35'], max: ['#F0452B', '#FFD24A', '#5A0F05'] };
   function bombPal(m) { return BOMB_PAL[bombTier(m)]; }
   var EGG = 'M50 5 C75 5 89 37 89 60 C89 81 72 95 50 95 C28 95 11 81 11 60 C11 37 25 5 50 5 Z';

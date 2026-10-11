@@ -2,6 +2,7 @@
    Stage-relative CSS px everywhere. Styles are injected by init(); no fx.css needed. */
 (function () {
   'use strict';
+  var SND = window.DinoAudio || null;
   var reduce = false;
   try { reduce = matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
   var rnd = function (a, b) { return a + Math.random() * (b - a); };
@@ -225,6 +226,16 @@
     var a = node.animate([{ opacity: 1 }, { opacity: 0 }], { duration: ms, easing: 'ease-in', fill: 'forwards' });
     a.onfinish = cb; setTimeout(cb, ms + 80);
   }
+  // shrink until the rendered text really fits (fit() estimates from glyph count; wide digits/currency on a phone can still overflow)
+  function fitMeasured(node, maxFrac) {
+    node.style.whiteSpace = 'nowrap';
+    Promise.resolve().then(function () {   // runs after modal() has attached the panel
+      if (!node.isConnected) return;
+      var avail = Math.min(W, window.innerWidth || W) * maxFrac, size = parseFloat(getComputedStyle(node).fontSize) || 40, n = 0;
+      var wide = function () { var cs = getComputedStyle(node); return node.scrollWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) > avail; };
+      while (wide() && size > 14 && n++ < 30) { size *= 0.92; node.style.fontSize = size.toFixed(1) + 'px'; }
+    });
+  }
   function fit(node, text, maxFrac, ratio) {
     var base = parseFloat(getComputedStyle(node).fontSize) || 40, avail = W * maxFrac, need = String(text).length * ratio * base;
     if (need > avail) node.style.fontSize = Math.max(14, base * avail / need).toFixed(1) + 'px';
@@ -247,6 +258,7 @@
       var panel = el('dfx-panel'), tierEl = el('dfx-tier', ''), amt = el('dfx-amt', fmt(0)), hint = el('dfx-hint', short ? '' : 'TAP TO SKIP');
       panel.appendChild(tierEl); panel.appendChild(amt); panel.appendChild(hint);
       ov.appendChild(panel);
+      if (!short) cameo(panel);
       fit(amt, fmt(toUnits), 0.92, 0.72);
       var idx = -1, t0 = performance.now(), raf = 0, finishTm = 0, holdTm = 0, coinIv = 0, closed = false, finished = false, t00 = t0;
 
@@ -256,6 +268,7 @@
         tierEl.textContent = st[0]; tierEl.style.color = st[1];
         fit(tierEl, st[0], 0.94, 0.8);
         if (!quiet) {
+          SND && SND.bigWin(name);
           punch(tierEl, 1.35, 340);
           if (!reduce) { flash(st[1], 260); var lvl = Math.min(3, i + 1); confetti(short ? 1 : lvl); shake(260 + 80 * i, 3 + 2 * i); }
           if (!reduce) { burst(W / 2, H * 0.4, st[1], 20 + 8 * i); }
@@ -263,6 +276,7 @@
       }
       function finishCount() {
         if (finished) return; finished = true;
+        SND && SND.countEnd();
         cancelAnimationFrame(raf); clearTimeout(finishTm); clearInterval(coinIv);
         amt.textContent = fmt(toUnits);
         setStage(stages.length - 1);
@@ -282,6 +296,7 @@
       }
       function close() {
         if (closed) return; closed = true;
+        SND && SND.bigWinEnd();
         clearTimeout(holdTm); clearTimeout(finishTm); cancelAnimationFrame(raf); clearInterval(coinIv);
         document.removeEventListener('keydown', onKey, true); untrack();
         fadeOut(panel, T.bigClose, function () { if (panel.parentNode) panel.parentNode.removeChild(panel); resolve(); });
@@ -295,6 +310,7 @@
       var untrack = track(function () { closed = true; clearTimeout(holdTm); clearTimeout(finishTm); cancelAnimationFrame(raf); clearInterval(coinIv); document.removeEventListener('keydown', onKey, true); resolve(); });
       panel.addEventListener('pointerdown', function (e) { e.preventDefault(); act(); });
       document.addEventListener('keydown', onKey, true);
+      SND && SND.countStart(total);
       setStage(0);
       if (!reduce) { coinShower(short ? 8 : 14); coinIv = setInterval(function () { coinShower(short ? 2 : 3 + stages.length * 2); }, 140); }
       amt.textContent = fmt(0);
@@ -358,6 +374,17 @@
   }
 
   // autoMs: 0/undefined = wait for a click (the default); a number closes the card by itself after that long (autoplay).
+  // the nanny (mascot.js) stands in #play, under the banner dim: show a copy of her current pose in front of the dim, at the same spot
+  function cameo(panel) {
+    try {
+      var m = document.querySelector('#play .th-mascot'); if (!m || !stage) return;
+      var r = m.getBoundingClientRect(), s = stage.getBoundingClientRect(); if (!r.width) return;
+      var c = m.cloneNode(true); c.classList.add('dfx-cameo');
+      c.style.cssText = 'position:absolute;left:' + (r.left - s.left) + 'px;top:' + (r.top - s.top) + 'px;width:' + r.width + 'px;height:' + r.height + 'px;right:auto;bottom:auto;z-index:-1';
+      panel.style.isolation = 'isolate'; panel.insertBefore(c, panel.firstChild);
+    } catch (e) {}
+  }
+
   function fsIntro(spins, autoMs) {
     return modal(function (panel) {
       var n = el('dfx-big', String(spins)), l = el('dfx-lbl', 'FREE SPINS'), b = el('dfx-btn', 'START', 'button'); b.type = 'button';
@@ -386,7 +413,7 @@
     return modal(function (panel) {
       var l = el('dfx-lbl', 'YOU WON'), a = el('dfx-big', totalText), b = el('dfx-btn', 'CONTINUE', 'button'); b.type = 'button';
       panel.appendChild(l); panel.appendChild(a); panel.appendChild(b);
-      fit(a, totalText, 0.9, 0.72);
+      fit(a, totalText, 0.9, 0.72); fitMeasured(a, 0.9);
       confetti(3); flash('#FFFFFF', 260); burst(W / 2, H * 0.42, '#FFD23F', 30); punch(a, 1.2, 420);
       return b;
     }, autoMs || 0);

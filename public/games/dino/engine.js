@@ -10,20 +10,20 @@
 
   const CFG = {
     // cell weights for regular symbols; S (and B in free spins) added on top
-    weights: { h1: 5, h2: 6, h3: 7, h4: 8, l1: 10, l2: 11, l3: 13, l4: 15, l5: 17 },
-    bonusWeights: { h1: 5, h2: 6, h3: 7, h4: 8, l1: 10, l2: 12, l3: 15, l4: 18, l5: 22 },   // free-spin board: lows heavier, so more tumble chains under the bombs
-    scatterW: 1.615, anteScatterW: 1.975, bonusScatterW: 1.0,
-    bombW: 1.84,                                  // bomb weight per cell draw, free spins only
-    bombTable: [[2, 80], [3, 62], [4, 52], [5, 46], [7, 42], [9, 38], [11, 34], [14, 30], [18, 26], [22, 22], [30, 18], [45, 12], [75, 7], [100, 5]],   // [value, weight]: our own set, 2x-100x
-    // payout x total bet by count bucket: 8-9, 10-11, 12+
+    weights: { h1: 4, h2: 5, h3: 6, h4: 7, l1: 10, l2: 12, l3: 14, l4: 16, l5: 18 },
+    bonusWeights: { h1: 9, h2: 6, h3: 6, h4: 8, l1: 12, l2: 15, l3: 19, l4: 23, l5: 28 },   // free-spin board: more h1 (the 12+ big-cluster tail under the bombs) and heavier lows (win frequency)
+    scatterW: 1.47, anteScatterW: 1.82, bonusScatterW: 3.1,
+    bombW: 2.14,                                  // bomb weight per cell draw, free spins only (about 0.62 bombs on the final board per free spin)
+    bombTable: [[2, 74], [3, 58], [4, 50], [5, 45], [6, 42], [8, 40], [10, 37], [12, 34], [15, 31], [20, 29], [25, 25], [50, 21], [100, 5]],   // [value, weight]: SB's public value set 2x-100x, our own weights
+    // payout x total bet by count bucket: 8-9, 10-11, 12+ (12+ is 5x the 8-9 tier; top symbol 100x)
     pay: {
-      h1: [16, 40, 450], h2: [8, 20, 230], h3: [5, 12, 140], h4: [3.2, 8, 80],
-      l1: [2.4, 5, 45], l2: [1.8, 3.6, 32], l3: [1.2, 2.8, 22], l4: [0.9, 2.2, 16], l5: [0.6, 1.6, 11],
+      h1: [20, 50, 100], h2: [12, 30, 60], h3: [7, 17.5, 35], h4: [3.7, 9.5, 19],
+      l1: [1.85, 4.75, 9.5], l2: [1.45, 3.6, 7.2], l3: [1, 2.5, 5], l4: [0.6, 1.45, 2.9], l5: [0.4, 0.95, 1.9],
     },
     scatterPay: { 4: 2.5, 5: 6, 6: 60 },          // 4+ scatters anywhere at the end of a spin's tumbles
-    fsScatterPay: true,                           // scatter pays also apply in free spins (not multiplied by bombs)
-    freeSpins: 10, retriggerMin: 3, retriggerAdd: 5, maxSpins: 100,
-    buyCost: 100, buyScatters: [[4, 85], [5, 13], [6, 2]],
+    fsScatterPay: true,                           // scatter pays also apply in free spins (multiplied by the spin's bombs, like its tumble wins)
+    freeSpins: 10, retriggerMin: 3, retriggerAdd: 5, maxSpins: 1000,
+    buyCost: 100, buyScatters: [[4, 1]],          // a buy lands exactly 4 scatters (refills can still add a 5th)
     anteCost: 1.25,
     maxTumbles: 60,                               // safety stop; pay-anywhere chains end long before this
   };
@@ -51,6 +51,7 @@
   function pickWeighted(rng, t, tot) { let x = rng() * tot; for (const [v, w] of t) { x -= w; if (x < 0) return v; } return t[t.length - 1][0]; }
 
   function createEngine(cfg = CFG) {
+    const EPS = 1e-9;                             // cap compares: capLeft drifts by float subtraction
     const T = { base: makeTable(cfg, 'base'), ante: makeTable(cfg, 'ante'), bonus: makeTable(cfg, 'bonus'), fill: makeTable(cfg, 'fill') };
     const bombTot = tableTotal(cfg.bombTable), buyScTot = tableTotal(cfg.buyScatters);
     let nextId = 1;
@@ -106,7 +107,8 @@
       const bombs = bonus ? listOf(g, 'B') : [];
       script.bombs = bombs;
       script.bombSum = bombs.reduce((a, b) => a + b.m, 0);
-      script.bombApplied = bonus && wbb > 0 && script.bombSum > 0;
+      const scRaw = bonus && cfg.fsScatterPay ? scatterPayFor(sc.length) : 0;   // FS: the bombs multiply the spin's whole prize, tumble wins + scatter pay (playBonus pays that part)
+      script.bombApplied = bonus && wbb + scRaw > 0 && script.bombSum > 0;
       let win = script.bombApplied ? wbb * script.bombSum : wbb;
       const capLeft = opts.capLeft == null ? Infinity : opts.capLeft;
       if (win > capLeft) { win = capLeft; script.capped = true; }
@@ -126,16 +128,17 @@
         const s = playSpin(rng, { kind: 'bonus', capLeft });
         let spinTotal = s.spinWin; capLeft -= s.spinWin;
         s.scatterPay = 0;
-        if (cfg.fsScatterPay && s.scatters >= 4 && capLeft > 0) { s.scatterPay = Math.min(scatterPayFor(s.scatters), capLeft); capLeft -= s.scatterPay; spinTotal += s.scatterPay; }
+        if (cfg.fsScatterPay && s.scatters >= 4 && capLeft > EPS) { s.scatterPay = Math.min(scatterPayFor(s.scatters) * (s.bombApplied ? s.bombSum : 1), capLeft); capLeft -= s.scatterPay; spinTotal += s.scatterPay; }
         s.total = spinTotal;
         out.total += spinTotal;
-        if (s.scatters >= cfg.retriggerMin && cfg.freeSpins + out.added < cfg.maxSpins) {
+        const capHit = capLeft <= EPS;                // the round ends on this spin: no "+5" for it
+        if (!capHit && s.scatters >= cfg.retriggerMin && cfg.freeSpins + out.added < cfg.maxSpins) {
           const add = Math.min(cfg.retriggerAdd, cfg.maxSpins - cfg.freeSpins - out.added);
           left += add; out.added += add; out.retriggers++; s.retrigger = add;
         }
-        s.spinsLeft = left;
+        s.spinsLeft = capHit ? 0 : left;
         out.spins.push(s);
-        if (capLeft <= 0) { out.capped = true; break; }
+        if (capHit) { out.capped = true; break; }
       }
       return out;
     }
@@ -151,9 +154,9 @@
       if (base.scatters >= 4) {
         res.scatterPay = Math.min(scatterPayFor(base.scatters), MAX_WIN_X - res.win); res.win += res.scatterPay;
         const left = MAX_WIN_X - res.win;
-        if (left > 0) { res.bonus = playBonus(rng, left); res.win += res.bonus.total; }
+        if (left > EPS) { res.bonus = playBonus(rng, left); res.win += res.bonus.total; }
       }
-      if (res.win >= MAX_WIN_X) { res.win = MAX_WIN_X; res.maxed = true; } else res.maxed = false;
+      if (res.win >= MAX_WIN_X - EPS || base.capped || (res.bonus && res.bonus.capped)) { res.win = MAX_WIN_X; res.maxed = true; } else res.maxed = false;
       return res;
     }
 

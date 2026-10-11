@@ -4,7 +4,7 @@
 const crypto = require('crypto');
 const Eng = require('./dino-engine.js');
 
-const RTP_LABEL = '96% (long-run, 9M-spin stratified sim: base 96.0 +-0.18, ante 95.8 +-0.21, buy 96.3 +-0.16; bonus about 1 in 360, 1 in 180 with ante)';
+const RTP_LABEL = '96% (long-run, 36M-spin sim + 6M bonuses: base 96.1 +-0.1, ante 96.2 +-0.1, buy 96.1 +-0.1; bonus about 1 in 390, 1 in 190 with ante)';
 const BET_LEVELS = Eng.BET_LEVELS;
 const ANTE_LEVELS = Eng.anteLevels();
 const MODES = ['play', 'chips'];

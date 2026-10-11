@@ -13,6 +13,7 @@
     svg: (s, m) => `<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" fill="#667"/><text x="50" y="62" font-size="34" text-anchor="middle" fill="#fff">${s === 'B' ? 'x' + m : s}</text></svg>`,
     name: (s) => s, color: () => '#aab'
   };
+  const A = window.DinoAudio || null;
   const FX = Object.assign({
     init() {}, burst() {}, popBurst() {}, shake() {}, flash() {}, confetti() {}, clear() {},
     bigWin: () => Promise.resolve(), bombFly: () => Promise.resolve(), fsIntro: () => Promise.resolve(), fsOutro: () => Promise.resolve(), retrigger: () => Promise.resolve(),
@@ -160,12 +161,22 @@
     }
     Promise.all(outs).then(() => olds.forEach((o) => o.el.remove()));
     let contact = 0;
+    const sndCol = [], sndSpecial = [];
     for (let c = 0; c < COLS; c++) for (let r = 0; r < ROWS; r++) {
       // Every new tile falls the same distance (they queue up above the board, ~2.4 cells apart in flight as in the clip); the stagger is in the start times
       const rec = mkCell(grid[c][r], c, r), delay = inBase + c * T.inColStagger + (ROWS - 1 - r) * T.inRowStagger, hit = delay + T.inFall, f = T.inFall;
       ins.push(anim(rec.el, dropKF(T.inDist, f), { duration: dur(f + T.inTail), delay: dur(delay) }));
       landShadow(rec.el, delay, f);
       contact = Math.max(contact, hit);
+      if (r === ROWS - 1) sndCol.push([hit, c]);
+      if (grid[c][r].s === 'S' || grid[c][r].s === 'B') sndSpecial.push([hit, grid[c][r]]);
+    }
+    if (A) {
+      sndCol.forEach(([t, c]) => setTimeout(() => A.land(c), dur(t)));
+      let nSc = 0;
+      sndSpecial.sort((a, b) => a[0] - b[0]).forEach(([t, cell]) => setTimeout(() => {
+        if (cell.s === 'S') A.scatterLand(++nSc); else A.bombLand(A.bombTier(cell.m));
+      }, dur(t)));
     }
     await Promise.race([wait(contact + T.inTail - T.landEarly), Promise.all(ins)]);
     cur = grid;
@@ -214,6 +225,7 @@
       popup('+' + fmt(u(w.pay, o.bet)), cx, cy, SYM.color(w.s));
     }
     o.acc += step.stepWin;
+    A && A.pop(++o.stepN, step.wins.map((w) => w.s));
     const counting = setWin(u(o.base + o.acc, o.bet), tt('countStep'));
     // pop: bubble swells, frosts and fades while shards drop (motion-measure.md "pop")
     const sz = boardEl.getBoundingClientRect().height / ROWS;
@@ -227,6 +239,7 @@
     trace('popEnd');
     await wait('holeHold');
     trace('fallStart');
+    A && setTimeout(() => A.refill(), dur(T.fallBase));
     const list = [], perCol = {};
     const fallMs = (d) => T.fallBase + T.fallPerRow * d;
     let contact = 0;
@@ -250,6 +263,7 @@
     await Promise.race([wait(contact + T.inTail - T.landEarly), Promise.all(list)]);
     cur = step.grid;
     trace('refilled');
+    if (A) fresh.forEach((rec) => { if (rec.cell.s === 'S') A.scatterLand([...els.values()].filter((x) => x.cell.s === 'S').length); else if (rec.cell.s === 'B') A.bombLand(A.bombTier(rec.cell.m)); });
     landEmphasis((rec) => fresh.includes(rec));
     markScatters();
     await counting;
@@ -262,13 +276,19 @@
   // o = { bet, base (x bet already in the round total), free }
   async function playSpin(sp, o) {
     o.acc = 0;
+    o.stepN = 0;
     const t0 = o.t0 || performance.now();
     trace(o.free ? 'fsSpin' : 'spin');
+    A && A.spinStart(!!o.free);
     setMult(0); $('multbox').hidden = !o.free;
     popsEl.textContent = '';
     if (o.lead !== false) await wait(Math.max(0, TT().pressLead - (performance.now() - t0)));
     await dropBoard(sp.initial);
     landEmphasis(); markScatters();
+    if (!o.free && window.DinoMascot) {
+      let n = 0; for (const col of sp.initial) for (const x of col) if (x && x.s === 'S') n++;
+      if (n === Math.min(...Object.keys(S.cfg.scatterPay).map(Number)) - 1) mascot('shock', { holdMs: 900 }); // one scatter short of the feature
+    }
     for (const step of sp.steps) await playStep(step, o);
     const b = o.bet;
     // bombs: collected at the end of a winning spin
@@ -281,14 +301,17 @@
       for (const bb of sp.bombs) {
         const rec = els.get(bb.id);
         trace('bombFly');
+        A && A.bombFly();
         const fly = FX.bombFly(rec ? rec.el : null, multEl, 'x' + bb.m, tt('bombFly'));
         if (rec) { rec.el.classList.remove('hl'); anim(rec.el, [{ transform: 'scale(1)', opacity: 1 }, { transform: 'scale(.3)', opacity: 0 }], { duration: dur(180), easing: 'ease-in', fill: 'forwards' }); }
         await fly;
         sum += bb.m; setMult(sum, true);
-        if (bb.m >= 50) mascot('shock', { holdMs: 700 });
+        A && A.bombCollect(sum);
+        if (bb.m >= 50 && window.DinoMascot) mascot('shock', { holdMs: 700 });
         trace('bombHit');
       }
       trace('slam');
+      A && A.slam();
       st.shown2 = u(o.base + sp.spinWin, b);
       winEl.textContent = fmt(st.shown2);
       FX.flash('#35d0ba', 200);
@@ -307,6 +330,7 @@
   // ---------- replay: whole round ----------
   async function replay(p) {
     const R = p.round, b = p.bet;
+    A && A.round({ win: p.totalWin, stake: p.cost != null ? p.cost : p.bet });
     resetWin(); popsEl.textContent = '';
     setFree(false);
     const o = { bet: b, base: 0, free: false, t0: st.pressT };
@@ -318,6 +342,8 @@
       FX.flash('#ffc21a', 260); if (!reduce) FX.shake(380, 5);
       msg(R.base.scatters + ' SCATTERS', { hold: true });
       trace('trigger');
+      A && A.fsTrigger();
+      window.DinoMascot && mascot('celebrate');
       let counting = null;
       if (R.scatterPay > 0) { popup('SCATTER +' + fmt(u(R.scatterPay, b)), 2.5, 2, '#ffc21a'); run += R.scatterPay; counting = setWin(u(run, b), tt('countStep')); }
       const celeb = TT().triggerCelebrate, pulses = Math.max(1, Math.round(celeb / 800));
@@ -325,13 +351,14 @@
       await counting;
       msg('');
       trace('introOpen');
+      A && A.fsIntro();
       await FX.fsIntro(R.bonus.startSpins, st.auto > 0 ? TT().cardAuto : 0);
+      window.DinoMascot && mascot('idle');
       trace('introClosed');
       FX.clear();
       await wait(Math.max(0, TT().introOut - FX.T.fade));
       await runBonus(R, p, run);
     } else if (R.bonus) { /* base alone hit the cap: no bonus */ }
-    else if (R.base.scatters === 3) mascot('shock', { holdMs: 700 }); // one scatter short of the feature
     // the last number is the server's total
     await finishRound(p);
   }
@@ -349,18 +376,21 @@
       await setWin(u(run, b), tt('countStep'));
       $('bonusTot').querySelector('b').textContent = fmt(u(bonusTot, b));
       // a spin that hits the max-win cap ends the round: never show its +spins
-      if (sp.retrigger && !(p.maxed && i === B.spins.length - 1)) {
+      const lastSpin = i === B.spins.length - 1;
+      if (sp.retrigger && !sp.capped && !(lastSpin && (p.maxed || B.capped))) {
         markScatters().forEach((r) => r.el.classList.add('sc'));
+        A && A.retrigger();
         await FX.retrigger(sp.retrigger);
         total += sp.retrigger; $('fsCount').textContent = 'FREE SPINS ' + (i + 1) + '/' + total; punch($('fsCount'));
       }
       await wait('fsGap');
     }
     trace('outroOpen');
-    mascot('dance');
+    A && A.fsOutro();
+    window.DinoMascot && mascot('dance');
     await FX.fsOutro(fmt(p.totalWin), st.auto > 0 ? TT().cardAuto : 0);
     trace('outroClosed');
-    mascot('idle');
+    window.DinoMascot && mascot('idle');
     FX.clear();
     await wait(Math.max(0, TT().outroOut - FX.T.fade));
     setFree(false);
@@ -376,12 +406,15 @@
     if (banner) {
       winEl.textContent = fmt(st.shown2 || 0);
       const dance = tier !== 'nice' && tier !== 'great';
-      if (dance) mascot('dance');
+      if (dance && window.DinoMascot) mascot('dance');
       await FX.bigWin(tier, p.totalWin, fmt, dur(window.DINO_T.countMs(winX, st.turbo)), { tiers: S && S.tiers, winX, from: window.DINO_T.bannerFrom });
-      if (dance) mascot('idle');
+      if (dance && window.DinoMascot) mascot('idle');
       FX.clear();
     } else if (p.totalWin > 0) {
-      await setWin(p.totalWin, dur(window.DINO_T.smallMs(winX)));
+      const ms = dur(window.DINO_T.smallMs(winX));
+      A && A.countStart(ms, { end: false });
+      await setWin(p.totalWin, ms);
+      A && A.win(tier, winX);
       if (tier === 'great') FX.confetti(1);
     }
     st.shown2 = p.totalWin; winEl.textContent = fmt(p.totalWin);
@@ -514,7 +547,7 @@
       const sc = document.createElement('div'); sc.className = 'scrim'; sc.innerHTML = '<div class="card" role="dialog" aria-modal="true">' + html + '</div>';
       const close = (v) => { sc.remove(); removeEventListener('keydown', onKey, true); resolve(v); };
       const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); close('x'); } };
-      sc.addEventListener('click', (e) => { const b = e.target.closest('[data-v]'); if (b) close(b.dataset.v); else if (e.target === sc) close('x'); });
+      sc.addEventListener('click', (e) => { const b = e.target.closest('[data-v]'); if (b) { A && A.click(); close(b.dataset.v); } else if (e.target === sc) close('x'); });
       addEventListener('keydown', onKey, true);
       ov.appendChild(sc); const f = sc.querySelector('.go') || sc.querySelector('button'); if (f) f.focus();
     });
@@ -525,7 +558,7 @@
     const v = await modal(`<h2>BUY FEATURE</h2><p>Start ${C.freeSpins} free spins right away. Multiplier bombs can land during free spins.</p>
       <p>Price</p><div class="big">${fmt(cost)}</div><p>${(S.buyCostX || 100)}x your bet of ${fmt(b)}.${ok ? '' : ' Your balance is too low.'}</p>
       <div class="row"><button data-v="x" type="button">Cancel</button><button class="go" data-v="buy" type="button" ${ok ? '' : 'disabled'}>Buy</button></div>`);
-    if (v === 'buy') play('buy');
+    if (v === 'buy') { A && A.buyConfirm(); play('buy'); }
   }
   async function autoDialog() {
     const v = await modal(`<h2>AUTOPLAY</h2><p>Number of spins. Autoplay stops when a feature starts or your balance runs low.</p>
@@ -555,17 +588,23 @@
 
   // ---------- controls ----------
   $('spin').addEventListener('click', () => play('spin'));
-  $('betDn').addEventListener('click', () => { if (st.busy) return; st.betIdx = Math.max(0, st.betIdx - 1); if (!inAnte(bet())) st.ante = false; drawBet(); });
-  $('betUp').addEventListener('click', () => { if (st.busy) return; st.betIdx = Math.min(bets().length - 1, st.betIdx + 1); if (!inAnte(bet())) st.ante = false; drawBet(); });
+  $('betDn').addEventListener('click', () => { A && A.click(); if (st.busy) return; st.betIdx = Math.max(0, st.betIdx - 1); if (!inAnte(bet())) st.ante = false; drawBet(); });
+  $('betUp').addEventListener('click', () => { A && A.click(); if (st.busy) return; st.betIdx = Math.min(bets().length - 1, st.betIdx + 1); if (!inAnte(bet())) st.ante = false; drawBet(); });
   $('ante').addEventListener('click', () => {
     if (st.busy) return;
     if (!inAnte(bet())) { msg('Ante is not offered at this bet.', { err: true }); return; }
     st.ante = !st.ante; drawBet();
+    A && A.anteToggle(st.ante);
   });
   $('buy').addEventListener('click', () => { if (st.busy || st.ante || !S) return; buyDialog(); });
-  $('turbo').addEventListener('click', () => { st.turbo = !st.turbo; drawBet(); });
-  $('auto').addEventListener('click', () => { if (st.auto > 0) { stopAuto(); return; } if (st.busy || !S) return; autoDialog(); });
-  $('info').addEventListener('click', () => { if (!st.busy) infoDialog(); });
+  $('turbo').addEventListener('click', () => { A && A.click(); st.turbo = !st.turbo; drawBet(); });
+  $('auto').addEventListener('click', () => { A && A.click(); if (st.auto > 0) { stopAuto(); return; } if (st.busy || !S) return; autoDialog(); });
+  $('info').addEventListener('click', () => { A && A.click(); if (!st.busy) infoDialog(); });
+  const sndUi = () => { $('snd').classList.toggle('off', !(A && A.isOn())); $('snd').setAttribute('aria-pressed', A && A.isOn() ? 'true' : 'false'); };
+  const musUi = () => { $('mus').classList.toggle('off', !(A && A.isMusicOn())); $('mus').setAttribute('aria-pressed', A && A.isMusicOn() ? 'true' : 'false'); };
+  $('snd').addEventListener('click', () => { if (!A) return; A.init(); A.toggle(); sndUi(); A.click(); });
+  $('mus').addEventListener('click', () => { if (!A) return; A.init(); A.toggleMusic(); musUi(); });
+  sndUi(); musUi();
   boardEl.addEventListener('pointerdown', skipNow);
   addEventListener('keydown', (e) => {
     if (e.code !== 'Space' || e.repeat || ov.firstChild) return;

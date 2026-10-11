@@ -71,8 +71,8 @@ window.DINO_T = {
     toast: 2200
   },
   turbo: {
-    // Rows "Full drop" 0.56-0.64 s and "Column stagger: none, all columns together" [M]; motion shape as normal, scaled to ~0.35 s of fall (not clip-measured)
-    pressLead: 120, outDur: 170, outColStagger: 0, outRowStagger: 8, outInGap: 40, inColStagger: 0, inRowStagger: 8, inFall: 165, inDist: 6, inTail: 90,
+    // Rows "Full drop" 0.56-0.64 s and "Column stagger: none, all columns together" [M]; motion shape as normal, full drop (first motion to last contact) ~0.6 s
+    pressLead: 120, outDur: 240, outColStagger: 0, outRowStagger: 8, outInGap: 70, inColStagger: 0, inRowStagger: 8, inFall: 235, inDist: 6, inTail: 90,
     overshoot: 10, ring1: -2, ring2: 1, stretch: [0.975, 1.04], squash: [1.035, 0.955], landEarly: 45,
     // Row "One whole tumble step" 1.20-1.37 s [M]: (tail-landEarly)+landSettle+hlDur+popDur+holeHold+fall+tail ~ 1.3 s
     landSettle: 150, hlDur: 330, popDur: 180, holeHold: 200, fallBase: 190, fallPerRow: 18, refillColStagger: 0, popupLife: 600,
