@@ -171,3 +171,8 @@ html.art-btn_buy .opts #buy:active:not(:disabled) { filter: brightness(.92); }
   #fsCount { font-size: 12px; padding: 3px 8px 2px; }
   #bonusTot, #multbox { padding: 2px 7px 1px; gap: 4px; }
 }
+/* portrait: 5 small buttons (Turbo, Auto, Info, SFX, Music) in two columns so the column keeps its 3-row height */
+@media not all and (min-aspect-ratio: 6/5) and (min-width: 760px) { .mini { grid-template-columns: 1fr 1fr; } .mini #mus:last-child { grid-column: span 2; } }
+/* portrait: size the board from the measured stack (fixed ~366 px + logo + 1.143 x board width) so the dock never falls off the
+   bottom (tablet 768x1024 and short 360x640 phones overflowed with the old 330 px reserve) */
+@media not all and (min-aspect-ratio: 6/5) and (min-width: 760px) { #boardCol { --bw: min((100vw - 16px) / 1.12, (100dvh - 366px - var(--logo-h)) / 1.143); } }
